@@ -14,7 +14,7 @@ setup(
     description='Single-cell RNA Sequencing Analysis',
     long_description=README,
     long_description_content_type='text/x-rst',
-    url='https://github.com/orenbenkiki/metacells.git',
+    url='https://github.com/tanaylab/metacells.git',
     author='Oren Ben-Kiki',
     author_email='oren@ben-kiki.org',
     license='MIT',
