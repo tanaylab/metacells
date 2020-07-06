@@ -1,0 +1,10 @@
+build
+dist
+*.egg-info
+.eggs
+junk*
+__pycache__
+.*.swo
+.*.swp
+tags
+.tox
