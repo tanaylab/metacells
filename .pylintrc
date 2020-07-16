@@ -1,0 +1,14 @@
+[MASTER]
+jobs=0
+persistent=no
+
+[MESSAGES CONTROL]
+
+disable=C0330,
+        line-too-long,
+        no-member,
+        wrong-import-order,
+        too-many-arguments,
+
+[STRING]
+check-quote-consistency=yes

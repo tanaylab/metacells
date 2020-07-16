@@ -1,16 +1,44 @@
-import metacells.version
 import pathlib
-
-from setuptools import setup
 from glob import glob
+
+from setuptools import find_packages, setup
 
 CWD = pathlib.Path(__file__).parent
 
 README = (CWD / 'README.rst').read_text()
 
+SETUP_REQUIRES = [
+    'setuptools_scm',
+]
+
+INSTALL_REQUIRES = [
+    'anndata',
+    'importlib-metadata',
+    'numpy',
+    'pandas',
+    'readerwriterlock',
+]
+
+# TODO: Repeated in setup.cfg
+TESTS_REQUIRE = [
+    'pytest',
+    'scanpy',
+    'tox',
+    'pyyaml',
+]
+
+DEVELOP_REQUIRES = [
+    'autopep8',
+    'isort',
+    'mypy',
+    'pylint',
+    'sphinx',
+    'sphinx_rtd_theme'
+]
+
 setup(
     name='metacells',
-    version=metacells.version.__version__,
+    use_scm_version=True,
     description='Single-cell RNA Sequencing Analysis',
     long_description=README,
     long_description_content_type='text/x-rst',
@@ -18,7 +46,7 @@ setup(
     author='Oren Ben-Kiki',
     author_email='oren@ben-kiki.org',
     license='MIT',
-    license_files='LICENSE.rst',
+    license_file='LICENSE.rst',
     classifiers=[
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: MIT License',
@@ -28,9 +56,12 @@ setup(
         'Intended Audience :: Developers',
         'Intended Audience :: Science/Research',
     ],
-    packages=['metacells'],
+    packages=find_packages(),
     python_requires='>=3.7',
-    install_requires=['scipy'],
-    tests_require=['pytest'],
-    data_files=[('', glob('data/*'))],
+    setup_requires=SETUP_REQUIRES,
+    install_requires=INSTALL_REQUIRES,
+    tests_require=TESTS_REQUIRE,
+    extras_require={  # TODO: Is this the proper way of expressing these dependencies?
+        'develop': INSTALL_REQUIRES + TESTS_REQUIRE + DEVELOP_REQUIRES
+    },
 )

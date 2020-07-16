@@ -1,11 +1,32 @@
 Reference
 =========
 
+Preprocessing
+-------------
+
 Rare Gene Modules
------------------
+~~~~~~~~~~~~~~~~~
 
-.. automodule:: metacells.rare_gene_modules
-    :members: find_rare_gene_modules
-    :undoc-members:
-    :show-inheritance:
+.. automodule:: metacells.preprocessing.rare_gene_modules
+    :members:
 
+Utilities
+---------
+
+Annotation
+~~~~~~~~~~
+
+.. automodule:: metacells.utilities.annotation
+    :members:
+
+Computation
+~~~~~~~~~~~
+
+.. automodule:: metacells.utilities.computation
+    :members:
+
+Documentation
+~~~~~~~~~~~~~
+
+.. automodule:: metacells.utilities.documentation
+    :members:
