@@ -8,3 +8,4 @@ from .annotation import *  # pylint: disable=redefined-builtin
 from .computation import *
 from .documentation import *
 from .threading import *
+from .timing import *

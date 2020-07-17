@@ -27,7 +27,7 @@ pylint:
 	pylint metacells tests
 
 test:
-	pytest --cov=metacells
+	pytest -s --cov=metacells
 
 tox:
 	tox

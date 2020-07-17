@@ -70,13 +70,14 @@ def parallel_map(
     step_timing = timed.current_step()
 
     if batches_per_thread is None:
-        if step_timing is not None:
-            def timed_function(index: int) -> None:
+        if step_timing is None:
+            timed_function = function
+        else:
+            def timed_function(index: int) -> None:  # type: ignore
                 with timed.step(step_timing):  # type: ignore
                     function(index)
-            function = timed_function  # type: ignore
 
-        return list(EXECUTOR.map(function, range(invocations_count)))
+        return list(EXECUTOR.map(timed_function, range(invocations_count)))
 
     batches_count, batch_size = \
         _analyze_loop(invocations_count, batches_per_thread,
@@ -138,13 +139,14 @@ def parallel_for(
     step_timing = timed.current_step()
 
     if batches_per_thread is None:
-        if step_timing is not None:
-            def timed_function(index: int) -> None:
+        if step_timing is None:
+            timed_function = function
+        else:
+            def timed_function(index: int) -> None:  # type: ignore
                 with timed.step(step_timing):  # type: ignore
                     function(index)
-            function = timed_function
 
-        for _ in EXECUTOR.map(function, range(invocations_count)):
+        for _ in EXECUTOR.map(timed_function, range(invocations_count)):
             pass
         return
 
