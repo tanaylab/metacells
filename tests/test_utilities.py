@@ -27,3 +27,40 @@ def test_sparse_corrcoef():
     sparse_correlation = ut.sparse_corrcoef(matrix)
     numpy_correlation = np.corrcoef(matrix.todense())
     assert np.allclose(sparse_correlation, numpy_correlation)
+
+
+def test_parallel_map():
+    actual = list(ut.parallel_map(lambda index: index, 10000))
+    expected = list(range(10000))
+    assert actual == expected
+
+
+def test_unbatcheded_parallel_map():
+    actual = list(ut.parallel_map(lambda index: index,
+                                  10000, batches_per_thread=None))
+    expected = list(range(10000))
+    assert actual == expected
+
+
+def test_parallel_for():
+    mask = np.zeros(10000, dtype='bool')
+
+    def invocation(indices):
+        assert not np.any(mask[indices])
+        mask[indices] = True
+
+    ut.parallel_for(invocation, 10000)
+
+    assert np.all(mask)
+
+
+def test_unbatcheded_parallel_for():
+    mask = np.zeros(10000, dtype='bool')
+
+    def invocation(index):
+        assert not mask[index]
+        mask[index] = True
+
+    ut.parallel_for(invocation, 10000, batches_per_thread=None)
+
+    assert np.all(mask)

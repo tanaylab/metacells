@@ -8,4 +8,5 @@ __pycache__
 .*.swo
 .*.swp
 tags
+timing.csv
 .tox

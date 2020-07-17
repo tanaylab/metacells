@@ -2,13 +2,15 @@
 Utilities for dealing with data annotations.
 '''
 
-from typing import Any, Callable, Collection, Dict, Optional, Tuple, Union
+from typing import (Any, Callable, Collection, Dict, NamedTuple, Optional,
+                    Tuple, Union)
 from warnings import warn
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from anndata import AnnData  # type: ignore
 from readerwriterlock import rwlock
+from scipy import sparse  # type: ignore
 
 import metacells.utilities.computation as utc
 
@@ -17,19 +19,44 @@ __all__ = [
     'slicing_obs_annotation',
     'slicing_var_annotation',
     'slicing_uns_annotation',
+    'SlicingContext',
 
+    'assert_data_value',
     'annotate_as_base',
+
     'get_cells_count',
     'get_genes_count',
 
     'get_annotation_of_cells',
-    'get_annotation_of_genes',
     'get_total_umis_of_cells',
-    'get_total_umis_of_genes',
     'get_non_zero_genes_of_cells',
+
+    'get_annotation_of_genes',
+    'get_total_umis_of_genes',
     'get_non_zero_cells_of_genes',
     'get_max_umis_of_genes',
+
+    'get_annotation_of_data',
+    'get_csr_data',
+    'get_csc_data',
 ]
+
+
+class SlicingContext(NamedTuple):
+    '''
+    Context of slicing operation.
+
+    Used as a parameter for function fixing the value of affected annotations.
+    '''
+    full_adata: AnnData  #: The data before the slicing.
+    sliced_adata: AnnData  #: The data sliced using the builtin operation.
+    did_slice_obs: bool  #: Whether observations were sliced.
+    did_slice_var: bool  #: Whether variables were sliced.
+    #: If observations were sliced, the indices or mask of the kept ones.
+    slice_obs: Optional[Collection]
+    #: If variables were sliced, the indices or mask of the kept ones.
+    slice_var: Optional[Collection]
+
 
 LOCK = rwlock.RWLockRead()
 
@@ -37,16 +64,13 @@ WARN_WHEN_SLICING_UNKNOWN_ANNOTATIONS: bool = True
 
 SAFE_SLICING_OBS_ANNOTATIONS: Dict[str,
                                    Tuple[bool, bool,
-                                         Optional[Callable[[AnnData, AnnData, str, bool, bool],
-                                                           None]]]] = {}
+                                         Optional[Callable[[SlicingContext, str], None]]]] = {}
 SAFE_SLICING_VAR_ANNOTATIONS: Dict[str,
                                    Tuple[bool, bool,
-                                         Optional[Callable[[AnnData, AnnData, str, bool, bool],
-                                                           None]]]] = {}
+                                         Optional[Callable[[SlicingContext, str], None]]]] = {}
 SAFE_SLICING_UNS_ANNOTATIONS: Dict[str,
                                    Tuple[bool, bool,
-                                         Optional[Callable[[AnnData, AnnData, str, bool, bool],
-                                                           None]]]] = {}
+                                         Optional[Callable[[SlicingContext, str], None]]]] = {}
 
 
 def slicing_obs_annotation(
@@ -54,15 +78,15 @@ def slicing_obs_annotation(
     *,
     preserve_when_slicing_obs: bool = False,
     preserve_when_slicing_var: bool = False,
-    fix_sliced_annotation: Optional[Callable[[AnnData, AnnData, str, bool, bool], None]] = None,
+    fix_sliced_annotation: Optional[Callable[[SlicingContext, str], None]] = None,
 ) -> None:
     '''
     Specify whether the named per-observation (cell) annotation should be preserved when slicing
     either the observations (cells) or variables (genes).
 
     If ``fix_sliced_annotation`` is provided, when a slicing occurs, it will be invoked as
-    ``fix_sliced_annotation(full_adata, sliced_adata, annotation_name, did_slice_obs,
-    did_slice_var)`` to allow for fixing the preserved sliced annotation values.
+    ``fix_sliced_annotation(slicing_context: SlicingContext, annotation_name: str)`` to allow for
+    fixing the preserved sliced annotation values.
     '''
     with LOCK.gen_wlock():
         SAFE_SLICING_OBS_ANNOTATIONS[name] = (preserve_when_slicing_obs,
@@ -87,15 +111,15 @@ def slicing_var_annotation(
     *,
     preserve_when_slicing_obs: bool = False,
     preserve_when_slicing_var: bool = False,
-    fix_sliced_annotation: Optional[Callable[[AnnData, AnnData, str, bool, bool], None]] = None,
+    fix_sliced_annotation: Optional[Callable[[SlicingContext, str], None]] = None,
 ) -> None:
     '''
     Specify whether the named per-variable (gene) annotation should be preserved when slicing
     either the observations (cells) or variables (genes).
 
     If ``fix_sliced_annotation`` is provided, when a slicing occurs, it will be invoked as
-    ``fix_sliced_annotation(full_adata, sliced_adata, annotation_name, did_slice_obs,
-    did_slice_var)`` to allow for fixing the preserved sliced annotation values.
+    ``fix_sliced_annotation(slicing_context: SlicingContext, annotation_name: str)`` to allow for
+    fixing the preserved sliced annotation values.
     '''
     with LOCK.gen_wlock():
         SAFE_SLICING_VAR_ANNOTATIONS[name] = (preserve_when_slicing_obs,
@@ -126,15 +150,15 @@ def slicing_uns_annotation(
     *,
     preserve_when_slicing_obs: bool = False,
     preserve_when_slicing_var: bool = False,
-    fix_sliced_annotation: Optional[Callable[[AnnData, AnnData, str, bool, bool], None]] = None,
+    fix_sliced_annotation: Optional[Callable[[SlicingContext, str], None]] = None,
 ) -> None:
     '''
     Specify whether the named unstructured annotation should be preserved when slicing either the
     observations (cells) or variables (genes).
 
     If ``fix_sliced_annotation`` is provided, when a slicing occurs, it will be invoked as
-    ``fix_sliced_annotation(full_adata, sliced_adata, annotation_name, did_slice_obs,
-    did_slice_var)`` to allow for fixing the preserved sliced annotation values.
+    ``fix_sliced_annotation(slicing_context: SlicingContext, annotation_name: str)`` to allow for
+    fixing the preserved sliced annotation values.
     '''
     with LOCK.gen_wlock():
         SAFE_SLICING_UNS_ANNOTATIONS[name] = (preserve_when_slicing_obs,
@@ -142,8 +166,41 @@ def slicing_uns_annotation(
                                               fix_sliced_annotation)
 
 
+def _slice_csr(
+    slicing_context: SlicingContext,
+    _annotation_name: str,
+) -> None:
+    assert slicing_context.did_slice_obs
+    assert not slicing_context.did_slice_var
+    full_csr = slicing_context.full_adata.uns['csr']
+    assert id(slicing_context.sliced_adata.uns['csr']) == id(full_csr)
+    slicing_context.sliced_adata.uns['csr'] = full_csr[slicing_context.slice_obs, :]
+
+
+def _slice_csc(
+    slicing_context: SlicingContext,
+    _annotation_name: str,
+) -> None:
+    assert slicing_context.did_slice_obs
+    assert not slicing_context.did_slice_var
+    full_csc = slicing_context.sliced_adata.uns['csc']
+    assert id(slicing_context.sliced_adata.uns['csc']) == id(full_csc)
+    slicing_context.sliced_adata.uns['csc'] = full_csc[:,
+                                                       slicing_context.slice_var]
+
+
 def _slicing_known_uns_annotations() -> None:
-    return
+    slicing_uns_annotation('value',
+                           preserve_when_slicing_obs=True,
+                           preserve_when_slicing_var=True)
+    slicing_uns_annotation('csr',
+                           preserve_when_slicing_obs=True,
+                           preserve_when_slicing_var=False,
+                           fix_sliced_annotation=_slice_csr)
+    slicing_uns_annotation('csc',
+                           preserve_when_slicing_obs=False,
+                           preserve_when_slicing_var=True,
+                           fix_sliced_annotation=_slice_csc)
 
 
 def _slicing_known_annotations() -> None:
@@ -195,28 +252,28 @@ def slice(  # pylint: disable=redefined-builtin
     did_slice_obs = get_cells_count(bdata) != get_cells_count(adata)
     did_slice_var = get_genes_count(bdata) != get_genes_count(adata)
 
+    slicing_context = SlicingContext(full_adata=adata, sliced_adata=bdata,
+                                     did_slice_obs=did_slice_obs, did_slice_var=did_slice_var,
+                                     slice_obs=cells, slice_var=genes)
+
     if did_slice_obs or did_slice_var:
-        _filter_annotations('obs', adata, bdata, bdata.obs, SAFE_SLICING_OBS_ANNOTATIONS,
-                            did_slice_obs, did_slice_var, invalidated_annotations_prefix)
-        _filter_annotations('var', adata, bdata, bdata.var, SAFE_SLICING_VAR_ANNOTATIONS,
-                            did_slice_obs, did_slice_var, invalidated_annotations_prefix)
-        _filter_annotations('uns', adata, bdata, bdata.uns, SAFE_SLICING_UNS_ANNOTATIONS,
-                            did_slice_obs, did_slice_var, invalidated_annotations_prefix)
+        _filter_annotations('obs', bdata.obs, slicing_context,
+                            SAFE_SLICING_OBS_ANNOTATIONS, invalidated_annotations_prefix)
+        _filter_annotations('var', bdata.var, slicing_context,
+                            SAFE_SLICING_VAR_ANNOTATIONS, invalidated_annotations_prefix)
+        _filter_annotations('uns', bdata.uns, slicing_context,
+                            SAFE_SLICING_UNS_ANNOTATIONS, invalidated_annotations_prefix)
 
     return bdata
 
 
 def _filter_annotations(  # pylint: disable=too-many-locals
     kind: str,
-    old_data: AnnData,
-    new_data: AnnData,
     new_annotations: Union[pd.DataFrame, Dict[str, Any]],
+    slicing_context: SlicingContext,
     slicing_annotations: Dict[str,
                               Tuple[bool, bool,
-                                    Optional[Callable[[AnnData, AnnData, str, bool, bool],
-                                                      None]]]],
-    did_slice_obs: bool,
-    did_slice_var: bool,
+                                    Optional[Callable[[SlicingContext, str], None]]]],
     invalidated_annotations_prefix: Optional[str],
 ) -> None:
     annotation_names = list(new_annotations.keys())
@@ -239,13 +296,12 @@ def _filter_annotations(  # pylint: disable=too-many-locals
         (preserve_when_slicing_obs, preserve_when_slicing_var, fix_sliced_annotation) = \
             slicing_annotation
 
-        preserve = (not did_slice_obs or preserve_when_slicing_obs) \
-            and (not did_slice_var or preserve_when_slicing_var)
+        preserve = (not slicing_context.did_slice_obs or preserve_when_slicing_obs) \
+            and (not slicing_context.did_slice_var or preserve_when_slicing_var)
 
         if preserve:
             if fix_sliced_annotation is not None:
-                fix_sliced_annotation(old_data, new_data,
-                                      name, did_slice_obs, did_slice_var)
+                fix_sliced_annotation(slicing_context, name)
             continue
 
         if invalidated_annotations_prefix is not None:
@@ -254,6 +310,17 @@ def _filter_annotations(  # pylint: disable=too-many-locals
             new_annotations[new_name] = new_annotations[name]
 
         del new_annotations[name]
+
+
+def assert_data_value(adata: AnnData, value: str) -> None:
+    '''
+    Assert that the data contains the expected type of value.
+
+    For example, this protects against applying an operation intended to work on UMI counts
+    on data that contains the log of the UMI counts.
+    '''
+    assert 'value' in adata.uns_keys()
+    assert adata.uns['value'] == value
 
 
 def annotate_as_base(adata: AnnData, *, name: str = 'base_index') -> None:
@@ -283,6 +350,7 @@ def get_genes_count(adata: AnnData) -> int:
 def get_annotation_of_cells(
     adata: AnnData, name: str,
     compute: Callable[[AnnData], Any],
+    *,
     inplace: bool = False
 ) -> np.ndarray:
     '''
@@ -304,9 +372,34 @@ def get_annotation_of_cells(
     return data
 
 
+def get_total_umis_of_cells(adata: AnnData, *, inplace: bool = False) -> np.ndarray:
+    '''
+    Return the total number of UMIs per cell.
+
+    Use the existing ``total_counts`` annotation if it exists.
+
+    If ``inplace``, store the annotation in ``adata``.
+    '''
+    return get_annotation_of_cells(adata, 'total_counts',
+                                   utc.totals_of_cells, inplace=inplace)
+
+
+def get_non_zero_genes_of_cells(adata, *, inplace: bool = False) -> np.ndarray:
+    '''
+    Return the number of genes with non-zero UMIs per cell.
+
+    Use the existing ``n_genes_by_counts`` annotation if it exists.
+
+    If ``inplace``, store the annotation in ``adata``.
+    '''
+    return get_annotation_of_cells(adata, 'n_cells_by_counts',
+                                   utc.non_zero_genes_of_cells, inplace=inplace)
+
+
 def get_annotation_of_genes(
     adata: AnnData, name: str,
     compute: Callable[[AnnData], Any],
+    *,
     inplace: bool = False
 ) -> np.ndarray:
     '''
@@ -328,19 +421,7 @@ def get_annotation_of_genes(
     return data
 
 
-def get_total_umis_of_cells(adata: AnnData, inplace: bool = False) -> np.ndarray:
-    '''
-    Return the total number of UMIs per cell.
-
-    Use the existing ``total_counts`` annotation if it exists.
-
-    If ``inplace``, store the annotation in ``adata``.
-    '''
-    return get_annotation_of_cells(adata, 'total_counts',
-                                   utc.totals_of_cells, inplace=inplace)
-
-
-def get_total_umis_of_genes(adata: AnnData, inplace: bool = False) -> np.ndarray:
+def get_total_umis_of_genes(adata: AnnData, *, inplace: bool = False) -> np.ndarray:
     '''
     Return the total number of UMIs per gene.
 
@@ -352,19 +433,7 @@ def get_total_umis_of_genes(adata: AnnData, inplace: bool = False) -> np.ndarray
                                    utc.totals_of_genes, inplace=inplace)
 
 
-def get_non_zero_genes_of_cells(adata, inplace: bool = False) -> np.ndarray:
-    '''
-    Return the number of genes with non-zero UMIs per cell.
-
-    Use the existing ``n_genes_by_counts`` annotation if it exists.
-
-    If ``inplace``, store the annotation in ``adata``.
-    '''
-    return get_annotation_of_cells(adata, 'n_cells_by_counts',
-                                   utc.non_zero_genes_of_cells, inplace=inplace)
-
-
-def get_non_zero_cells_of_genes(adata, inplace: bool = False) -> np.ndarray:
+def get_non_zero_cells_of_genes(adata, *, inplace: bool = False) -> np.ndarray:
     '''
     Return the number of cells each gene has non-zero UMIs in.
 
@@ -376,7 +445,7 @@ def get_non_zero_cells_of_genes(adata, inplace: bool = False) -> np.ndarray:
                                    utc.non_zero_cells_of_genes, inplace=inplace)
 
 
-def get_max_umis_of_genes(adata, inplace: bool = False) -> np.ndarray:
+def get_max_umis_of_genes(adata, *, inplace: bool = False) -> np.ndarray:
     '''
     Return the maximal number of UMIs each gene has in a cell.
 
@@ -386,3 +455,53 @@ def get_max_umis_of_genes(adata, inplace: bool = False) -> np.ndarray:
     '''
     return get_annotation_of_genes(adata, 'max_by_counts',
                                    utc.max_umis_of_genes, inplace=inplace)
+
+
+def get_annotation_of_data(
+    adata: AnnData, name: str,
+    compute: Callable[[AnnData], Any],
+    *,
+    inplace: bool = False
+) -> np.ndarray:
+    '''
+    Lookup unstructured (data) annotation in ``adata``.
+
+    If the annotation does not exist, ``compute`` it.
+
+    If ``inplace``, store the annotation in ``adata``.
+    '''
+    if name in adata.uns_keys():
+        return adata.uns[name]
+
+    data = compute(adata)
+
+    if inplace:
+        adata.uns[name] = data
+
+    return data
+
+
+def get_csr_data(adata: AnnData, *, inplace: bool = False) -> Optional[sparse.csr_matrix]:
+    '''
+    If the data is sparse, return the internal matrix in ``csr_matrix`` format for efficient per-row
+    (cell) processing.
+    '''
+    def _get_csr(adata: AnnData) -> Optional[sparse.csr_matrix]:
+        if sparse.issparse(adata.X):
+            return adata.X.tocsr()
+        return None
+
+    return get_annotation_of_data(adata, 'csr', _get_csr, inplace=inplace)
+
+
+def get_csc_data(adata: AnnData, *, inplace: bool = False) -> Optional[sparse.csc_matrix]:
+    '''
+    If the data is sparse, return the internal matrix in ``csc_matrix`` format for efficient
+    per-column (gene) processing.
+    '''
+    def _get_csc(adata: AnnData) -> Optional[sparse.csc_matrix]:
+        if sparse.issparse(adata.X):
+            return adata.X.tocsc()
+        return None
+
+    return get_annotation_of_data(adata, 'csc', _get_csc, inplace=inplace)

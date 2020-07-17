@@ -19,6 +19,18 @@ Annotation
 .. automodule:: metacells.utilities.annotation
     :members:
 
+Timing
+~~~~~~
+
+.. automodule:: metacells.utilities.timing
+    :members:
+
+Threading
+~~~~~~~~~
+
+.. automodule:: metacells.utilities.threading
+    :members:
+
 Computation
 ~~~~~~~~~~~
 

@@ -5,10 +5,14 @@ persistent=no
 [MESSAGES CONTROL]
 
 disable=C0330,
+        global-statement,
         line-too-long,
         no-member,
-        wrong-import-order,
         too-many-arguments,
+        wrong-import-order,
 
 [STRING]
 check-quote-consistency=yes
+
+[BASIC]
+good-names=X

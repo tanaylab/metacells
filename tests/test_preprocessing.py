@@ -18,6 +18,7 @@ def test_find_rare_genes_modules(data_path):
     with open(data_path[:-4] + 'yaml') as file:
         expected = yaml.safe_load(file)
     adata = sc.read(data_path)
+    adata.uns['value'] = 'UMI'
     _cells_data, _genes_data, modules_data = \
         mc.pp.find_rare_genes_modules(adata)
     actual_modules = [list(module) for module in modules_data]

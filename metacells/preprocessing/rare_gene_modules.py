@@ -108,6 +108,8 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
        cells are discarded.
     '''
 
+    ut.assert_data_value(adata, 'UMI')
+
     # 0: prepare
 
     cells_count = ut.get_cells_count(adata)
@@ -161,7 +163,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
 
     # 2: correlate
 
-    correlations_between_candidate_genes = \
+    correlations_between_candidate_genes: np.ndarray = \
         ut.sparse_corrcoef(candidate_data.X.T)
     correlations_between_candidate_genes = \
         np.corrcoef(correlations_between_candidate_genes)
@@ -194,8 +196,9 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
             sorted(left_combined_candidates + right_combined_candidates)
         assert link_combined_candidates
         link_correlations = \
-            correlations_between_candidate_genes[link_combined_candidates,
-                                                 :][:, link_combined_candidates]
+            correlations_between_candidate_genes[link_combined_candidates,  #
+                                                 :][:,  #
+                                                    link_combined_candidates]
         average_link_correlation = np.nanmean(link_correlations)
         if average_link_correlation < minimal_correlation_of_modules:
             continue
