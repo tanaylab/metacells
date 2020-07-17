@@ -3,7 +3,7 @@ Utilities for multi-threaded code.
 '''
 import os
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Iterable, List, Optional, Tuple
+from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
 
 import numpy as np  # type: ignore
 
@@ -20,12 +20,13 @@ THREADS_COUNT = int(os.environ.get(
     'METACELLS_THREADS_COUNT', str(os.cpu_count())))
 if THREADS_COUNT == 0:
     THREADS_COUNT = os.cpu_count() or 1
+
 EXECUTOR = ThreadPoolExecutor(THREADS_COUNT) if THREADS_COUNT > 1 else None
 
 
 @expand_doc()
 def parallel_map(
-    function: Callable,
+    function: Callable[[Union[int, range]], Any],
     invocations_count: int,
     *,
     batches_per_thread: Optional[int] = 4,
@@ -66,7 +67,15 @@ def parallel_map(
             return map(function, range(invocations_count))
         return _flatten(map(function, [range(invocations_count)]))
 
+    step_timing = timed.current_step()
+
     if batches_per_thread is None:
+        if step_timing is not None:
+            def timed_function(index: int) -> None:
+                with timed.step(step_timing):  # type: ignore
+                    function(index)
+            function = timed_function  # type: ignore
+
         return list(EXECUTOR.map(function, range(invocations_count)))
 
     batches_count, batch_size = \
@@ -80,13 +89,24 @@ def parallel_map(
     if batches_count <= 1:
         return function(range(invocations_count))
 
-    def batch_function(batch_index: int) -> List[Any]:
-        start = round(batch_index * batch_size)
-        stop = round((batch_index + 1) * batch_size)
-        indices = range(start, stop)
-        results_of_chunk = function(indices)
-        assert len(results_of_chunk) == len(indices)
-        return results_of_chunk
+    if step_timing is None:
+        def batch_function(batch_index: int) -> List[Any]:
+            start = round(batch_index * batch_size)
+            stop = round((batch_index + 1) * batch_size)
+            indices = range(start, stop)
+            results_of_chunk = function(indices)
+            assert len(results_of_chunk) == len(indices)
+            return results_of_chunk
+
+    else:
+        def batch_function(batch_index: int) -> List[Any]:
+            with timed.step(step_timing):  # type: ignore
+                start = round(batch_index * batch_size)
+                stop = round((batch_index + 1) * batch_size)
+                indices = range(start, stop)
+                results_of_chunk = function(indices)
+                assert len(results_of_chunk) == len(indices)
+                return results_of_chunk
 
     return _flatten(EXECUTOR.map(batch_function, range(batches_count)))
 
@@ -115,7 +135,15 @@ def parallel_for(
             map(function, [range(invocations_count)])
         return
 
+    step_timing = timed.current_step()
+
     if batches_per_thread is None:
+        if step_timing is not None:
+            def timed_function(index: int) -> None:
+                with timed.step(step_timing):  # type: ignore
+                    function(index)
+            function = timed_function
+
         for _ in EXECUTOR.map(function, range(invocations_count)):
             pass
         return
@@ -132,11 +160,20 @@ def parallel_for(
         function(range(invocations_count))
         return
 
-    def batch_function(batch_index: int) -> None:
-        start = round(batch_index * batch_size)
-        stop = round((batch_index + 1) * batch_size)
-        indices = range(start, stop)
-        function(indices)
+    if step_timing is None:
+        def batch_function(batch_index: int) -> None:
+            start = round(batch_index * batch_size)
+            stop = round((batch_index + 1) * batch_size)
+            indices = range(start, stop)
+            function(indices)
+
+    else:
+        def batch_function(batch_index: int) -> None:
+            with timed.step(step_timing):  # type: ignore
+                start = round(batch_index * batch_size)
+                stop = round((batch_index + 1) * batch_size)
+                indices = range(start, stop)
+                function(indices)
 
     for _ in EXECUTOR.map(batch_function, range(batches_count)):
         pass

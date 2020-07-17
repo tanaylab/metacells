@@ -4,10 +4,10 @@ Utilities for timing operations.
 
 import os
 from contextlib import contextmanager
-from threading import Lock
+from threading import Lock, current_thread
 from threading import local as thread_local
-from time import perf_counter_ns, process_time_ns
-from typing import Any, Callable, Iterator, Optional, TextIO
+from time import perf_counter_ns, thread_time_ns
+from typing import Any, Callable, Iterator, List, Optional, TextIO
 
 __all__ = [
     'step',
@@ -26,8 +26,52 @@ TIMING_BUFFERING: int = int(os.environ.get('METACELL_TIMING_BUFFERING', '1'))
 THREAD_LOCAL = thread_local()
 
 
+class Snapshot:
+    '''
+    A snapshot of the state of CPU usage.
+    '''
+
+    def __init__(self, *, elapsed_ns: int = 0, cpu_ns: int = 0) -> None:
+        self.elapsed_ns = elapsed_ns  #: Elapsed time counter.
+        self.cpu_ns = cpu_ns  #: CPU time counter.
+
+    @staticmethod
+    def now() -> 'Snapshot':
+        '''
+        Return the current snapshot of the state of the CPU usage.
+        '''
+        return Snapshot(elapsed_ns=perf_counter_ns(), cpu_ns=thread_time_ns())
+
+    def __iadd__(self, other: 'Snapshot') -> 'Snapshot':
+        self.elapsed_ns += other.elapsed_ns
+        self.cpu_ns += other.cpu_ns
+        return self
+
+    def __isub__(self, other: 'Snapshot') -> 'Snapshot':
+        self.elapsed_ns -= other.elapsed_ns
+        self.cpu_ns -= other.cpu_ns
+        return self
+
+
+class StepTiming:
+    '''
+    Timing information for some named processing step.
+    '''
+
+    def __init__(self, name: str) -> None:
+        '''
+        Start collecting time for a named processing step.
+        '''
+        self.step_name = name  #: The unique name of the processing step.
+        #: Parameters of interest of the processing step.
+        self.parameters: List[Any] = []
+        #: The thread the step was invoked in.
+        self.thread_name = current_thread().name
+        self.start_point = Snapshot.now()  #: The point when the step started.
+
+
 @contextmanager
-def step(name: str) -> Iterator[None]:
+def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
     '''
     Collect timing information for a computation step.
 
@@ -44,39 +88,79 @@ def step(name: str) -> Iterator[None]:
 
         123,123,foo
 
-    To a timing log file (`timing.csv` by default). The first number is the total CPU time
-    used and the second is the elapsed time, both in nanoseconds.
+    To a timing log file (`timing.csv` by default). The first number is the CPU time used and the
+    second is the elapsed time, both in nanoseconds. Time spent in other threads via
+    ``parallel_map`` and/or ``parallel_for`` is automatically included. Time spent in nested timed
+    step is not included, that is, the generated file contains just the "self" times of each step.
     '''
     if not COLLECT_TIMING:
         yield None
         return
 
-    parameters_stack = getattr(THREAD_LOCAL, 'parameters_stack', None)
-    if parameters_stack is None:
-        parameters_stack = THREAD_LOCAL.parameters_stack = []
-    parameters_stack.append(None)
+    steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
+    if steps_stack is None:
+        steps_stack = THREAD_LOCAL.steps_stack = []
 
-    start_elapsed_ns = perf_counter_ns()
-    start_process_ns = process_time_ns()
+    parent_timing: Optional[StepTiming] = None
+    if isinstance(name, StepTiming):
+        parent_timing = name
+        if parent_timing.thread_name == current_thread().name:
+            yield None
+            return
+        name = ''
+
+    else:
+        assert name != ''
+        if name[0] == '.':
+            assert len(steps_stack) > 0
+            name = steps_stack[-1].step_name + name
+
+    step_timing = StepTiming(name)
+    steps_stack.append(step_timing)
+
     try:
         yield None
     finally:
-        stop_process_ns = process_time_ns()
-        stop_elapsed_ns = perf_counter_ns()
-        function_parameters = parameters_stack.pop()
+        total_times = Snapshot.now()
+        total_times -= step_timing.start_point
+        assert total_times.elapsed_ns >= 0
+        assert total_times.cpu_ns >= 0
 
-    process_ns = stop_process_ns - start_process_ns
-    elapsed_ns = stop_elapsed_ns - start_elapsed_ns
+    steps_stack.pop()
+
+    if name == '':
+        assert parent_timing is not None
+        parent_timing.start_point.cpu_ns -= total_times.cpu_ns
+        return
+
+    for parent_step_timing in steps_stack:
+        parent_step_timing.start_point += total_times
 
     with LOCK:
         global TIMING_FILE
         if TIMING_FILE is None:
             TIMING_FILE = open(TIMING_PATH, 'a', buffering=TIMING_BUFFERING)
-        if function_parameters is None:
-            TIMING_FILE.write('%s,%s,%s\n' % (process_ns, elapsed_ns, name))
+        if len(step_timing.parameters) == 0:
+            TIMING_FILE.write('%s,%s,%s\n'
+                              % (total_times.cpu_ns, total_times.elapsed_ns, name))
         else:
             TIMING_FILE.write('%s,%s,%s,%s\n'
-                              % (process_ns, elapsed_ns, name, function_parameters))
+                              % (total_times.cpu_ns, total_times.elapsed_ns, name,
+                                 ','.join([str(parameter)
+                                           for parameter
+                                           in step_timing.parameters])))
+
+
+def current_step() -> Optional[StepTiming]:
+    '''
+    The timing collector for the innermost (current) step.
+    '''
+    if not COLLECT_TIMING:
+        return None
+    steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
+    if steps_stack is None or len(steps_stack) == 0:
+        return None
+    return steps_stack[-1]
 
 
 def parameters(*values: Any) -> None:
@@ -87,16 +171,9 @@ def parameters(*values: Any) -> None:
     allows tracking parameters which affect invocation time (such as array sizes), to help calibrate
     parameters such as ``minimal_invocations_per_batch`` for ``parallel_map`` and ``parallel_for``.
     '''
-    if not COLLECT_TIMING:
-        return
-    parameters_stack = getattr(THREAD_LOCAL, 'parameters_stack', None)
-    if parameters_stack is None or len(parameters_stack) == 0:
-        return
-    new_values = ','.join([str(value) for value in values])
-    old_values = THREAD_LOCAL.parameters_stack[-1]
-    if old_values is not None:
-        new_values = old_values + ',' + new_values
-    parameters_stack[-1] = new_values
+    step_timing = current_step()
+    if step_timing is not None:
+        step_timing.parameters.extend(values)
 
 
 def call(function: Callable) -> Callable[[Callable], Callable]:
