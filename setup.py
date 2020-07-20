@@ -1,7 +1,7 @@
 import pathlib
 from glob import glob
 
-from setuptools import find_packages, setup
+from setuptools import Extension, find_packages, setup
 
 CWD = pathlib.Path(__file__).parent
 
@@ -46,7 +46,6 @@ setup(
     author='Oren Ben-Kiki',
     author_email='oren@ben-kiki.org',
     license='MIT',
-    license_file='LICENSE.rst',
     classifiers=[
         'Development Status :: 3 - Alpha',
         'License :: OSI Approved :: MIT License',
@@ -55,6 +54,16 @@ setup(
         'Topic :: Scientific/Engineering :: Bio-Informatics',
         'Intended Audience :: Developers',
         'Intended Audience :: Science/Research',
+    ],
+    ext_modules=[
+        Extension(  #
+            'metacells.extensions',
+            include_dirs=['pybind11/include'],
+            sources=['metacells/extensions.cpp'],
+            define_macros=[
+                ('ASSERT_LEVEL', 2),  # 0 for none, 1 for fast, 2 for slow.
+            ],
+        ),
     ],
     packages=find_packages(),
     python_requires='>=3.7',

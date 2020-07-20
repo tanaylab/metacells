@@ -1,4 +1,4 @@
-.PHONY: all for-commit reformat format isort rst unstaged todo mypy pylint test tox docs
+.PHONY: all for-commit reformat format isort rst unstaged todo mypy pylint build test tox docs
 .PHONY: dist clean
 
 all: for-commit
@@ -7,9 +7,10 @@ for-commit: reformat format isort rst unstaged todo mypy pylint test tox docs
 
 reformat:
 	autopep8 -i -r metacells tests setup.py
+	clang-format -i metacells/extensions.cpp
 
 format:
-	@if grep -n '^[ ].*[(%<>/+-]$$\|[^ =][[]$$' `git ls-files | grep '\.py'`; then false; fi
+	@if grep -n '^[ ].*[(%<>/+-]$$\|[^ =][[]$$' `git ls-files | grep '\.py$$'`; then false; fi
 
 isort:
 	isort metacells/**/*.py tests/*.py setup.py
@@ -18,7 +19,7 @@ unstaged:
 	@if git status| grep 'not staged' > /dev/null; then git status; false; fi
 
 todo:
-	@if grep -i -n TODO''X `git ls-files`; then false; fi
+	@if grep -i -n TODO''X `git ls-files | grep -v pybind11`; then false; fi
 
 mypy:
 	mypy metacells tests
@@ -26,8 +27,11 @@ mypy:
 pylint:
 	pylint metacells tests
 
-test:
-	pytest -s --cov=metacells
+build:
+	python setup.py build_ext --inplace
+
+test: build
+	pytest -s --cov=metacells tests
 
 tox:
 	tox

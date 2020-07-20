@@ -5,6 +5,7 @@ persistent=no
 [MESSAGES CONTROL]
 
 disable=C0330,
+        c-extension-no-member,
         global-statement,
         line-too-long,
         no-member,

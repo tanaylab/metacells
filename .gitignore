@@ -1,9 +1,11 @@
+build
 .coverage
 dist
 docs/build
 *.egg-info
 .eggs
 junk*
+metacells/*.so
 __pycache__
 .*.swo
 .*.swp

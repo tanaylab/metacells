@@ -1,5 +1,5 @@
 include metacells/extension/*.hpp
-include pybind11/*
-include pybind11/*/*
+include pybind11/include/pybind11/*
+include pybind11/include/pybind11/*/*
 include tests/*.py
 include tox.ini
