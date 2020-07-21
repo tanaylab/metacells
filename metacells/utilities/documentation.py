@@ -4,6 +4,7 @@ Utilities for documentation generation.
 
 from inspect import Parameter, signature
 from typing import Any, Callable
+from warnings import warn
 
 __all__ = [
     'expand_doc',
@@ -34,10 +35,23 @@ def expand_doc(**kwargs: Any) -> Callable[[Callable], Callable]:
 
     def documented(function: Callable) -> Callable:
         for parameter in signature(function).parameters.values():
-            if parameter.default != Parameter.empty:
+            if parameter.default != Parameter.empty and parameter.name not in kwargs:
                 kwargs[parameter.name] = parameter.default
+
         assert function.__doc__ is not None
-        function.__doc__ = function.__doc__.format_map(kwargs)
+        try:
+            expanded_doc = function.__doc__.format_map(kwargs)
+        except KeyError as exception:
+            raise KeyError('missing key %s in expand_doc documentation for the function %s.%s'
+                           % (exception, function.__module__, function.__qualname__))
+
+        if expanded_doc == function.__doc__:
+            expand_doc_had_no_effect = \
+                '@expand_doc had no effect on the documentation of the function %s.%s' \
+                % (function.__module__, function.__qualname__)
+            warn(expand_doc_had_no_effect)
+
+        function.__doc__ = expanded_doc
         return function
 
     return documented

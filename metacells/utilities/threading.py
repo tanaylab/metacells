@@ -116,7 +116,6 @@ def _flatten(list_of_lists: Iterable[Iterable[Any]]) -> List[Any]:
     return [item for list_of_items in list_of_lists for item in list_of_items]
 
 
-@expand_doc()
 def parallel_for(
     function: Callable,
     invocations_count: int,

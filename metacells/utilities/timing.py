@@ -100,7 +100,7 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
 
         foo,123,456
 
-    To a timing log file (`timing.csv` by default). The first number is the CPU time used and the
+    To a timing log file (``timing.csv`` by default). The first number is the CPU time used and the
     second is the elapsed time, both in nanoseconds. Time spent in other threads via
     ``parallel_map`` and/or ``parallel_for`` is automatically included. Time spent in nested timed
     step is not included, that is, the generated file contains just the "self" times of each step.
@@ -220,14 +220,15 @@ def parameters(*values: Any) -> None:
         step_timing.parameters.extend(values)
 
 
-def call(function: Callable) -> Callable[[Callable], Callable]:
+def call(name: Optional[str] = None) -> Callable[[Callable], Callable]:
     '''
-    Automatically wrap each function invocation with ``timing.step`` using the function's name.
+    Automatically wrap each function invocation with ``timing.step`` using the ``name`` (by default,
+    the function's qualified name).
     '''
-    if not COLLECT_TIMING:
-        return function
+    def wrap(function: Callable) -> Callable:
+        def timed(*args: Any, **kwargs: Any) -> Any:
+            with step(name or function.__qualname__):
+                return function(*args, **kwargs)
+        return timed
 
-    def timed(*args: Any, **kwargs: Any) -> Any:
-        with step(function.__qualname__):
-            return function(*args, **kwargs)
-    return timed
+    return wrap

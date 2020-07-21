@@ -17,11 +17,12 @@ __all__ = [
 ]
 
 
-@ut.call
+@ut.call()
 @ut.expand_doc()
 def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-statements,too-many-branches
     adata: AnnData,
     *,
+    umis_layer: str = 'UMIs',
     maximal_fraction_of_cells_of_genes: float = 1e-3,
     minimal_max_umis_of_genes: int = 6,
     cluster_method_of_genes: str = 'ward',
@@ -44,20 +45,23 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
 
     **Input**
 
-    An annotated ``adata``, where the observations are cells and the variables are gene UMI counts.
+    An annotated ``adata``, where the observations are cells and the variables are genes,
+    containing the following:
+
+    Data Layers
+        ``umis_layer`` (default: {umis_layer})
+            The layer containing the per-gene-per-cell UMIs count to use.
+
     The following annotations are used if available, otherwise they are computed and in
     ``intermediate`` then stored in ``adata``:
 
     Observation (Cell) Annotations
-        ``total_counts``
+        ``total_UMIs``
             The total number of UMIs in each cell.
 
     Variable (Gene) Annotations
-        ``n_cells_by_counts``
+        ``total_UMIs``
             The number of cells for which each gene has non-zero value.
-
-    These and others can be pre-computed and stored in ``adata`` by
-    ``scanpy.pp.calculate_qc_metrics``.
 
     **Returns**
 
@@ -109,8 +113,6 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
        cells are discarded.
     '''
 
-    ut.assert_data_value(adata, 'UMI')
-
     cells_count = ut.get_cells_count(adata)
     genes_count = ut.get_genes_count(adata)
 
@@ -160,8 +162,9 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         candidate_data = ut.slice(adata, genes=candidate_genes_indices)
 
     with ut.step('.2.correlate'):
+        candidate_umis = ut.get_csc_data(candidate_data, of_layer=umis_layer)
         correlations_between_candidate_genes: np.ndarray = \
-            ut.sparse_corrcoef(candidate_data.X.T)
+            ut.sparse_corrcoef(candidate_umis.T)
         correlations_between_candidate_genes = \
             np.corrcoef(correlations_between_candidate_genes)
 
@@ -211,16 +214,16 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
 
     with ut.step('.5.identify_cells'):
         maximal_strength_of_cells = np.zeros(cells_count)
-
         gene_indices_of_modules: List[np.ndarray] = []
+        candidate_umis = ut.get_csc_data(candidate_data, of_layer=umis_layer)
 
         for link_index, module_candidate_indices in combined_candidate_indices.items():
             if len(module_candidate_indices) < minimal_size_of_modules:
                 continue
 
             total_umis_of_module_of_cells = \
-                ut.as_array(candidate_data.X[:, module_candidate_indices]
-                            .sum(axis=1))
+                ut.as_array(candidate_umis[:,
+                                           module_candidate_indices].sum(axis=1))
             assert total_umis_of_module_of_cells.size == cells_count
 
             minimal_total_umis_of_module_mask_of_cells = \

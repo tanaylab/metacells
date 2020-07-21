@@ -77,7 +77,7 @@ language = None
 # This patterns also effect to html_static_path and html_extra_path
 exclude_patterns = []
 
-# The reST default role (used for this markup: `text`) to use for all
+# The reST default role (used for this markup: ``text``) to use for all
 # documents.
 #
 # default_role = None
@@ -105,7 +105,7 @@ pygments_style = 'sphinx'
 # If true, keep warnings as "system message" paragraphs in the built documents.
 # keep_warnings = False
 
-# If true, `todo` and `todoList` produce output, else they produce nothing.
+# If true, ``todo`` and ``todoList`` produce output, else they produce nothing.
 todo_include_todos = False
 
 
@@ -227,7 +227,7 @@ if not on_rtd:  # only import and set the theme if we're building docs locally
 
 # A dictionary with options for the search language support, empty by default.
 # 'ja' uses this config value.
-# 'zh' user can custom change `jieba` dictionary path.
+# 'zh' user can custom change ``jieba`` dictionary path.
 #
 # html_search_options = {'type': 'default'}
 

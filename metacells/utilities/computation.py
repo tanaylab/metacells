@@ -3,20 +3,23 @@ Utilities for performing efficient computations.
 '''
 
 from math import ceil
-from typing import Any, Callable
+from typing import Any, Callable, Optional, Union
 
 import numpy as np  # type: ignore
+import pandas as pd  # type: ignore
 from anndata import AnnData  # type: ignore
 from scipy import sparse  # type: ignore
 
 import metacells.utilities.timing as timed
 from metacells.utilities.threading import parallel_for
 
-MINIMAL_OPERATIONS_PER_BATCH = 200_000
+MINIMAL_OPERATIONS_PER_BATCH = 2_000_000
 
 __all__ = [
     'as_array',
     'sparse_corrcoef',
+
+    'log_data',
 
     'totals_of_cells',
     'totals_of_genes',
@@ -34,7 +37,7 @@ def as_array(data: Any) -> np.ndarray:
     return np.ravel(data)
 
 
-@timed.call
+@timed.call()
 def sparse_corrcoef(matrix: Any) -> np.ndarray:
     '''
     Compute correlations between all rows of a sparse matrix.
@@ -51,7 +54,43 @@ def sparse_corrcoef(matrix: Any) -> np.ndarray:
     return correlations
 
 
-@timed.call
+@timed.call()
+def log_data(
+    data: Union[sparse.spmatrix, np.ndarray, pd.DataFrame],
+    *,
+    base: Optional[float] = None,
+    normalization: float = 1,
+) -> np.ndarray:
+    '''
+    Compute the ``log2`` of some data.
+
+    The ``base`` is added to the count before ``log2`` is applied, to handle the common case of zero
+    values in sparse data.
+
+    The ``normalization`` (default: {normalization}) is added to the count before the log is
+    applied, to handle the common case of sparse data.
+    '''
+    if sparse.issparse(data):
+        matrix = data.todense()
+    elif isinstance(data, pd.DataFrame):
+        matrix = np.copy(data.values)
+    else:
+        assert isinstance(data, np.ndarray)
+        matrix = np.copy(data)
+
+    matrix += normalization
+    if base == 2:
+        np.log2(matrix, out=matrix)
+    else:
+        np.log(matrix, out=matrix)
+        if base is not None:
+            assert base > 0
+            matrix /= np.log(base)
+
+    return matrix
+
+
+@timed.call()
 def totals_of_cells(adata: AnnData) -> np.ndarray:
     '''
     Compute the total number of UMIs per cell.
@@ -59,7 +98,7 @@ def totals_of_cells(adata: AnnData) -> np.ndarray:
     return _reduce_cells(adata, lambda data: data.sum(axis=1))
 
 
-@timed.call
+@timed.call()
 def totals_of_genes(adata: AnnData) -> np.ndarray:
     '''
     Compute the total number of UMIs per gene.
@@ -67,7 +106,7 @@ def totals_of_genes(adata: AnnData) -> np.ndarray:
     return _reduce_genes(adata, lambda data: data.sum(axis=0))
 
 
-@timed.call
+@timed.call()
 def non_zero_genes_of_cells(adata: AnnData) -> np.ndarray:
     '''
     Compute the number of genes with non-zero UMIs per cell.
@@ -77,7 +116,7 @@ def non_zero_genes_of_cells(adata: AnnData) -> np.ndarray:
     return _reduce_cells(adata, lambda data: np.count_nonzero(data, axis=1))
 
 
-@timed.call
+@timed.call()
 def non_zero_cells_of_genes(adata: AnnData) -> np.ndarray:
     '''
     Compute the number of cells each gene has non-zero UMIs in.
@@ -87,7 +126,7 @@ def non_zero_cells_of_genes(adata: AnnData) -> np.ndarray:
     return _reduce_genes(adata, lambda data: np.count_nonzero(data, axis=0))
 
 
-@timed.call
+@timed.call()
 def max_umis_of_genes(adata: AnnData) -> np.ndarray:
     '''
     Compute the number of cells each gene has non-zero UMIs in.

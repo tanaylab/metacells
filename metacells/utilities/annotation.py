@@ -1,5 +1,12 @@
 '''
 Utilities for dealing with data annotations.
+
+This tries to deal safely with data layers, observation, variable and unstructured annotations,
+especially in the presence to slicing the data.
+
+.. todo::
+
+    Deal with multi-dimensional ''obsm`` and ``varm`` annotations.
 '''
 
 from typing import (Any, Callable, Collection, Dict, NamedTuple, Optional,
@@ -13,19 +20,27 @@ from readerwriterlock import rwlock
 from scipy import sparse  # type: ignore
 
 import metacells.utilities.computation as utc
+import metacells.utilities.documentation as utd
 
 __all__ = [
     'slice',
+    'slicing_data_layer',
     'slicing_obs_annotation',
     'slicing_var_annotation',
     'slicing_uns_annotation',
     'SlicingContext',
 
-    'assert_data_value',
     'annotate_as_base',
 
     'get_cells_count',
     'get_genes_count',
+
+    'declare_focus_of_data',
+
+    'get_data_layer',
+    'get_csr_data',
+    'get_csc_data',
+    'get_log_data',
 
     'get_annotation_of_cells',
     'get_total_umis_of_cells',
@@ -37,8 +52,6 @@ __all__ = [
     'get_max_umis_of_genes',
 
     'get_annotation_of_data',
-    'get_csr_data',
-    'get_csc_data',
 ]
 
 
@@ -65,12 +78,54 @@ WARN_WHEN_SLICING_UNKNOWN_ANNOTATIONS: bool = True
 SAFE_SLICING_OBS_ANNOTATIONS: Dict[str,
                                    Tuple[bool, bool,
                                          Optional[Callable[[SlicingContext, str], None]]]] = {}
+
 SAFE_SLICING_VAR_ANNOTATIONS: Dict[str,
                                    Tuple[bool, bool,
                                          Optional[Callable[[SlicingContext, str], None]]]] = {}
+
 SAFE_SLICING_UNS_ANNOTATIONS: Dict[str,
                                    Tuple[bool, bool,
                                          Optional[Callable[[SlicingContext, str], None]]]] = {}
+
+SAFE_SLICING_DATA_LAYERS: Dict[str,
+                               Tuple[bool, bool,
+                                     Optional[Callable[[SlicingContext, str], None]]]] = {}
+
+
+def slicing_data_layer(
+    name: str,
+    *,
+    preserve_when_slicing_obs: bool = False,
+    preserve_when_slicing_var: bool = False,
+    fix_sliced_layer: Optional[Callable[[SlicingContext, str], None]] = None,
+) -> None:
+    '''
+    Specify whether the named data layer should be preserved when slicing either the observations
+    (cells) or variables (genes).
+
+    A data layer is always preserved if it is the focus layer (the value of ``X``). Otherwise,
+    when the data is sliced, it may become invalidated, and will not be preserved.
+
+    If ``fix_sliced_layer`` is provided, when a slicing occurs, it will be invoked as
+    ``fix_sliced_layer(slicing_context: SlicingContext, layer_name: str)`` to allow for fixing the
+    preserved sliced data layer values.
+    '''
+    with LOCK.gen_wlock():
+        SAFE_SLICING_DATA_LAYERS[name] = (preserve_when_slicing_obs,
+                                          preserve_when_slicing_var,
+                                          fix_sliced_layer)
+
+
+def _slicing_known_data_layers() -> None:
+    slicing_data_layer('UMIs',
+                       preserve_when_slicing_obs=True,
+                       preserve_when_slicing_var=True)
+    slicing_data_layer('log_UMIs',
+                       preserve_when_slicing_obs=True,
+                       preserve_when_slicing_var=True)
+    slicing_data_layer('downsampled_UMIs',
+                       preserve_when_slicing_obs=True,
+                       preserve_when_slicing_var=False)
 
 
 def slicing_obs_annotation(
@@ -88,10 +143,9 @@ def slicing_obs_annotation(
     ``fix_sliced_annotation(slicing_context: SlicingContext, annotation_name: str)`` to allow for
     fixing the preserved sliced annotation values.
     '''
-    with LOCK.gen_wlock():
-        SAFE_SLICING_OBS_ANNOTATIONS[name] = (preserve_when_slicing_obs,
-                                              preserve_when_slicing_var,
-                                              fix_sliced_annotation)
+    SAFE_SLICING_OBS_ANNOTATIONS[name] = (preserve_when_slicing_obs,
+                                          preserve_when_slicing_var,
+                                          fix_sliced_annotation)
 
 
 def _slicing_known_obs_annotations() -> None:
@@ -121,10 +175,9 @@ def slicing_var_annotation(
     ``fix_sliced_annotation(slicing_context: SlicingContext, annotation_name: str)`` to allow for
     fixing the preserved sliced annotation values.
     '''
-    with LOCK.gen_wlock():
-        SAFE_SLICING_VAR_ANNOTATIONS[name] = (preserve_when_slicing_obs,
-                                              preserve_when_slicing_var,
-                                              fix_sliced_annotation)
+    SAFE_SLICING_VAR_ANNOTATIONS[name] = (preserve_when_slicing_obs,
+                                          preserve_when_slicing_var,
+                                          fix_sliced_annotation)
 
 
 def _slicing_known_var_annotations() -> None:
@@ -190,7 +243,7 @@ def _slice_csc(
 
 
 def _slicing_known_uns_annotations() -> None:
-    slicing_uns_annotation('value',
+    slicing_uns_annotation('layer',
                            preserve_when_slicing_obs=True,
                            preserve_when_slicing_var=True)
     slicing_uns_annotation('csr',
@@ -204,6 +257,7 @@ def _slicing_known_uns_annotations() -> None:
 
 
 def _slicing_known_annotations() -> None:
+    _slicing_known_data_layers()
     _slicing_known_obs_annotations()
     _slicing_known_var_annotations()
     _slicing_known_uns_annotations()
@@ -263,6 +317,7 @@ def slice(  # pylint: disable=redefined-builtin
                             SAFE_SLICING_VAR_ANNOTATIONS, invalidated_annotations_prefix)
         _filter_annotations('uns', bdata.uns, slicing_context,
                             SAFE_SLICING_UNS_ANNOTATIONS, invalidated_annotations_prefix)
+        _filter_layers(slicing_context, invalidated_annotations_prefix)
 
     return bdata
 
@@ -278,23 +333,9 @@ def _filter_annotations(  # pylint: disable=too-many-locals
 ) -> None:
     annotation_names = list(new_annotations.keys())
     for name in annotation_names:
-        with LOCK.gen_rlock():
-            slicing_annotation = slicing_annotations.get(name)
-
-        if slicing_annotation is None:
-            with LOCK.gen_wlock():
-                slicing_annotation = slicing_annotations.get(name)
-                if slicing_annotation is None:
-                    unknown_sliced_annotation_message = \
-                        'Slicing an unknown {kind} annotation: {name}; ' \
-                        'assuming it should not be preserved' \
-                        .format(kind=kind, name=name)
-                    warn(unknown_sliced_annotation_message)
-                    slicing_annotation = (False, False, None)
-                    slicing_annotations[name] = slicing_annotation
-
         (preserve_when_slicing_obs, preserve_when_slicing_var, fix_sliced_annotation) = \
-            slicing_annotation
+            _get_slicing_annotation(kind, 'annotation',
+                                    slicing_annotations, name)
 
         preserve = (not slicing_context.did_slice_obs or preserve_when_slicing_obs) \
             and (not slicing_context.did_slice_var or preserve_when_slicing_var)
@@ -308,19 +349,79 @@ def _filter_annotations(  # pylint: disable=too-many-locals
             new_name = invalidated_annotations_prefix + name
             assert new_name != name
             new_annotations[new_name] = new_annotations[name]
+            _clone_slicing_annotation(slicing_annotations, name, new_name)
 
         del new_annotations[name]
 
 
-def assert_data_value(adata: AnnData, value: str) -> None:
-    '''
-    Assert that the data contains the expected type of value.
+def _filter_layers(
+    slicing_context: SlicingContext,
+    invalidated_annotations_prefix: Optional[str],
+) -> None:
+    layer_names = list(slicing_context.sliced_adata.layers.keys())
+    for name in layer_names:
+        (preserve_when_slicing_obs, preserve_when_slicing_var, fix_sliced_layer) = \
+            _get_slicing_annotation('data', 'layer',
+                                    SAFE_SLICING_DATA_LAYERS, name)
 
-    For example, this protects against applying an operation intended to work on UMI counts
-    on data that contains the log of the UMI counts.
-    '''
-    assert 'value' in adata.uns_keys()
-    assert adata.uns['value'] == value
+        preserve = (not slicing_context.did_slice_obs or preserve_when_slicing_obs) \
+            and (not slicing_context.did_slice_var or preserve_when_slicing_var)
+
+        if preserve:
+            if fix_sliced_layer is not None:
+                fix_sliced_layer(slicing_context, name)
+            continue
+
+        if invalidated_annotations_prefix is not None:
+            new_name = invalidated_annotations_prefix + name
+            assert new_name != name
+            slicing_context.sliced_adata.layers[new_name] = slicing_context.sliced_adata.layers[name]
+            _clone_slicing_annotation(SAFE_SLICING_DATA_LAYERS, name, new_name)
+
+        del slicing_context.sliced_adata.layers[name]
+
+
+def _get_slicing_annotation(
+    kind: str,
+    what: str,
+    slicing_annotations: Dict[str,
+                              Tuple[bool, bool,
+                                    Optional[Callable[[SlicingContext, str], None]]]],
+    name: str
+) -> Tuple[bool, bool, Optional[Callable[[SlicingContext, str], None]]]:
+    with LOCK.gen_rlock():
+        slicing_annotation = slicing_annotations.get(name)
+
+    if slicing_annotation is None:
+        with LOCK.gen_wlock():
+            slicing_annotation = slicing_annotations.get(name)
+            if slicing_annotation is None:
+                unknown_sliced_annotation = \
+                    'Slicing an unknown {kind} {what}: {name}; ' \
+                    'assuming it should not be preserved' \
+                    .format(kind=kind, what=what, name=name)
+                warn(unknown_sliced_annotation)
+                slicing_annotation = (False, False, None)
+                slicing_annotations[name] = slicing_annotation
+
+    return slicing_annotation
+
+
+def _clone_slicing_annotation(
+    slicing_annotations: Dict[str,
+                              Tuple[bool, bool,
+                                    Optional[Callable[[SlicingContext, str], None]]]],
+    old_name: str,
+    new_name: str,
+) -> None:
+    with LOCK.gen_rlock():
+        if new_name in slicing_annotations:
+            return
+
+    with LOCK.gen_wlock():
+        if new_name in slicing_annotations:
+            return
+        slicing_annotations[new_name] = slicing_annotations[old_name]
 
 
 def annotate_as_base(adata: AnnData, *, name: str = 'base_index') -> None:
@@ -337,33 +438,214 @@ def get_cells_count(adata: AnnData) -> int:
     '''
     Return the number of RNA cell profiles in the ``adata``.
     '''
-    return adata.X.shape[0]
+    return adata.shape[0]
 
 
 def get_genes_count(adata: AnnData) -> int:
     '''
     Return the number of genes per cell in the ``adata``.
     '''
-    return adata.X.shape[1]
+    return adata.shape[1]
+
+
+def declare_focus_of_data(adata: AnnData, name: str) -> None:
+    '''
+    Declare the current layer of the data that is contained in ``X``.
+
+    This should be called after populating the ``X`` data for the first time (e.g., by importing the
+    data). It lets rest of the code to know what kind of data it holds. All the other layer
+    utilities ``assert`` this was done.
+
+    .. note::
+
+        When using the layer utilities, do not replace the value of ``X`` by writinf ``adata.X =
+        ...``. Instead use ``get_data_layer(adata, ...)``.
+    '''
+    assert adata.X is not None
+    assert 'layer' not in adata.uns_keys()
+    adata.uns['layer'] = name
+    adata.layers[name] = adata.X
+
+
+def get_data_layer(
+    adata: AnnData,
+    name: str,
+    compute: Optional[Callable[[AnnData], Any]] = None,
+    *,
+    inplace: bool = False,
+    infocus: bool = False,
+    instead: bool = False,
+) -> Union[np.ndarray, sparse.spmatrix, pd.DataFrame]:
+    '''
+    Lookup a per-obsevration-per-variable matrix in ``adata``.
+
+    If the layer does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
+
+    If ``inplace``, store the annotation in ``adata``.
+
+    If ``infocus`` (implies ``inplace``), also make it the current ``X`` of the data.
+
+    If ``instead`` (implies ``infocus``), do not preserve the current ``X`` of the data, that is,
+    remove it from the layers.
+
+    .. note::
+
+        This ``assert``s that the current ``X``, if not ``None``, was declared to be a layer of the
+        data so it isn't lost even if ``infocus`` is specified.
+    '''
+    if name in adata.layers.keys():
+        data = adata.layers[name]
+    else:
+        if compute is None:
+            raise RuntimeError('unavailable layer data: ' + name)
+        data = compute(adata)
+        assert data.shape == adata.shape
+
+    if inplace or infocus or instead:
+        adata.layers[name] = data
+
+        if infocus or instead:
+            if data.X is not None:
+                old_name = get_annotation_of_data(adata, 'layer')
+                assert id(adata.layers[old_name]) == id(adata.X)
+                if instead:
+                    del adata.layers[old_name]
+            adata.uns['layer'] = name
+            adata.X = data
+
+    return data
+
+
+def get_csr_data(
+    adata: AnnData,
+    *,
+    of_layer: str,
+    to_layer: Optional[str] = None,
+    inplace: bool = False,
+    infocus: bool = False,
+    instead: bool = False,
+) -> Union[np.ndarray, sparse.spmatrix]:
+    '''
+    If the data layer is dense, return it immediately. Otherwise:
+
+    Return the data in ``csr_matrix`` format for efficient per-row (cell) processing.
+
+    If ``of_layer`` is specified, this specific data is used. Otherwise, the focus data layer (in
+    ``adata.X``) is used.
+
+    If ``inplace`` or ``infocus`` or ``instead``, the data will be stored in ``to_layer`` (by
+    default, this is the name of the source layer with a ``csr_`` prefix).
+    '''
+    data = get_data_layer(adata, of_layer)
+    if not sparse.issparse(data):
+        return data
+
+    if to_layer is None:
+        to_layer = 'csr_' + of_layer
+
+    return get_data_layer(adata, to_layer, lambda _adata: data.tocsr(),
+                          inplace=inplace, infocus=infocus, instead=instead)
+
+
+def get_csc_data(
+    adata: AnnData,
+    *,
+    of_layer: str,
+    to_layer: Optional[str] = None,
+    inplace: bool = False,
+    infocus: bool = False,
+    instead: bool = False,
+) -> Union[np.ndarray, sparse.spmatrix]:
+    '''
+    If the data layer is dense, return it immediately. Otherwise:
+
+    Return the data in ``csc_matrix`` format for efficient per-column (gene) processing.
+
+    If ``of_layer`` is specified, this specific data is used. Otherwise, the focus data layer (in
+    ``adata.X``) is used.
+
+    If ``inplace`` or ``infocus`` or ``instead``, the data will be stored in ``to_layer`` (by
+    default, this is the name of the source layer with a ``csc_`` prefix).
+    '''
+    data = get_data_layer(adata, of_layer)
+    if not sparse.issparse(data):
+        return data
+
+    if to_layer is None:
+        to_layer = 'csc_' + of_layer
+
+    return get_data_layer(adata, to_layer, lambda _: data.tocsc(),
+                          inplace=inplace, infocus=infocus, instead=instead)
+
+
+@utd.expand_doc()
+def get_log_data(
+    adata: AnnData,
+    *,
+    of_layer: Optional[str] = None,
+    to_layer: Optional[str] = None,
+    base: Optional[float] = None,
+    normalization: float = 1,
+    inplace: bool = False,
+    infocus: bool = False,
+    instead: bool = False,
+) -> Union[np.ndarray]:
+    '''
+    Return a matrix with the log of some data layer.
+
+    If ``of_layer`` is specified, this specific data is used. Otherwise, the focus data layer (in
+    ``adata.X``) is used.
+
+    If ``inplace`` or ``infocus`` or ``instead``, the data will be stored in ``to_layer`` (by
+    default, this is the name of the source layer with a ``log_`` prefix).
+
+    The natural logarithm is used by default. Otherwise, the ``base`` is used.
+
+    The ``normalization`` (default: {normalization}) is added to the count before the log is
+    applied, to handle the common case of sparse data.
+
+    .. note::
+
+        The result is always a dense matrix, as even for sparse data, the log is rarely zero.
+    '''
+    if of_layer is None:
+        of_layer = get_annotation_of_data(adata, 'layer')
+        assert of_layer is not None
+
+    if to_layer is None:
+        to_layer = 'log_' + of_layer
+
+    def compute(adata: AnnData) -> np.ndarray:
+        assert of_layer is not None
+        data = get_data_layer(adata, of_layer)
+        return utc.log_data(data, base=base, normalization=normalization)
+
+    return get_data_layer(adata, to_layer, compute,
+                          inplace=inplace, infocus=infocus, instead=instead)
 
 
 def get_annotation_of_cells(
-    adata: AnnData, name: str,
-    compute: Callable[[AnnData], Any],
+    adata: AnnData,
+    name: str,
+    compute: Optional[Callable[[AnnData], Any]] = None,
     *,
     inplace: bool = False
 ) -> np.ndarray:
     '''
     Lookup per-observation (cell) annotation in ``adata``.
 
-    If the annotation does not exist, ``compute`` it.
+    If the annotation does not exist, ``compute`` it. If no ``compute`` function was given,
+    ``raise``.
 
     If ``inplace``, store the annotation in ``adata``.
     '''
     if name in adata.obs_keys():
         return adata.obs[name]
 
+    if compute is None:
+        raise RuntimeError('unavailable observation annotation: ' + name)
     data = compute(adata)
+    assert data is not None
     assert data.shape == (get_cells_count(adata),)
 
     if inplace:
@@ -397,22 +679,28 @@ def get_non_zero_genes_of_cells(adata, *, inplace: bool = False) -> np.ndarray:
 
 
 def get_annotation_of_genes(
-    adata: AnnData, name: str,
-    compute: Callable[[AnnData], Any],
+    adata: AnnData,
+    name: str,
+    compute: Optional[Callable[[AnnData], Any]] = None,
     *,
     inplace: bool = False
 ) -> np.ndarray:
     '''
     Lookup per-variable (gene) annotation in ``adata``.
 
-    If the annotation does not exist, ``compute`` it.
+    If the annotation does not exist, ``compute`` it. If no ``compute`` function was given,
+    ``raise``.
 
     If ``inplace``, store the annotation in ``adata``.
     '''
     if name in adata.var_keys():
         return adata.var[name]
 
+    if compute is None:
+        raise RuntimeError('unavailable variable annotation: ' + name)
+
     data = compute(adata)
+    assert data is not None
     assert data.shape == (get_genes_count(adata),)
 
     if inplace:
@@ -458,50 +746,30 @@ def get_max_umis_of_genes(adata, *, inplace: bool = False) -> np.ndarray:
 
 
 def get_annotation_of_data(
-    adata: AnnData, name: str,
-    compute: Callable[[AnnData], Any],
+    adata: AnnData,
+    name: str,
+    compute: Optional[Callable[[AnnData], Any]] = None,
     *,
     inplace: bool = False
-) -> np.ndarray:
+) -> Any:
     '''
     Lookup unstructured (data) annotation in ``adata``.
 
-    If the annotation does not exist, ``compute`` it.
+    If the annotation does not exist, ``compute`` it. If no ``compute`` function was given,
+    ``raise``.
 
     If ``inplace``, store the annotation in ``adata``.
     '''
     if name in adata.uns_keys():
         return adata.uns[name]
 
+    if compute is None:
+        raise RuntimeError('unavailable unstructured annotation: ' + name)
+
     data = compute(adata)
+    assert data is not None
 
     if inplace:
         adata.uns[name] = data
 
     return data
-
-
-def get_csr_data(adata: AnnData, *, inplace: bool = False) -> Optional[sparse.csr_matrix]:
-    '''
-    If the data is sparse, return the internal matrix in ``csr_matrix`` format for efficient per-row
-    (cell) processing.
-    '''
-    def _get_csr(adata: AnnData) -> Optional[sparse.csr_matrix]:
-        if sparse.issparse(adata.X):
-            return adata.X.tocsr()
-        return None
-
-    return get_annotation_of_data(adata, 'csr', _get_csr, inplace=inplace)
-
-
-def get_csc_data(adata: AnnData, *, inplace: bool = False) -> Optional[sparse.csc_matrix]:
-    '''
-    If the data is sparse, return the internal matrix in ``csc_matrix`` format for efficient
-    per-column (gene) processing.
-    '''
-    def _get_csc(adata: AnnData) -> Optional[sparse.csc_matrix]:
-        if sparse.issparse(adata.X):
-            return adata.X.tocsc()
-        return None
-
-    return get_annotation_of_data(adata, 'csc', _get_csc, inplace=inplace)
