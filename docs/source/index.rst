@@ -8,6 +8,7 @@ metacells documentation
   intro
   advanced
   reuse
+  todo
   license
 
 Reference

@@ -83,9 +83,9 @@ def parallel_map(
         _analyze_loop(invocations_count, batches_per_thread,
                       minimal_invocations_per_batch)
 
-    timed.parameters('invocations_count', invocations_count,
-                     'batches_count', batches_count,
-                     'batch_size', batch_size)
+    timed.parameters(invocations_count=invocations_count,
+                     batches_count=batches_count,
+                     invocations_per_batch=batch_size)
 
     if batches_count <= 1:
         return function(range(invocations_count))
@@ -153,9 +153,9 @@ def parallel_for(
         _analyze_loop(invocations_count, batches_per_thread,
                       minimal_invocations_per_batch)
 
-    timed.parameters('invocations_count', invocations_count,
-                     'batches_count', batches_count,
-                     'batch_size', batch_size)
+    timed.parameters(invocations_count=invocations_count,
+                     batches_count=batches_count,
+                     invocations_per_batch=batch_size)
 
     if batches_count <= 1:
         function(range(invocations_count))

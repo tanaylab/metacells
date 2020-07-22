@@ -6,7 +6,7 @@ especially in the presence to slicing the data.
 
 .. todo::
 
-    Deal with multi-dimensional ''obsm`` and ``varm`` annotations.
+    Also deal with multi-dimensional ``obsm`` and ``varm`` annotations.
 '''
 
 from typing import (Any, Callable, Collection, Dict, NamedTuple, Optional,
@@ -32,27 +32,29 @@ __all__ = [
 
     'annotate_as_base',
 
-    'get_cells_count',
-    'get_genes_count',
+    'get_obs_count',
+    'get_var_count',
 
     'declare_focus_of_data',
 
     'get_data_layer',
-    'get_csr_data',
-    'get_csc_data',
     'get_log_data',
 
-    'get_annotation_of_cells',
-    'get_total_umis_of_cells',
-    'get_non_zero_genes_of_cells',
+    'get_annotation_of_obs',
+    'get_sum_per_obs',
+    'get_nnz_per_obs',
+    'get_max_per_obs',
 
-    'get_annotation_of_genes',
-    'get_total_umis_of_genes',
-    'get_non_zero_cells_of_genes',
-    'get_max_umis_of_genes',
+    'get_annotation_of_var',
+    'get_sum_per_var',
+    'get_nnz_per_var',
+    'get_max_per_var',
 
     'get_annotation_of_data',
 ]
+
+
+SPARSE_LAYOUTS = ['bsr', 'coo', 'csc', 'csr', 'dia', 'dok', 'lil']
 
 
 class SlicingContext(NamedTuple):
@@ -152,10 +154,13 @@ def _slicing_known_obs_annotations() -> None:
     slicing_obs_annotation('base_index',
                            preserve_when_slicing_obs=True,
                            preserve_when_slicing_var=True)
-    slicing_obs_annotation('total_counts',
+    slicing_obs_annotation('sum_UMIs',
                            preserve_when_slicing_obs=True,
                            preserve_when_slicing_var=False)
-    slicing_obs_annotation('n_genes_by_counts',
+    slicing_obs_annotation('nnz_UMIs',
+                           preserve_when_slicing_obs=True,
+                           preserve_when_slicing_var=False)
+    slicing_obs_annotation('max_UMIs',
                            preserve_when_slicing_obs=True,
                            preserve_when_slicing_var=False)
 
@@ -187,13 +192,13 @@ def _slicing_known_var_annotations() -> None:
     slicing_var_annotation('base_index',
                            preserve_when_slicing_obs=True,
                            preserve_when_slicing_var=True)
-    slicing_var_annotation('total_counts',
+    slicing_var_annotation('sum_UMIs',
                            preserve_when_slicing_obs=False,
                            preserve_when_slicing_var=True)
-    slicing_obs_annotation('n_cells_by_counts',
+    slicing_obs_annotation('nnz_UMIs',
                            preserve_when_slicing_obs=False,
                            preserve_when_slicing_var=True)
-    slicing_obs_annotation('max_by_counts',
+    slicing_obs_annotation('max_UMIs',
                            preserve_when_slicing_obs=False,
                            preserve_when_slicing_var=True)
 
@@ -219,41 +224,10 @@ def slicing_uns_annotation(
                                               fix_sliced_annotation)
 
 
-def _slice_csr(
-    slicing_context: SlicingContext,
-    _annotation_name: str,
-) -> None:
-    assert slicing_context.did_slice_obs
-    assert not slicing_context.did_slice_var
-    full_csr = slicing_context.full_adata.uns['csr']
-    assert id(slicing_context.sliced_adata.uns['csr']) == id(full_csr)
-    slicing_context.sliced_adata.uns['csr'] = full_csr[slicing_context.slice_obs, :]
-
-
-def _slice_csc(
-    slicing_context: SlicingContext,
-    _annotation_name: str,
-) -> None:
-    assert slicing_context.did_slice_obs
-    assert not slicing_context.did_slice_var
-    full_csc = slicing_context.sliced_adata.uns['csc']
-    assert id(slicing_context.sliced_adata.uns['csc']) == id(full_csc)
-    slicing_context.sliced_adata.uns['csc'] = full_csc[:,
-                                                       slicing_context.slice_var]
-
-
 def _slicing_known_uns_annotations() -> None:
     slicing_uns_annotation('layer',
                            preserve_when_slicing_obs=True,
                            preserve_when_slicing_var=True)
-    slicing_uns_annotation('csr',
-                           preserve_when_slicing_obs=True,
-                           preserve_when_slicing_var=False,
-                           fix_sliced_annotation=_slice_csr)
-    slicing_uns_annotation('csc',
-                           preserve_when_slicing_obs=False,
-                           preserve_when_slicing_var=True,
-                           fix_sliced_annotation=_slice_csc)
 
 
 def _slicing_known_annotations() -> None:
@@ -280,7 +254,7 @@ def slice(  # pylint: disable=redefined-builtin
     mask or a collection of indices to include in the data slice. In the case of an indices array,
     it is assumed the indices are unique and sorted, that is that their effect is similar to a mask.
 
-    In general, annotations data might become invalid when slicing (e.g., the ``total_counts`` of
+    In general, annotations data might become invalid when slicing (e.g., the ``sum_UMIs`` of
     genes is invalidated when specifying a subset of the cells). Therefore, annotations will be
     removed from the result unless they were explicitly marked as preserved using
     ``slicing_obs_annotation``, ``slicing_var_annotation``, and/or ``slicing_uns_annotation``.
@@ -297,14 +271,14 @@ def slice(  # pylint: disable=redefined-builtin
     assert invalidated_annotations_prefix != ''
 
     if cells is None:
-        cells = range(get_cells_count(adata))
+        cells = range(get_obs_count(adata))
     if genes is None:
-        genes = range(get_genes_count(adata))
+        genes = range(get_var_count(adata))
 
     bdata = adata[cells, genes]
 
-    did_slice_obs = get_cells_count(bdata) != get_cells_count(adata)
-    did_slice_var = get_genes_count(bdata) != get_genes_count(adata)
+    did_slice_obs = get_obs_count(bdata) != get_obs_count(adata)
+    did_slice_var = get_var_count(bdata) != get_var_count(adata)
 
     slicing_context = SlicingContext(full_adata=adata, sliced_adata=bdata,
                                      did_slice_obs=did_slice_obs, did_slice_var=did_slice_var,
@@ -360,22 +334,31 @@ def _filter_layers(
 ) -> None:
     layer_names = list(slicing_context.sliced_adata.layers.keys())
     for name in layer_names:
+        if name[0] == '_' and name[4] == '_' and name[1:4] in SPARSE_LAYOUTS:
+            base_name = name[5:]
+        else:
+            base_name = name
+
         (preserve_when_slicing_obs, preserve_when_slicing_var, fix_sliced_layer) = \
             _get_slicing_annotation('data', 'layer',
-                                    SAFE_SLICING_DATA_LAYERS, name)
+                                    SAFE_SLICING_DATA_LAYERS, base_name)
 
         preserve = (not slicing_context.did_slice_obs or preserve_when_slicing_obs) \
             and (not slicing_context.did_slice_var or preserve_when_slicing_var)
 
         if preserve:
             if fix_sliced_layer is not None:
-                fix_sliced_layer(slicing_context, name)
+                if base_name == name:
+                    fix_sliced_layer(slicing_context, name)
+                else:
+                    del slicing_context.sliced_adata.layers[name]
             continue
 
-        if invalidated_annotations_prefix is not None:
+        if invalidated_annotations_prefix is not None and name == base_name:
             new_name = invalidated_annotations_prefix + name
             assert new_name != name
-            slicing_context.sliced_adata.layers[new_name] = slicing_context.sliced_adata.layers[name]
+            slicing_context.sliced_adata.layers[new_name] = \
+                slicing_context.sliced_adata.layers[name]
             _clone_slicing_annotation(SAFE_SLICING_DATA_LAYERS, name, new_name)
 
         del slicing_context.sliced_adata.layers[name]
@@ -430,20 +413,20 @@ def annotate_as_base(adata: AnnData, *, name: str = 'base_index') -> None:
     annotations, which will be preserved when creating a ``slice`` of the data to easily refer back
     to the original full data.
     '''
-    adata.obs[name] = np.arange(get_cells_count(adata))
-    adata.var[name] = np.arange(get_genes_count(adata))
+    adata.obs[name] = np.arange(get_obs_count(adata))
+    adata.var[name] = np.arange(get_var_count(adata))
 
 
-def get_cells_count(adata: AnnData) -> int:
+def get_obs_count(adata: AnnData) -> int:
     '''
-    Return the number of RNA cell profiles in the ``adata``.
+    Return the number of observations (cells) in the ``adata``.
     '''
     return adata.shape[0]
 
 
-def get_genes_count(adata: AnnData) -> int:
+def get_var_count(adata: AnnData) -> int:
     '''
-    Return the number of genes per cell in the ``adata``.
+    Return the number of variables (genes) per observation (cell) in the ``adata``.
     '''
     return adata.shape[1]
 
@@ -467,15 +450,17 @@ def declare_focus_of_data(adata: AnnData, name: str) -> None:
     adata.layers[name] = adata.X
 
 
-def get_data_layer(
+@utd.expand_doc(sparse_layouts=', '.join(['``%s``' % layout for layout in SPARSE_LAYOUTS]))
+def get_data_layer(  # pylint: disable=too-many-branches
     adata: AnnData,
     name: str,
-    compute: Optional[Callable[[AnnData], Any]] = None,
+    compute: Optional[Callable[[], utc.Vector]] = None,
     *,
     inplace: bool = False,
     infocus: bool = False,
     instead: bool = False,
-) -> Union[np.ndarray, sparse.spmatrix, pd.DataFrame]:
+    layout: Optional[str] = None,
+) -> utc.Matrix:
     '''
     Lookup a per-obsevration-per-variable matrix in ``adata``.
 
@@ -488,17 +473,26 @@ def get_data_layer(
     If ``instead`` (implies ``infocus``), do not preserve the current ``X`` of the data, that is,
     remove it from the layers.
 
+    If ``inplace``, and ``layout`` is specified (valid values: {sparse_layouts}), and the data
+    returned by ``compute`` is sparse, then the specific layout data is stored as an additional
+    layer whose name is prefixed with the layout (e.g., ``_csr_UMIs`` instead of ``UMIs``).
+
     .. note::
 
         This ``assert``s that the current ``X``, if not ``None``, was declared to be a layer of the
         data so it isn't lost even if ``infocus`` is specified.
+
+    .. note::
+
+        This never sets the focus layer (that is, ``X``) to a specific-layout data. The focus layer
+        is always set to whatever was returned by ``compute`` under the unprefixed name.
     '''
     if name in adata.layers.keys():
         data = adata.layers[name]
     else:
         if compute is None:
             raise RuntimeError('unavailable layer data: ' + name)
-        data = compute(adata)
+        data = compute()
         assert data.shape == adata.shape
 
     if inplace or infocus or instead:
@@ -513,69 +507,17 @@ def get_data_layer(
             adata.uns['layer'] = name
             adata.X = data
 
+    if layout is None or not sparse.issparse(data):
+        return data
+    assert layout in SPARSE_LAYOUTS
+
+    layout_name = '_%s_%s' % (layout, name)
+    if layout_name in adata.layers.keys():
+        return adata.layers[layout_name]
+
+    data = getattr(data, 'to' + layout)()
+    adata.layers[layout_name] = data
     return data
-
-
-def get_csr_data(
-    adata: AnnData,
-    *,
-    of_layer: str,
-    to_layer: Optional[str] = None,
-    inplace: bool = False,
-    infocus: bool = False,
-    instead: bool = False,
-) -> Union[np.ndarray, sparse.spmatrix]:
-    '''
-    If the data layer is dense, return it immediately. Otherwise:
-
-    Return the data in ``csr_matrix`` format for efficient per-row (cell) processing.
-
-    If ``of_layer`` is specified, this specific data is used. Otherwise, the focus data layer (in
-    ``adata.X``) is used.
-
-    If ``inplace`` or ``infocus`` or ``instead``, the data will be stored in ``to_layer`` (by
-    default, this is the name of the source layer with a ``csr_`` prefix).
-    '''
-    data = get_data_layer(adata, of_layer)
-    if not sparse.issparse(data):
-        return data
-
-    if to_layer is None:
-        to_layer = 'csr_' + of_layer
-
-    return get_data_layer(adata, to_layer, lambda _adata: data.tocsr(),
-                          inplace=inplace, infocus=infocus, instead=instead)
-
-
-def get_csc_data(
-    adata: AnnData,
-    *,
-    of_layer: str,
-    to_layer: Optional[str] = None,
-    inplace: bool = False,
-    infocus: bool = False,
-    instead: bool = False,
-) -> Union[np.ndarray, sparse.spmatrix]:
-    '''
-    If the data layer is dense, return it immediately. Otherwise:
-
-    Return the data in ``csc_matrix`` format for efficient per-column (gene) processing.
-
-    If ``of_layer`` is specified, this specific data is used. Otherwise, the focus data layer (in
-    ``adata.X``) is used.
-
-    If ``inplace`` or ``infocus`` or ``instead``, the data will be stored in ``to_layer`` (by
-    default, this is the name of the source layer with a ``csc_`` prefix).
-    '''
-    data = get_data_layer(adata, of_layer)
-    if not sparse.issparse(data):
-        return data
-
-    if to_layer is None:
-        to_layer = 'csc_' + of_layer
-
-    return get_data_layer(adata, to_layer, lambda _: data.tocsc(),
-                          inplace=inplace, infocus=infocus, instead=instead)
 
 
 @utd.expand_doc()
@@ -589,7 +531,7 @@ def get_log_data(
     inplace: bool = False,
     infocus: bool = False,
     instead: bool = False,
-) -> Union[np.ndarray]:
+) -> utc.Matrix:
     '''
     Return a matrix with the log of some data layer.
 
@@ -615,19 +557,19 @@ def get_log_data(
     if to_layer is None:
         to_layer = 'log_' + of_layer
 
-    def compute(adata: AnnData) -> np.ndarray:
+    def compute() -> np.ndarray:
         assert of_layer is not None
         data = get_data_layer(adata, of_layer)
-        return utc.log_data(data, base=base, normalization=normalization)
+        return utc.log_matrix(data, base=base, normalization=normalization)
 
     return get_data_layer(adata, to_layer, compute,
                           inplace=inplace, infocus=infocus, instead=instead)
 
 
-def get_annotation_of_cells(
+def get_annotation_of_obs(
     adata: AnnData,
     name: str,
-    compute: Optional[Callable[[AnnData], Any]] = None,
+    compute: Optional[Callable[[], utc.Vector]] = None,
     *,
     inplace: bool = False
 ) -> np.ndarray:
@@ -644,9 +586,9 @@ def get_annotation_of_cells(
 
     if compute is None:
         raise RuntimeError('unavailable observation annotation: ' + name)
-    data = compute(adata)
+    data = compute()
     assert data is not None
-    assert data.shape == (get_cells_count(adata),)
+    assert data.shape == (get_obs_count(adata),)
 
     if inplace:
         adata.obs[name] = data
@@ -654,34 +596,52 @@ def get_annotation_of_cells(
     return data
 
 
-def get_total_umis_of_cells(adata: AnnData, *, inplace: bool = False) -> np.ndarray:
+def get_sum_per_obs(adata: AnnData, layer: str, *, inplace: bool = False) -> np.ndarray:
     '''
-    Return the total number of UMIs per cell.
+    Return the sum of the values per observation (cell) of some ``layer``.
 
-    Use the existing ``total_counts`` annotation if it exists.
+    Use the existing ``sum_<layer>`` annotation if it exists.
 
     If ``inplace``, store the annotation in ``adata``.
     '''
-    return get_annotation_of_cells(adata, 'total_counts',
-                                   utc.totals_of_cells, inplace=inplace)
+    def compute() -> np.ndarray:
+        return utc.sum_matrix(get_data_layer(adata, layer, layout='csr'), axis=1)
+
+    return get_annotation_of_obs(adata, 'obs_' + layer, compute, inplace=inplace)
 
 
-def get_non_zero_genes_of_cells(adata, *, inplace: bool = False) -> np.ndarray:
+def get_nnz_per_obs(adata, layer: str, *, inplace: bool = False) -> np.ndarray:
     '''
-    Return the number of genes with non-zero UMIs per cell.
+    Return the number of non-zero values per observation (cell) of some ``layer``.
 
-    Use the existing ``n_genes_by_counts`` annotation if it exists.
+    Use the existing ``nnz_<layer>`` annotation if it exists.
 
     If ``inplace``, store the annotation in ``adata``.
     '''
-    return get_annotation_of_cells(adata, 'n_cells_by_counts',
-                                   utc.non_zero_genes_of_cells, inplace=inplace)
+    def compute() -> np.ndarray:
+        return utc.nnz_matrix(get_data_layer(adata, layer, layout='csr'), axis=1)
+
+    return get_annotation_of_obs(adata, 'obs_' + layer, compute, inplace=inplace)
 
 
-def get_annotation_of_genes(
+def get_max_per_obs(adata, layer: str, *, inplace: bool = False) -> np.ndarray:
+    '''
+    Return the maximal value per observation (cell) of some ``layer``.
+
+    Use the existing ``max_<layer>`` annotation if it exists.
+
+    If ``inplace``, store the annotation in ``adata``.
+    '''
+    def compute() -> np.ndarray:
+        return utc.max_matrix(get_data_layer(adata, layer, layout='csr'), axis=1)
+
+    return get_annotation_of_obs(adata, 'obs_' + layer, compute, inplace=inplace)
+
+
+def get_annotation_of_var(
     adata: AnnData,
     name: str,
-    compute: Optional[Callable[[AnnData], Any]] = None,
+    compute: Optional[Callable[[], utc.Vector]] = None,
     *,
     inplace: bool = False
 ) -> np.ndarray:
@@ -699,9 +659,9 @@ def get_annotation_of_genes(
     if compute is None:
         raise RuntimeError('unavailable variable annotation: ' + name)
 
-    data = compute(adata)
+    data = compute()
     assert data is not None
-    assert data.shape == (get_genes_count(adata),)
+    assert data.shape == (get_var_count(adata),)
 
     if inplace:
         adata.var[name] = data
@@ -709,46 +669,52 @@ def get_annotation_of_genes(
     return data
 
 
-def get_total_umis_of_genes(adata: AnnData, *, inplace: bool = False) -> np.ndarray:
+def get_sum_per_var(adata: AnnData, layer: str, *, inplace: bool = False) -> np.ndarray:
     '''
-    Return the total number of UMIs per gene.
+    Return the sum of the values per variable (gene) of some ``layer``.
 
-    Use the existing ``total_counts`` annotation if it exists.
+    Use the existing ``sum_<layer>`` annotation if it exists.
 
     If ``inplace``, store the annotation in ``adata``.
     '''
-    return get_annotation_of_genes(adata, 'total_counts',
-                                   utc.totals_of_genes, inplace=inplace)
+    def compute() -> np.ndarray:
+        return utc.sum_matrix(get_data_layer(adata, layer, layout='csc'), axis=0)
+
+    return get_annotation_of_var(adata, 'sum_' + layer, compute, inplace=inplace)
 
 
-def get_non_zero_cells_of_genes(adata, *, inplace: bool = False) -> np.ndarray:
+def get_nnz_per_var(adata, layer: str, *, inplace: bool = False) -> np.ndarray:
     '''
-    Return the number of cells each gene has non-zero UMIs in.
+    Return the number of non-zero values per variable (gene) of some ``layer``.
 
-    Use the existing ``n_cells_by_counts`` annotation if it exists.
+    Use the existing ``nnz_<layer>`` annotation if it exists.
 
     If ``inplace``, store the annotation in ``adata``.
     '''
-    return get_annotation_of_genes(adata, 'n_cells_by_counts',
-                                   utc.non_zero_cells_of_genes, inplace=inplace)
+    def compute() -> np.ndarray:
+        return utc.nnz_matrix(get_data_layer(adata, layer, layout='csc'), axis=0)
+
+    return get_annotation_of_var(adata, 'nnz_' + layer, compute, inplace=inplace)
 
 
-def get_max_umis_of_genes(adata, *, inplace: bool = False) -> np.ndarray:
+def get_max_per_var(adata, layer: str, *, inplace: bool = False) -> np.ndarray:
     '''
-    Return the maximal number of UMIs each gene has in a cell.
+    Return the maximal value per variable (gene) of some ``layer``.
 
-    Use the existing ``max_by_counts`` annotation if it exists.
+    Use the existing ``max_<layer>`` annotation if it exists.
 
     If ``inplace``, store the annotation in ``adata``.
     '''
-    return get_annotation_of_genes(adata, 'max_by_counts',
-                                   utc.max_umis_of_genes, inplace=inplace)
+    def compute() -> np.ndarray:
+        return utc.max_matrix(get_data_layer(adata, layer, layout='csc'), axis=0)
+
+    return get_annotation_of_var(adata, 'max_' + layer, compute, inplace=inplace)
 
 
 def get_annotation_of_data(
     adata: AnnData,
     name: str,
-    compute: Optional[Callable[[AnnData], Any]] = None,
+    compute: Optional[Callable[[], utc.Vector]] = None,
     *,
     inplace: bool = False
 ) -> Any:
@@ -766,7 +732,7 @@ def get_annotation_of_data(
     if compute is None:
         raise RuntimeError('unavailable unstructured annotation: ' + name)
 
-    data = compute(adata)
+    data = compute()
     assert data is not None
 
     if inplace:

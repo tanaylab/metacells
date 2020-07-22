@@ -3,32 +3,31 @@ Utilities for performing efficient computations.
 '''
 
 from math import ceil
-from typing import Any, Callable, Optional, Union
+from typing import Callable, Optional, Union
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
-from anndata import AnnData  # type: ignore
 from scipy import sparse  # type: ignore
 
 import metacells.utilities.timing as timed
 from metacells.utilities.threading import parallel_for
 
-MINIMAL_OPERATIONS_PER_BATCH = 2_000_000
+Matrix = Union[sparse.spmatrix, np.ndarray, pd.DataFrame]
+Vector = Union[np.ndarray, pd.Series]
+
+MINIMAL_INSTRUCTIONS_PER_BATCH = 2_000_000
 
 __all__ = [
     'as_array',
-    'sparse_corrcoef',
-
-    'log_data',
-
-    'totals_of_cells',
-    'totals_of_genes',
-    'non_zero_genes_of_cells',
-    'non_zero_cells_of_genes',
+    'corrcoef',
+    'log_matrix',
+    'sum_matrix',
+    'nnz_matrix',
+    'max_matrix',
 ]
 
 
-def as_array(data: Any) -> np.ndarray:
+def as_array(data: Union[Matrix, Vector]) -> np.ndarray:
     '''
     Convert a matrix to an array.
     '''
@@ -38,25 +37,37 @@ def as_array(data: Any) -> np.ndarray:
 
 
 @timed.call()
-def sparse_corrcoef(matrix: Any) -> np.ndarray:
+def corrcoef(matrix: Matrix) -> np.ndarray:
     '''
-    Compute correlations between all rows of a sparse matrix.
+    Compute correlations between all observations (rows, cells) containing variables (columns,
+    genes).
 
-    This should give the same results as ``numpy.corrcoef``, but faster.
+    This should give the same results as ``numpy.corrcoef``, but faster for sparse matrices.
+
+    .. note::
+
+        To correlate between observations (cells), the expected layout is the transpose of the
+        layout of ``X`` in ``AnnData``.
     '''
-    timed.parameters(*matrix.shape)
-    size = matrix.shape[1]
+    if not sparse.issparse(matrix):
+        return np.corrcoef(matrix)
+
+    obs_count = matrix.shape[0]
+    var_count = matrix.shape[1]
+    timed.parameters(obs_count=obs_count, var_count=var_count)
     sum_of_rows = matrix.sum(axis=1)
-    centering = sum_of_rows.dot(sum_of_rows.T) / size
-    correlations = (matrix.dot(matrix.T) - centering) / (size - 1)
+    assert len(sum_of_rows) == obs_count
+    centering = sum_of_rows.dot(sum_of_rows.T) / var_count
+    correlations = (matrix.dot(matrix.T) - centering) / (var_count - 1)
+    assert correlations.shape == (obs_count, obs_count)
     diagonal = np.diag(correlations)
     correlations /= np.sqrt(np.outer(diagonal, diagonal))
     return correlations
 
 
 @timed.call()
-def log_data(
-    data: Union[sparse.spmatrix, np.ndarray, pd.DataFrame],
+def log_matrix(
+    data: Matrix,
     *,
     base: Optional[float] = None,
     normalization: float = 1,
@@ -91,108 +102,72 @@ def log_data(
 
 
 @timed.call()
-def totals_of_cells(adata: AnnData) -> np.ndarray:
+def sum_matrix(data: Matrix, axis: int) -> np.ndarray:
     '''
-    Compute the total number of UMIs per cell.
+    Compute the total per row (``axis`` = 1) or column (``axis`` = 0) of some ``data``.
     '''
-    return _reduce_cells(adata, lambda data: data.sum(axis=1))
+    return _reduce_matrix(data, axis, lambda data: data.sum(axis=axis))
 
 
 @timed.call()
-def totals_of_genes(adata: AnnData) -> np.ndarray:
+def nnz_matrix(data: Matrix, axis: int) -> np.ndarray:
     '''
-    Compute the total number of UMIs per gene.
+    Compute the number of non-zero elements per row (``axis`` = 1) or column (``axis`` = 0) of some
+    ``data``.
     '''
-    return _reduce_genes(adata, lambda data: data.sum(axis=0))
+    if sparse.issparse(data):
+        return _reduce_matrix(data, axis, lambda data: data.getnnz(axis=axis))
+    return _reduce_matrix(data, axis, lambda data: np.count_nonzero(data, axis=axis))
 
 
 @timed.call()
-def non_zero_genes_of_cells(adata: AnnData) -> np.ndarray:
+def max_matrix(data: Matrix, axis: int) -> np.ndarray:
     '''
-    Compute the number of genes with non-zero UMIs per cell.
+    Compute the maximal element per row (``axis`` = 1) or column (``axis`` = 0) of some ``data``.
     '''
-    if sparse.issparse(adata.X):
-        return _reduce_cells(adata, lambda data: data.getnnz(axis=1))
-    return _reduce_cells(adata, lambda data: np.count_nonzero(data, axis=1))
+    if sparse.issparse(data):
+        return _reduce_matrix(data, axis, lambda data: data.max(axis=axis))
+    return _reduce_matrix(data, axis, lambda data: np.amax(data, axis=axis))
 
 
-@timed.call()
-def non_zero_cells_of_genes(adata: AnnData) -> np.ndarray:
-    '''
-    Compute the number of cells each gene has non-zero UMIs in.
-    '''
-    if sparse.issparse(adata.X):
-        return _reduce_genes(adata, lambda data: data.getnnz(axis=0))
-    return _reduce_genes(adata, lambda data: np.count_nonzero(data, axis=0))
-
-
-@timed.call()
-def max_umis_of_genes(adata: AnnData) -> np.ndarray:
-    '''
-    Compute the number of cells each gene has non-zero UMIs in.
-    '''
-    if sparse.issparse(adata.X):
-        return _reduce_genes(adata, lambda data: data.max(axis=0))
-    return _reduce_genes(adata, lambda data: np.amax(data, axis=0))
-
-
-def _reduce_cells(
-    adata: AnnData,
+def _reduce_matrix(
+    data: Matrix,
+    axis: int,
     reducer: Callable,
     *,
-    operations_per_gene: int = 1,
+    instructions_per_element: int = 1,
 ) -> np.ndarray:
-    cells_count = adata.X.shape[0]
-    results = np.empty(cells_count)
+    assert data.ndim == 2
+    assert 0 <= axis <= 1
 
-    X = adata.X
-    if sparse.issparse(X):
-        X = X.tocsr()
-        genes_count = X.data.size / cells_count
+    elements_count = data.shape[axis]
+    results_count = data.shape[1 - axis]
+    results = np.empty(results_count)
+
+    if sparse.issparse(data):
+        if axis == 0:
+            data = data.tocsc()
+        else:
+            data = data.tocsr()
+        mean_elements_per_result = len(data.indices) / results_count
     else:
-        genes_count = adata.X.shape[1]
+        mean_elements_per_result = elements_count
 
-    def batch_reducer(indices: range) -> None:
-        results[indices] = as_array(reducer(X[indices, :]))
+    if axis == 0:
+        def batch_reducer(indices: range) -> None:
+            results[indices] = as_array(reducer(data[:, indices]))
+    else:
+        def batch_reducer(indices: range) -> None:
+            results[indices] = as_array(reducer(data[indices, :]))
 
-    timed.parameters('non_zero_genes_per_cell', genes_count)
+    mean_instructions_per_result = mean_elements_per_result * instructions_per_element
     minimal_invocations_per_batch = \
-        _minimal_invocations_per_batch(genes_count, operations_per_gene)
-    parallel_for(batch_reducer, cells_count,
+        ceil(MINIMAL_INSTRUCTIONS_PER_BATCH / mean_instructions_per_result)
+
+    timed.parameters(results_count=results_count, elements_count=elements_count,
+                     mean_elements_per_result=mean_elements_per_result)
+
+    parallel_for(batch_reducer, results_count,
                  minimal_invocations_per_batch=minimal_invocations_per_batch)
 
     return results
-
-
-def _reduce_genes(
-    adata: AnnData,
-    reducer: Callable,
-    *,
-    operations_per_cell: int = 1,
-) -> np.ndarray:
-    genes_count = adata.X.shape[1]
-
-    results = np.empty(genes_count)
-
-    X = adata.X
-    if sparse.issparse(X):
-        X = X.tocsc()
-        cells_count = X.data.size / genes_count
-    else:
-        cells_count = adata.X.shape[0]
-
-    def batch_reducer(indices: range) -> None:
-        results[indices] = as_array(reducer(X[:, indices]))
-
-    timed.parameters('non_zero_cells_per_gene', cells_count)
-    minimal_invocations_per_batch = \
-        _minimal_invocations_per_batch(cells_count, operations_per_cell)
-    parallel_for(batch_reducer, genes_count,
-                 minimal_invocations_per_batch=minimal_invocations_per_batch)
-
-    return results
-
-
-def _minimal_invocations_per_batch(items_count: int, operations_per_item: int = 1) -> int:
-    operations_per_invocation = items_count * operations_per_item
-    return ceil(MINIMAL_OPERATIONS_PER_BATCH / operations_per_invocation)

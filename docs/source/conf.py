@@ -23,7 +23,8 @@ sys.path.insert(0, os.path.abspath('../..'))
 extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.coverage',
-    'sphinx.ext.autosectionlabel'
+    'sphinx.ext.autosectionlabel',
+    'sphinx.ext.todo',
 ]
 
 autosectionlabel_prefix_document = True
@@ -106,7 +107,8 @@ pygments_style = 'sphinx'
 # keep_warnings = False
 
 # If true, ``todo`` and ``todoList`` produce output, else they produce nothing.
-todo_include_todos = False
+todo_include_todos = True
+todo_link_only = True
 
 
 # -- Options for HTML output ----------------------------------------------

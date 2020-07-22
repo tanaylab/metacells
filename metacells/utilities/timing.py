@@ -9,13 +9,20 @@ from threading import local as thread_local
 from time import perf_counter_ns, thread_time_ns
 from typing import Any, Callable, Iterator, List, Optional, TextIO
 
+USE_PAPI = \
+    os.environ.get('METACELLS_COLLECT_TIMING', 'False').lower() == 'true'
+
+if USE_PAPI:
+    from pypapi import papi_high  # type: ignore
+    from pypapi import events as papi_events  # type: ignore
+
 __all__ = [
     'step',
     'call',
 ]
 
-COLLECT_TIMING = os.environ.get(
-    'METACELLS_COLLECT_TIMING', 'False').lower() == 'true'
+COLLECT_TIMING = \
+    os.environ.get('METACELLS_COLLECT_TIMING', 'False').lower() == 'true'
 
 LOCK = Lock()
 
@@ -26,34 +33,58 @@ TIMING_BUFFERING: int = int(os.environ.get('METACELL_TIMING_BUFFERING', '1'))
 THREAD_LOCAL = thread_local()
 
 
+def total_instructions() -> int:
+    '''
+    Get the total number of instructions executed in the current thread.
+    '''
+    if not USE_PAPI:
+        return 0
+
+    base_instructions = getattr(THREAD_LOCAL, 'base_instructions', None)
+    if base_instructions is None:
+        papi_high.start_counters([papi_events.PAPI_TOT_INS])
+        instructions = 0
+    else:
+        instructions = base_instructions + papi_high.read_counters()[0]
+
+    THREAD_LOCAL.base_instructions = instructions
+    return instructions
+
+
 class Counters:
     '''
     The counters for the execution times.
     '''
 
-    def __init__(self, *, elapsed_ns: int = 0, cpu_ns: int = 0) -> None:
+    def __init__(self, *, elapsed_ns: int = 0, cpu_ns: int = 0, instructions: int = 0) -> None:
         self.elapsed_ns = elapsed_ns  #: Elapsed time counter.
         self.cpu_ns = cpu_ns  #: CPU time counter.
+        #: Executed instructions (using PAPI).
+        self.instructions = instructions
 
     @staticmethod
     def now() -> 'Counters':
         '''
         Return the current value of the counters.
         '''
-        return Counters(elapsed_ns=perf_counter_ns(), cpu_ns=thread_time_ns())
+        return Counters(elapsed_ns=perf_counter_ns(), cpu_ns=thread_time_ns(),
+                        instructions=total_instructions())
 
     def __iadd__(self, other: 'Counters') -> 'Counters':
         self.elapsed_ns += other.elapsed_ns
         self.cpu_ns += other.cpu_ns
+        self.instructions += other.instructions
         return self
 
     def __sub__(self, other: 'Counters') -> 'Counters':
         return Counters(elapsed_ns=self.elapsed_ns - other.elapsed_ns,
-                        cpu_ns=self.cpu_ns - other.cpu_ns)
+                        cpu_ns=self.cpu_ns - other.cpu_ns,
+                        instructions=self.instructions - other.instructions)
 
     def __isub__(self, other: 'Counters') -> 'Counters':
         self.elapsed_ns -= other.elapsed_ns
         self.cpu_ns -= other.cpu_ns
+        self.instructions -= other.instructions
         return self
 
 
@@ -70,7 +101,7 @@ class StepTiming:
         self.step_name = name
 
         #: Parameters of interest of the processing step.
-        self.parameters: List[Any] = []
+        self.parameters: List[str] = []
 
         #: The thread the step was invoked in.
         self.thread_name = current_thread().name
@@ -184,15 +215,13 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
                 if TIMING_FILE is None:
                     TIMING_FILE = \
                         open(TIMING_PATH, 'a', buffering=TIMING_BUFFERING)
-                if len(step_timing.parameters) == 0:
-                    TIMING_FILE.write('%s,%s,%s\n'
-                                      % (name, total_times.cpu_ns, total_times.elapsed_ns))
-                else:
-                    TIMING_FILE.write('%s,%s,%s,%s\n'
-                                      % (name, total_times.cpu_ns, total_times.elapsed_ns,
-                                         ','.join([str(parameter)
-                                                   for parameter
-                                                   in step_timing.parameters])))
+                text = [name, 'elapsed_ns', str(total_times.elapsed_ns),
+                        'cpu_ns', str(total_times.cpu_ns)]
+                if USE_PAPI:
+                    text.append('instructions')
+                    text.append(str(total_times.instructions))
+                text.extend(step_timing.parameters)
+                TIMING_FILE.write(','.join(text) + '\n')
 
 
 def current_step() -> Optional[StepTiming]:
@@ -207,17 +236,22 @@ def current_step() -> Optional[StepTiming]:
     return steps_stack[-1]
 
 
-def parameters(*values: Any) -> None:
+def parameters(**kwargs: Any) -> None:
     '''
     Associate relevant timing parameters to the innermost ``timing.step``.
 
-    The specified ``values`` are appended at the end of the generated ``timing.csv`` line. This
-    allows tracking parameters which affect invocation time (such as array sizes), to help calibrate
-    parameters such as ``minimal_invocations_per_batch`` for ``parallel_map`` and ``parallel_for``.
+    The specified arguments are appended at the end of the generated ``timing.csv`` line. For
+    example, ``parameters(foo=2, bar=3)`` would add ``foo,2,bar,3`` to the line ``timing.csv``.
+
+    This allows tracking parameters which affect invocation time (such as array sizes), to help
+    calibrate parameters such as ``minimal_invocations_per_batch`` for ``parallel_map`` and
+    ``parallel_for``.
     '''
     step_timing = current_step()
     if step_timing is not None:
-        step_timing.parameters.extend(values)
+        for name, value in kwargs.items():
+            step_timing.parameters.append(name)
+            step_timing.parameters.append(str(value))
 
 
 def call(name: Optional[str] = None) -> Callable[[Callable], Callable]:

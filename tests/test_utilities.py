@@ -24,8 +24,9 @@ def test_expand_doc():
 
 def test_sparse_corrcoef():
     matrix = sparse.rand(100, 10000, density=0.1, format='csr')
-    sparse_correlation = ut.sparse_corrcoef(matrix)
+    sparse_correlation = ut.corrcoef(matrix)
     numpy_correlation = np.corrcoef(matrix.todense())
+    assert numpy_correlation.shape == (100, 100)
     assert np.allclose(sparse_correlation, numpy_correlation)
 
 
