@@ -27,7 +27,7 @@ COLLECT_TIMING = \
 LOCK = Lock()
 
 TIMING_FILE: Optional[TextIO] = None
-TIMING_PATH: str = os.environ.get('METACELL_TIMING_FILE', 'timing.csv')
+TIMING_PATH: str = os.environ.get('METACELL_TIMING_CSV', 'timing.csv')
 TIMING_BUFFERING: int = int(os.environ.get('METACELL_TIMING_BUFFERING', '1'))
 
 THREAD_LOCAL = thread_local()
@@ -109,8 +109,8 @@ class StepTiming:
         #: The amount of CPU used in nested steps in the same thread.
         self.total_nested = Counters()
 
-        #: Amount of CPU used in other thread by parallel code.
-        self.other_thread_cpu_ns = 0
+        #: Amount of resources used in other thread by parallel code.
+        self.other_thread = Counters()
 
 
 @contextmanager
@@ -199,7 +199,8 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
 
         if name == '':
             assert parent_timing is not None
-            parent_timing.other_thread_cpu_ns += total_times.cpu_ns
+            total_times.elapsed_ns = 0
+            parent_timing.other_thread += total_times
 
         else:
             if parent_timing is not None:
@@ -208,7 +209,7 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
             total_times -= step_timing.total_nested
             assert total_times.elapsed_ns >= 0
             assert total_times.cpu_ns >= 0
-            total_times.cpu_ns += step_timing.other_thread_cpu_ns
+            total_times += step_timing.other_thread
 
             with LOCK:
                 global TIMING_FILE

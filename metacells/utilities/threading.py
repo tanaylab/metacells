@@ -45,7 +45,8 @@ def parallel_map(
     If ``minimal_invocations_per_batch`` is specified, it may reduce the number of batches,
     ensuring that a lower invocation count does not incur excessive scheduling overhead. Picking a
     good value here requires profiling, and taking into account the amount of work in each
-    invocation. A good way to collect the needed information is to use ``timing.parameters``.
+    invocation. A good way to collect the needed information is to use ``timing.parameters``;
+    this is used by the functions in ``metacells.computation``.
 
     When batching is used, the ``function`` is invoked with a range of invocation indices, and
     should return a list of results, one per invocation index. This allows the function to perform
@@ -82,10 +83,6 @@ def parallel_map(
     batches_count, batch_size = \
         _analyze_loop(invocations_count, batches_per_thread,
                       minimal_invocations_per_batch)
-
-    timed.parameters(invocations_count=invocations_count,
-                     batches_count=batches_count,
-                     invocations_per_batch=batch_size)
 
     if batches_count <= 1:
         return function(range(invocations_count))
@@ -152,10 +149,6 @@ def parallel_for(
     batches_count, batch_size = \
         _analyze_loop(invocations_count, batches_per_thread,
                       minimal_invocations_per_batch)
-
-    timed.parameters(invocations_count=invocations_count,
-                     batches_count=batches_count,
-                     invocations_per_batch=batch_size)
 
     if batches_count <= 1:
         function(range(invocations_count))

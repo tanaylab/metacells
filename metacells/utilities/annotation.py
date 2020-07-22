@@ -21,6 +21,7 @@ from scipy import sparse  # type: ignore
 
 import metacells.utilities.computation as utc
 import metacells.utilities.documentation as utd
+import metacells.utilities.timing as utt
 
 __all__ = [
     'slice',
@@ -515,7 +516,8 @@ def get_data_layer(  # pylint: disable=too-many-branches
     if layout_name in adata.layers.keys():
         return adata.layers[layout_name]
 
-    data = getattr(data, 'to' + layout)()
+    with utt.step(name + '_to_' + layout):
+        data = getattr(data, 'to' + layout)()
     adata.layers[layout_name] = data
     return data
 

@@ -1,0 +1,19 @@
+max_matrix:
+  sparse:
+    complexity: n
+    constant: 4558.551436670135
+    factor: 11.053735851151371
+    relative_absolute_error: 0.0001618798226572545
+nnz_matrix:
+  sparse:
+    complexity: n
+    constant: 3741.5034748319194
+    factor: 2.672464467553086
+    relative_absolute_error: 0.00014449319830582566
+sum_matrix:
+  sparse:
+    complexity: n
+    constant: 2221.0851174532304
+    factor: 8.221083439305565
+    relative_absolute_error: 0.07010060155479046
+

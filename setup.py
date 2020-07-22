@@ -17,6 +17,7 @@ INSTALL_REQUIRES = [
     'numpy',
     'pandas',
     'papi; platform_system=="Linux"',
+    'pyyaml',
     'readerwriterlock',
 ]
 
@@ -25,7 +26,6 @@ TESTS_REQUIRE = [
     'pytest',
     'scanpy',
     'tox',
-    'pyyaml',
 ]
 
 DEVELOP_REQUIRES = [
@@ -66,6 +66,9 @@ setup(
             ],
         ),
     ],
+    entry_points={'console_scripts': [
+        'metacells_timing=metacells.scripts.timing:main',
+    ]},
     packages=find_packages(),
     python_requires='>=3.7',
     setup_requires=SETUP_REQUIRES,

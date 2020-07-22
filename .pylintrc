@@ -17,4 +17,4 @@ disable=C0330,
 check-quote-consistency=yes
 
 [BASIC]
-good-names=X
+good-names=X,n,m,O_N,O_N_Log_N

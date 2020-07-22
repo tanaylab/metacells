@@ -120,6 +120,13 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     rare_module_of_genes = np.full(genes_count, -1)
     list_of_names_of_genes_of_modules: List[np.ndarray] = []
 
+    total_umis_of_cells = \
+        ut.get_sum_per_obs(adata, umis_layer, inplace=intermediate)
+    nnz_cells_of_genes = \
+        ut.get_nnz_per_var(adata, umis_layer, inplace=intermediate)
+    max_umis_of_genes = \
+        ut.get_max_per_var(adata, umis_layer, inplace=intermediate)
+
     def results() -> Optional[Tuple[pd.DataFrame, pd.DataFrame, np.ndarray]]:
         array_of_names_of_genes_of_modules = \
             np.array(list_of_names_of_genes_of_modules, dtype='object')
@@ -138,14 +145,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
 
         return obs_metrics, var_metrics, array_of_names_of_genes_of_modules
 
-    total_umis_of_cells = \
-        ut.get_sum_per_obs(adata, umis_layer, inplace=intermediate)
-    nnz_cells_of_genes = \
-        ut.get_nnz_per_var(adata, umis_layer, inplace=intermediate)
-    max_umis_of_genes = \
-        ut.get_max_per_var(adata, umis_layer, inplace=intermediate)
-
-    with ut.step('.1.pick_candidate_genes'):
+    with ut.step('.1-pick_candidate_genes'):
         nnz_cells_fraction_of_genes = nnz_cells_of_genes / cells_count
 
         nnz_cells_fraction_mask_of_genes = \
@@ -162,18 +162,18 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
             return results()
         candidate_data = ut.slice(adata, genes=candidate_genes_indices)
 
-    with ut.step('.2.correlate'):
+    with ut.step('.2-correlate'):
         candidate_umis = ut.get_data_layer(candidate_data, umis_layer)
         correlations_between_candidate_genes = ut.corrcoef(candidate_umis.T)
         correlations_between_candidate_genes = \
             np.corrcoef(correlations_between_candidate_genes)
 
-    with ut.step('.3.linkage'):
+    with ut.step('.3-linkage'):
         linkage = \
             sch.linkage(scd.pdist(correlations_between_candidate_genes),
                         method=cluster_method_of_genes)
 
-    with ut.step('.4.identify_genes'):
+    with ut.step('.4-identify_genes'):
         np.fill_diagonal(correlations_between_candidate_genes, None)
         combined_candidate_indices = {index: [index]
                                       for index in range(candidate_genes_count)}
@@ -212,7 +212,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
             del combined_correlation[left_index]
             del combined_correlation[right_index]
 
-    with ut.step('.5.identify_cells'):
+    with ut.step('.5-identify_cells'):
         maximal_strength_of_cells = np.zeros(cells_count)
         gene_indices_of_modules: List[np.ndarray] = []
         candidate_umis = \
@@ -280,4 +280,5 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         list_of_names_of_genes_of_modules.append(names_of_genes_of_module)
 
     assert len(list_of_names_of_genes_of_modules) > 0
+
     return results()
