@@ -30,7 +30,6 @@ def parallel_map(
     invocations_count: int,
     *,
     batches_per_thread: Optional[int] = 4,
-    minimal_invocations_per_batch: int = 1,
 ) -> Iterable[Any]:
     '''
     Execute ``function``, in parallel, ``invocations_count`` times. Each invocation is given the
@@ -41,12 +40,6 @@ def parallel_map(
     there is an inherent trade-off where a higher number of batches per thread increases scheduling
     overhead but reduces sensitivity for variance between execution time of function invocations.
     The default value of {batches_per_thread} is meant to provide a reasonable compromise.
-
-    If ``minimal_invocations_per_batch`` is specified, it may reduce the number of batches,
-    ensuring that a lower invocation count does not incur excessive scheduling overhead. Picking a
-    good value here requires profiling, and taking into account the amount of work in each
-    invocation. A good way to collect the needed information is to use ``timing.parameters``;
-    this is used by the functions in ``metacells.computation``.
 
     When batching is used, the ``function`` is invoked with a range of invocation indices, and
     should return a list of results, one per invocation index. This allows the function to perform
@@ -81,8 +74,7 @@ def parallel_map(
         return list(EXECUTOR.map(timed_function, range(invocations_count)))
 
     batches_count, batch_size = \
-        _analyze_loop(invocations_count, batches_per_thread,
-                      minimal_invocations_per_batch)
+        _analyze_loop(invocations_count, batches_per_thread)
 
     if batches_count <= 1:
         return function(range(invocations_count))
@@ -118,7 +110,6 @@ def parallel_for(
     invocations_count: int,
     *,
     batches_per_thread: Optional[int] = 4,
-    minimal_invocations_per_batch: int = 1,
 ) -> None:
     '''
     Similar to ``parallel_map`` except that the return value of ``function`` is ignored. This avoid
@@ -147,8 +138,7 @@ def parallel_for(
         return
 
     batches_count, batch_size = \
-        _analyze_loop(invocations_count, batches_per_thread,
-                      minimal_invocations_per_batch)
+        _analyze_loop(invocations_count, batches_per_thread)
 
     if batches_count <= 1:
         function(range(invocations_count))
@@ -176,15 +166,9 @@ def parallel_for(
 def _analyze_loop(
     invocations_count: int,
     batches_per_thread: int,
-    minimal_invocations_per_batch: int,
 ) -> Tuple[int, float]:
     batches_count = THREADS_COUNT * batches_per_thread
     batch_size = invocations_count / batches_count
-
-    if batch_size < minimal_invocations_per_batch:
-        batches_count = \
-            max(int(invocations_count / minimal_invocations_per_batch), 1)
-        batch_size = invocations_count / batches_count
 
     if batch_size <= 1.0:
         return invocations_count, 1.0

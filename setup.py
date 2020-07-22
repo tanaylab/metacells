@@ -17,13 +17,13 @@ INSTALL_REQUIRES = [
     'numpy',
     'pandas',
     'papi; platform_system=="Linux"',
-    'pyyaml',
     'readerwriterlock',
 ]
 
 # TODO: Repeated in setup.cfg
 TESTS_REQUIRE = [
     'pytest',
+    'pyyaml',
     'scanpy',
     'tox',
 ]
