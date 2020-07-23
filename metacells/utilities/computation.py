@@ -8,11 +8,10 @@ import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from scipy import sparse  # type: ignore
 
+import metacells.extensions as xt  # type: ignore
+import metacells.utilities.documentation as utd
 import metacells.utilities.timing as timed
 from metacells.utilities.threading import parallel_for
-
-Matrix = Union[sparse.spmatrix, np.ndarray, pd.DataFrame]
-Vector = Union[np.ndarray, pd.Series]
 
 __all__ = [
     'as_array',
@@ -22,7 +21,16 @@ __all__ = [
     'sum_matrix',
     'nnz_matrix',
     'max_matrix',
+    'downsample_array',
+    'downsample_tmp_size',
 ]
+
+
+Matrix = Union[sparse.spmatrix, np.ndarray, pd.DataFrame]
+Vector = Union[np.ndarray, pd.Series]
+
+
+DATA_TYPES = ['float32', 'float64', 'int32', 'int64', 'uint32', 'uint64']
 
 
 def as_array(data: Union[Matrix, Vector]) -> np.ndarray:
@@ -197,3 +205,76 @@ def _reduce_matrix(
     parallel_for(batch_reducer, results_count)
 
     return results
+
+
+@timed.call()
+@utd.expand_doc(data_types=','.join(['``%s``' % data_type for data_type in DATA_TYPES]))
+def downsample_array(
+    data: np.ndarray,
+    samples: int,
+    *,
+    tmp: Optional[np.ndarray] = None,
+    output: Optional[np.ndarray] = None,
+    random_seed: int = 0
+) -> None:
+    '''
+    Downsample a vector of sample counters.
+
+    **Input**
+
+    * A Numpy array ``data`` containing non-negative integer sample counts.
+
+    * A desired total number of ``samples``.
+
+    * An optional temporary storage Numpy array minimize allocations for multiple invocations.
+
+    * An optional Numpy array ``output`` to hold the results (otherwise, the input is overwritten).
+
+    * An optional random seed to make the operation replicable.
+
+    The arrays may have any of the data types: {data_types}.
+
+    **Operation**
+
+    If the total number of samples (sum of the data array) is not higher than the required number of
+    samples, the output is identical to the input.
+
+    Otherwise, treat the input as if it was a set where each index appeared its data count number of
+    times. Randomly select the desired number of samples from this set (without repetition), and
+    store in the output the number of times each index was chosen.
+
+    **Motivation**
+
+    Downsampling is an effective way to get the same number of samples in multiple observations (in
+    particular, the same number of total UMIs in multiple cells), and serves as an alternative to
+    normalization (e.g., working with UMI fractions instead of raw UMI counts).
+
+    Downsampling is especially important when computing correlations between observations. When
+    there is high variance between the total samples count in different observations (total UMI
+    count in different cells), then normalization will return higher values when correlating
+    observations with a higher sample count, which will result in an inflated estimation of their
+    similarity to other observations. Downsampling avoids this effect.
+    '''
+    assert data.ndim == 1
+
+    if tmp is None:
+        tmp = np.empty(downsample_tmp_size(data.size), dtype='int32')
+    else:
+        tmp.resize(downsample_tmp_size(data.size))
+
+    if output is None:
+        output = data
+    else:
+        assert output.shape == data.shape
+
+    function_name = \
+        'downsample_%s_%s_%s' % (data.dtype, tmp.dtype, output.dtype)
+    function = getattr(xt, function_name)
+    function(data, tmp, output, samples, random_seed)
+
+
+def downsample_tmp_size(size: int) -> int:
+    '''
+    Return the size of the temporary array needed to ``downsample`` data of the specified size.
+    '''
+    return xt.downsample_tmp_size(size)

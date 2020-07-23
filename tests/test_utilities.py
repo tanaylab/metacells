@@ -91,8 +91,8 @@ def test_downsample_with_tmp():
     tmp = np.empty(ut.downsample_tmp_size(size))
     output = np.empty(size)
 
-    ut.downsample(data, samples, random_seed=random_seed,
-                  tmp=tmp, output=output)
+    ut.downsample_array(data, samples, random_seed=random_seed,
+                        tmp=tmp, output=output)
     assert tmp[-1] == total - samples
 
     assert np.all(data == safe)
@@ -100,7 +100,7 @@ def test_downsample_with_tmp():
     assert np.sum(output) == samples
 
 
-def test_downsample_inplace():
+def test_downsample_array_inplace():
     size = 10
     samples = 20
     random_seed = 123456
@@ -108,13 +108,13 @@ def test_downsample_inplace():
     safe = np.arange(size)
     data = np.arange(size)
 
-    ut.downsample(data, samples, random_seed=random_seed)
+    ut.downsample_array(data, samples, random_seed=random_seed)
 
     assert np.all(data <= safe)
     assert np.sum(data) == samples
 
 
-def test_downsample_too_few():
+def test_downsample_array_too_few():
     size = 10
     total = (size * (size - 1)) // 2
     samples = total * 2
@@ -123,6 +123,6 @@ def test_downsample_too_few():
     safe = np.arange(size)
     data = np.arange(size)
 
-    ut.downsample(data, samples, random_seed=random_seed)
+    ut.downsample_array(data, samples, random_seed=random_seed)
 
     assert np.all(data == safe)

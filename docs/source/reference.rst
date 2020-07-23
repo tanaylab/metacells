@@ -37,12 +37,6 @@ Computation
 .. automodule:: metacells.utilities.computation
     :members:
 
-Extensions
-~~~~~~~~~~
-
-.. automodule:: metacells.utilities.extensions
-    :members:
-
 Documentation
 ~~~~~~~~~~~~~
 

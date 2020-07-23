@@ -266,7 +266,7 @@ random_sample(ArraySlice<T> tree, int64_t random) {
     }
 }
 
-/// See the Python metacell.utilities.computation.downsample
+/// See the Python `metacell.utilities.computation.downsample_array` function.
 template<typename D, typename T, typename O>
 static void
 typed_downsample(const pybind11::array_t<D>& input_array,

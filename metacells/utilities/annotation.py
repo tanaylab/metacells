@@ -49,7 +49,6 @@ __all__ = [
 
     'get_data_layer',
     'del_data_layer',
-    'del_data_layer',
     'get_log_data',
 
     'get_annotation_of_obs',
