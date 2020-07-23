@@ -31,8 +31,8 @@ THREADS_COUNT = 0
 #: The executor to use for parallel tasks (only set if using multiple threads).
 EXECUTOR: Optional[ThreadPoolExecutor] = None
 
-THREADS_COUNT = int(os.environ.get(
-    'METACELLS_THREADS_COUNT', str(os.cpu_count())))
+THREADS_COUNT = \
+    int(os.environ.get('METACELLS_THREADS_COUNT', str(os.cpu_count())))
 if THREADS_COUNT == -1:
     THREADS_COUNT = (os.cpu_count() or 1) // 2
 elif THREADS_COUNT == 0:
@@ -49,7 +49,7 @@ def parallel_map(
     function: Callable[[Union[int, range]], Any],
     invocations_count: int,
     *,
-    batches_per_thread: Optional[int] = 4,
+    batches_per_thread: Optional[int] = 3,
 ) -> Iterable[Any]:
     '''
     Execute ``function``, in parallel, ``invocations_count`` times. Each invocation is given the
@@ -79,7 +79,7 @@ def parallel_map(
     if EXECUTOR is None:
         if batches_per_thread is None:
             return map(function, range(invocations_count))
-        return _flatten(map(function, [range(invocations_count)]))
+        return function(range(invocations_count))
 
     step_timing = timed.current_step()
 
@@ -138,9 +138,10 @@ def parallel_for(
     '''
     if EXECUTOR is None:
         if batches_per_thread is None:
-            map(function, range(invocations_count))
+            for _ in map(function, range(invocations_count)):
+                pass
         else:
-            map(function, [range(invocations_count)])
+            function(range(invocations_count))
         return
 
     step_timing = timed.current_step()

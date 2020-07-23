@@ -229,7 +229,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
                 continue
 
             total_umis_of_module_of_cells = \
-                ut.as_array(candidate_umis[:,
+                ut.to_array(candidate_umis[:,
                                            module_candidate_indices].sum(axis=1))
             assert total_umis_of_module_of_cells.size == cells_count
 

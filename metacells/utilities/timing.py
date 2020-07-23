@@ -9,12 +9,7 @@ from threading import local as thread_local
 from time import perf_counter_ns, thread_time_ns
 from typing import Any, Callable, Dict, Iterator, List, Optional, TextIO, Union
 
-USE_PAPI = \
-    os.environ.get('METACELLS_COLLECT_TIMING', 'False').lower() == 'true'
-
-if USE_PAPI:
-    from pypapi import papi_high  # type: ignore
-    from pypapi import events as papi_events  # type: ignore
+import numpy as np  # type: ignore
 
 __all__ = [
     'COLLECT_TIMING',
@@ -44,6 +39,27 @@ TIMING_BUFFERING: int = int(os.environ.get('METACELL_TIMING_BUFFERING', '1'))
 TIMING_FILE: Optional[TextIO] = None
 THREAD_LOCAL = thread_local()
 LOCK = Lock()
+
+COUNTED_THREADS = 0
+
+#: Whether to use the ``papi`` package to count the executed CPU instructions. Override this by
+#: setting the ``METACELLS_USE_PAPI`` environment variable to ``true``.
+USE_PAPI = \
+    os.environ.get('METACELLS_USE_PAPI', 'False').lower() == 'true'
+
+if USE_PAPI:
+    from pypapi import papi_high  # type: ignore
+    from pypapi import events as papi_events  # type: ignore
+
+
+def _thread_index() -> int:
+    index = getattr(THREAD_LOCAL, 'index', None)
+    if index is None:
+        with LOCK:
+            global COUNTED_THREADS
+            COUNTED_THREADS += 1
+            index = THREAD_LOCAL.index = COUNTED_THREADS
+    return index
 
 
 def total_instructions() -> int:
@@ -127,6 +143,10 @@ class StepTiming:
 
         #: Amount of resources used in other thread by parallel code.
         self.other_thread = Counters()
+
+        #: The set of other threads used.
+        self.other_thread_mask = \
+            np.zeros(1 + (os.cpu_count() or 1), dtype='bool')
 
 
 if COLLECT_TIMING:
@@ -230,6 +250,7 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
             assert parent_timing is not None
             total_times.elapsed_ns = 0
             parent_timing.other_thread += total_times
+            parent_timing.other_thread_mask[_thread_index()] = True
 
         else:
             if parent_timing is not None:
@@ -240,13 +261,15 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
             assert total_times.cpu_ns >= 0
             total_times += step_timing.other_thread
 
-            _print_timing(name, total_times, step_timing.parameters)
+            _print_timing(name, total_times, step_timing.parameters,
+                          step_timing.other_thread_mask.sum())
 
 
 def _print_timing(
     name: str,
     total_times: Counters,
-    step_parameters: Optional[List[str]] = None
+    step_parameters: Optional[List[str]] = None,
+    other_threads_count: int = 0,
 ) -> None:
     with LOCK:
         global TIMING_FILE
@@ -258,6 +281,9 @@ def _print_timing(
         if USE_PAPI:
             text.append('instructions')
             text.append(str(total_times.instructions))
+        if other_threads_count > 0:
+            text.append('other_threads')
+            text.append(str(other_threads_count))
         if step_parameters:
             text.extend(step_parameters)
         TIMING_FILE.write(','.join(text) + '\n')

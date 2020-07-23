@@ -44,6 +44,24 @@
 
 namespace metacells {
 
+/// Release the GIL to allow for actual parallelism.
+class WithoutGil {
+private:
+    PyThreadState* m_save;
+
+public:
+    WithoutGil() {
+        Py_BEGIN_ALLOW_THREADS;
+        m_save = _save;
+    }
+}
+
+~WithoutGil(){ { PyThreadState* _save = m_save;
+Py_END_ALLOW_THREADS;
+}
+}
+;
+
 template<typename T>
 void
 fake_use(T&) {}
@@ -201,8 +219,8 @@ ceil_power_of_two(T size) {
     return 1 << int(ceil(log2(size)));
 }
 
-static int
-downsample_tmp_size(int size) {
+static ssize_t
+downsample_tmp_size(ssize_t size) {
     if (size <= 1) {
         return 0;
     }
@@ -228,7 +246,6 @@ initialize_tree(ConstArraySlice<D> input, ArraySlice<T> tree) {
             tree[index] = input[index * 2] + input[index * 2 + 1];
         }
     }
-
     FastAssertCompare(tree.size(), ==, 1);
 }
 
@@ -274,14 +291,17 @@ typed_downsample(const pybind11::array_t<D>& input_array,
                  pybind11::array_t<O>& output_array,
                  const int samples,
                  const int random_seed) {
+    WithoutGil without_gil{};
+
     ConstArraySlice<D> input{ input_array, "input_array" };
     ArraySlice<T> tree{ tree_array, "tree_array" };
     ArraySlice<O> output{ output_array, "output_array" };
     std::minstd_rand random(random_seed);
 
     FastAssertCompare(samples, >=, 0);
-    FastAssertCompare(tree.size(), ==, downsample_tmp_size(input.size()));
     FastAssertCompare(output.size(), ==, input.size());
+
+    tree = tree.slice(0, downsample_tmp_size(input.size()));
 
     if (input.size() == 0) {
         return;

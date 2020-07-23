@@ -18,13 +18,14 @@ __all__ = [
     'DATA_TYPES',
     'Matrix',
     'Vector',
-    'as_array',
+    'to_array',
     'corrcoef',
     'to_layout',
     'log_matrix',
     'sum_matrix',
     'nnz_matrix',
     'max_matrix',
+    'downsample_matrix',
     'downsample_array',
     'downsample_tmp_size',
 ]
@@ -40,13 +41,36 @@ Matrix = Union[sparse.spmatrix, np.ndarray, pd.DataFrame]
 Vector = Union[np.ndarray, pd.Series]
 
 
-def as_array(data: Union[Matrix, Vector]) -> np.ndarray:
+def to_array(data: Union[Matrix, Vector]) -> np.ndarray:
     '''
-    Convert a matrix to an array.
+    Convert some (possibly sparse) data to an (full dense size) array.
+
+    This should only be applied if only one dimension has size greater than one.
+
+    .. todo::
+
+        There are some strange cases where ``np.reshape(data, -1)`` returns a **matrix** rather than
+        an array. The code included a workaround but it sure is ugly.
     '''
     if sparse.issparse(data):
         data = data.todense()
-    return np.ravel(data)
+
+    if data.ndim == 1:
+        return data
+
+    seen_large_dimension = False
+    for size in data.shape:
+        if size == 1:
+            continue
+        assert not seen_large_dimension
+        seen_large_dimension = True
+
+    array = np.reshape(data, -1)
+    if array.ndim > 1:
+        array = np.reshape(array.__array__(), -1)
+        assert array.ndim == 1
+
+    return array
 
 
 @timed.call()
@@ -69,7 +93,7 @@ def corrcoef(matrix: Matrix) -> np.ndarray:
     var_count = matrix.shape[1]
     timed.parameters(obs_count=obs_count, var_count=var_count)
     sum_of_rows = matrix.sum(axis=1)
-    assert len(sum_of_rows) == obs_count
+    assert sum_of_rows.size == obs_count
     centering = sum_of_rows.dot(sum_of_rows.T) / var_count
     correlations = (matrix.dot(matrix.T) - centering) / (var_count - 1)
     assert correlations.shape == (obs_count, obs_count)
@@ -210,10 +234,10 @@ def _reduce_matrix(
 
     if axis == 0:
         def batch_reducer(indices: range) -> None:
-            results[indices] = as_array(reducer(matrix[:, indices]))
+            results[indices] = to_array(reducer(matrix[:, indices]))
     else:
         def batch_reducer(indices: range) -> None:
-            results[indices] = as_array(reducer(matrix[indices, :]))
+            results[indices] = to_array(reducer(matrix[indices, :]))
 
     timed.parameters(obs_count=results_count, var_count=elements_count)
 
@@ -222,6 +246,7 @@ def _reduce_matrix(
     return results
 
 
+@timed.call()
 def downsample_matrix(
     matrix: Matrix,
     *,
@@ -242,8 +267,10 @@ def downsample_matrix(
     assert 0 <= axis <= 1
 
     if sparse.issparse(matrix):
-        return _downsample_sparse_matrix(matrix, axis, samples, inplace, random_seed)
-    return _downsample_dense_matrix(matrix, axis, samples, inplace, random_seed)
+        with timed.step('.sparse'):
+            return _downsample_sparse_matrix(matrix, axis, samples, inplace, random_seed)
+    with timed.step('.dense'):
+        return _downsample_dense_matrix(matrix, axis, samples, inplace, random_seed)
 
 
 def _downsample_sparse_matrix(
@@ -253,6 +280,7 @@ def _downsample_sparse_matrix(
     inplace: bool,
     random_seed: int
 ) -> sparse.spmatrix:
+    elements_count = matrix.shape[axis]
     results_count = matrix.shape[1 - axis]
 
     axis_format = ['csc', 'csr'][axis]
@@ -270,7 +298,7 @@ def _downsample_sparse_matrix(
         output = constructor((output_data, matrix.indices, matrix.indptr))
 
     shared_storage = SharedStorage()
-    mean_tmp_size = downsample_tmp_size(matrix.nnz / results_count)
+    mean_tmp_size = downsample_tmp_size(elements_count)
     shared_storage.set_private('tmp',
                                lambda: np.empty(mean_tmp_size, dtype=matrix.dtype))
 
@@ -283,22 +311,21 @@ def _downsample_sparse_matrix(
             output_vector = output.data[start_index:stop_index]
 
             tmp = shared_storage.get_private('tmp')
-            tmp.resize(downsample_tmp_size(len(input_vector)))
 
             if random_seed != 0:
                 index_seed = random_seed + index
             else:
                 index_seed = 0
 
-            downsample_array(input_vector, samples, output=output_vector,
-                             tmp=tmp, random_seed=index_seed)
+            _downsample_array(input_vector, samples, tmp,
+                              output_vector, index_seed)
 
     parallel_for(downsample_sparse_vectors, results_count)
 
     return output
 
 
-def _downsample_dense_matrix(  # pylint: disable=too-many-locals
+def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statements
     matrix: np.ndarray,
     axis: int,
     samples: int,
@@ -320,7 +347,7 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals
         sample_output_vector = output[0, :]
 
     input_is_contiguous = \
-        sample_input_vector.flags[np.C_CONTIGUOUS] and sample_input_vector.flags[np.F_CONTIGUOUS]
+        sample_input_vector.flags['C_CONTIGUOUS'] and sample_input_vector.flags['F_CONTIGUOUS']
     if not input_is_contiguous:
         downsampling_dense_input_matrix_of_inefficient_format = \
             'downsampling axis: %s ' \
@@ -329,7 +356,7 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals
         warn(downsampling_dense_input_matrix_of_inefficient_format)
 
     output_is_contiguous = \
-        sample_output_vector.flags[np.C_CONTIGUOUS] and sample_output_vector.flags[np.F_CONTIGUOUS]
+        sample_output_vector.flags['C_CONTIGUOUS'] and sample_output_vector.flags['F_CONTIGUOUS']
     if not inplace and not output_is_contiguous:
         downsampling_dense_output_matrix_of_inefficient_format = \
             'downsampling axis: %s ' \
@@ -356,9 +383,15 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals
                 input_vector = matrix[index, :]
             if not input_is_contiguous:
                 input_vector = np.copy(input_vector)
+            input_array = to_array(input_vector)
 
             if not output_is_contiguous:
                 output_vector = shared_storage.get_private('output')
+            elif axis == 0:
+                output_vector = output[:, index]
+            else:
+                output_vector = output[index, :]
+            output_array = to_array(output_vector)
 
             tmp = shared_storage.get_private('tmp')
 
@@ -367,16 +400,16 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals
             else:
                 index_seed = 0
 
-            downsample_array(input_vector, samples, output=output_vector,
-                             tmp=tmp, random_seed=index_seed)
+            _downsample_array(input_array, samples, tmp,
+                              output_array, index_seed)
 
             if output_is_contiguous:
-                return
+                continue
 
             if axis == 0:
-                output[:, index] = output_vector
+                output[:, index] = output_array
             else:
-                output[index, :] = output_vector
+                output[index, :] = output_array
 
     results_count = matrix.shape[1 - axis]
     parallel_for(downsample_dense_vectors, results_count)
@@ -432,12 +465,22 @@ def downsample_array(
     observations with a higher sample count, which will result in an inflated estimation of their
     similarity to other observations. Downsampling avoids this effect.
     '''
+    return _downsample_array(array, samples, tmp, output, random_seed)
+
+
+def _downsample_array(
+    array: np.ndarray,
+    samples: int,
+    tmp: Optional[np.ndarray] = None,
+    output: Optional[np.ndarray] = None,
+    random_seed: int = 0
+) -> None:
     assert array.ndim == 1
 
     if tmp is None:
         tmp = np.empty(downsample_tmp_size(array.size), dtype='int32')
     else:
-        tmp.resize(downsample_tmp_size(array.size))
+        assert tmp.size >= downsample_tmp_size(array.size)
 
     if output is None:
         output = array

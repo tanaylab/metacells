@@ -39,7 +39,8 @@ def main() -> None:
         elapsed_ns = int(row[2])
         assert row[3] == 'cpu_ns'
         cpu_ns = int(row[4])
-        instructions = int(row[6]) if row[5] == 'instructions' else None
+        instructions = \
+            int(row[6]) if len(row) > 5 and row[5] == 'instructions' else None
 
         data = data_by_name.get(name)
         if data is None:

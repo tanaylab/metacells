@@ -4,6 +4,7 @@ Test the utility functions.
 
 import numpy as np  # type: ignore
 from scipy import sparse  # type: ignore
+from scipy import stats  # type: ignore
 
 import metacells.utilities as ut
 
@@ -36,7 +37,7 @@ def test_parallel_map():
     assert actual == expected
 
 
-def test_unbatcheded_parallel_map():
+def test_unbatched_parallel_map():
     actual = list(ut.parallel_map(lambda index: index,
                                   10000, batches_per_thread=None))
     expected = list(range(10000))
@@ -55,7 +56,7 @@ def test_parallel_for():
     assert np.all(mask)
 
 
-def test_unbatcheded_parallel_for():
+def test_unbatched_parallel_for():
     mask = np.zeros(10000, dtype='bool')
 
     def invocation(index):
@@ -126,3 +127,22 @@ def test_downsample_array_too_few():
     ut.downsample_array(data, samples, random_seed=random_seed)
 
     assert np.all(data == safe)
+
+
+def test_downsample_matrix():
+    rvs = stats.poisson(10, loc=10).rvs
+    matrix = sparse.random(1000, 10000, format='csr',
+                           dtype='int32', random_state=123456, data_rvs=rvs)
+    assert matrix.nnz == matrix.shape[0] * matrix.shape[1] * 0.01
+    old_row_sums = ut.sum_matrix(matrix, axis=1)
+    min_sum = old_row_sums.min()
+    result = ut.downsample_matrix(matrix, axis=1, samples=int(min_sum))
+    assert result.shape == matrix.shape
+    new_row_sums = ut.sum_matrix(result, axis=1)
+    assert np.all(new_row_sums == min_sum)
+
+    matrix = matrix.todense()
+    result = ut.downsample_matrix(matrix, axis=1, samples=int(min_sum))
+    assert result.shape == matrix.shape
+    new_row_sums = ut.sum_matrix(result, axis=1)
+    assert np.all(new_row_sums == min_sum)
