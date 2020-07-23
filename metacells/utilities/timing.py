@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from threading import Lock, current_thread
 from threading import local as thread_local
 from time import perf_counter_ns, thread_time_ns
-from typing import Any, Callable, Iterator, List, Optional, TextIO
+from typing import Any, Callable, Dict, Iterator, List, Optional, TextIO, Union
 
 USE_PAPI = \
     os.environ.get('METACELLS_COLLECT_TIMING', 'False').lower() == 'true'
@@ -19,6 +19,9 @@ if USE_PAPI:
 __all__ = [
     'step',
     'call',
+    'parameters',
+    'context',
+    'current_step',
 ]
 
 COLLECT_TIMING = \
@@ -93,12 +96,15 @@ class StepTiming:
     Timing information for some named processing step.
     '''
 
-    def __init__(self, name: str) -> None:
+    def __init__(self, name: str, parent: Optional['StepTiming']) -> None:
         '''
         Start collecting time for a named processing step.
         '''
         #: The unique name of the processing step.
-        self.step_name = name
+        self.name = name
+
+        #: The parent step, if any.
+        self.parent = parent
 
         #: Parameters of interest of the processing step.
         self.parameters: List[str] = []
@@ -111,6 +117,41 @@ class StepTiming:
 
         #: Amount of resources used in other thread by parallel code.
         self.other_thread = Counters()
+
+
+if COLLECT_TIMING:
+    import gc
+
+    GC_START_POINT: Optional[Counters] = None
+
+    def _time_gc(phase: str, info: Dict[str, Any]) -> None:
+        steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
+        if not steps_stack:
+            return
+
+        global GC_START_POINT
+        if phase == 'start':
+            assert GC_START_POINT is None
+            GC_START_POINT = Counters.now()
+            return
+
+        assert phase == 'stop'
+        assert GC_START_POINT is not None
+
+        gc_total_time = Counters.now() - GC_START_POINT
+        GC_START_POINT = None
+
+        parent_timing = steps_stack[-1]
+        parent_timing.other_thread += gc_total_time
+
+        gc_parameters = []
+        for name, value in info.items():
+            gc_parameters.append(name)
+            gc_parameters.append(str(value))
+
+        _print_timing('__gc__', gc_total_time, gc_parameters)
+
+    gc.callbacks.append(_time_gc)
 
 
 @contextmanager
@@ -182,10 +223,10 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
         assert name != ''
         if name[0] == '.':
             assert parent_timing is not None
-            name = parent_timing.step_name + name
+            name = parent_timing.name + name
 
     start_point = Counters.now()
-    step_timing = StepTiming(name)
+    step_timing = StepTiming(name, parent_timing)
     steps_stack.append(step_timing)
 
     try:
@@ -211,30 +252,27 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
             assert total_times.cpu_ns >= 0
             total_times += step_timing.other_thread
 
-            with LOCK:
-                global TIMING_FILE
-                if TIMING_FILE is None:
-                    TIMING_FILE = \
-                        open(TIMING_PATH, 'a', buffering=TIMING_BUFFERING)
-                text = [name, 'elapsed_ns', str(total_times.elapsed_ns),
-                        'cpu_ns', str(total_times.cpu_ns)]
-                if USE_PAPI:
-                    text.append('instructions')
-                    text.append(str(total_times.instructions))
-                text.extend(step_timing.parameters)
-                TIMING_FILE.write(','.join(text) + '\n')
+            _print_timing(name, total_times, step_timing.parameters)
 
 
-def current_step() -> Optional[StepTiming]:
-    '''
-    The timing collector for the innermost (current) step.
-    '''
-    if not COLLECT_TIMING:
-        return None
-    steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
-    if steps_stack is None or len(steps_stack) == 0:
-        return None
-    return steps_stack[-1]
+def _print_timing(
+    name: str,
+    total_times: Counters,
+    step_parameters: Optional[List[str]] = None
+) -> None:
+    with LOCK:
+        global TIMING_FILE
+        if TIMING_FILE is None:
+            TIMING_FILE = \
+                open(TIMING_PATH, 'a', buffering=TIMING_BUFFERING)
+        text = [name, 'elapsed_ns', str(total_times.elapsed_ns),
+                'cpu_ns', str(total_times.cpu_ns)]
+        if USE_PAPI:
+            text.append('instructions')
+            text.append(str(total_times.instructions))
+        if step_parameters:
+            text.extend(step_parameters)
+        TIMING_FILE.write(','.join(text) + '\n')
 
 
 def parameters(**kwargs: Any) -> None:
@@ -267,3 +305,44 @@ def call(name: Optional[str] = None) -> Callable[[Callable], Callable]:
         return timed
 
     return wrap
+
+
+def context() -> Union[List[str], Iterator[str]]:
+    '''
+    Return the current context (list of steps leading to the current point).
+
+    .. note::
+
+        The list will be empty unless we are collecting timing.
+
+    .. note::
+
+        This correctly tracks the context across threads when using ``parallel_for`` and
+        ``parallel_map``.
+    '''
+    steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
+    if not steps_stack:
+        return []
+
+    step_names = []
+    current_name = ''
+    step_timing: Optional[StepTiming] = steps_stack[-1]
+    while step_timing is not None:
+        if step_timing.name != '' and not current_name.startswith(step_timing.name):
+            current_name = step_timing.name
+            step_names.append(current_name)
+        step_timing = step_timing.parent
+
+    return reversed(step_names)
+
+
+def current_step() -> Optional[StepTiming]:
+    '''
+    The timing collector for the innermost (current) step.
+    '''
+    if not COLLECT_TIMING:
+        return None
+    steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
+    if steps_stack is None or len(steps_stack) == 0:
+        return None
+    return steps_stack[-1]

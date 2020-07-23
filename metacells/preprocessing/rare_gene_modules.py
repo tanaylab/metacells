@@ -120,12 +120,18 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     rare_module_of_genes = np.full(genes_count, -1)
     list_of_names_of_genes_of_modules: List[np.ndarray] = []
 
-    total_umis_of_cells = \
-        ut.get_sum_per_obs(adata, umis_layer, inplace=intermediate)
-    nnz_cells_of_genes = \
-        ut.get_nnz_per_var(adata, umis_layer, inplace=intermediate)
-    max_umis_of_genes = \
-        ut.get_max_per_var(adata, umis_layer, inplace=intermediate)
+    with ut.step('.0.0'):
+        total_umis_of_cells = \
+            ut.get_sum_per_obs(adata, umis_layer,
+                               inplace=intermediate, intermediate=True)
+    with ut.step('.0.1'):
+        nnz_cells_of_genes = \
+            ut.get_nnz_per_var(adata, umis_layer,
+                               inplace=intermediate, intermediate=True)
+    with ut.step('.0.2'):
+        max_umis_of_genes = \
+            ut.get_max_per_var(adata, umis_layer,
+                               inplace=intermediate, intermediate=True)
 
     def results() -> Optional[Tuple[pd.DataFrame, pd.DataFrame, np.ndarray]]:
         array_of_names_of_genes_of_modules = \
@@ -216,7 +222,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         maximal_strength_of_cells = np.zeros(cells_count)
         gene_indices_of_modules: List[np.ndarray] = []
         candidate_umis = \
-            ut.get_data_layer(candidate_data, umis_layer, layout='csc')
+            ut.get_data_layer(candidate_data, umis_layer, per='var')
 
         for link_index, module_candidate_indices in combined_candidate_indices.items():
             if len(module_candidate_indices) < minimal_size_of_modules:
@@ -263,22 +269,23 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         if len(gene_indices_of_modules) == 0:
             return results()
 
-    for raw_module_index, module_gene_indices in enumerate(gene_indices_of_modules):
-        module_cell_indices = \
-            np.where(rare_module_of_cells == raw_module_index)[0]
-        if module_cell_indices.size == 0:
-            continue
+    with ut.step('.6-results'):
+        for raw_module_index, module_gene_indices in enumerate(gene_indices_of_modules):
+            module_cell_indices = \
+                np.where(rare_module_of_cells == raw_module_index)[0]
+            if module_cell_indices.size == 0:
+                continue
 
-        module_index = len(list_of_names_of_genes_of_modules)
+            module_index = len(list_of_names_of_genes_of_modules)
 
-        if raw_module_index != module_index:
-            rare_module_of_cells[module_cell_indices] = module_index
-            rare_module_of_genes[module_gene_indices] = module_index
+            if raw_module_index != module_index:
+                rare_module_of_cells[module_cell_indices] = module_index
+                rare_module_of_genes[module_gene_indices] = module_index
 
-        names_of_genes_of_module = \
-            np.array(adata.var.index[module_gene_indices])
-        list_of_names_of_genes_of_modules.append(names_of_genes_of_module)
+            names_of_genes_of_module = \
+                np.array(adata.var.index[module_gene_indices])
+            list_of_names_of_genes_of_modules.append(names_of_genes_of_module)
 
-    assert len(list_of_names_of_genes_of_modules) > 0
+        assert len(list_of_names_of_genes_of_modules) > 0
 
-    return results()
+        return results()

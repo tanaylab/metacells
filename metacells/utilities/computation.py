@@ -17,6 +17,7 @@ Vector = Union[np.ndarray, pd.Series]
 __all__ = [
     'as_array',
     'corrcoef',
+    'to_layout',
     'log_matrix',
     'sum_matrix',
     'nnz_matrix',
@@ -60,6 +61,47 @@ def corrcoef(matrix: Matrix) -> np.ndarray:
     diagonal = np.diag(correlations)
     correlations /= np.sqrt(np.outer(diagonal, diagonal))
     return correlations
+
+
+@timed.call()
+def to_layout(matrix: Matrix, axis: int) -> Matrix:
+    '''
+    Re-layout a matrix for efficient axis slicing/processing.
+
+    That is, for ``axis=0``, re-layout the matrix for efficient per-column (variable, gene)
+    slicing/processing. For sparse matrices, this is ``csc`` format; for
+    dense matrices, this is Fortran (column-major) format.
+
+    Similarly, for ``axis=1``, re-layout the matrix for efficient per-row (observation, cell)
+    slicing/processing. For sparse matrices, this is ``csr`` format; for dense matrices, this is C
+    (row-major) format.
+
+    If the matrix is already in the correct layout, it is returned as-is. Otherwise, a new copy is
+    created. This is a costly operation as it needs to move a lot of data. However, it makes the
+    following processing much more efficient, so it is typically a net performance gain overall.
+    '''
+    assert matrix.ndim == 2
+    assert 0 <= axis <= 1
+
+    if sparse.issparse(matrix):
+        axis_format = ['csc', 'csr'][axis]
+        if matrix.getformat() == axis_format:
+            return matrix
+
+        name = '.to' + axis_format
+        with timed.step(name):
+            return getattr(matrix, name[1:])()
+
+    if axis == 0:
+        if matrix.flags['F_CONTIGUOUS']:
+            return matrix
+        with timed.step('np.ravel'):
+            return np.reshape(np.ravel(matrix, order='F'), matrix.shape, order='F')
+
+    if matrix.flags['C_CONTIGUOUS']:
+        return matrix
+    with timed.step('np.ravel'):
+        return np.reshape(np.ravel(matrix, order='C'), matrix.shape, order='C')
 
 
 @timed.call()
@@ -135,16 +177,13 @@ def _reduce_matrix(
     assert matrix.ndim == 2
     assert 0 <= axis <= 1
 
-    elements_count = matrix.shape[axis]
     results_count = matrix.shape[1 - axis]
     results = np.empty(results_count)
 
     if sparse.issparse(matrix):
-        if axis == 0:
-            matrix = matrix.tocsc()
-        else:
-            matrix = matrix.tocsr()
         elements_count = len(matrix.indices) / results_count
+    else:
+        elements_count = matrix.shape[axis]
 
     if axis == 0:
         def batch_reducer(indices: range) -> None:

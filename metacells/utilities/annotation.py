@@ -7,6 +7,16 @@ especially in the presence to slicing the data.
 .. todo::
 
     Also deal with multi-dimensional ``obsm`` and ``varm`` annotations.
+
+.. todo::
+
+    Mysteriously, some calls to ``compute`` take a long time as of themselves (not due to their
+    body). This is not garbage collection overhead (which is counted separately). Time tracking is
+    added to show this.
+
+    Even more mysteriously, merging the three ``matrix = ...; result = ...(matrix, ...); return
+    result`` statements into a single ``return ...`` statement moves the overhead outside the body
+    (but still inside the function).
 '''
 
 from typing import (Any, Callable, Collection, Dict, NamedTuple, Optional,
@@ -17,11 +27,10 @@ import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from anndata import AnnData  # type: ignore
 from readerwriterlock import rwlock
-from scipy import sparse  # type: ignore
 
 import metacells.utilities.computation as utc
 import metacells.utilities.documentation as utd
-import metacells.utilities.timing as utt
+import metacells.utilities.timing as timed
 
 __all__ = [
     'slice',
@@ -39,6 +48,8 @@ __all__ = [
     'declare_focus_of_data',
 
     'get_data_layer',
+    'del_data_layer',
+    'del_data_layer',
     'get_log_data',
 
     'get_annotation_of_obs',
@@ -53,9 +64,6 @@ __all__ = [
 
     'get_annotation_of_data',
 ]
-
-
-SPARSE_LAYOUTS = ['bsr', 'coo', 'csc', 'csr', 'dia', 'dok', 'lil']
 
 
 class SlicingContext(NamedTuple):
@@ -335,27 +343,40 @@ def _filter_layers(
 ) -> None:
     layer_names = list(slicing_context.sliced_adata.layers.keys())
     for name in layer_names:
-        if name[0] == '_' and name[4] == '_' and name[1:4] in SPARSE_LAYOUTS:
-            base_name = name[5:]
-        else:
+        if name[:2] != '__':
+            is_per = False
+            is_per_obs = False
+            is_per_var = False
             base_name = name
+        else:
+            is_per = True
+            is_per_obs = name.startswith('__per_obs__')
+            is_per_var = name.startswith('__per_var__')
+            assert is_per_obs or is_per_var
+            base_name = name[11:]
 
         (preserve_when_slicing_obs, preserve_when_slicing_var, fix_sliced_layer) = \
             _get_slicing_annotation('data', 'layer',
                                     SAFE_SLICING_DATA_LAYERS, base_name)
 
+        if is_per_var:
+            preserve_when_slicing_obs = False
+        if is_per_obs:
+            preserve_when_slicing_var = False
+
         preserve = (not slicing_context.did_slice_obs or preserve_when_slicing_obs) \
             and (not slicing_context.did_slice_var or preserve_when_slicing_var)
 
+        if preserve and fix_sliced_layer is not None:
+            if is_per:
+                preserve = False
+            else:
+                fix_sliced_layer(slicing_context, name)
+
         if preserve:
-            if fix_sliced_layer is not None:
-                if base_name == name:
-                    fix_sliced_layer(slicing_context, name)
-                else:
-                    del slicing_context.sliced_adata.layers[name]
             continue
 
-        if invalidated_annotations_prefix is not None and name == base_name:
+        if not is_per and invalidated_annotations_prefix is not None:
             new_name = invalidated_annotations_prefix + name
             assert new_name != name
             slicing_context.sliced_adata.layers[new_name] = \
@@ -451,19 +472,17 @@ def declare_focus_of_data(adata: AnnData, name: str) -> None:
     adata.layers[name] = adata.X
 
 
-@utd.expand_doc(sparse_layouts=', '.join(['``%s``' % layout for layout in SPARSE_LAYOUTS]))
-def get_data_layer(  # pylint: disable=too-many-branches
+def get_data_layer(
     adata: AnnData,
     name: str,
     compute: Optional[Callable[[], utc.Vector]] = None,
     *,
     inplace: bool = False,
     infocus: bool = False,
-    instead: bool = False,
-    layout: Optional[str] = None,
+    per: Optional[str] = None,
 ) -> utc.Matrix:
     '''
-    Lookup a per-obsevration-per-variable matrix in ``adata``.
+    Lookup a per-obsevration-per-variable matrix in ``adata`` by its ``name``.
 
     If the layer does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
 
@@ -471,12 +490,10 @@ def get_data_layer(  # pylint: disable=too-many-branches
 
     If ``infocus`` (implies ``inplace``), also make it the current ``X`` of the data.
 
-    If ``instead`` (implies ``infocus``), do not preserve the current ``X`` of the data, that is,
-    remove it from the layers.
-
-    If ``inplace``, and ``layout`` is specified (valid values: {sparse_layouts}), and the data
-    returned by ``compute`` is sparse, then the specific layout data is stored as an additional
-    layer whose name is prefixed with the layout (e.g., ``_csr_UMIs`` instead of ``UMIs``).
+    If ``per`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
+    data in a layout optimized for per-observation (row-major / csr) or per-variable (column-major
+    / csc). If also ``inplace``, this is cached in an additional layer whose name is prefixed (e.g.
+    ``__per_obs__UMIs`` for the ``UMIs`` layer).
 
     .. note::
 
@@ -485,9 +502,25 @@ def get_data_layer(  # pylint: disable=too-many-branches
 
     .. note::
 
-        This never sets the focus layer (that is, ``X``) to a specific-layout data. The focus layer
-        is always set to whatever was returned by ``compute`` under the unprefixed name.
+        In general layer names that start with ``__`` are reserved and should not be explicitly
+        used.
+
+    .. note::
+
+        The original data returned by ``compute`` is always preserved under its non-prefixed layer
+        name, so even if asking for layout-optimized data ``infocus``, you can switch back to the
+        original by requesting the data ``infocus`` again without a ``per`` argument.
+
+    .. todo::
+
+        A better implementation would be to cache the layout-specific data in a private variable,
+        but we do not own the ``AnnData`` object.
     '''
+    assert name[:2] != '__'
+
+    if adata.X is not None:
+        get_annotation_of_data(adata, 'layer')
+
     if name in adata.layers.keys():
         data = adata.layers[name]
     else:
@@ -496,30 +529,54 @@ def get_data_layer(  # pylint: disable=too-many-branches
         data = compute()
         assert data.shape == adata.shape
 
-    if inplace or infocus or instead:
+    if inplace or infocus:
         adata.layers[name] = data
 
-        if infocus or instead:
-            if data.X is not None:
-                old_name = get_annotation_of_data(adata, 'layer')
-                assert id(adata.layers[old_name]) == id(adata.X)
-                if instead:
-                    del adata.layers[old_name]
-            adata.uns['layer'] = name
-            adata.X = data
+    if per is not None:
+        assert per in ['var', 'obs']
+        per_name = '__per_%s__%s' % (per, name)
+        axis = ['var', 'obs'].index(per)
 
-    if layout is None or not sparse.issparse(data):
-        return data
-    assert layout in SPARSE_LAYOUTS
+        per_data = adata.layers.get(per_name)
+        if per_data is None:
+            data = utc.to_layout(data, axis)
+        else:
+            data = per_data
 
-    layout_name = '_%s_%s' % (layout, name)
-    if layout_name in adata.layers.keys():
-        return adata.layers[layout_name]
+        if inplace or infocus:
+            adata.layers[per_name] = data
 
-    with utt.step(name + '_to_' + layout):
-        data = getattr(data, 'to' + layout)()
-    adata.layers[layout_name] = data
+    if infocus:
+        adata.uns['layer'] = name
+        adata.X = data
+
     return data
+
+
+def del_data_layer(adata: AnnData, name: str, *, must_exist: bool = False) -> None:
+    '''
+    Delete a per-obsevration-per-variable matrix in ``adata`` by its ``name``.
+
+    This will also delete any cached layout-specific data.
+
+    If ``must_exist``, will ``raise`` if the data does not currently exist.
+
+    .. todo::
+
+        This is mainly required due to the need to delete cached layout-specific data. A better way
+        would be to intercept ``del`` of the ``AnnData`` ``layers`` field, but we do not own it.
+    '''
+    if must_exist:
+        assert name in adata.layers
+
+    for prefix in ['', '__per_obs__', '__per_var__']:
+        prefixed_name = prefix + name
+        if prefixed_name in adata.layers:
+            del adata.layers[prefixed_name]
+
+    if adata.uns.get('layer') == name:
+        del adata.uns['layer']
+        adata.X = None
 
 
 @utd.expand_doc()
@@ -532,7 +589,6 @@ def get_log_data(
     normalization: float = 1,
     inplace: bool = False,
     infocus: bool = False,
-    instead: bool = False,
 ) -> utc.Matrix:
     '''
     Return a matrix with the log of some data layer.
@@ -540,8 +596,8 @@ def get_log_data(
     If ``of_layer`` is specified, this specific data is used. Otherwise, the focus data layer (in
     ``adata.X``) is used.
 
-    If ``inplace`` or ``infocus`` or ``instead``, the data will be stored in ``to_layer`` (by
-    default, this is the name of the source layer with a ``log_`` prefix).
+    If ``inplace`` or ``infocus`` the data will be stored in ``to_layer`` (by default, this is the
+    name of the source layer with a ``log_`` prefix).
 
     The natural logarithm is used by default. Otherwise, the ``base`` is used.
 
@@ -559,13 +615,14 @@ def get_log_data(
     if to_layer is None:
         to_layer = 'log_' + of_layer
 
-    def compute() -> np.ndarray:
+    @timed.call()
+    def compute_log_data() -> np.ndarray:
         assert of_layer is not None
-        data = get_data_layer(adata, of_layer)
-        return utc.log_matrix(data, base=base, normalization=normalization)
+        matrix = \
+            get_data_layer(adata, of_layer, inplace=inplace, infocus=infocus)
+        return utc.log_matrix(matrix, base=base, normalization=normalization)
 
-    return get_data_layer(adata, to_layer, compute,
-                          inplace=inplace, infocus=infocus, instead=instead)
+    return get_data_layer(adata, to_layer, compute_log_data, inplace=inplace, infocus=infocus)
 
 
 def get_annotation_of_obs(
@@ -573,7 +630,7 @@ def get_annotation_of_obs(
     name: str,
     compute: Optional[Callable[[], utc.Vector]] = None,
     *,
-    inplace: bool = False
+    inplace: bool = False,
 ) -> np.ndarray:
     '''
     Lookup per-observation (cell) annotation in ``adata``.
@@ -588,6 +645,7 @@ def get_annotation_of_obs(
 
     if compute is None:
         raise RuntimeError('unavailable observation annotation: ' + name)
+
     data = compute()
     assert data is not None
     assert data.shape == (get_obs_count(adata),)
@@ -598,46 +656,85 @@ def get_annotation_of_obs(
     return data
 
 
-def get_sum_per_obs(adata: AnnData, layer: str, *, inplace: bool = False) -> np.ndarray:
+def get_sum_per_obs(
+    adata: AnnData,
+    layer: str,
+    *,
+    inplace: bool = False,
+    intermediate: bool = False,
+) -> np.ndarray:
     '''
     Return the sum of the values per observation (cell) of some ``layer``.
 
     Use the existing ``sum_<layer>`` annotation if it exists.
 
     If ``inplace``, store the annotation in ``adata``.
+
+    If ``intermediate``, store the layout-specific data used for the computation.
     '''
-    def compute() -> np.ndarray:
-        return utc.sum_matrix(get_data_layer(adata, layer, layout='csr'), axis=1)
+    @timed.call()
+    def compute_sum_per_obs() -> np.ndarray:
+        with timed.step('.body'):
+            matrix = \
+                get_data_layer(adata, layer, per='obs', inplace=intermediate)
+            result = utc.sum_matrix(matrix, axis=1)
+            return result
 
-    return get_annotation_of_obs(adata, 'obs_' + layer, compute, inplace=inplace)
+    return get_annotation_of_obs(adata, 'sum_' + layer, compute_sum_per_obs, inplace=inplace)
 
 
-def get_nnz_per_obs(adata, layer: str, *, inplace: bool = False) -> np.ndarray:
+def get_nnz_per_obs(
+    adata: AnnData,
+    layer: str,
+    *,
+    inplace: bool = False,
+    intermediate: bool = False
+) -> np.ndarray:
     '''
     Return the number of non-zero values per observation (cell) of some ``layer``.
 
     Use the existing ``nnz_<layer>`` annotation if it exists.
 
     If ``inplace``, store the annotation in ``adata``.
+
+    If ``intermediate``, store the layout-specific data used for the computation.
     '''
-    def compute() -> np.ndarray:
-        return utc.nnz_matrix(get_data_layer(adata, layer, layout='csr'), axis=1)
+    @timed.call()
+    def compute_nnz_per_obs() -> np.ndarray:
+        with timed.step('.body'):
+            matrix = \
+                get_data_layer(adata, layer, per='obs', inplace=intermediate)
+            result = utc.nnz_matrix(matrix, axis=1)
+            return result
 
-    return get_annotation_of_obs(adata, 'obs_' + layer, compute, inplace=inplace)
+    return get_annotation_of_obs(adata, 'nnz_' + layer, compute_nnz_per_obs, inplace=inplace)
 
 
-def get_max_per_obs(adata, layer: str, *, inplace: bool = False) -> np.ndarray:
+def get_max_per_obs(
+    adata: AnnData,
+    layer: str,
+    *,
+    inplace: bool = False,
+    intermediate: bool = False
+) -> np.ndarray:
     '''
     Return the maximal value per observation (cell) of some ``layer``.
 
     Use the existing ``max_<layer>`` annotation if it exists.
 
     If ``inplace``, store the annotation in ``adata``.
-    '''
-    def compute() -> np.ndarray:
-        return utc.max_matrix(get_data_layer(adata, layer, layout='csr'), axis=1)
 
-    return get_annotation_of_obs(adata, 'obs_' + layer, compute, inplace=inplace)
+    If ``intermediate``, store the layout-specific data used for the computation.
+    '''
+    @timed.call()
+    def compute_max_per_obs() -> np.ndarray:
+        with timed.step('.body'):
+            matrix = \
+                get_data_layer(adata, layer, per='obs', inplace=intermediate)
+            result = utc.max_matrix(matrix, axis=1)
+            return result
+
+    return get_annotation_of_obs(adata, 'max_' + layer, compute_max_per_obs, inplace=inplace)
 
 
 def get_annotation_of_var(
@@ -671,7 +768,13 @@ def get_annotation_of_var(
     return data
 
 
-def get_sum_per_var(adata: AnnData, layer: str, *, inplace: bool = False) -> np.ndarray:
+def get_sum_per_var(
+    adata: AnnData,
+    layer: str,
+    *,
+    inplace: bool = False,
+    intermediate: bool = False
+) -> np.ndarray:
     '''
     Return the sum of the values per variable (gene) of some ``layer``.
 
@@ -679,38 +782,69 @@ def get_sum_per_var(adata: AnnData, layer: str, *, inplace: bool = False) -> np.
 
     If ``inplace``, store the annotation in ``adata``.
     '''
-    def compute() -> np.ndarray:
-        return utc.sum_matrix(get_data_layer(adata, layer, layout='csc'), axis=0)
+    @timed.call()
+    def compute_sum_per_var() -> np.ndarray:
+        with timed.step('.body'):
+            matrix = \
+                get_data_layer(adata, layer, per='var', inplace=intermediate)
+            result = utc.sum_matrix(matrix, axis=0)
+            return result
 
-    return get_annotation_of_var(adata, 'sum_' + layer, compute, inplace=inplace)
+    return get_annotation_of_var(adata, 'sum_' + layer, compute_sum_per_var, inplace=inplace)
 
 
-def get_nnz_per_var(adata, layer: str, *, inplace: bool = False) -> np.ndarray:
+def get_nnz_per_var(
+    adata: AnnData,
+    layer: str,
+    *,
+    inplace: bool = False,
+    intermediate: bool = False
+) -> np.ndarray:
     '''
     Return the number of non-zero values per variable (gene) of some ``layer``.
 
     Use the existing ``nnz_<layer>`` annotation if it exists.
 
     If ``inplace``, store the annotation in ``adata``.
+
+    If ``intermediate``, store the layout-specific data used for the computation.
     '''
-    def compute() -> np.ndarray:
-        return utc.nnz_matrix(get_data_layer(adata, layer, layout='csc'), axis=0)
+    @timed.call()
+    def compute_nnz_per_var() -> np.ndarray:
+        with timed.step('.body'):
+            matrix = \
+                get_data_layer(adata, layer, per='var', inplace=intermediate)
+            result = utc.nnz_matrix(matrix, axis=0)
+            return result
 
-    return get_annotation_of_var(adata, 'nnz_' + layer, compute, inplace=inplace)
+    return get_annotation_of_var(adata, 'nnz_' + layer, compute_nnz_per_var, inplace=inplace)
 
 
-def get_max_per_var(adata, layer: str, *, inplace: bool = False) -> np.ndarray:
+def get_max_per_var(
+    adata: AnnData,
+    layer: str,
+    *,
+    inplace: bool = False,
+    intermediate: bool = False
+) -> np.ndarray:
     '''
     Return the maximal value per variable (gene) of some ``layer``.
 
     Use the existing ``max_<layer>`` annotation if it exists.
 
     If ``inplace``, store the annotation in ``adata``.
-    '''
-    def compute() -> np.ndarray:
-        return utc.max_matrix(get_data_layer(adata, layer, layout='csc'), axis=0)
 
-    return get_annotation_of_var(adata, 'max_' + layer, compute, inplace=inplace)
+    If ``intermediate``, store the layout-specific data used for the computation.
+    '''
+    @timed.call()
+    def compute_max_per_var() -> np.ndarray:
+        with timed.step('.body'):
+            matrix = \
+                get_data_layer(adata, layer, per='var', inplace=intermediate)
+            result = utc.max_matrix(matrix, axis=0)
+            return result
+
+    return get_annotation_of_var(adata, 'max_' + layer, compute_max_per_var, inplace=inplace)
 
 
 def get_annotation_of_data(

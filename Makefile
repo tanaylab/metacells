@@ -1,4 +1,4 @@
-.PHONY: all for-commit reformat format isort rst unstaged todo mypy pylint build test tox docs
+.PHONY: all for-commit reformat format isort rst unstaged todo mypy build pylint test tox docs
 .PHONY: dist clean
 
 all: for-commit
@@ -24,11 +24,11 @@ todo:
 mypy:
 	mypy metacells tests
 
-pylint:
-	pylint metacells tests
-
 build:
 	python setup.py build_ext --inplace
+
+pylint: build
+	pylint metacells tests
 
 test: build
 	pytest -s --cov=metacells tests
