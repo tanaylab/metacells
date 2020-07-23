@@ -16,7 +16,6 @@ INSTALL_REQUIRES = [
     'importlib-metadata',
     'numpy',
     'pandas',
-    'papi; platform_system=="Linux"',
     'readerwriterlock',
 ]
 

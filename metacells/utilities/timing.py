@@ -42,15 +42,6 @@ LOCK = Lock()
 
 COUNTED_THREADS = 0
 
-#: Whether to use the ``papi`` package to count the executed CPU instructions. Override this by
-#: setting the ``METACELLS_USE_PAPI`` environment variable to ``true``.
-USE_PAPI = \
-    os.environ.get('METACELLS_USE_PAPI', 'False').lower() == 'true'
-
-if USE_PAPI:
-    from pypapi import papi_high  # type: ignore
-    from pypapi import events as papi_events  # type: ignore
-
 
 def _thread_index() -> int:
     index = getattr(THREAD_LOCAL, 'index', None)
@@ -62,58 +53,34 @@ def _thread_index() -> int:
     return index
 
 
-def total_instructions() -> int:
-    '''
-    Get the total number of instructions executed in the current thread.
-    '''
-    if not USE_PAPI:
-        return 0
-
-    base_instructions = getattr(THREAD_LOCAL, 'base_instructions', None)
-    if base_instructions is None:
-        papi_high.start_counters([papi_events.PAPI_TOT_INS])
-        instructions = 0
-    else:
-        instructions = base_instructions + papi_high.read_counters()[0]
-
-    THREAD_LOCAL.base_instructions = instructions
-    return instructions
-
-
 class Counters:
     '''
     The counters for the execution times.
     '''
 
-    def __init__(self, *, elapsed_ns: int = 0, cpu_ns: int = 0, instructions: int = 0) -> None:
+    def __init__(self, *, elapsed_ns: int = 0, cpu_ns: int = 0) -> None:
         self.elapsed_ns = elapsed_ns  #: Elapsed time counter.
         self.cpu_ns = cpu_ns  #: CPU time counter.
-        #: Executed instructions (using PAPI).
-        self.instructions = instructions
 
     @staticmethod
     def now() -> 'Counters':
         '''
         Return the current value of the counters.
         '''
-        return Counters(elapsed_ns=perf_counter_ns(), cpu_ns=thread_time_ns(),
-                        instructions=total_instructions())
+        return Counters(elapsed_ns=perf_counter_ns(), cpu_ns=thread_time_ns())
 
     def __iadd__(self, other: 'Counters') -> 'Counters':
         self.elapsed_ns += other.elapsed_ns
         self.cpu_ns += other.cpu_ns
-        self.instructions += other.instructions
         return self
 
     def __sub__(self, other: 'Counters') -> 'Counters':
         return Counters(elapsed_ns=self.elapsed_ns - other.elapsed_ns,
-                        cpu_ns=self.cpu_ns - other.cpu_ns,
-                        instructions=self.instructions - other.instructions)
+                        cpu_ns=self.cpu_ns - other.cpu_ns)
 
     def __isub__(self, other: 'Counters') -> 'Counters':
         self.elapsed_ns -= other.elapsed_ns
         self.cpu_ns -= other.cpu_ns
-        self.instructions -= other.instructions
         return self
 
 
@@ -200,11 +167,10 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
 
     .. code:: text
 
-        foo,elapsed_ns,123,cpu_ns,456,instructions,789
+        foo,elapsed_ns,123,cpu_ns,456
 
-    To a timing log file (``timing.csv`` by default). Instructions count is only printed if using
-    the ``papi`` package. Additional fields can be appended to the line using the
-    ``metacells.utilities.timing.parameters`` function.
+    To a timing log file (``timing.csv`` by default). Additional fields can be appended to the line
+    using the ``metacells.utilities.timing.parameters`` function.
 
     If the ``name`` starts with a ``.``, then it is prefixed with the names of the innermost
     surrounding step name (which must exist). This is commonly used to time sub-steps of a function.
@@ -278,9 +244,6 @@ def _print_timing(
                 open(TIMING_PATH, 'a', buffering=TIMING_BUFFERING)
         text = [name, 'elapsed_ns', str(total_times.elapsed_ns),
                 'cpu_ns', str(total_times.cpu_ns)]
-        if USE_PAPI:
-            text.append('instructions')
-            text.append(str(total_times.instructions))
         if other_threads_count > 0:
             text.append('other_threads')
             text.append(str(other_threads_count))

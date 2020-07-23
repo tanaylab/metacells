@@ -21,8 +21,7 @@ def main() -> None:
         Read a ``timings.csv`` file from the input and write a sum file with one line per step
         containing the number of invocations and the sum of the data to the output.
 
-        The data in the sum file is presented in seconds and billions of instructions, to make it
-        easier to follow.
+        The data in the sum file is presented in seconds, to make it easier to follow.
 
         The output is sorted in descending elapsed time order.
 
@@ -39,21 +38,14 @@ def main() -> None:
         elapsed_ns = int(row[2])
         assert row[3] == 'cpu_ns'
         cpu_ns = int(row[4])
-        instructions = \
-            int(row[6]) if len(row) > 5 and row[5] == 'instructions' else None
 
         data = data_by_name.get(name)
         if data is None:
-            if instructions is None:
-                data = [0, 0, 0]
-            else:
-                data = [0, 0, 0, 0]
+            data = [0, 0, 0]
             data_by_name[name] = data
         data[0] += 1
         data[1] += elapsed_ns / 1_000_000_000
         data[2] += cpu_ns / 1_000_000_000
-        if instructions is not None:
-            data[3] += instructions / 1_000_000_000
 
     total_data: List[float] = []
     for name, data in data_by_name.items():
