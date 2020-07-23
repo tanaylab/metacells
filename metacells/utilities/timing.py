@@ -17,6 +17,9 @@ if USE_PAPI:
     from pypapi import events as papi_events  # type: ignore
 
 __all__ = [
+    'COLLECT_TIMING',
+    'TIMING_PATH',
+    'TIMING_BUFFERING',
     'step',
     'call',
     'parameters',
@@ -24,16 +27,23 @@ __all__ = [
     'current_step',
 ]
 
+#: Whether to collect timing at all. Override this by setting the ``METACELLS_COLLECT_TIMING``
+#: environment variable to ``true``.
 COLLECT_TIMING = \
     os.environ.get('METACELLS_COLLECT_TIMING', 'False').lower() == 'true'
 
-LOCK = Lock()
-
-TIMING_FILE: Optional[TextIO] = None
+#: The path of the timing CSV file to write. Override this by setting the ``METACELL_TIMING_CSV``
+#: environment variable to some path.
 TIMING_PATH: str = os.environ.get('METACELL_TIMING_CSV', 'timing.csv')
+
+#: The buffering mode to use when writing to the timing CSV file. Override this by setting the
+#: ``METACELL_TIMING_BUFFERING`` environment variable to ``0`` for no buffering, ``1`` for line
+#: buffering, or the size of the buffer.
 TIMING_BUFFERING: int = int(os.environ.get('METACELL_TIMING_BUFFERING', '1'))
 
+TIMING_FILE: Optional[TextIO] = None
 THREAD_LOCAL = thread_local()
+LOCK = Lock()
 
 
 def total_instructions() -> int:
@@ -170,36 +180,14 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
 
     .. code:: text
 
-        foo,123,456
+        foo,elapsed_ns,123,cpu_ns,456,instructions,789
 
-    To a timing log file (``timing.csv`` by default). The first number is the CPU time used and the
-    second is the elapsed time, both in nanoseconds. Time spent in other threads via
-    ``parallel_map`` and/or ``parallel_for`` is automatically included. Time spent in nested timed
-    step is not included, that is, the generated file contains just the "self" times of each step.
+    To a timing log file (``timing.csv`` by default). Instructions count is only printed if using
+    the ``papi`` package. Additional fields can be appended to the line using the
+    ``metacells.utilities.timing.parameters`` function.
 
     If the ``name`` starts with a ``.``, then it is prefixed with the names of the innermost
     surrounding step name (which must exist). This is commonly used to time sub-steps of a function.
-    For example, the following:
-
-    .. code:: python
-
-        @ut.call
-        def foo(...):
-            ...
-            with ut.step(".bar"):
-                ...
-            with ut.step(".baz"):
-                ...
-            ...
-
-    Will result in three lines written to the timing log file per invocation:
-
-    .. code:: text
-
-        foo,123,456      - time inside foo but outside the sub-steps
-        foo.bar,123,456  - time inside the .bar sub-step of the foo function
-        foo.baz,123,456  - time inside the .baz sub-step of the foo function
-
     '''
     if not COLLECT_TIMING:
         yield None

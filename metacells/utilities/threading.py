@@ -3,25 +3,45 @@ Utilities for multi-threaded code.
 '''
 import os
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, Callable, Iterable, List, Optional, Tuple, Union
+from contextlib import contextmanager
+from threading import current_thread
+from typing import (Any, Callable, Dict, Iterable, Iterator, KeysView, List,
+                    Optional, Tuple, Union)
 
 import numpy as np  # type: ignore
+from readerwriterlock import rwlock
 
 import metacells.utilities.timing as timed
 from metacells.utilities.documentation import expand_doc
 
 __all__ = [
+    'THREADS_COUNT',
+    'EXECUTOR',
     'parallel_map',
     'parallel_for',
+    'SharedStorage',
 ]
 
 
+#: The number of threads to use. Override this by setting the ``METACELLS_THREADS_COUNT``
+#: environment variable: -1 uses half of the available processors to combat hyper-threading, 0 uses
+#: all the available processors, otherwise the value is the number of threads to use.
+THREADS_COUNT = 0
+
+#: The executor to use for parallel tasks (only set if using multiple threads).
+EXECUTOR: Optional[ThreadPoolExecutor] = None
+
 THREADS_COUNT = int(os.environ.get(
     'METACELLS_THREADS_COUNT', str(os.cpu_count())))
-if THREADS_COUNT == 0:
+if THREADS_COUNT == -1:
+    THREADS_COUNT = (os.cpu_count() or 1) // 2
+elif THREADS_COUNT == 0:
     THREADS_COUNT = os.cpu_count() or 1
 
-EXECUTOR = ThreadPoolExecutor(THREADS_COUNT) if THREADS_COUNT > 1 else None
+assert THREADS_COUNT > 0
+
+if THREADS_COUNT > 1:
+    EXECUTOR = ThreadPoolExecutor(THREADS_COUNT)
 
 
 @expand_doc()
@@ -175,3 +195,156 @@ def _analyze_loop(
 
     assert np.isclose(batches_count * batch_size, invocations_count)
     return batches_count, batch_size
+
+
+class SharedStorage:
+    '''
+    Shared storage for parallel tasks.
+
+    .. note::
+
+        The implementation assumes that Python dictionary operations are atomic, in the sense that
+        if different threads read/write different keys in the same shared dictionary, then
+        everything will work as expected. This seems to be the case (e.g., see
+        stackoverflow question 1312331_.)
+
+        .. _1312331: https://stackoverflow.com/questions/1312331/using-a-global-dictionary-with-threads-in-python
+    '''
+
+    def __init__(self) -> None:
+        '''
+        Create an empty storage for parallel tasks.
+        '''
+        self._shared: Dict[str, Tuple[rwlock.RWLockRead, Any]] = {}
+        self._makers: Dict[str, Callable[[], Any]] = {}
+        self._private: Dict[str, Dict[str, Any]] = {}
+
+    def set_shared(self, name: str, value: Any) -> None:
+        '''
+        Set the ``value`` of a shared ``named`` data.
+
+        Shared data is accessible to all threads.
+
+        .. note::
+
+            This is meant to be invoked from the main thread before sending the storage to be used
+            by multiple threads. As such, it assumes no other thread is accessing the storage at the
+            same time.
+        '''
+        self._shared[name] = (rwlock.RWLockRead(), value)
+
+    @contextmanager
+    def with_read_shared(self, name: str) -> Iterator[Any]:
+        '''
+        Safe(-ish) read-only access to shared data by its ``name``.
+
+        .. note::
+
+            This is meant to be used by threads who want to ensure that no other thread is modifying
+            the data. It will be safe against modification by ``with_write_shared``, but not against
+            access using ``get_shared``.
+        '''
+        lock, value = self._shared[name]
+        with lock.gen_rlock():
+            yield value
+
+    @contextmanager
+    def with_write_shared(self, name: str) -> Iterator[Any]:
+        '''
+        Safe(-ish) exclusive read-write access to shared data by its ``name``.
+
+        .. note::
+
+            This is meant to be used by threads who want to modify the data even if other threads
+            might be reading it. It will be safe against read-only-access by ``with_read_shared``,
+            but not against access using ``get_shared``.
+        '''
+        lock, value = self._shared[name]
+        with lock.gen_wlock():
+            yield value
+
+    def get_shared(self, name: str) -> Any:
+        '''
+        Unsafe access to shared data (which must exist) by its ``name``.
+
+        .. note::
+
+            This is meant to be used by the threads if all only read the data, or if each thread
+            safely modified different parts of the data (e.g. writing to different array entries),
+            or the threads otherwise somehow coordinate safe shared access to the data.
+        '''
+        _lock, value = self._shared[name]
+        return value
+
+    def set_private(self, name: str, make: Callable[[], Any]) -> None:
+        '''
+        Set the ``value`` of private data by its ``name``.
+
+        Private data will have a copy per thread. The data will be lazily created on the first
+        access by invoking the ``make`` function within the thread. It must not return ``None``.
+
+        .. note::
+
+            This is meant to be invoked from the main thread before sending the storage to be used
+            by multiple threads. As such, it assumes no other thread is accessing the storage at the
+            same time.
+        '''
+        self._makers[name] = make
+
+    def get_private(self, name: str) -> Any:
+        '''
+        Safe(-ish) access to the private data of the current thread by its ``name``.
+
+        This will lazily create the data if it is the first access to it from the current thread.
+
+        .. note::
+
+            This is intended to be used from within each thread to access its own data. As such, it
+            assumes that no other thread is accessing this thread's private data at the same time.
+        '''
+        thread = current_thread().name
+
+        values = self._private.get(thread)
+        if values is None:
+            values = self._private[thread] = {}
+
+        value = values.get(name)
+        if value is None:
+            value = values[name] = self._makers[name]()
+            assert value is not None
+
+        return value
+
+    def get_thread_private(self, name: str, *, thread: str) -> Any:
+        '''
+        Unsafe access to private ``thread`` data by its ``name``.
+
+        This will not lazily create the data if it was not created by ``get_private`` from the
+        specified ``thread``. Instead it will return ``None``.
+
+        .. note::
+
+            This is intended to be used from the main thread after all the other threads are done
+            executing, in order to collect the data each collected. As such, it assumes that no
+            other thread is accessing the storage at the same time.
+
+        .. note::
+
+            Multiple threads may be accessing the same data at the same time.
+        '''
+        values = self._private.get(thread)
+        if values is None:
+            return None
+        return values.get(name)
+
+    def get_threads(self) -> KeysView[str]:
+        '''
+        Return the names of the threads who created private data.
+
+        .. note::
+
+            This is intended to be used from the main thread after all the other threads are done
+            executing, in order to collect the data each collected. As such, it assumes that no
+            other thread is accessing the storage at the same time.
+        '''
+        return self._private.keys()

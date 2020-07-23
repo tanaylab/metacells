@@ -28,6 +28,18 @@ extensions = [
 ]
 
 autosectionlabel_prefix_document = True
+nitpicky = True
+nitpick_ignore = [
+    ('py:class', 'anndata._core.anndata.AnnData'),
+    ('py:class', 'concurrent.futures.thread.ThreadPoolExecutor'),
+    ('py:class', 'Iterator[None]'),
+    ('py:class', 'metacells.utilities.timing.StepTiming'),
+    ('py:class', 'numpy.ndarray'),
+    ('py:class', 'Optional[Callable[[metacells.utilities.annotation.SlicingContext, str], None]]'),
+    ('py:class', 'pandas.core.frame.DataFrame'),
+    ('py:class', 'pandas.core.series.Series'),
+    ('py:class', 'scipy.sparse.base.spmatrix'),
+]
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['.templates']

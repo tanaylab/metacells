@@ -10,7 +10,7 @@ reformat:
 	clang-format -i metacells/extensions.cpp
 
 format:
-	@if grep -n '^[ ].*[(%<>/+-]$$\|[^ =][[]$$\|[^`]`[^`]' `git ls-files | grep '\.py$$'`; then false; fi
+	@if grep -n '^[ ].*[(%<>/+-]$$\|[^ =][[]$$\|[^:`]`[^:`][^:`]*`[^`]' `git ls-files | grep '\.py$$'`; then false; fi
 
 isort:
 	isort metacells/**/*.py tests/*.py setup.py

@@ -262,10 +262,11 @@ def slice(  # pylint: disable=redefined-builtin
     mask or a collection of indices to include in the data slice. In the case of an indices array,
     it is assumed the indices are unique and sorted, that is that their effect is similar to a mask.
 
-    In general, annotations data might become invalid when slicing (e.g., the ``sum_UMIs`` of
-    genes is invalidated when specifying a subset of the cells). Therefore, annotations will be
-    removed from the result unless they were explicitly marked as preserved using
-    ``slicing_obs_annotation``, ``slicing_var_annotation``, and/or ``slicing_uns_annotation``.
+    In general, annotations data might become invalid when slicing (e.g., the ``sum_UMIs`` of genes
+    is invalidated when specifying a subset of the cells). Therefore, annotations will be removed
+    from the result unless they were explicitly marked as preserved using
+    :py:func:`slicing_obs_annotation`, :py:func:`slicing_var_annotation`, and/or
+    :py:func:`slicing_uns_annotation`.
 
     If ``invalidated_annotations_prefix`` is specified, then unpreserved annotations will not be
     removed; instead they will be renamed with the addition of the prefix.
@@ -431,8 +432,8 @@ def _clone_slicing_annotation(
 def annotate_as_base(adata: AnnData, *, name: str = 'base_index') -> None:
     '''
     Create ``name`` (by default, ``base_index``) per-observation (cells) and per-variable (genes)
-    annotations, which will be preserved when creating a ``slice`` of the data to easily refer back
-    to the original full data.
+    annotations, which will be preserved when creating a :py:func:`slice` of the data to easily
+    refer back to the original full data.
     '''
     adata.obs[name] = np.arange(get_obs_count(adata))
     adata.var[name] = np.arange(get_var_count(adata))
@@ -538,7 +539,7 @@ def get_data_layer(
 
         per_data = adata.layers.get(per_name)
         if per_data is None:
-            data = utc.to_layout(data, axis)
+            data = utc.to_layout(data, axis=axis)
         else:
             data = per_data
 
