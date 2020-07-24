@@ -39,10 +39,17 @@
 #include "pybind11/numpy.h"
 #include "pybind11/pybind11.h"
 
+#include <atomic>
 #include <cmath>
 #include <random>
 
 namespace metacells {
+
+typedef float float32_t;
+typedef double float64_t;
+
+static_assert(sizeof(float32_t) == 4);
+static_assert(sizeof(float64_t) == 8);
 
 /// Release the GIL to allow for actual parallelism.
 class WithoutGil {
@@ -82,6 +89,9 @@ private:
     T m_iter;
 
 public:
+    /// Construct a range between two indices.
+    Range(const T start, const T stop) : m_size(stop), m_iter(start) {}
+
     /// Construct a range of some size.
     Range(const T size) : m_size(size), m_iter(0) {}
 
@@ -343,12 +353,6 @@ typed_downsample(const pybind11::array_t<D>& input_array,
                                               random_seed);                             \
     }
 
-typedef float float32_t;
-typedef double float64_t;
-
-static_assert(sizeof(float32_t) == 4);
-static_assert(sizeof(float64_t) == 8);
-
 DEFINE_DOWNSAMPLE(float32, float32, float32)
 DEFINE_DOWNSAMPLE(float32, float32, float64)
 DEFINE_DOWNSAMPLE(float32, float32, int32)
@@ -565,6 +569,159 @@ DEFINE_DOWNSAMPLE(uint64, uint64, int32)
 DEFINE_DOWNSAMPLE(uint64, uint64, int64)
 DEFINE_DOWNSAMPLE(uint64, uint64, uint32)
 DEFINE_DOWNSAMPLE(uint64, uint64, uint64)
+
+/// See the Python `metacell.utilities.computation._relayout_compressed` function.
+template<typename D, typename I, typename P>
+static void
+typed_collect_compressed(int start_input_band_index,
+                         int stop_input_band_index,
+                         const pybind11::array_t<D>& input_data_array,
+                         const pybind11::array_t<I>& input_indices_array,
+                         const pybind11::array_t<P>& input_indptr_array,
+                         pybind11::array_t<D>& output_data_array,
+                         pybind11::array_t<I>& output_indices_array,
+                         pybind11::array_t<P>& output_indptr_array) {
+    WithoutGil without_gil{};
+
+    ConstArraySlice<D> input_data{ input_data_array, "input_data_array" };
+    ConstArraySlice<I> input_indices{ input_indices_array, "input_indices_array" };
+    ConstArraySlice<P> input_indptr{ input_indptr_array, "input_indptr_array" };
+
+    FastAssertCompare(0, <=, start_input_band_index);
+    FastAssertCompare(start_input_band_index, <, stop_input_band_index);
+    FastAssertCompare(stop_input_band_index, <, input_indptr.size());
+    FastAssertCompare(input_data.size(), ==, input_indptr[input_indptr.size() - 1]);
+    FastAssertCompare(input_indices.size(), ==, input_data.size());
+
+    ArraySlice<D> output_data{ output_data_array, "output_data_array" };
+    ArraySlice<I> output_indices{ output_indices_array, "output_indices_array" };
+    ArraySlice<P> output_indptr{ output_indptr_array, "output_indptr_array" };
+
+    FastAssertCompare(output_data.size(), ==, input_data.size());
+    FastAssertCompare(output_indices.size(), ==, input_indices.size());
+    FastAssertCompare(output_indptr[output_indptr.size() - 1], <=, output_data.size());
+
+    for (int input_band_index : Range<int>(start_input_band_index, stop_input_band_index)) {
+        auto start_input_element_offset = input_indptr[input_band_index];
+        auto stop_input_element_offset = input_indptr[input_band_index + 1];
+
+        FastAssertCompare(0, <=, start_input_element_offset);
+        FastAssertCompare(start_input_element_offset, <=, stop_input_element_offset);
+        FastAssertCompare(stop_input_element_offset, <=, input_data.size());
+
+        int output_element_index = input_band_index;
+
+        for (int input_element_offset :
+             Range<int>(start_input_element_offset, stop_input_element_offset)) {
+            auto input_element_index = input_indices[input_element_offset];
+            auto input_element_data = input_data[input_element_offset];
+
+            auto output_band_index = input_element_index;
+            auto output_element_data = input_element_data;
+
+            auto atomic_output_element_offset =
+                reinterpret_cast<std::atomic<P>*>(&output_indptr[output_band_index]);
+            auto output_element_offset =
+                atomic_output_element_offset->fetch_add(1, std::memory_order_relaxed);
+
+            output_indices[output_element_offset] = output_element_index;
+            output_data[output_element_offset] = output_element_data;
+        }
+    }
+}
+
+#define DEFINE_COLLECT_COMPRESSED(D, I, P)                                                      \
+    static void                                                                                 \
+        collect_compressed_##D##_##I##_##P(int start_input_band_index,                          \
+                                           int stop_input_band_index,                           \
+                                           const pybind11::array_t<D##_t>& input_data_array,    \
+                                           const pybind11::array_t<I##_t>& input_indices_array, \
+                                           const pybind11::array_t<P##_t>& input_indptr_array,  \
+                                           pybind11::array_t<D##_t>& output_data_array,         \
+                                           pybind11::array_t<I##_t>& output_indices_array,      \
+                                           pybind11::array_t<P##_t>& output_indptr_array) {     \
+        typed_collect_compressed<D##_t, I##_t, P##_t>(start_input_band_index,                   \
+                                                      stop_input_band_index,                    \
+                                                      input_data_array,                         \
+                                                      input_indices_array,                      \
+                                                      input_indptr_array,                       \
+                                                      output_data_array,                        \
+                                                      output_indices_array,                     \
+                                                      output_indptr_array);                     \
+    }
+
+DEFINE_COLLECT_COMPRESSED(float32, int32, int32)
+DEFINE_COLLECT_COMPRESSED(float32, int32, int64)
+DEFINE_COLLECT_COMPRESSED(float32, int32, uint32)
+DEFINE_COLLECT_COMPRESSED(float32, int32, uint64)
+DEFINE_COLLECT_COMPRESSED(float32, int64, int32)
+DEFINE_COLLECT_COMPRESSED(float32, int64, int64)
+DEFINE_COLLECT_COMPRESSED(float32, int64, uint32)
+DEFINE_COLLECT_COMPRESSED(float32, int64, uint64)
+DEFINE_COLLECT_COMPRESSED(float32, uint32, uint32)
+DEFINE_COLLECT_COMPRESSED(float32, uint32, uint64)
+DEFINE_COLLECT_COMPRESSED(float32, uint64, uint32)
+DEFINE_COLLECT_COMPRESSED(float32, uint64, uint64)
+DEFINE_COLLECT_COMPRESSED(float64, int32, int32)
+DEFINE_COLLECT_COMPRESSED(float64, int32, int64)
+DEFINE_COLLECT_COMPRESSED(float64, int32, uint32)
+DEFINE_COLLECT_COMPRESSED(float64, int32, uint64)
+DEFINE_COLLECT_COMPRESSED(float64, int64, int32)
+DEFINE_COLLECT_COMPRESSED(float64, int64, int64)
+DEFINE_COLLECT_COMPRESSED(float64, int64, uint32)
+DEFINE_COLLECT_COMPRESSED(float64, int64, uint64)
+DEFINE_COLLECT_COMPRESSED(float64, uint32, uint32)
+DEFINE_COLLECT_COMPRESSED(float64, uint32, uint64)
+DEFINE_COLLECT_COMPRESSED(float64, uint64, uint32)
+DEFINE_COLLECT_COMPRESSED(float64, uint64, uint64)
+DEFINE_COLLECT_COMPRESSED(int32, int32, int32)
+DEFINE_COLLECT_COMPRESSED(int32, int32, int64)
+DEFINE_COLLECT_COMPRESSED(int32, int32, uint32)
+DEFINE_COLLECT_COMPRESSED(int32, int32, uint64)
+DEFINE_COLLECT_COMPRESSED(int32, int64, int32)
+DEFINE_COLLECT_COMPRESSED(int32, int64, int64)
+DEFINE_COLLECT_COMPRESSED(int32, int64, uint32)
+DEFINE_COLLECT_COMPRESSED(int32, int64, uint64)
+DEFINE_COLLECT_COMPRESSED(int32, uint32, uint32)
+DEFINE_COLLECT_COMPRESSED(int32, uint32, uint64)
+DEFINE_COLLECT_COMPRESSED(int32, uint64, uint32)
+DEFINE_COLLECT_COMPRESSED(int32, uint64, uint64)
+DEFINE_COLLECT_COMPRESSED(int64, int32, int32)
+DEFINE_COLLECT_COMPRESSED(int64, int32, int64)
+DEFINE_COLLECT_COMPRESSED(int64, int32, uint32)
+DEFINE_COLLECT_COMPRESSED(int64, int32, uint64)
+DEFINE_COLLECT_COMPRESSED(int64, int64, int32)
+DEFINE_COLLECT_COMPRESSED(int64, int64, int64)
+DEFINE_COLLECT_COMPRESSED(int64, int64, uint32)
+DEFINE_COLLECT_COMPRESSED(int64, int64, uint64)
+DEFINE_COLLECT_COMPRESSED(int64, uint32, uint32)
+DEFINE_COLLECT_COMPRESSED(int64, uint32, uint64)
+DEFINE_COLLECT_COMPRESSED(int64, uint64, uint32)
+DEFINE_COLLECT_COMPRESSED(int64, uint64, uint64)
+DEFINE_COLLECT_COMPRESSED(uint32, int32, int32)
+DEFINE_COLLECT_COMPRESSED(uint32, int32, int64)
+DEFINE_COLLECT_COMPRESSED(uint32, int32, uint32)
+DEFINE_COLLECT_COMPRESSED(uint32, int32, uint64)
+DEFINE_COLLECT_COMPRESSED(uint32, int64, int32)
+DEFINE_COLLECT_COMPRESSED(uint32, int64, int64)
+DEFINE_COLLECT_COMPRESSED(uint32, int64, uint32)
+DEFINE_COLLECT_COMPRESSED(uint32, int64, uint64)
+DEFINE_COLLECT_COMPRESSED(uint32, uint32, uint32)
+DEFINE_COLLECT_COMPRESSED(uint32, uint32, uint64)
+DEFINE_COLLECT_COMPRESSED(uint32, uint64, uint32)
+DEFINE_COLLECT_COMPRESSED(uint32, uint64, uint64)
+DEFINE_COLLECT_COMPRESSED(uint64, int32, int32)
+DEFINE_COLLECT_COMPRESSED(uint64, int32, int64)
+DEFINE_COLLECT_COMPRESSED(uint64, int32, uint32)
+DEFINE_COLLECT_COMPRESSED(uint64, int32, uint64)
+DEFINE_COLLECT_COMPRESSED(uint64, int64, int32)
+DEFINE_COLLECT_COMPRESSED(uint64, int64, int64)
+DEFINE_COLLECT_COMPRESSED(uint64, int64, uint32)
+DEFINE_COLLECT_COMPRESSED(uint64, int64, uint64)
+DEFINE_COLLECT_COMPRESSED(uint64, uint32, uint32)
+DEFINE_COLLECT_COMPRESSED(uint64, uint32, uint64)
+DEFINE_COLLECT_COMPRESSED(uint64, uint64, uint32)
+DEFINE_COLLECT_COMPRESSED(uint64, uint64, uint64)
 
 }  // namespace metacells
 
@@ -794,4 +951,82 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_DOWNSAMPLE(uint64, uint64, int64);
     REGISTER_DOWNSAMPLE(uint64, uint64, uint32);
     REGISTER_DOWNSAMPLE(uint64, uint64, uint64);
+
+#define REGISTER_COLLECT_COMPRESSED(D, I, P)                   \
+    module.def("collect_compressed_" #D "_" #I "_" #P,         \
+               &metacells::collect_compressed_##D##_##I##_##P, \
+               "Collect compressed data for relayout.")
+
+    REGISTER_COLLECT_COMPRESSED(float32, int32, int32);
+    REGISTER_COLLECT_COMPRESSED(float32, int32, int64);
+    REGISTER_COLLECT_COMPRESSED(float32, int32, uint32);
+    REGISTER_COLLECT_COMPRESSED(float32, int32, uint64);
+    REGISTER_COLLECT_COMPRESSED(float32, int64, int32);
+    REGISTER_COLLECT_COMPRESSED(float32, int64, int64);
+    REGISTER_COLLECT_COMPRESSED(float32, int64, uint32);
+    REGISTER_COLLECT_COMPRESSED(float32, int64, uint64);
+    REGISTER_COLLECT_COMPRESSED(float32, uint32, uint32);
+    REGISTER_COLLECT_COMPRESSED(float32, uint32, uint64);
+    REGISTER_COLLECT_COMPRESSED(float32, uint64, uint32);
+    REGISTER_COLLECT_COMPRESSED(float32, uint64, uint64);
+    REGISTER_COLLECT_COMPRESSED(float64, int32, int32);
+    REGISTER_COLLECT_COMPRESSED(float64, int32, int64);
+    REGISTER_COLLECT_COMPRESSED(float64, int32, uint32);
+    REGISTER_COLLECT_COMPRESSED(float64, int32, uint64);
+    REGISTER_COLLECT_COMPRESSED(float64, int64, int32);
+    REGISTER_COLLECT_COMPRESSED(float64, int64, int64);
+    REGISTER_COLLECT_COMPRESSED(float64, int64, uint32);
+    REGISTER_COLLECT_COMPRESSED(float64, int64, uint64);
+    REGISTER_COLLECT_COMPRESSED(float64, uint32, uint32);
+    REGISTER_COLLECT_COMPRESSED(float64, uint32, uint64);
+    REGISTER_COLLECT_COMPRESSED(float64, uint64, uint32);
+    REGISTER_COLLECT_COMPRESSED(float64, uint64, uint64);
+    REGISTER_COLLECT_COMPRESSED(int32, int32, int32);
+    REGISTER_COLLECT_COMPRESSED(int32, int32, int64);
+    REGISTER_COLLECT_COMPRESSED(int32, int32, uint32);
+    REGISTER_COLLECT_COMPRESSED(int32, int32, uint64);
+    REGISTER_COLLECT_COMPRESSED(int32, int64, int32);
+    REGISTER_COLLECT_COMPRESSED(int32, int64, int64);
+    REGISTER_COLLECT_COMPRESSED(int32, int64, uint32);
+    REGISTER_COLLECT_COMPRESSED(int32, int64, uint64);
+    REGISTER_COLLECT_COMPRESSED(int32, uint32, uint32);
+    REGISTER_COLLECT_COMPRESSED(int32, uint32, uint64);
+    REGISTER_COLLECT_COMPRESSED(int32, uint64, uint32);
+    REGISTER_COLLECT_COMPRESSED(int32, uint64, uint64);
+    REGISTER_COLLECT_COMPRESSED(int64, int32, int32);
+    REGISTER_COLLECT_COMPRESSED(int64, int32, int64);
+    REGISTER_COLLECT_COMPRESSED(int64, int32, uint32);
+    REGISTER_COLLECT_COMPRESSED(int64, int32, uint64);
+    REGISTER_COLLECT_COMPRESSED(int64, int64, int32);
+    REGISTER_COLLECT_COMPRESSED(int64, int64, int64);
+    REGISTER_COLLECT_COMPRESSED(int64, int64, uint32);
+    REGISTER_COLLECT_COMPRESSED(int64, int64, uint64);
+    REGISTER_COLLECT_COMPRESSED(int64, uint32, uint32);
+    REGISTER_COLLECT_COMPRESSED(int64, uint32, uint64);
+    REGISTER_COLLECT_COMPRESSED(int64, uint64, uint32);
+    REGISTER_COLLECT_COMPRESSED(int64, uint64, uint64);
+    REGISTER_COLLECT_COMPRESSED(uint32, int32, int32);
+    REGISTER_COLLECT_COMPRESSED(uint32, int32, int64);
+    REGISTER_COLLECT_COMPRESSED(uint32, int32, uint32);
+    REGISTER_COLLECT_COMPRESSED(uint32, int32, uint64);
+    REGISTER_COLLECT_COMPRESSED(uint32, int64, int32);
+    REGISTER_COLLECT_COMPRESSED(uint32, int64, int64);
+    REGISTER_COLLECT_COMPRESSED(uint32, int64, uint32);
+    REGISTER_COLLECT_COMPRESSED(uint32, int64, uint64);
+    REGISTER_COLLECT_COMPRESSED(uint32, uint32, uint32);
+    REGISTER_COLLECT_COMPRESSED(uint32, uint32, uint64);
+    REGISTER_COLLECT_COMPRESSED(uint32, uint64, uint32);
+    REGISTER_COLLECT_COMPRESSED(uint32, uint64, uint64);
+    REGISTER_COLLECT_COMPRESSED(uint64, int32, int32);
+    REGISTER_COLLECT_COMPRESSED(uint64, int32, int64);
+    REGISTER_COLLECT_COMPRESSED(uint64, int32, uint32);
+    REGISTER_COLLECT_COMPRESSED(uint64, int32, uint64);
+    REGISTER_COLLECT_COMPRESSED(uint64, int64, int32);
+    REGISTER_COLLECT_COMPRESSED(uint64, int64, int64);
+    REGISTER_COLLECT_COMPRESSED(uint64, int64, uint32);
+    REGISTER_COLLECT_COMPRESSED(uint64, int64, uint64);
+    REGISTER_COLLECT_COMPRESSED(uint64, uint32, uint32);
+    REGISTER_COLLECT_COMPRESSED(uint64, uint32, uint64);
+    REGISTER_COLLECT_COMPRESSED(uint64, uint64, uint32);
+    REGISTER_COLLECT_COMPRESSED(uint64, uint64, uint64);
 }

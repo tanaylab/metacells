@@ -146,3 +146,29 @@ def test_downsample_matrix():
     assert result.shape == matrix.shape
     new_row_sums = ut.sum_matrix(result, axis=1)
     assert np.all(new_row_sums == min_sum)
+
+
+def test_relayout_matrix():
+    rvs = stats.poisson(10, loc=10).rvs
+    csr_matrix = sparse.random(1000, 10000, format='csr',
+                               dtype='int32', random_state=123456, data_rvs=rvs)
+    assert csr_matrix.getformat() == 'csr'
+
+    scipy_csc_matrix = csr_matrix.tocsc()
+    metacells_csc_matrix = ut.relayout_compressed(csr_matrix, axis=0)
+
+    assert scipy_csc_matrix.getformat() == 'csc'
+    assert metacells_csc_matrix.getformat() == 'csc'
+
+    assert np.all(metacells_csc_matrix.indptr == scipy_csc_matrix.indptr)
+    assert np.all(metacells_csc_matrix.todense() == scipy_csc_matrix.todense())
+
+    scipy_csr_matrix = scipy_csc_matrix.tocsr()
+
+    metacells_csr_matrix = ut.relayout_compressed(metacells_csc_matrix, axis=1)
+
+    assert scipy_csr_matrix.getformat() == 'csr'
+    assert metacells_csr_matrix.getformat() == 'csr'
+
+    assert np.all(metacells_csr_matrix.indptr == scipy_csr_matrix.indptr)
+    assert np.all(metacells_csr_matrix.todense() == scipy_csr_matrix.todense())

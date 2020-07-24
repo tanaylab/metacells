@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from threading import Lock, current_thread
 from threading import local as thread_local
 from time import perf_counter_ns, thread_time_ns
-from typing import Any, Callable, Dict, Iterator, List, Optional, TextIO, Union
+from typing import Any, Callable, Dict, Iterator, List, Optional, TextIO
 
 import numpy as np  # type: ignore
 
@@ -93,11 +93,18 @@ class StepTiming:
         '''
         Start collecting time for a named processing step.
         '''
-        #: The unique name of the processing step.
-        self.name = name
-
         #: The parent step, if any.
         self.parent = parent
+
+        if name[0] != '.':
+            name = ';' + name
+
+        if parent is None:
+            assert not name[0] == '.'
+            name = name[1:]
+
+        #: The full context of the processing step.
+        self.context: str = name if parent is None else parent.context + name
 
         #: Parameters of interest of the processing step.
         self.parameters: List[str] = []
@@ -189,15 +196,14 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
         if parent_timing.thread_name == current_thread().name:
             yield None
             return
-        name = ''
+        name = '_'
 
     else:
         if len(steps_stack) > 0:
             parent_timing = steps_stack[-1]
-        assert name != ''
+        assert name != '_'
         if name[0] == '.':
             assert parent_timing is not None
-            name = parent_timing.name + name
 
     start_point = Counters.now()
     step_timing = StepTiming(name, parent_timing)
@@ -212,7 +218,7 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
 
         steps_stack.pop()
 
-        if name == '':
+        if name == '_':
             assert parent_timing is not None
             total_times.elapsed_ns = 0
             parent_timing.other_thread += total_times
@@ -227,12 +233,12 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
             assert total_times.cpu_ns >= 0
             total_times += step_timing.other_thread
 
-            _print_timing(name, total_times, step_timing.parameters,
+            _print_timing(step_timing.context, total_times, step_timing.parameters,
                           step_timing.other_thread_mask.sum())
 
 
 def _print_timing(
-    name: str,
+    invocation_context: str,
     total_times: Counters,
     step_parameters: Optional[List[str]] = None,
     other_threads_count: int = 0,
@@ -242,7 +248,8 @@ def _print_timing(
         if TIMING_FILE is None:
             TIMING_FILE = \
                 open(TIMING_PATH, 'a', buffering=TIMING_BUFFERING)
-        text = [name, 'elapsed_ns', str(total_times.elapsed_ns),
+        text = [invocation_context,
+                'elapsed_ns', str(total_times.elapsed_ns),
                 'cpu_ns', str(total_times.cpu_ns)]
         if other_threads_count > 0:
             text.append('other_threads')
@@ -284,13 +291,13 @@ def call(name: Optional[str] = None) -> Callable[[Callable], Callable]:
     return wrap
 
 
-def context() -> Union[List[str], Iterator[str]]:
+def context() -> str:
     '''
-    Return the current context (list of steps leading to the current point).
+    Return the full current context (path of steps leading to the current point).
 
     .. note::
 
-        The list will be empty unless we are collecting timing.
+        The context will be empty unless we are collecting timing.
 
     .. note::
 
@@ -299,18 +306,8 @@ def context() -> Union[List[str], Iterator[str]]:
     '''
     steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
     if not steps_stack:
-        return []
-
-    step_names = []
-    current_name = ''
-    step_timing: Optional[StepTiming] = steps_stack[-1]
-    while step_timing is not None:
-        if step_timing.name != '' and not current_name.startswith(step_timing.name):
-            current_name = step_timing.name
-            step_names.append(current_name)
-        step_timing = step_timing.parent
-
-    return reversed(step_names)
+        return ''
+    return steps_stack[-1].context
 
 
 def current_step() -> Optional[StepTiming]:

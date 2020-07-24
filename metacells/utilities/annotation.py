@@ -10,17 +10,13 @@ especially in the presence to slicing the data.
 
 .. todo::
 
-    Mysteriously, some calls to ``compute`` take a long time as of themselves (not due to their
-    body). This is not garbage collection overhead (which is counted separately). Time tracking is
-    added to show this.
+    Mysteriously, sometimes the calls to ``adata.X`` or ``adata.layers[name]`` take a long time.
+    Time tracking is added to show this.
 
-    Even more mysteriously, merging the three ``matrix = ...; result = ...(matrix, ...); return
-    result`` statements into a single ``return ...`` statement moves the overhead outside the body
-    (but still inside the function).
 '''
 
-from typing import (Any, Callable, Collection, Dict, NamedTuple, Optional,
-                    Tuple, Union)
+from typing import (Any, Callable, Collection, Dict, List, NamedTuple,
+                    Optional, Tuple, Union)
 from warnings import warn
 
 import numpy as np  # type: ignore
@@ -248,6 +244,7 @@ def _slicing_known_annotations() -> None:
 _slicing_known_annotations()
 
 
+@timed.call()
 def slice(  # pylint: disable=redefined-builtin
     adata: AnnData,
     *,
@@ -284,25 +281,161 @@ def slice(  # pylint: disable=redefined-builtin
     if genes is None:
         genes = range(get_var_count(adata))
 
-    bdata = adata[cells, genes]
+    will_slice_obs = len(cells) != get_obs_count(adata)
+    will_slice_var = len(genes) != get_var_count(adata)
+
+    X = adata.X
+    if X is not None:
+        focus = get_annotation_of_data(adata, 'layer')
+        save_x = X
+    else:
+        focus = None
+        save_x = None
+
+    saved_data_layers = \
+        _save_data_layers(adata, will_slice_obs, will_slice_var,
+                          invalidated_annotations_prefix is not None)
+
+    with timed.step('.builtin'):
+        bdata = adata[cells, genes]
 
     did_slice_obs = get_obs_count(bdata) != get_obs_count(adata)
     did_slice_var = get_var_count(bdata) != get_var_count(adata)
+
+    assert did_slice_obs == will_slice_obs
+    assert did_slice_var == will_slice_var
 
     slicing_context = SlicingContext(full_adata=adata, sliced_adata=bdata,
                                      did_slice_obs=did_slice_obs, did_slice_var=did_slice_var,
                                      slice_obs=cells, slice_var=genes)
 
     if did_slice_obs or did_slice_var:
+        _filter_layers(slicing_context, invalidated_annotations_prefix)
         _filter_annotations('obs', bdata.obs, slicing_context,
                             SAFE_SLICING_OBS_ANNOTATIONS, invalidated_annotations_prefix)
         _filter_annotations('var', bdata.var, slicing_context,
                             SAFE_SLICING_VAR_ANNOTATIONS, invalidated_annotations_prefix)
         _filter_annotations('uns', bdata.uns, slicing_context,
                             SAFE_SLICING_UNS_ANNOTATIONS, invalidated_annotations_prefix)
-        _filter_layers(slicing_context, invalidated_annotations_prefix)
+
+    if focus is None:
+        assert bdata.X is None
+    else:
+        _set_x(bdata, _get_layer(bdata, focus))
+        _set_x(adata, save_x)
+
+    adata.layers.update(saved_data_layers)
 
     return bdata
+
+
+def _save_data_layers(
+    adata: AnnData,
+    will_slice_obs: bool,
+    will_slice_var: bool,
+    will_prefix_invalidated: bool
+) -> Dict[str, Any]:
+    saved_data_layers: Dict[str, Any] = {}
+    delete_data_layers: List[str] = []
+
+    will_slice_only_obs = will_slice_obs and not will_slice_var
+    will_slice_only_var = will_slice_var and not will_slice_obs
+
+    for name, data in adata.layers.items():
+        action = \
+            _analyze_data_layer(name, will_slice_obs,
+                                will_slice_var, will_prefix_invalidated)[0]
+        if action == 'discard':
+            delete_data_layers.append(name)
+            saved_data_layers[name] = data
+            continue
+
+        if name.startswith('__'):
+            continue
+
+        for will, prefix in [(will_slice_only_obs, '__per_obs__'),
+                             (will_slice_only_var, '__per_var__')]:
+            if not will:
+                continue
+            per_name = prefix + name
+            if per_name not in adata.layers:
+                continue
+            saved_data_layers[name] = data
+            data = _get_layer(adata, per_name)
+            adata.layers[name] = data
+
+    for name in delete_data_layers:
+        del adata.layers[name]
+
+    return saved_data_layers
+
+
+def _filter_layers(
+    slicing_context: SlicingContext,
+    invalidated_annotations_prefix: Optional[str],
+) -> None:
+    layer_names = list(slicing_context.sliced_adata.layers.keys())
+    for name in layer_names:
+        action, fix_sliced_layer = \
+            _analyze_data_layer(name, slicing_context.did_slice_obs,
+                                slicing_context.did_slice_var,
+                                invalidated_annotations_prefix is not None)
+
+        assert action != 'discard'
+
+        if action == 'preserve':
+            if fix_sliced_layer is not None:
+                fix_sliced_layer(slicing_context, name)
+            continue
+
+        assert action == 'prefix'
+        assert invalidated_annotations_prefix is not None
+
+        new_name = invalidated_annotations_prefix + name
+        assert new_name != name
+        slicing_context.sliced_adata.layers[new_name] = \
+            _get_layer(slicing_context.sliced_adata, name)
+        _clone_slicing_annotation(SAFE_SLICING_DATA_LAYERS, name, new_name)
+
+
+def _analyze_data_layer(
+    name: str,
+    do_slice_obs: bool,
+    do_slice_var: bool,
+    will_prefix_invalidated: bool,
+) -> Tuple[str, Optional[Callable[[SlicingContext, str], None]]]:
+    if name[:2] != '__':
+        is_per = False
+        is_per_obs = False
+        is_per_var = False
+        base_name = name
+    else:
+        is_per = True
+        is_per_obs = name.startswith('__per_obs__')
+        is_per_var = name.startswith('__per_var__')
+        assert is_per_obs or is_per_var
+        base_name = name[11:]
+
+    (preserve_when_slicing_obs, preserve_when_slicing_var, fix_sliced_layer) = \
+        _get_slicing_annotation('data', 'layer',
+                                SAFE_SLICING_DATA_LAYERS, base_name)
+
+    if is_per_var:
+        preserve_when_slicing_obs = False
+    if is_per_obs:
+        preserve_when_slicing_var = False
+
+    preserve = (not do_slice_obs or preserve_when_slicing_obs) \
+        and (not do_slice_var or preserve_when_slicing_var) \
+        and (not is_per or fix_sliced_layer is None)
+
+    if preserve:
+        return 'preserve', fix_sliced_layer
+
+    if is_per or not will_prefix_invalidated:
+        return 'discard', None
+
+    return 'prefix', None
 
 
 def _filter_annotations(  # pylint: disable=too-many-locals
@@ -335,55 +468,6 @@ def _filter_annotations(  # pylint: disable=too-many-locals
             _clone_slicing_annotation(slicing_annotations, name, new_name)
 
         del new_annotations[name]
-
-
-def _filter_layers(
-    slicing_context: SlicingContext,
-    invalidated_annotations_prefix: Optional[str],
-) -> None:
-    layer_names = list(slicing_context.sliced_adata.layers.keys())
-    for name in layer_names:
-        if name[:2] != '__':
-            is_per = False
-            is_per_obs = False
-            is_per_var = False
-            base_name = name
-        else:
-            is_per = True
-            is_per_obs = name.startswith('__per_obs__')
-            is_per_var = name.startswith('__per_var__')
-            assert is_per_obs or is_per_var
-            base_name = name[11:]
-
-        (preserve_when_slicing_obs, preserve_when_slicing_var, fix_sliced_layer) = \
-            _get_slicing_annotation('data', 'layer',
-                                    SAFE_SLICING_DATA_LAYERS, base_name)
-
-        if is_per_var:
-            preserve_when_slicing_obs = False
-        if is_per_obs:
-            preserve_when_slicing_var = False
-
-        preserve = (not slicing_context.did_slice_obs or preserve_when_slicing_obs) \
-            and (not slicing_context.did_slice_var or preserve_when_slicing_var)
-
-        if preserve and fix_sliced_layer is not None:
-            if is_per:
-                preserve = False
-            else:
-                fix_sliced_layer(slicing_context, name)
-
-        if preserve:
-            continue
-
-        if not is_per and invalidated_annotations_prefix is not None:
-            new_name = invalidated_annotations_prefix + name
-            assert new_name != name
-            slicing_context.sliced_adata.layers[new_name] = \
-                slicing_context.sliced_adata.layers[name]
-            _clone_slicing_annotation(SAFE_SLICING_DATA_LAYERS, name, new_name)
-
-        del slicing_context.sliced_adata.layers[name]
 
 
 def _get_slicing_annotation(
@@ -463,15 +547,17 @@ def declare_focus_of_data(adata: AnnData, name: str) -> None:
 
     .. note::
 
-        When using the layer utilities, do not replace the value of ``X`` by writinf ``adata.X =
+        When using the layer utilities, do not replace the value of ``X`` by writing ``adata.X =
         ...``. Instead use ``get_data_layer(adata, ...)``.
     '''
-    assert adata.X is not None
+    X = adata.X
+    assert X is not None
     assert 'layer' not in adata.uns_keys()
     adata.uns['layer'] = name
-    adata.layers[name] = adata.X
+    adata.layers[name] = X
 
 
+@timed.call()
 def get_data_layer(
     adata: AnnData,
     name: str,
@@ -515,18 +601,20 @@ def get_data_layer(
 
         A better implementation would be to cache the layout-specific data in a private variable,
         but we do not own the ``AnnData`` object.
+
+    .. todo::
+
+        For some reason, getting/setting data in the ``.layers`` field takes a long time.
     '''
+
     assert name[:2] != '__'
 
-    if adata.X is not None:
-        get_annotation_of_data(adata, 'layer')
-
-    if name in adata.layers.keys():
-        data = adata.layers[name]
-    else:
+    data = _get_layer(adata, name)
+    if data is None:
         if compute is None:
             raise RuntimeError('unavailable layer data: ' + name)
-        data = compute()
+        with timed.step('.compute'):
+            data = compute()
         assert data.shape == adata.shape
 
     if inplace or infocus:
@@ -537,7 +625,7 @@ def get_data_layer(
         per_name = '__per_%s__%s' % (per, name)
         axis = ['var', 'obs'].index(per)
 
-        per_data = adata.layers.get(per_name)
+        per_data = _get_layer(adata, per_name)
         if per_data is None:
             data = utc.to_layout(data, axis=axis)
         else:
@@ -548,7 +636,7 @@ def get_data_layer(
 
     if infocus:
         adata.uns['layer'] = name
-        adata.X = data
+        _set_x(adata, data)
 
     return data
 
@@ -576,7 +664,7 @@ def del_data_layer(adata: AnnData, name: str, *, must_exist: bool = False) -> No
 
     if adata.uns.get('layer') == name:
         del adata.uns['layer']
-        adata.X = None
+        _set_x(adata, None)
 
 
 @utd.expand_doc()
@@ -640,8 +728,9 @@ def get_annotation_of_obs(
 
     If ``inplace``, store the annotation in ``adata``.
     '''
-    if name in adata.obs_keys():
-        return adata.obs[name]
+    data = adata.obs.get(name)
+    if data is not None:
+        return data
 
     if compute is None:
         raise RuntimeError('unavailable observation annotation: ' + name)
@@ -674,11 +763,8 @@ def get_sum_per_obs(
     '''
     @timed.call()
     def compute_sum_per_obs() -> np.ndarray:
-        with timed.step('.body'):
-            matrix = \
-                get_data_layer(adata, layer, per='obs', inplace=intermediate)
-            result = utc.sum_matrix(matrix, axis=1)
-            return result
+        matrix = get_data_layer(adata, layer, per='obs', inplace=intermediate)
+        return utc.sum_matrix(matrix, axis=1)
 
     return get_annotation_of_obs(adata, 'sum_' + layer, compute_sum_per_obs, inplace=inplace)
 
@@ -701,11 +787,8 @@ def get_nnz_per_obs(
     '''
     @timed.call()
     def compute_nnz_per_obs() -> np.ndarray:
-        with timed.step('.body'):
-            matrix = \
-                get_data_layer(adata, layer, per='obs', inplace=intermediate)
-            result = utc.nnz_matrix(matrix, axis=1)
-            return result
+        matrix = get_data_layer(adata, layer, per='obs', inplace=intermediate)
+        return utc.nnz_matrix(matrix, axis=1)
 
     return get_annotation_of_obs(adata, 'nnz_' + layer, compute_nnz_per_obs, inplace=inplace)
 
@@ -728,11 +811,8 @@ def get_max_per_obs(
     '''
     @timed.call()
     def compute_max_per_obs() -> np.ndarray:
-        with timed.step('.body'):
-            matrix = \
-                get_data_layer(adata, layer, per='obs', inplace=intermediate)
-            result = utc.max_matrix(matrix, axis=1)
-            return result
+        matrix = get_data_layer(adata, layer, per='obs', inplace=intermediate)
+        return utc.max_matrix(matrix, axis=1)
 
     return get_annotation_of_obs(adata, 'max_' + layer, compute_max_per_obs, inplace=inplace)
 
@@ -752,8 +832,9 @@ def get_annotation_of_var(
 
     If ``inplace``, store the annotation in ``adata``.
     '''
-    if name in adata.var_keys():
-        return adata.var[name]
+    data = adata.var.get(name)
+    if data is not None:
+        return data
 
     if compute is None:
         raise RuntimeError('unavailable variable annotation: ' + name)
@@ -784,11 +865,8 @@ def get_sum_per_var(
     '''
     @timed.call()
     def compute_sum_per_var() -> np.ndarray:
-        with timed.step('.body'):
-            matrix = \
-                get_data_layer(adata, layer, per='var', inplace=intermediate)
-            result = utc.sum_matrix(matrix, axis=0)
-            return result
+        matrix = get_data_layer(adata, layer, per='var', inplace=intermediate)
+        return utc.sum_matrix(matrix, axis=0)
 
     return get_annotation_of_var(adata, 'sum_' + layer, compute_sum_per_var, inplace=inplace)
 
@@ -811,11 +889,8 @@ def get_nnz_per_var(
     '''
     @timed.call()
     def compute_nnz_per_var() -> np.ndarray:
-        with timed.step('.body'):
-            matrix = \
-                get_data_layer(adata, layer, per='var', inplace=intermediate)
-            result = utc.nnz_matrix(matrix, axis=0)
-            return result
+        matrix = get_data_layer(adata, layer, per='var', inplace=intermediate)
+        return utc.nnz_matrix(matrix, axis=0)
 
     return get_annotation_of_var(adata, 'nnz_' + layer, compute_nnz_per_var, inplace=inplace)
 
@@ -838,15 +913,13 @@ def get_max_per_var(
     '''
     @timed.call()
     def compute_max_per_var() -> np.ndarray:
-        with timed.step('.body'):
-            matrix = \
-                get_data_layer(adata, layer, per='var', inplace=intermediate)
-            result = utc.max_matrix(matrix, axis=0)
-            return result
+        matrix = get_data_layer(adata, layer, per='var', inplace=intermediate)
+        return utc.max_matrix(matrix, axis=0)
 
     return get_annotation_of_var(adata, 'max_' + layer, compute_max_per_var, inplace=inplace)
 
 
+@timed.call()
 def get_annotation_of_data(
     adata: AnnData,
     name: str,
@@ -862,8 +935,9 @@ def get_annotation_of_data(
 
     If ``inplace``, store the annotation in ``adata``.
     '''
-    if name in adata.uns_keys():
-        return adata.uns[name]
+    data = adata.uns.get(name)
+    if data is not None:
+        return data
 
     if compute is None:
         raise RuntimeError('unavailable unstructured annotation: ' + name)
@@ -875,3 +949,13 @@ def get_annotation_of_data(
         adata.uns[name] = data
 
     return data
+
+
+@timed.call()
+def _set_x(adata: AnnData, X: Optional[utc.Matrix]) -> None:
+    adata.X = X
+
+
+@timed.call()
+def _get_layer(adata: AnnData, name: str) -> Any:
+    return adata.layers.get(name)

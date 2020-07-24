@@ -28,6 +28,7 @@ __all__ = [
     'downsample_matrix',
     'downsample_array',
     'downsample_tmp_size',
+    'relayout_compressed',
 ]
 
 
@@ -103,7 +104,7 @@ def corrcoef(matrix: Matrix) -> np.ndarray:
 
 
 @timed.call()
-def to_layout(matrix: Matrix, *, axis: int) -> Matrix:
+def to_layout(matrix: Matrix, *, axis: int) -> Matrix:  # pylint: disable=too-many-return-statements
     '''
     Re-layout a matrix for efficient axis slicing/processing.
 
@@ -123,24 +124,69 @@ def to_layout(matrix: Matrix, *, axis: int) -> Matrix:
     assert 0 <= axis <= 1
 
     if sparse.issparse(matrix):
-        axis_format = ['csc', 'csr'][axis]
-        if matrix.getformat() == axis_format:
+        to_axis_format = ['csc', 'csr'][axis]
+        from_axis_format = ['csc', 'csr'][1 - axis]
+        if matrix.getformat() == to_axis_format:
             return matrix
 
-        name = '.to' + axis_format
+        if matrix.getformat() == from_axis_format:
+            return relayout_compressed(matrix, axis)
+
+        name = '.to' + to_axis_format
         with timed.step(name):
             return getattr(matrix, name[1:])()
 
     if axis == 0:
         if matrix.flags['F_CONTIGUOUS']:
             return matrix
-        with timed.step('np.ravel'):
+        with timed.step('.ravel'):
             return np.reshape(np.ravel(matrix, order='F'), matrix.shape, order='F')
 
     if matrix.flags['C_CONTIGUOUS']:
         return matrix
-    with timed.step('np.ravel'):
+    with timed.step('.ravel'):
         return np.reshape(np.ravel(matrix, order='C'), matrix.shape, order='C')
+
+
+@timed.call()
+def relayout_compressed(matrix: sparse.spmatrix, axis: int) -> sparse.spmatrix:
+    '''
+    Efficient parallel conversion of a CSR/CSC matrix to a CSC/CSR matrix.
+    '''
+    assert matrix.ndim == 2
+    assert matrix.getformat() == ['csr', 'csc'][axis]
+
+    _output_elements_count = matrix_bands_count = matrix.shape[axis]
+    output_bands_count = matrix_elements_count = matrix.shape[1 - axis]
+
+    with timed.step('.bincount'):
+        nnz_elements_of_output_bands = \
+            np.bincount(matrix.indices, minlength=matrix_elements_count)
+
+    output_indptr = np.empty(output_bands_count + 1, dtype=matrix.indptr.dtype)
+    output_indptr[0:2] = 0
+    with timed.step('.cumsum'):
+        np.cumsum(nnz_elements_of_output_bands[:-1], out=output_indptr[2:])
+
+    output_indices = np.empty(matrix.indices.size, dtype=matrix.indices.dtype)
+    output_data = np.empty(matrix.data.size, dtype=matrix.data.dtype)
+
+    function_name = 'collect_compressed_%s_%s_%s' \
+        % (matrix.data.dtype, matrix.indices.dtype, matrix.indptr.dtype)
+    function = getattr(xt, function_name)
+
+    def collect_compressed(matrix_band_indices: range) -> None:
+        function(matrix_band_indices.start, matrix_band_indices.stop,
+                 matrix.data, matrix.indices, matrix.indptr,
+                 output_data, output_indices, output_indptr[1:])
+
+    with timed.step('.collect_compressed'):
+        parallel_for(collect_compressed, matrix_bands_count)
+
+    assert output_indptr[-1] == matrix.indptr[-1]
+
+    constructor = [sparse.csc_matrix, sparse.csr_matrix][axis]
+    return constructor((output_data, output_indices, output_indptr), shape=matrix.shape)
 
 
 @timed.call()
@@ -252,12 +298,16 @@ def downsample_matrix(
     *,
     axis: int,
     samples: int,
+    eliminate_zeros: bool = True,
     inplace: bool = False,
-    random_seed: int = 0
+    random_seed: int = 0,
 ) -> Matrix:
     '''
     Downsample the rows (``axis`` = 1) or columns (``axis`` = 0) of some ``matrix`` such that the
     sum of each one becomes ``samples``.
+
+    If the matrix is sparse, if not ``eliminate_zeros``, then do not perform the final phase of
+    eliminating leftover zero values from the compressed format.
 
     If ``inplace``, modify the matrix, otherwise, return a modified copy.
 
@@ -266,17 +316,17 @@ def downsample_matrix(
     assert matrix.ndim == 2
     assert 0 <= axis <= 1
 
-    if sparse.issparse(matrix):
-        with timed.step('.sparse'):
-            return _downsample_sparse_matrix(matrix, axis, samples, inplace, random_seed)
-    with timed.step('.dense'):
+    if not sparse.issparse(matrix):
         return _downsample_dense_matrix(matrix, axis, samples, inplace, random_seed)
+
+    return _downsample_sparse_matrix(matrix, axis, samples, eliminate_zeros, inplace, random_seed)
 
 
 def _downsample_sparse_matrix(
     matrix: sparse.spmatrix,
     axis: int,
     samples: int,
+    eliminate_zeros: bool,
     inplace: bool,
     random_seed: int
 ) -> sparse.spmatrix:
@@ -320,7 +370,12 @@ def _downsample_sparse_matrix(
             _downsample_array(input_vector, samples, tmp,
                               output_vector, index_seed)
 
-    parallel_for(downsample_sparse_vectors, results_count)
+    with timed.step('.sparse'):
+        parallel_for(downsample_sparse_vectors, results_count)
+
+    if eliminate_zeros:
+        with timed.step('.eliminate_zeros'):
+            output.eliminate_zeros()
 
     return output
 
@@ -412,7 +467,8 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
                 output[index, :] = output_array
 
     results_count = matrix.shape[1 - axis]
-    parallel_for(downsample_dense_vectors, results_count)
+    with timed.step('.dense'):
+        parallel_for(downsample_dense_vectors, results_count)
 
     return output
 

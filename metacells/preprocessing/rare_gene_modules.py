@@ -120,18 +120,15 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     rare_module_of_genes = np.full(genes_count, -1)
     list_of_names_of_genes_of_modules: List[np.ndarray] = []
 
-    with ut.step('.0.0'):
-        total_umis_of_cells = \
-            ut.get_sum_per_obs(adata, umis_layer,
-                               inplace=intermediate, intermediate=True)
-    with ut.step('.0.1'):
-        nnz_cells_of_genes = \
-            ut.get_nnz_per_var(adata, umis_layer,
-                               inplace=intermediate, intermediate=True)
-    with ut.step('.0.2'):
-        max_umis_of_genes = \
-            ut.get_max_per_var(adata, umis_layer,
-                               inplace=intermediate, intermediate=True)
+    total_umis_of_cells = \
+        ut.get_sum_per_obs(adata, umis_layer,
+                           inplace=intermediate, intermediate=True)
+    nnz_cells_of_genes = \
+        ut.get_nnz_per_var(adata, umis_layer,
+                           inplace=intermediate, intermediate=True)
+    max_umis_of_genes = \
+        ut.get_max_per_var(adata, umis_layer,
+                           inplace=intermediate, intermediate=True)
 
     def results() -> Optional[Tuple[pd.DataFrame, pd.DataFrame, np.ndarray]]:
         array_of_names_of_genes_of_modules = \
@@ -151,7 +148,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
 
         return obs_metrics, var_metrics, array_of_names_of_genes_of_modules
 
-    with ut.step('.1-pick_candidate_genes'):
+    with ut.step('.pick_candidate_genes'):
         nnz_cells_fraction_of_genes = nnz_cells_of_genes / cells_count
 
         nnz_cells_fraction_mask_of_genes = \
@@ -166,20 +163,21 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         candidate_genes_count = candidate_genes_indices.size
         if candidate_genes_count < minimal_size_of_modules:
             return results()
+
         candidate_data = ut.slice(adata, genes=candidate_genes_indices)
 
-    with ut.step('.2-correlate'):
+    with ut.step('.correlate'):
         candidate_umis = ut.get_data_layer(candidate_data, umis_layer)
         correlations_between_candidate_genes = ut.corrcoef(candidate_umis.T)
         correlations_between_candidate_genes = \
             np.corrcoef(correlations_between_candidate_genes)
 
-    with ut.step('.3-linkage'):
+    with ut.step('.linkage'):
         linkage = \
             sch.linkage(scd.pdist(correlations_between_candidate_genes),
                         method=cluster_method_of_genes)
 
-    with ut.step('.4-identify_genes'):
+    with ut.step('.identify_genes'):
         np.fill_diagonal(correlations_between_candidate_genes, None)
         combined_candidate_indices = {index: [index]
                                       for index in range(candidate_genes_count)}
@@ -218,7 +216,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
             del combined_correlation[left_index]
             del combined_correlation[right_index]
 
-    with ut.step('.5-identify_cells'):
+    with ut.step('.identify_cells'):
         maximal_strength_of_cells = np.zeros(cells_count)
         gene_indices_of_modules: List[np.ndarray] = []
         candidate_umis = \
@@ -269,7 +267,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         if len(gene_indices_of_modules) == 0:
             return results()
 
-    with ut.step('.6-results'):
+    with ut.step('.results'):
         for raw_module_index, module_gene_indices in enumerate(gene_indices_of_modules):
             module_cell_indices = \
                 np.where(rare_module_of_cells == raw_module_index)[0]
