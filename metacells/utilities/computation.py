@@ -1,5 +1,5 @@
 '''
-Utilities for performing efficient computations.
+Utilities for performing efficient parallel computations.
 '''
 
 from typing import Callable, Optional, Union
@@ -18,17 +18,21 @@ __all__ = [
     'DATA_TYPES',
     'Matrix',
     'Vector',
+
     'to_array',
-    'corrcoef',
     'to_layout',
+    'relayout_compressed',
+
+    'corrcoef',
+
     'log_matrix',
     'sum_matrix',
     'nnz_matrix',
     'max_matrix',
+
     'downsample_matrix',
     'downsample_array',
     'downsample_tmp_size',
-    'relayout_compressed',
 ]
 
 
@@ -72,35 +76,6 @@ def to_array(data: Union[Matrix, Vector]) -> np.ndarray:
         assert array.ndim == 1
 
     return array
-
-
-@timed.call()
-def corrcoef(matrix: Matrix) -> np.ndarray:
-    '''
-    Compute correlations between all observations (rows, cells) containing variables (columns,
-    genes).
-
-    This should give the same results as ``numpy.corrcoef``, but faster for sparse matrices.
-
-    .. note::
-
-        To correlate between observations (cells), the expected layout is the transpose of the
-        layout of ``X`` in ``AnnData``.
-    '''
-    if not sparse.issparse(matrix):
-        return np.corrcoef(matrix)
-
-    obs_count = matrix.shape[0]
-    var_count = matrix.shape[1]
-    timed.parameters(obs_count=obs_count, var_count=var_count)
-    sum_of_rows = matrix.sum(axis=1)
-    assert sum_of_rows.size == obs_count
-    centering = sum_of_rows.dot(sum_of_rows.T) / var_count
-    correlations = (matrix.dot(matrix.T) - centering) / (var_count - 1)
-    assert correlations.shape == (obs_count, obs_count)
-    diagonal = np.diag(correlations)
-    correlations /= np.sqrt(np.outer(diagonal, diagonal))
-    return correlations
 
 
 @timed.call()
@@ -171,14 +146,14 @@ def relayout_compressed(matrix: sparse.spmatrix, axis: int) -> sparse.spmatrix:
     output_indices = np.empty(matrix.indices.size, dtype=matrix.indices.dtype)
     output_data = np.empty(matrix.data.size, dtype=matrix.data.dtype)
 
-    function_name = 'collect_compressed_%s_%s_%s' \
+    extension_name = 'collect_compressed_%s_t_%s_t_%s_t' \
         % (matrix.data.dtype, matrix.indices.dtype, matrix.indptr.dtype)
-    function = getattr(xt, function_name)
+    extension = getattr(xt, extension_name)
 
     def collect_compressed(matrix_band_indices: range) -> None:
-        function(matrix_band_indices.start, matrix_band_indices.stop,
-                 matrix.data, matrix.indices, matrix.indptr,
-                 output_data, output_indices, output_indptr[1:])
+        extension(matrix_band_indices.start, matrix_band_indices.stop,
+                  matrix.data, matrix.indices, matrix.indptr,
+                  output_data, output_indices, output_indptr[1:])
 
     with timed.step('.collect_compressed'):
         parallel_for(collect_compressed, matrix_bands_count)
@@ -187,6 +162,35 @@ def relayout_compressed(matrix: sparse.spmatrix, axis: int) -> sparse.spmatrix:
 
     constructor = [sparse.csc_matrix, sparse.csr_matrix][axis]
     return constructor((output_data, output_indices, output_indptr), shape=matrix.shape)
+
+
+@timed.call()
+def corrcoef(matrix: Matrix) -> np.ndarray:
+    '''
+    Compute correlations between all observations (rows, cells) containing variables (columns,
+    genes).
+
+    This should give the same results as ``numpy.corrcoef``, but faster for sparse matrices.
+
+    .. note::
+
+        To correlate between observations (cells), the expected layout is the transpose of the
+        layout of ``X`` in ``AnnData``.
+    '''
+    if not sparse.issparse(matrix):
+        return np.corrcoef(matrix)
+
+    obs_count = matrix.shape[0]
+    var_count = matrix.shape[1]
+    timed.parameters(obs_count=obs_count, var_count=var_count)
+    sum_of_rows = matrix.sum(axis=1)
+    assert sum_of_rows.size == obs_count
+    centering = sum_of_rows.dot(sum_of_rows.T) / var_count
+    correlations = (matrix.dot(matrix.T) - centering) / (var_count - 1)
+    assert correlations.shape == (obs_count, obs_count)
+    diagonal = np.diag(correlations)
+    correlations /= np.sqrt(np.outer(diagonal, diagonal))
+    return correlations
 
 
 @timed.call()
@@ -543,10 +547,10 @@ def _downsample_array(
     else:
         assert output.shape == array.shape
 
-    function_name = \
-        'downsample_%s_%s_%s' % (array.dtype, tmp.dtype, output.dtype)
-    function = getattr(xt, function_name)
-    function(array, tmp, output, samples, random_seed)
+    extension_name = \
+        'downsample_%s_t_%s_t_%s_t' % (array.dtype, tmp.dtype, output.dtype)
+    extension = getattr(xt, extension_name)
+    extension(array, tmp, output, samples, random_seed)
 
 
 def downsample_tmp_size(size: int) -> int:

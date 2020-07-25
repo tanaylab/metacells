@@ -61,7 +61,7 @@ setup(
             include_dirs=['pybind11/include'],
             sources=['metacells/extensions.cpp'],
             define_macros=[
-                ('ASSERT_LEVEL', 2),  # 0 for none, 1 for fast, 2 for slow.
+                ('ASSERT_LEVEL', 1),  # 0 for none, 1 for fast, 2 for slow.
             ],
         ),
     ],

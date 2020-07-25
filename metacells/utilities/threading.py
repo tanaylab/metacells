@@ -19,6 +19,7 @@ __all__ = [
     'EXECUTOR',
     'parallel_map',
     'parallel_for',
+    'parallel_collect',
     'SharedStorage',
 ]
 
@@ -184,6 +185,78 @@ def parallel_for(
         pass
 
 
+def parallel_collect(
+    function: Callable,
+    merge: Callable,
+    invocations_count: int,
+    *,
+    batches_per_thread: Optional[int] = 4,
+) -> str:
+    '''
+    Similar to ``parallel_for``, except it is assumed that each invocation of ``function`` updates
+    some private per-thread variable(s) in some storage, and ``merge(from_thread_name,
+    into_thread_name)`` will merge the data from the private storage variable(s) of one thread into
+    the private storage of another.
+
+    Returns the name of the thread which executed the final ``merge`` operations so the caller can
+    access the final collected data.
+
+    .. todo::
+
+        Provide an example.
+
+    .. note::
+
+        Both ``function`` and ``merge`` can be run in parallel (on different data).
+
+    '''
+    if EXECUTOR is None:
+        parallel_for(function, invocations_count,
+                     batches_per_thread=batches_per_thread)
+        return current_thread().name
+
+    shared_storage = SharedStorage()
+
+    shared_storage.set_shared('pending', set())
+
+    def thread_function(*args: Any) -> None:
+        function(*args)
+        thread_name = current_thread().name
+        with shared_storage.read_shared('pending') as pending:
+            if thread_name in pending:
+                return
+        with shared_storage.write_shared('pending') as pending:
+            pending.add(thread_name)
+
+    parallel_for(thread_function, invocations_count,
+                 batches_per_thread=batches_per_thread)
+
+    pending = shared_storage.get_shared('pending')
+
+    if len(pending) > 1:
+        def merge_function(_index: int) -> None:
+            into_thread_name: Optional[str] = None
+            while True:
+                with shared_storage.write_shared('pending') as pending:
+                    if into_thread_name is None:
+                        if len(pending) == 0:
+                            return
+                        into_thread_name = pending.pop()
+
+                    if len(pending) == 0:
+                        pending.add(into_thread_name)
+                        return
+
+                    from_thread_name = pending.pop()
+
+                merge(from_thread_name, into_thread_name)
+
+        parallel_for(merge_function, len(pending) - 1, batches_per_thread=None)
+
+    assert len(pending) == 1
+    return pending.pop()
+
+
 def _analyze_loop(
     invocations_count: int,
     batches_per_thread: int,
@@ -235,14 +308,14 @@ class SharedStorage:
         self._shared[name] = (rwlock.RWLockRead(), value)
 
     @contextmanager
-    def with_read_shared(self, name: str) -> Iterator[Any]:
+    def read_shared(self, name: str) -> Iterator[Any]:
         '''
         Safe(-ish) read-only access to shared data by its ``name``.
 
         .. note::
 
             This is meant to be used by threads who want to ensure that no other thread is modifying
-            the data. It will be safe against modification by ``with_write_shared``, but not against
+            the data. It will be safe against modification by ``with write_shared``, but not against
             access using ``get_shared``.
         '''
         lock, value = self._shared[name]
@@ -250,14 +323,14 @@ class SharedStorage:
             yield value
 
     @contextmanager
-    def with_write_shared(self, name: str) -> Iterator[Any]:
+    def write_shared(self, name: str) -> Iterator[Any]:
         '''
         Safe(-ish) exclusive read-write access to shared data by its ``name``.
 
         .. note::
 
             This is meant to be used by threads who want to modify the data even if other threads
-            might be reading it. It will be safe against read-only-access by ``with_read_shared``,
+            might be reading it. It will be safe against read-only-access by ``with read_shared``,
             but not against access using ``get_shared``.
         '''
         lock, value = self._shared[name]
@@ -316,7 +389,7 @@ class SharedStorage:
 
         return value
 
-    def get_thread_private(self, name: str, *, thread: str) -> Any:
+    def get_thread_private(self, name: str, thread: str) -> Any:
         '''
         Unsafe access to private ``thread`` data by its ``name``.
 

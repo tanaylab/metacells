@@ -68,6 +68,52 @@ def test_unbatched_parallel_for():
     assert np.all(mask)
 
 
+def test_parallel_collect():
+    shared_storage = ut.SharedStorage()
+    shared_storage.set_private('tmp', list)
+
+    def compute(index: int) -> None:
+        tmp = shared_storage.get_private('tmp')
+        tmp.append(index)
+
+    def merge(from_thread_name: str, into_thread_name: str) -> None:
+        from_tmp = shared_storage.get_thread_private('tmp', from_thread_name)
+        into_tmp = shared_storage.get_thread_private('tmp', into_thread_name)
+        into_tmp.extend(from_tmp)
+
+    final_thread_name = \
+        ut.parallel_collect(compute, merge, 10000, batches_per_thread=None)
+    final_tmp = shared_storage.get_thread_private('tmp', final_thread_name)
+    assert len(final_tmp) == 10000
+    assert np.all(np.arange(10000) == sorted(final_tmp))
+
+
+def test_relayout_matrix():
+    rvs = stats.poisson(10, loc=10).rvs
+    csr_matrix = sparse.random(1000, 10000, format='csr',
+                               dtype='int32', random_state=123456, data_rvs=rvs)
+    assert csr_matrix.getformat() == 'csr'
+
+    scipy_csc_matrix = csr_matrix.tocsc()
+    metacells_csc_matrix = ut.relayout_compressed(csr_matrix, axis=0)
+
+    assert scipy_csc_matrix.getformat() == 'csc'
+    assert metacells_csc_matrix.getformat() == 'csc'
+
+    assert np.all(metacells_csc_matrix.indptr == scipy_csc_matrix.indptr)
+    assert np.all(metacells_csc_matrix.todense() == scipy_csc_matrix.todense())
+
+    scipy_csr_matrix = scipy_csc_matrix.tocsr()
+
+    metacells_csr_matrix = ut.relayout_compressed(metacells_csc_matrix, axis=1)
+
+    assert scipy_csr_matrix.getformat() == 'csr'
+    assert metacells_csr_matrix.getformat() == 'csr'
+
+    assert np.all(metacells_csr_matrix.indptr == scipy_csr_matrix.indptr)
+    assert np.all(metacells_csr_matrix.todense() == scipy_csr_matrix.todense())
+
+
 def test_downsample_tmp_size():
     assert ut.downsample_tmp_size(0) == 0
     assert ut.downsample_tmp_size(1) == 0
@@ -146,29 +192,3 @@ def test_downsample_matrix():
     assert result.shape == matrix.shape
     new_row_sums = ut.sum_matrix(result, axis=1)
     assert np.all(new_row_sums == min_sum)
-
-
-def test_relayout_matrix():
-    rvs = stats.poisson(10, loc=10).rvs
-    csr_matrix = sparse.random(1000, 10000, format='csr',
-                               dtype='int32', random_state=123456, data_rvs=rvs)
-    assert csr_matrix.getformat() == 'csr'
-
-    scipy_csc_matrix = csr_matrix.tocsc()
-    metacells_csc_matrix = ut.relayout_compressed(csr_matrix, axis=0)
-
-    assert scipy_csc_matrix.getformat() == 'csc'
-    assert metacells_csc_matrix.getformat() == 'csc'
-
-    assert np.all(metacells_csc_matrix.indptr == scipy_csc_matrix.indptr)
-    assert np.all(metacells_csc_matrix.todense() == scipy_csc_matrix.todense())
-
-    scipy_csr_matrix = scipy_csc_matrix.tocsr()
-
-    metacells_csr_matrix = ut.relayout_compressed(metacells_csc_matrix, axis=1)
-
-    assert scipy_csr_matrix.getformat() == 'csr'
-    assert metacells_csr_matrix.getformat() == 'csr'
-
-    assert np.all(metacells_csr_matrix.indptr == scipy_csr_matrix.indptr)
-    assert np.all(metacells_csr_matrix.todense() == scipy_csr_matrix.todense())

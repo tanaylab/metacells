@@ -43,10 +43,10 @@
 #include <cmath>
 #include <random>
 
-namespace metacells {
-
 typedef float float32_t;
 typedef double float64_t;
+
+namespace metacells {
 
 static_assert(sizeof(float32_t) == 4);
 static_assert(sizeof(float64_t) == 8);
@@ -296,11 +296,11 @@ random_sample(ArraySlice<T> tree, int64_t random) {
 /// See the Python `metacell.utilities.computation.downsample_array` function.
 template<typename D, typename T, typename O>
 static void
-typed_downsample(const pybind11::array_t<D>& input_array,
-                 pybind11::array_t<T>& tree_array,
-                 pybind11::array_t<O>& output_array,
-                 const int samples,
-                 const int random_seed) {
+downsample(const pybind11::array_t<D>& input_array,
+           pybind11::array_t<T>& tree_array,
+           pybind11::array_t<O>& output_array,
+           const int samples,
+           const int random_seed) {
     WithoutGil without_gil{};
 
     ConstArraySlice<D> input{ input_array, "input_array" };
@@ -340,247 +340,17 @@ typed_downsample(const pybind11::array_t<D>& input_array,
     }
 }
 
-#define DEFINE_DOWNSAMPLE(D, T, O)                                                      \
-    static void downsample_##D##_##T##_##O(const pybind11::array_t<D##_t>& input_array, \
-                                           pybind11::array_t<T##_t>& tree_array,        \
-                                           pybind11::array_t<O##_t>& output_array,      \
-                                           const int samples,                           \
-                                           const int random_seed) {                     \
-        typed_downsample<D##_t, T##_t, O##_t>(input_array,                              \
-                                              tree_array,                               \
-                                              output_array,                             \
-                                              samples,                                  \
-                                              random_seed);                             \
-    }
-
-DEFINE_DOWNSAMPLE(float32, float32, float32)
-DEFINE_DOWNSAMPLE(float32, float32, float64)
-DEFINE_DOWNSAMPLE(float32, float32, int32)
-DEFINE_DOWNSAMPLE(float32, float32, int64)
-DEFINE_DOWNSAMPLE(float32, float32, uint32)
-DEFINE_DOWNSAMPLE(float32, float32, uint64)
-DEFINE_DOWNSAMPLE(float32, float64, float32)
-DEFINE_DOWNSAMPLE(float32, float64, float64)
-DEFINE_DOWNSAMPLE(float32, float64, int32)
-DEFINE_DOWNSAMPLE(float32, float64, int64)
-DEFINE_DOWNSAMPLE(float32, float64, uint32)
-DEFINE_DOWNSAMPLE(float32, float64, uint64)
-DEFINE_DOWNSAMPLE(float32, int32, float32)
-DEFINE_DOWNSAMPLE(float32, int32, float64)
-DEFINE_DOWNSAMPLE(float32, int32, int32)
-DEFINE_DOWNSAMPLE(float32, int32, int64)
-DEFINE_DOWNSAMPLE(float32, int32, uint32)
-DEFINE_DOWNSAMPLE(float32, int32, uint64)
-DEFINE_DOWNSAMPLE(float32, int64, float32)
-DEFINE_DOWNSAMPLE(float32, int64, float64)
-DEFINE_DOWNSAMPLE(float32, int64, int32)
-DEFINE_DOWNSAMPLE(float32, int64, int64)
-DEFINE_DOWNSAMPLE(float32, int64, uint32)
-DEFINE_DOWNSAMPLE(float32, int64, uint64)
-DEFINE_DOWNSAMPLE(float32, uint32, float32)
-DEFINE_DOWNSAMPLE(float32, uint32, float64)
-DEFINE_DOWNSAMPLE(float32, uint32, int32)
-DEFINE_DOWNSAMPLE(float32, uint32, int64)
-DEFINE_DOWNSAMPLE(float32, uint32, uint32)
-DEFINE_DOWNSAMPLE(float32, uint32, uint64)
-DEFINE_DOWNSAMPLE(float32, uint64, float32)
-DEFINE_DOWNSAMPLE(float32, uint64, float64)
-DEFINE_DOWNSAMPLE(float32, uint64, int32)
-DEFINE_DOWNSAMPLE(float32, uint64, int64)
-DEFINE_DOWNSAMPLE(float32, uint64, uint32)
-DEFINE_DOWNSAMPLE(float32, uint64, uint64)
-DEFINE_DOWNSAMPLE(float64, float32, float32)
-DEFINE_DOWNSAMPLE(float64, float32, float64)
-DEFINE_DOWNSAMPLE(float64, float32, int32)
-DEFINE_DOWNSAMPLE(float64, float32, int64)
-DEFINE_DOWNSAMPLE(float64, float32, uint32)
-DEFINE_DOWNSAMPLE(float64, float32, uint64)
-DEFINE_DOWNSAMPLE(float64, float64, float32)
-DEFINE_DOWNSAMPLE(float64, float64, float64)
-DEFINE_DOWNSAMPLE(float64, float64, int32)
-DEFINE_DOWNSAMPLE(float64, float64, int64)
-DEFINE_DOWNSAMPLE(float64, float64, uint32)
-DEFINE_DOWNSAMPLE(float64, float64, uint64)
-DEFINE_DOWNSAMPLE(float64, int32, float32)
-DEFINE_DOWNSAMPLE(float64, int32, float64)
-DEFINE_DOWNSAMPLE(float64, int32, int32)
-DEFINE_DOWNSAMPLE(float64, int32, int64)
-DEFINE_DOWNSAMPLE(float64, int32, uint32)
-DEFINE_DOWNSAMPLE(float64, int32, uint64)
-DEFINE_DOWNSAMPLE(float64, int64, float32)
-DEFINE_DOWNSAMPLE(float64, int64, float64)
-DEFINE_DOWNSAMPLE(float64, int64, int32)
-DEFINE_DOWNSAMPLE(float64, int64, int64)
-DEFINE_DOWNSAMPLE(float64, int64, uint32)
-DEFINE_DOWNSAMPLE(float64, int64, uint64)
-DEFINE_DOWNSAMPLE(float64, uint32, float32)
-DEFINE_DOWNSAMPLE(float64, uint32, float64)
-DEFINE_DOWNSAMPLE(float64, uint32, int32)
-DEFINE_DOWNSAMPLE(float64, uint32, int64)
-DEFINE_DOWNSAMPLE(float64, uint32, uint32)
-DEFINE_DOWNSAMPLE(float64, uint32, uint64)
-DEFINE_DOWNSAMPLE(float64, uint64, float32)
-DEFINE_DOWNSAMPLE(float64, uint64, float64)
-DEFINE_DOWNSAMPLE(float64, uint64, int32)
-DEFINE_DOWNSAMPLE(float64, uint64, int64)
-DEFINE_DOWNSAMPLE(float64, uint64, uint32)
-DEFINE_DOWNSAMPLE(float64, uint64, uint64)
-DEFINE_DOWNSAMPLE(int32, float32, float32)
-DEFINE_DOWNSAMPLE(int32, float32, float64)
-DEFINE_DOWNSAMPLE(int32, float32, int32)
-DEFINE_DOWNSAMPLE(int32, float32, int64)
-DEFINE_DOWNSAMPLE(int32, float32, uint32)
-DEFINE_DOWNSAMPLE(int32, float32, uint64)
-DEFINE_DOWNSAMPLE(int32, float64, float32)
-DEFINE_DOWNSAMPLE(int32, float64, float64)
-DEFINE_DOWNSAMPLE(int32, float64, int32)
-DEFINE_DOWNSAMPLE(int32, float64, int64)
-DEFINE_DOWNSAMPLE(int32, float64, uint32)
-DEFINE_DOWNSAMPLE(int32, float64, uint64)
-DEFINE_DOWNSAMPLE(int32, int32, float32)
-DEFINE_DOWNSAMPLE(int32, int32, float64)
-DEFINE_DOWNSAMPLE(int32, int32, int32)
-DEFINE_DOWNSAMPLE(int32, int32, int64)
-DEFINE_DOWNSAMPLE(int32, int32, uint32)
-DEFINE_DOWNSAMPLE(int32, int32, uint64)
-DEFINE_DOWNSAMPLE(int32, int64, float32)
-DEFINE_DOWNSAMPLE(int32, int64, float64)
-DEFINE_DOWNSAMPLE(int32, int64, int32)
-DEFINE_DOWNSAMPLE(int32, int64, int64)
-DEFINE_DOWNSAMPLE(int32, int64, uint32)
-DEFINE_DOWNSAMPLE(int32, int64, uint64)
-DEFINE_DOWNSAMPLE(int32, uint32, float32)
-DEFINE_DOWNSAMPLE(int32, uint32, float64)
-DEFINE_DOWNSAMPLE(int32, uint32, int32)
-DEFINE_DOWNSAMPLE(int32, uint32, int64)
-DEFINE_DOWNSAMPLE(int32, uint32, uint32)
-DEFINE_DOWNSAMPLE(int32, uint32, uint64)
-DEFINE_DOWNSAMPLE(int32, uint64, float32)
-DEFINE_DOWNSAMPLE(int32, uint64, float64)
-DEFINE_DOWNSAMPLE(int32, uint64, int32)
-DEFINE_DOWNSAMPLE(int32, uint64, int64)
-DEFINE_DOWNSAMPLE(int32, uint64, uint32)
-DEFINE_DOWNSAMPLE(int32, uint64, uint64)
-DEFINE_DOWNSAMPLE(int64, float32, float32)
-DEFINE_DOWNSAMPLE(int64, float32, float64)
-DEFINE_DOWNSAMPLE(int64, float32, int32)
-DEFINE_DOWNSAMPLE(int64, float32, int64)
-DEFINE_DOWNSAMPLE(int64, float32, uint32)
-DEFINE_DOWNSAMPLE(int64, float32, uint64)
-DEFINE_DOWNSAMPLE(int64, float64, float32)
-DEFINE_DOWNSAMPLE(int64, float64, float64)
-DEFINE_DOWNSAMPLE(int64, float64, int32)
-DEFINE_DOWNSAMPLE(int64, float64, int64)
-DEFINE_DOWNSAMPLE(int64, float64, uint32)
-DEFINE_DOWNSAMPLE(int64, float64, uint64)
-DEFINE_DOWNSAMPLE(int64, int32, float32)
-DEFINE_DOWNSAMPLE(int64, int32, float64)
-DEFINE_DOWNSAMPLE(int64, int32, int32)
-DEFINE_DOWNSAMPLE(int64, int32, int64)
-DEFINE_DOWNSAMPLE(int64, int32, uint32)
-DEFINE_DOWNSAMPLE(int64, int32, uint64)
-DEFINE_DOWNSAMPLE(int64, int64, float32)
-DEFINE_DOWNSAMPLE(int64, int64, float64)
-DEFINE_DOWNSAMPLE(int64, int64, int32)
-DEFINE_DOWNSAMPLE(int64, int64, int64)
-DEFINE_DOWNSAMPLE(int64, int64, uint32)
-DEFINE_DOWNSAMPLE(int64, int64, uint64)
-DEFINE_DOWNSAMPLE(int64, uint32, float32)
-DEFINE_DOWNSAMPLE(int64, uint32, float64)
-DEFINE_DOWNSAMPLE(int64, uint32, int32)
-DEFINE_DOWNSAMPLE(int64, uint32, int64)
-DEFINE_DOWNSAMPLE(int64, uint32, uint32)
-DEFINE_DOWNSAMPLE(int64, uint32, uint64)
-DEFINE_DOWNSAMPLE(int64, uint64, float32)
-DEFINE_DOWNSAMPLE(int64, uint64, float64)
-DEFINE_DOWNSAMPLE(int64, uint64, int32)
-DEFINE_DOWNSAMPLE(int64, uint64, int64)
-DEFINE_DOWNSAMPLE(int64, uint64, uint32)
-DEFINE_DOWNSAMPLE(int64, uint64, uint64)
-DEFINE_DOWNSAMPLE(uint32, float32, float32)
-DEFINE_DOWNSAMPLE(uint32, float32, float64)
-DEFINE_DOWNSAMPLE(uint32, float32, int32)
-DEFINE_DOWNSAMPLE(uint32, float32, int64)
-DEFINE_DOWNSAMPLE(uint32, float32, uint32)
-DEFINE_DOWNSAMPLE(uint32, float32, uint64)
-DEFINE_DOWNSAMPLE(uint32, float64, float32)
-DEFINE_DOWNSAMPLE(uint32, float64, float64)
-DEFINE_DOWNSAMPLE(uint32, float64, int32)
-DEFINE_DOWNSAMPLE(uint32, float64, int64)
-DEFINE_DOWNSAMPLE(uint32, float64, uint32)
-DEFINE_DOWNSAMPLE(uint32, float64, uint64)
-DEFINE_DOWNSAMPLE(uint32, int32, float32)
-DEFINE_DOWNSAMPLE(uint32, int32, float64)
-DEFINE_DOWNSAMPLE(uint32, int32, int32)
-DEFINE_DOWNSAMPLE(uint32, int32, int64)
-DEFINE_DOWNSAMPLE(uint32, int32, uint32)
-DEFINE_DOWNSAMPLE(uint32, int32, uint64)
-DEFINE_DOWNSAMPLE(uint32, int64, float32)
-DEFINE_DOWNSAMPLE(uint32, int64, float64)
-DEFINE_DOWNSAMPLE(uint32, int64, int32)
-DEFINE_DOWNSAMPLE(uint32, int64, int64)
-DEFINE_DOWNSAMPLE(uint32, int64, uint32)
-DEFINE_DOWNSAMPLE(uint32, int64, uint64)
-DEFINE_DOWNSAMPLE(uint32, uint32, float32)
-DEFINE_DOWNSAMPLE(uint32, uint32, float64)
-DEFINE_DOWNSAMPLE(uint32, uint32, int32)
-DEFINE_DOWNSAMPLE(uint32, uint32, int64)
-DEFINE_DOWNSAMPLE(uint32, uint32, uint32)
-DEFINE_DOWNSAMPLE(uint32, uint32, uint64)
-DEFINE_DOWNSAMPLE(uint32, uint64, float32)
-DEFINE_DOWNSAMPLE(uint32, uint64, float64)
-DEFINE_DOWNSAMPLE(uint32, uint64, int32)
-DEFINE_DOWNSAMPLE(uint32, uint64, int64)
-DEFINE_DOWNSAMPLE(uint32, uint64, uint32)
-DEFINE_DOWNSAMPLE(uint32, uint64, uint64)
-DEFINE_DOWNSAMPLE(uint64, float32, float32)
-DEFINE_DOWNSAMPLE(uint64, float32, float64)
-DEFINE_DOWNSAMPLE(uint64, float32, int32)
-DEFINE_DOWNSAMPLE(uint64, float32, int64)
-DEFINE_DOWNSAMPLE(uint64, float32, uint32)
-DEFINE_DOWNSAMPLE(uint64, float32, uint64)
-DEFINE_DOWNSAMPLE(uint64, float64, float32)
-DEFINE_DOWNSAMPLE(uint64, float64, float64)
-DEFINE_DOWNSAMPLE(uint64, float64, int32)
-DEFINE_DOWNSAMPLE(uint64, float64, int64)
-DEFINE_DOWNSAMPLE(uint64, float64, uint32)
-DEFINE_DOWNSAMPLE(uint64, float64, uint64)
-DEFINE_DOWNSAMPLE(uint64, int32, float32)
-DEFINE_DOWNSAMPLE(uint64, int32, float64)
-DEFINE_DOWNSAMPLE(uint64, int32, int32)
-DEFINE_DOWNSAMPLE(uint64, int32, int64)
-DEFINE_DOWNSAMPLE(uint64, int32, uint32)
-DEFINE_DOWNSAMPLE(uint64, int32, uint64)
-DEFINE_DOWNSAMPLE(uint64, int64, float32)
-DEFINE_DOWNSAMPLE(uint64, int64, float64)
-DEFINE_DOWNSAMPLE(uint64, int64, int32)
-DEFINE_DOWNSAMPLE(uint64, int64, int64)
-DEFINE_DOWNSAMPLE(uint64, int64, uint32)
-DEFINE_DOWNSAMPLE(uint64, int64, uint64)
-DEFINE_DOWNSAMPLE(uint64, uint32, float32)
-DEFINE_DOWNSAMPLE(uint64, uint32, float64)
-DEFINE_DOWNSAMPLE(uint64, uint32, int32)
-DEFINE_DOWNSAMPLE(uint64, uint32, int64)
-DEFINE_DOWNSAMPLE(uint64, uint32, uint32)
-DEFINE_DOWNSAMPLE(uint64, uint32, uint64)
-DEFINE_DOWNSAMPLE(uint64, uint64, float32)
-DEFINE_DOWNSAMPLE(uint64, uint64, float64)
-DEFINE_DOWNSAMPLE(uint64, uint64, int32)
-DEFINE_DOWNSAMPLE(uint64, uint64, int64)
-DEFINE_DOWNSAMPLE(uint64, uint64, uint32)
-DEFINE_DOWNSAMPLE(uint64, uint64, uint64)
-
 /// See the Python `metacell.utilities.computation._relayout_compressed` function.
 template<typename D, typename I, typename P>
 static void
-typed_collect_compressed(int start_input_band_index,
-                         int stop_input_band_index,
-                         const pybind11::array_t<D>& input_data_array,
-                         const pybind11::array_t<I>& input_indices_array,
-                         const pybind11::array_t<P>& input_indptr_array,
-                         pybind11::array_t<D>& output_data_array,
-                         pybind11::array_t<I>& output_indices_array,
-                         pybind11::array_t<P>& output_indptr_array) {
+collect_compressed(int start_input_band_index,
+                   int stop_input_band_index,
+                   const pybind11::array_t<D>& input_data_array,
+                   const pybind11::array_t<I>& input_indices_array,
+                   const pybind11::array_t<P>& input_indptr_array,
+                   pybind11::array_t<D>& output_data_array,
+                   pybind11::array_t<I>& output_indices_array,
+                   pybind11::array_t<P>& output_indptr_array) {
     WithoutGil without_gil{};
 
     ConstArraySlice<D> input_data{ input_data_array, "input_data_array" };
@@ -630,99 +400,6 @@ typed_collect_compressed(int start_input_band_index,
     }
 }
 
-#define DEFINE_COLLECT_COMPRESSED(D, I, P)                                                      \
-    static void                                                                                 \
-        collect_compressed_##D##_##I##_##P(int start_input_band_index,                          \
-                                           int stop_input_band_index,                           \
-                                           const pybind11::array_t<D##_t>& input_data_array,    \
-                                           const pybind11::array_t<I##_t>& input_indices_array, \
-                                           const pybind11::array_t<P##_t>& input_indptr_array,  \
-                                           pybind11::array_t<D##_t>& output_data_array,         \
-                                           pybind11::array_t<I##_t>& output_indices_array,      \
-                                           pybind11::array_t<P##_t>& output_indptr_array) {     \
-        typed_collect_compressed<D##_t, I##_t, P##_t>(start_input_band_index,                   \
-                                                      stop_input_band_index,                    \
-                                                      input_data_array,                         \
-                                                      input_indices_array,                      \
-                                                      input_indptr_array,                       \
-                                                      output_data_array,                        \
-                                                      output_indices_array,                     \
-                                                      output_indptr_array);                     \
-    }
-
-DEFINE_COLLECT_COMPRESSED(float32, int32, int32)
-DEFINE_COLLECT_COMPRESSED(float32, int32, int64)
-DEFINE_COLLECT_COMPRESSED(float32, int32, uint32)
-DEFINE_COLLECT_COMPRESSED(float32, int32, uint64)
-DEFINE_COLLECT_COMPRESSED(float32, int64, int32)
-DEFINE_COLLECT_COMPRESSED(float32, int64, int64)
-DEFINE_COLLECT_COMPRESSED(float32, int64, uint32)
-DEFINE_COLLECT_COMPRESSED(float32, int64, uint64)
-DEFINE_COLLECT_COMPRESSED(float32, uint32, uint32)
-DEFINE_COLLECT_COMPRESSED(float32, uint32, uint64)
-DEFINE_COLLECT_COMPRESSED(float32, uint64, uint32)
-DEFINE_COLLECT_COMPRESSED(float32, uint64, uint64)
-DEFINE_COLLECT_COMPRESSED(float64, int32, int32)
-DEFINE_COLLECT_COMPRESSED(float64, int32, int64)
-DEFINE_COLLECT_COMPRESSED(float64, int32, uint32)
-DEFINE_COLLECT_COMPRESSED(float64, int32, uint64)
-DEFINE_COLLECT_COMPRESSED(float64, int64, int32)
-DEFINE_COLLECT_COMPRESSED(float64, int64, int64)
-DEFINE_COLLECT_COMPRESSED(float64, int64, uint32)
-DEFINE_COLLECT_COMPRESSED(float64, int64, uint64)
-DEFINE_COLLECT_COMPRESSED(float64, uint32, uint32)
-DEFINE_COLLECT_COMPRESSED(float64, uint32, uint64)
-DEFINE_COLLECT_COMPRESSED(float64, uint64, uint32)
-DEFINE_COLLECT_COMPRESSED(float64, uint64, uint64)
-DEFINE_COLLECT_COMPRESSED(int32, int32, int32)
-DEFINE_COLLECT_COMPRESSED(int32, int32, int64)
-DEFINE_COLLECT_COMPRESSED(int32, int32, uint32)
-DEFINE_COLLECT_COMPRESSED(int32, int32, uint64)
-DEFINE_COLLECT_COMPRESSED(int32, int64, int32)
-DEFINE_COLLECT_COMPRESSED(int32, int64, int64)
-DEFINE_COLLECT_COMPRESSED(int32, int64, uint32)
-DEFINE_COLLECT_COMPRESSED(int32, int64, uint64)
-DEFINE_COLLECT_COMPRESSED(int32, uint32, uint32)
-DEFINE_COLLECT_COMPRESSED(int32, uint32, uint64)
-DEFINE_COLLECT_COMPRESSED(int32, uint64, uint32)
-DEFINE_COLLECT_COMPRESSED(int32, uint64, uint64)
-DEFINE_COLLECT_COMPRESSED(int64, int32, int32)
-DEFINE_COLLECT_COMPRESSED(int64, int32, int64)
-DEFINE_COLLECT_COMPRESSED(int64, int32, uint32)
-DEFINE_COLLECT_COMPRESSED(int64, int32, uint64)
-DEFINE_COLLECT_COMPRESSED(int64, int64, int32)
-DEFINE_COLLECT_COMPRESSED(int64, int64, int64)
-DEFINE_COLLECT_COMPRESSED(int64, int64, uint32)
-DEFINE_COLLECT_COMPRESSED(int64, int64, uint64)
-DEFINE_COLLECT_COMPRESSED(int64, uint32, uint32)
-DEFINE_COLLECT_COMPRESSED(int64, uint32, uint64)
-DEFINE_COLLECT_COMPRESSED(int64, uint64, uint32)
-DEFINE_COLLECT_COMPRESSED(int64, uint64, uint64)
-DEFINE_COLLECT_COMPRESSED(uint32, int32, int32)
-DEFINE_COLLECT_COMPRESSED(uint32, int32, int64)
-DEFINE_COLLECT_COMPRESSED(uint32, int32, uint32)
-DEFINE_COLLECT_COMPRESSED(uint32, int32, uint64)
-DEFINE_COLLECT_COMPRESSED(uint32, int64, int32)
-DEFINE_COLLECT_COMPRESSED(uint32, int64, int64)
-DEFINE_COLLECT_COMPRESSED(uint32, int64, uint32)
-DEFINE_COLLECT_COMPRESSED(uint32, int64, uint64)
-DEFINE_COLLECT_COMPRESSED(uint32, uint32, uint32)
-DEFINE_COLLECT_COMPRESSED(uint32, uint32, uint64)
-DEFINE_COLLECT_COMPRESSED(uint32, uint64, uint32)
-DEFINE_COLLECT_COMPRESSED(uint32, uint64, uint64)
-DEFINE_COLLECT_COMPRESSED(uint64, int32, int32)
-DEFINE_COLLECT_COMPRESSED(uint64, int32, int64)
-DEFINE_COLLECT_COMPRESSED(uint64, int32, uint32)
-DEFINE_COLLECT_COMPRESSED(uint64, int32, uint64)
-DEFINE_COLLECT_COMPRESSED(uint64, int64, int32)
-DEFINE_COLLECT_COMPRESSED(uint64, int64, int64)
-DEFINE_COLLECT_COMPRESSED(uint64, int64, uint32)
-DEFINE_COLLECT_COMPRESSED(uint64, int64, uint64)
-DEFINE_COLLECT_COMPRESSED(uint64, uint32, uint32)
-DEFINE_COLLECT_COMPRESSED(uint64, uint32, uint64)
-DEFINE_COLLECT_COMPRESSED(uint64, uint64, uint32)
-DEFINE_COLLECT_COMPRESSED(uint64, uint64, uint64)
-
 }  // namespace metacells
 
 PYBIND11_MODULE(extensions, module) {
@@ -730,303 +407,303 @@ PYBIND11_MODULE(extensions, module) {
     module.def("downsample_tmp_size",
                &metacells::downsample_tmp_size,
                "Size needed for downsample temporary array.");
-#define REGISTER_DOWNSAMPLE(D, T, O)                   \
-    module.def("downsample_" #D "_" #T "_" #O,         \
-               &metacells::downsample_##D##_##T##_##O, \
+#define REGISTER_DOWNSAMPLE(D, T, O)            \
+    module.def("downsample_" #D "_" #T "_" #O,  \
+               &metacells::downsample<D, T, O>, \
                "Downsample array of sample counts.")
 
-    REGISTER_DOWNSAMPLE(float32, float32, float32);
-    REGISTER_DOWNSAMPLE(float32, float32, float64);
-    REGISTER_DOWNSAMPLE(float32, float32, int32);
-    REGISTER_DOWNSAMPLE(float32, float32, int64);
-    REGISTER_DOWNSAMPLE(float32, float32, uint32);
-    REGISTER_DOWNSAMPLE(float32, float32, uint64);
-    REGISTER_DOWNSAMPLE(float32, float64, float32);
-    REGISTER_DOWNSAMPLE(float32, float64, float64);
-    REGISTER_DOWNSAMPLE(float32, float64, int32);
-    REGISTER_DOWNSAMPLE(float32, float64, int64);
-    REGISTER_DOWNSAMPLE(float32, float64, uint32);
-    REGISTER_DOWNSAMPLE(float32, float64, uint64);
-    REGISTER_DOWNSAMPLE(float32, int32, float32);
-    REGISTER_DOWNSAMPLE(float32, int32, float64);
-    REGISTER_DOWNSAMPLE(float32, int32, int32);
-    REGISTER_DOWNSAMPLE(float32, int32, int64);
-    REGISTER_DOWNSAMPLE(float32, int32, uint32);
-    REGISTER_DOWNSAMPLE(float32, int32, uint64);
-    REGISTER_DOWNSAMPLE(float32, int64, float32);
-    REGISTER_DOWNSAMPLE(float32, int64, float64);
-    REGISTER_DOWNSAMPLE(float32, int64, int32);
-    REGISTER_DOWNSAMPLE(float32, int64, int64);
-    REGISTER_DOWNSAMPLE(float32, int64, uint32);
-    REGISTER_DOWNSAMPLE(float32, int64, uint64);
-    REGISTER_DOWNSAMPLE(float32, uint32, float32);
-    REGISTER_DOWNSAMPLE(float32, uint32, float64);
-    REGISTER_DOWNSAMPLE(float32, uint32, int32);
-    REGISTER_DOWNSAMPLE(float32, uint32, int64);
-    REGISTER_DOWNSAMPLE(float32, uint32, uint32);
-    REGISTER_DOWNSAMPLE(float32, uint32, uint64);
-    REGISTER_DOWNSAMPLE(float32, uint64, float32);
-    REGISTER_DOWNSAMPLE(float32, uint64, float64);
-    REGISTER_DOWNSAMPLE(float32, uint64, int32);
-    REGISTER_DOWNSAMPLE(float32, uint64, int64);
-    REGISTER_DOWNSAMPLE(float32, uint64, uint32);
-    REGISTER_DOWNSAMPLE(float32, uint64, uint64);
-    REGISTER_DOWNSAMPLE(float64, float32, float32);
-    REGISTER_DOWNSAMPLE(float64, float32, float64);
-    REGISTER_DOWNSAMPLE(float64, float32, int32);
-    REGISTER_DOWNSAMPLE(float64, float32, int64);
-    REGISTER_DOWNSAMPLE(float64, float32, uint32);
-    REGISTER_DOWNSAMPLE(float64, float32, uint64);
-    REGISTER_DOWNSAMPLE(float64, float64, float32);
-    REGISTER_DOWNSAMPLE(float64, float64, float64);
-    REGISTER_DOWNSAMPLE(float64, float64, int32);
-    REGISTER_DOWNSAMPLE(float64, float64, int64);
-    REGISTER_DOWNSAMPLE(float64, float64, uint32);
-    REGISTER_DOWNSAMPLE(float64, float64, uint64);
-    REGISTER_DOWNSAMPLE(float64, int32, float32);
-    REGISTER_DOWNSAMPLE(float64, int32, float64);
-    REGISTER_DOWNSAMPLE(float64, int32, int32);
-    REGISTER_DOWNSAMPLE(float64, int32, int64);
-    REGISTER_DOWNSAMPLE(float64, int32, uint32);
-    REGISTER_DOWNSAMPLE(float64, int32, uint64);
-    REGISTER_DOWNSAMPLE(float64, int64, float32);
-    REGISTER_DOWNSAMPLE(float64, int64, float64);
-    REGISTER_DOWNSAMPLE(float64, int64, int32);
-    REGISTER_DOWNSAMPLE(float64, int64, int64);
-    REGISTER_DOWNSAMPLE(float64, int64, uint32);
-    REGISTER_DOWNSAMPLE(float64, int64, uint64);
-    REGISTER_DOWNSAMPLE(float64, uint32, float32);
-    REGISTER_DOWNSAMPLE(float64, uint32, float64);
-    REGISTER_DOWNSAMPLE(float64, uint32, int32);
-    REGISTER_DOWNSAMPLE(float64, uint32, int64);
-    REGISTER_DOWNSAMPLE(float64, uint32, uint32);
-    REGISTER_DOWNSAMPLE(float64, uint32, uint64);
-    REGISTER_DOWNSAMPLE(float64, uint64, float32);
-    REGISTER_DOWNSAMPLE(float64, uint64, float64);
-    REGISTER_DOWNSAMPLE(float64, uint64, int32);
-    REGISTER_DOWNSAMPLE(float64, uint64, int64);
-    REGISTER_DOWNSAMPLE(float64, uint64, uint32);
-    REGISTER_DOWNSAMPLE(float64, uint64, uint64);
-    REGISTER_DOWNSAMPLE(int32, float32, float32);
-    REGISTER_DOWNSAMPLE(int32, float32, float64);
-    REGISTER_DOWNSAMPLE(int32, float32, int32);
-    REGISTER_DOWNSAMPLE(int32, float32, int64);
-    REGISTER_DOWNSAMPLE(int32, float32, uint32);
-    REGISTER_DOWNSAMPLE(int32, float32, uint64);
-    REGISTER_DOWNSAMPLE(int32, float64, float32);
-    REGISTER_DOWNSAMPLE(int32, float64, float64);
-    REGISTER_DOWNSAMPLE(int32, float64, int32);
-    REGISTER_DOWNSAMPLE(int32, float64, int64);
-    REGISTER_DOWNSAMPLE(int32, float64, uint32);
-    REGISTER_DOWNSAMPLE(int32, float64, uint64);
-    REGISTER_DOWNSAMPLE(int32, int32, float32);
-    REGISTER_DOWNSAMPLE(int32, int32, float64);
-    REGISTER_DOWNSAMPLE(int32, int32, int32);
-    REGISTER_DOWNSAMPLE(int32, int32, int64);
-    REGISTER_DOWNSAMPLE(int32, int32, uint32);
-    REGISTER_DOWNSAMPLE(int32, int32, uint64);
-    REGISTER_DOWNSAMPLE(int32, int64, float32);
-    REGISTER_DOWNSAMPLE(int32, int64, float64);
-    REGISTER_DOWNSAMPLE(int32, int64, int32);
-    REGISTER_DOWNSAMPLE(int32, int64, int64);
-    REGISTER_DOWNSAMPLE(int32, int64, uint32);
-    REGISTER_DOWNSAMPLE(int32, int64, uint64);
-    REGISTER_DOWNSAMPLE(int32, uint32, float32);
-    REGISTER_DOWNSAMPLE(int32, uint32, float64);
-    REGISTER_DOWNSAMPLE(int32, uint32, int32);
-    REGISTER_DOWNSAMPLE(int32, uint32, int64);
-    REGISTER_DOWNSAMPLE(int32, uint32, uint32);
-    REGISTER_DOWNSAMPLE(int32, uint32, uint64);
-    REGISTER_DOWNSAMPLE(int32, uint64, float32);
-    REGISTER_DOWNSAMPLE(int32, uint64, float64);
-    REGISTER_DOWNSAMPLE(int32, uint64, int32);
-    REGISTER_DOWNSAMPLE(int32, uint64, int64);
-    REGISTER_DOWNSAMPLE(int32, uint64, uint32);
-    REGISTER_DOWNSAMPLE(int32, uint64, uint64);
-    REGISTER_DOWNSAMPLE(int64, float32, float32);
-    REGISTER_DOWNSAMPLE(int64, float32, float64);
-    REGISTER_DOWNSAMPLE(int64, float32, int32);
-    REGISTER_DOWNSAMPLE(int64, float32, int64);
-    REGISTER_DOWNSAMPLE(int64, float32, uint32);
-    REGISTER_DOWNSAMPLE(int64, float32, uint64);
-    REGISTER_DOWNSAMPLE(int64, float64, float32);
-    REGISTER_DOWNSAMPLE(int64, float64, float64);
-    REGISTER_DOWNSAMPLE(int64, float64, int32);
-    REGISTER_DOWNSAMPLE(int64, float64, int64);
-    REGISTER_DOWNSAMPLE(int64, float64, uint32);
-    REGISTER_DOWNSAMPLE(int64, float64, uint64);
-    REGISTER_DOWNSAMPLE(int64, int32, float32);
-    REGISTER_DOWNSAMPLE(int64, int32, float64);
-    REGISTER_DOWNSAMPLE(int64, int32, int32);
-    REGISTER_DOWNSAMPLE(int64, int32, int64);
-    REGISTER_DOWNSAMPLE(int64, int32, uint32);
-    REGISTER_DOWNSAMPLE(int64, int32, uint64);
-    REGISTER_DOWNSAMPLE(int64, int64, float32);
-    REGISTER_DOWNSAMPLE(int64, int64, float64);
-    REGISTER_DOWNSAMPLE(int64, int64, int32);
-    REGISTER_DOWNSAMPLE(int64, int64, int64);
-    REGISTER_DOWNSAMPLE(int64, int64, uint32);
-    REGISTER_DOWNSAMPLE(int64, int64, uint64);
-    REGISTER_DOWNSAMPLE(int64, uint32, float32);
-    REGISTER_DOWNSAMPLE(int64, uint32, float64);
-    REGISTER_DOWNSAMPLE(int64, uint32, int32);
-    REGISTER_DOWNSAMPLE(int64, uint32, int64);
-    REGISTER_DOWNSAMPLE(int64, uint32, uint32);
-    REGISTER_DOWNSAMPLE(int64, uint32, uint64);
-    REGISTER_DOWNSAMPLE(int64, uint64, float32);
-    REGISTER_DOWNSAMPLE(int64, uint64, float64);
-    REGISTER_DOWNSAMPLE(int64, uint64, int32);
-    REGISTER_DOWNSAMPLE(int64, uint64, int64);
-    REGISTER_DOWNSAMPLE(int64, uint64, uint32);
-    REGISTER_DOWNSAMPLE(int64, uint64, uint64);
-    REGISTER_DOWNSAMPLE(uint32, float32, float32);
-    REGISTER_DOWNSAMPLE(uint32, float32, float64);
-    REGISTER_DOWNSAMPLE(uint32, float32, int32);
-    REGISTER_DOWNSAMPLE(uint32, float32, int64);
-    REGISTER_DOWNSAMPLE(uint32, float32, uint32);
-    REGISTER_DOWNSAMPLE(uint32, float32, uint64);
-    REGISTER_DOWNSAMPLE(uint32, float64, float32);
-    REGISTER_DOWNSAMPLE(uint32, float64, float64);
-    REGISTER_DOWNSAMPLE(uint32, float64, int32);
-    REGISTER_DOWNSAMPLE(uint32, float64, int64);
-    REGISTER_DOWNSAMPLE(uint32, float64, uint32);
-    REGISTER_DOWNSAMPLE(uint32, float64, uint64);
-    REGISTER_DOWNSAMPLE(uint32, int32, float32);
-    REGISTER_DOWNSAMPLE(uint32, int32, float64);
-    REGISTER_DOWNSAMPLE(uint32, int32, int32);
-    REGISTER_DOWNSAMPLE(uint32, int32, int64);
-    REGISTER_DOWNSAMPLE(uint32, int32, uint32);
-    REGISTER_DOWNSAMPLE(uint32, int32, uint64);
-    REGISTER_DOWNSAMPLE(uint32, int64, float32);
-    REGISTER_DOWNSAMPLE(uint32, int64, float64);
-    REGISTER_DOWNSAMPLE(uint32, int64, int32);
-    REGISTER_DOWNSAMPLE(uint32, int64, int64);
-    REGISTER_DOWNSAMPLE(uint32, int64, uint32);
-    REGISTER_DOWNSAMPLE(uint32, int64, uint64);
-    REGISTER_DOWNSAMPLE(uint32, uint32, float32);
-    REGISTER_DOWNSAMPLE(uint32, uint32, float64);
-    REGISTER_DOWNSAMPLE(uint32, uint32, int32);
-    REGISTER_DOWNSAMPLE(uint32, uint32, int64);
-    REGISTER_DOWNSAMPLE(uint32, uint32, uint32);
-    REGISTER_DOWNSAMPLE(uint32, uint32, uint64);
-    REGISTER_DOWNSAMPLE(uint32, uint64, float32);
-    REGISTER_DOWNSAMPLE(uint32, uint64, float64);
-    REGISTER_DOWNSAMPLE(uint32, uint64, int32);
-    REGISTER_DOWNSAMPLE(uint32, uint64, int64);
-    REGISTER_DOWNSAMPLE(uint32, uint64, uint32);
-    REGISTER_DOWNSAMPLE(uint32, uint64, uint64);
-    REGISTER_DOWNSAMPLE(uint64, float32, float32);
-    REGISTER_DOWNSAMPLE(uint64, float32, float64);
-    REGISTER_DOWNSAMPLE(uint64, float32, int32);
-    REGISTER_DOWNSAMPLE(uint64, float32, int64);
-    REGISTER_DOWNSAMPLE(uint64, float32, uint32);
-    REGISTER_DOWNSAMPLE(uint64, float32, uint64);
-    REGISTER_DOWNSAMPLE(uint64, float64, float32);
-    REGISTER_DOWNSAMPLE(uint64, float64, float64);
-    REGISTER_DOWNSAMPLE(uint64, float64, int32);
-    REGISTER_DOWNSAMPLE(uint64, float64, int64);
-    REGISTER_DOWNSAMPLE(uint64, float64, uint32);
-    REGISTER_DOWNSAMPLE(uint64, float64, uint64);
-    REGISTER_DOWNSAMPLE(uint64, int32, float32);
-    REGISTER_DOWNSAMPLE(uint64, int32, float64);
-    REGISTER_DOWNSAMPLE(uint64, int32, int32);
-    REGISTER_DOWNSAMPLE(uint64, int32, int64);
-    REGISTER_DOWNSAMPLE(uint64, int32, uint32);
-    REGISTER_DOWNSAMPLE(uint64, int32, uint64);
-    REGISTER_DOWNSAMPLE(uint64, int64, float32);
-    REGISTER_DOWNSAMPLE(uint64, int64, float64);
-    REGISTER_DOWNSAMPLE(uint64, int64, int32);
-    REGISTER_DOWNSAMPLE(uint64, int64, int64);
-    REGISTER_DOWNSAMPLE(uint64, int64, uint32);
-    REGISTER_DOWNSAMPLE(uint64, int64, uint64);
-    REGISTER_DOWNSAMPLE(uint64, uint32, float32);
-    REGISTER_DOWNSAMPLE(uint64, uint32, float64);
-    REGISTER_DOWNSAMPLE(uint64, uint32, int32);
-    REGISTER_DOWNSAMPLE(uint64, uint32, int64);
-    REGISTER_DOWNSAMPLE(uint64, uint32, uint32);
-    REGISTER_DOWNSAMPLE(uint64, uint32, uint64);
-    REGISTER_DOWNSAMPLE(uint64, uint64, float32);
-    REGISTER_DOWNSAMPLE(uint64, uint64, float64);
-    REGISTER_DOWNSAMPLE(uint64, uint64, int32);
-    REGISTER_DOWNSAMPLE(uint64, uint64, int64);
-    REGISTER_DOWNSAMPLE(uint64, uint64, uint32);
-    REGISTER_DOWNSAMPLE(uint64, uint64, uint64);
+    REGISTER_DOWNSAMPLE(float32_t, float32_t, float32_t);
+    REGISTER_DOWNSAMPLE(float32_t, float32_t, float64_t);
+    REGISTER_DOWNSAMPLE(float32_t, float32_t, int32_t);
+    REGISTER_DOWNSAMPLE(float32_t, float32_t, int64_t);
+    REGISTER_DOWNSAMPLE(float32_t, float32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(float32_t, float32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(float32_t, float64_t, float32_t);
+    REGISTER_DOWNSAMPLE(float32_t, float64_t, float64_t);
+    REGISTER_DOWNSAMPLE(float32_t, float64_t, int32_t);
+    REGISTER_DOWNSAMPLE(float32_t, float64_t, int64_t);
+    REGISTER_DOWNSAMPLE(float32_t, float64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(float32_t, float64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(float32_t, int32_t, float32_t);
+    REGISTER_DOWNSAMPLE(float32_t, int32_t, float64_t);
+    REGISTER_DOWNSAMPLE(float32_t, int32_t, int32_t);
+    REGISTER_DOWNSAMPLE(float32_t, int32_t, int64_t);
+    REGISTER_DOWNSAMPLE(float32_t, int32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(float32_t, int32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(float32_t, int64_t, float32_t);
+    REGISTER_DOWNSAMPLE(float32_t, int64_t, float64_t);
+    REGISTER_DOWNSAMPLE(float32_t, int64_t, int32_t);
+    REGISTER_DOWNSAMPLE(float32_t, int64_t, int64_t);
+    REGISTER_DOWNSAMPLE(float32_t, int64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(float32_t, int64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(float32_t, uint32_t, float32_t);
+    REGISTER_DOWNSAMPLE(float32_t, uint32_t, float64_t);
+    REGISTER_DOWNSAMPLE(float32_t, uint32_t, int32_t);
+    REGISTER_DOWNSAMPLE(float32_t, uint32_t, int64_t);
+    REGISTER_DOWNSAMPLE(float32_t, uint32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(float32_t, uint32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(float32_t, uint64_t, float32_t);
+    REGISTER_DOWNSAMPLE(float32_t, uint64_t, float64_t);
+    REGISTER_DOWNSAMPLE(float32_t, uint64_t, int32_t);
+    REGISTER_DOWNSAMPLE(float32_t, uint64_t, int64_t);
+    REGISTER_DOWNSAMPLE(float32_t, uint64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(float32_t, uint64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(float64_t, float32_t, float32_t);
+    REGISTER_DOWNSAMPLE(float64_t, float32_t, float64_t);
+    REGISTER_DOWNSAMPLE(float64_t, float32_t, int32_t);
+    REGISTER_DOWNSAMPLE(float64_t, float32_t, int64_t);
+    REGISTER_DOWNSAMPLE(float64_t, float32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(float64_t, float32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(float64_t, float64_t, float32_t);
+    REGISTER_DOWNSAMPLE(float64_t, float64_t, float64_t);
+    REGISTER_DOWNSAMPLE(float64_t, float64_t, int32_t);
+    REGISTER_DOWNSAMPLE(float64_t, float64_t, int64_t);
+    REGISTER_DOWNSAMPLE(float64_t, float64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(float64_t, float64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(float64_t, int32_t, float32_t);
+    REGISTER_DOWNSAMPLE(float64_t, int32_t, float64_t);
+    REGISTER_DOWNSAMPLE(float64_t, int32_t, int32_t);
+    REGISTER_DOWNSAMPLE(float64_t, int32_t, int64_t);
+    REGISTER_DOWNSAMPLE(float64_t, int32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(float64_t, int32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(float64_t, int64_t, float32_t);
+    REGISTER_DOWNSAMPLE(float64_t, int64_t, float64_t);
+    REGISTER_DOWNSAMPLE(float64_t, int64_t, int32_t);
+    REGISTER_DOWNSAMPLE(float64_t, int64_t, int64_t);
+    REGISTER_DOWNSAMPLE(float64_t, int64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(float64_t, int64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(float64_t, uint32_t, float32_t);
+    REGISTER_DOWNSAMPLE(float64_t, uint32_t, float64_t);
+    REGISTER_DOWNSAMPLE(float64_t, uint32_t, int32_t);
+    REGISTER_DOWNSAMPLE(float64_t, uint32_t, int64_t);
+    REGISTER_DOWNSAMPLE(float64_t, uint32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(float64_t, uint32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(float64_t, uint64_t, float32_t);
+    REGISTER_DOWNSAMPLE(float64_t, uint64_t, float64_t);
+    REGISTER_DOWNSAMPLE(float64_t, uint64_t, int32_t);
+    REGISTER_DOWNSAMPLE(float64_t, uint64_t, int64_t);
+    REGISTER_DOWNSAMPLE(float64_t, uint64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(float64_t, uint64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(int32_t, float32_t, float32_t);
+    REGISTER_DOWNSAMPLE(int32_t, float32_t, float64_t);
+    REGISTER_DOWNSAMPLE(int32_t, float32_t, int32_t);
+    REGISTER_DOWNSAMPLE(int32_t, float32_t, int64_t);
+    REGISTER_DOWNSAMPLE(int32_t, float32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(int32_t, float32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(int32_t, float64_t, float32_t);
+    REGISTER_DOWNSAMPLE(int32_t, float64_t, float64_t);
+    REGISTER_DOWNSAMPLE(int32_t, float64_t, int32_t);
+    REGISTER_DOWNSAMPLE(int32_t, float64_t, int64_t);
+    REGISTER_DOWNSAMPLE(int32_t, float64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(int32_t, float64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(int32_t, int32_t, float32_t);
+    REGISTER_DOWNSAMPLE(int32_t, int32_t, float64_t);
+    REGISTER_DOWNSAMPLE(int32_t, int32_t, int32_t);
+    REGISTER_DOWNSAMPLE(int32_t, int32_t, int64_t);
+    REGISTER_DOWNSAMPLE(int32_t, int32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(int32_t, int32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(int32_t, int64_t, float32_t);
+    REGISTER_DOWNSAMPLE(int32_t, int64_t, float64_t);
+    REGISTER_DOWNSAMPLE(int32_t, int64_t, int32_t);
+    REGISTER_DOWNSAMPLE(int32_t, int64_t, int64_t);
+    REGISTER_DOWNSAMPLE(int32_t, int64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(int32_t, int64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(int32_t, uint32_t, float32_t);
+    REGISTER_DOWNSAMPLE(int32_t, uint32_t, float64_t);
+    REGISTER_DOWNSAMPLE(int32_t, uint32_t, int32_t);
+    REGISTER_DOWNSAMPLE(int32_t, uint32_t, int64_t);
+    REGISTER_DOWNSAMPLE(int32_t, uint32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(int32_t, uint32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(int32_t, uint64_t, float32_t);
+    REGISTER_DOWNSAMPLE(int32_t, uint64_t, float64_t);
+    REGISTER_DOWNSAMPLE(int32_t, uint64_t, int32_t);
+    REGISTER_DOWNSAMPLE(int32_t, uint64_t, int64_t);
+    REGISTER_DOWNSAMPLE(int32_t, uint64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(int32_t, uint64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(int64_t, float32_t, float32_t);
+    REGISTER_DOWNSAMPLE(int64_t, float32_t, float64_t);
+    REGISTER_DOWNSAMPLE(int64_t, float32_t, int32_t);
+    REGISTER_DOWNSAMPLE(int64_t, float32_t, int64_t);
+    REGISTER_DOWNSAMPLE(int64_t, float32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(int64_t, float32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(int64_t, float64_t, float32_t);
+    REGISTER_DOWNSAMPLE(int64_t, float64_t, float64_t);
+    REGISTER_DOWNSAMPLE(int64_t, float64_t, int32_t);
+    REGISTER_DOWNSAMPLE(int64_t, float64_t, int64_t);
+    REGISTER_DOWNSAMPLE(int64_t, float64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(int64_t, float64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(int64_t, int32_t, float32_t);
+    REGISTER_DOWNSAMPLE(int64_t, int32_t, float64_t);
+    REGISTER_DOWNSAMPLE(int64_t, int32_t, int32_t);
+    REGISTER_DOWNSAMPLE(int64_t, int32_t, int64_t);
+    REGISTER_DOWNSAMPLE(int64_t, int32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(int64_t, int32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(int64_t, int64_t, float32_t);
+    REGISTER_DOWNSAMPLE(int64_t, int64_t, float64_t);
+    REGISTER_DOWNSAMPLE(int64_t, int64_t, int32_t);
+    REGISTER_DOWNSAMPLE(int64_t, int64_t, int64_t);
+    REGISTER_DOWNSAMPLE(int64_t, int64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(int64_t, int64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(int64_t, uint32_t, float32_t);
+    REGISTER_DOWNSAMPLE(int64_t, uint32_t, float64_t);
+    REGISTER_DOWNSAMPLE(int64_t, uint32_t, int32_t);
+    REGISTER_DOWNSAMPLE(int64_t, uint32_t, int64_t);
+    REGISTER_DOWNSAMPLE(int64_t, uint32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(int64_t, uint32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(int64_t, uint64_t, float32_t);
+    REGISTER_DOWNSAMPLE(int64_t, uint64_t, float64_t);
+    REGISTER_DOWNSAMPLE(int64_t, uint64_t, int32_t);
+    REGISTER_DOWNSAMPLE(int64_t, uint64_t, int64_t);
+    REGISTER_DOWNSAMPLE(int64_t, uint64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(int64_t, uint64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, float32_t, float32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, float32_t, float64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, float32_t, int32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, float32_t, int64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, float32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, float32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, float64_t, float32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, float64_t, float64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, float64_t, int32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, float64_t, int64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, float64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, float64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, int32_t, float32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, int32_t, float64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, int32_t, int32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, int32_t, int64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, int32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, int32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, int64_t, float32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, int64_t, float64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, int64_t, int32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, int64_t, int64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, int64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, int64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, uint32_t, float32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, uint32_t, float64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, uint32_t, int32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, uint32_t, int64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, uint32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, uint32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, uint64_t, float32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, uint64_t, float64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, uint64_t, int32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, uint64_t, int64_t);
+    REGISTER_DOWNSAMPLE(uint32_t, uint64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(uint32_t, uint64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, float32_t, float32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, float32_t, float64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, float32_t, int32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, float32_t, int64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, float32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, float32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, float64_t, float32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, float64_t, float64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, float64_t, int32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, float64_t, int64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, float64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, float64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, int32_t, float32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, int32_t, float64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, int32_t, int32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, int32_t, int64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, int32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, int32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, int64_t, float32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, int64_t, float64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, int64_t, int32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, int64_t, int64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, int64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, int64_t, uint64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, uint32_t, float32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, uint32_t, float64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, uint32_t, int32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, uint32_t, int64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, uint32_t, uint32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, uint32_t, uint64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, uint64_t, float32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, uint64_t, float64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, uint64_t, int32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, uint64_t, int64_t);
+    REGISTER_DOWNSAMPLE(uint64_t, uint64_t, uint32_t);
+    REGISTER_DOWNSAMPLE(uint64_t, uint64_t, uint64_t);
 
-#define REGISTER_COLLECT_COMPRESSED(D, I, P)                   \
-    module.def("collect_compressed_" #D "_" #I "_" #P,         \
-               &metacells::collect_compressed_##D##_##I##_##P, \
+#define REGISTER_COLLECT_COMPRESSED(D, I, P)            \
+    module.def("collect_compressed_" #D "_" #I "_" #P,  \
+               &metacells::collect_compressed<D, I, P>, \
                "Collect compressed data for relayout.")
 
-    REGISTER_COLLECT_COMPRESSED(float32, int32, int32);
-    REGISTER_COLLECT_COMPRESSED(float32, int32, int64);
-    REGISTER_COLLECT_COMPRESSED(float32, int32, uint32);
-    REGISTER_COLLECT_COMPRESSED(float32, int32, uint64);
-    REGISTER_COLLECT_COMPRESSED(float32, int64, int32);
-    REGISTER_COLLECT_COMPRESSED(float32, int64, int64);
-    REGISTER_COLLECT_COMPRESSED(float32, int64, uint32);
-    REGISTER_COLLECT_COMPRESSED(float32, int64, uint64);
-    REGISTER_COLLECT_COMPRESSED(float32, uint32, uint32);
-    REGISTER_COLLECT_COMPRESSED(float32, uint32, uint64);
-    REGISTER_COLLECT_COMPRESSED(float32, uint64, uint32);
-    REGISTER_COLLECT_COMPRESSED(float32, uint64, uint64);
-    REGISTER_COLLECT_COMPRESSED(float64, int32, int32);
-    REGISTER_COLLECT_COMPRESSED(float64, int32, int64);
-    REGISTER_COLLECT_COMPRESSED(float64, int32, uint32);
-    REGISTER_COLLECT_COMPRESSED(float64, int32, uint64);
-    REGISTER_COLLECT_COMPRESSED(float64, int64, int32);
-    REGISTER_COLLECT_COMPRESSED(float64, int64, int64);
-    REGISTER_COLLECT_COMPRESSED(float64, int64, uint32);
-    REGISTER_COLLECT_COMPRESSED(float64, int64, uint64);
-    REGISTER_COLLECT_COMPRESSED(float64, uint32, uint32);
-    REGISTER_COLLECT_COMPRESSED(float64, uint32, uint64);
-    REGISTER_COLLECT_COMPRESSED(float64, uint64, uint32);
-    REGISTER_COLLECT_COMPRESSED(float64, uint64, uint64);
-    REGISTER_COLLECT_COMPRESSED(int32, int32, int32);
-    REGISTER_COLLECT_COMPRESSED(int32, int32, int64);
-    REGISTER_COLLECT_COMPRESSED(int32, int32, uint32);
-    REGISTER_COLLECT_COMPRESSED(int32, int32, uint64);
-    REGISTER_COLLECT_COMPRESSED(int32, int64, int32);
-    REGISTER_COLLECT_COMPRESSED(int32, int64, int64);
-    REGISTER_COLLECT_COMPRESSED(int32, int64, uint32);
-    REGISTER_COLLECT_COMPRESSED(int32, int64, uint64);
-    REGISTER_COLLECT_COMPRESSED(int32, uint32, uint32);
-    REGISTER_COLLECT_COMPRESSED(int32, uint32, uint64);
-    REGISTER_COLLECT_COMPRESSED(int32, uint64, uint32);
-    REGISTER_COLLECT_COMPRESSED(int32, uint64, uint64);
-    REGISTER_COLLECT_COMPRESSED(int64, int32, int32);
-    REGISTER_COLLECT_COMPRESSED(int64, int32, int64);
-    REGISTER_COLLECT_COMPRESSED(int64, int32, uint32);
-    REGISTER_COLLECT_COMPRESSED(int64, int32, uint64);
-    REGISTER_COLLECT_COMPRESSED(int64, int64, int32);
-    REGISTER_COLLECT_COMPRESSED(int64, int64, int64);
-    REGISTER_COLLECT_COMPRESSED(int64, int64, uint32);
-    REGISTER_COLLECT_COMPRESSED(int64, int64, uint64);
-    REGISTER_COLLECT_COMPRESSED(int64, uint32, uint32);
-    REGISTER_COLLECT_COMPRESSED(int64, uint32, uint64);
-    REGISTER_COLLECT_COMPRESSED(int64, uint64, uint32);
-    REGISTER_COLLECT_COMPRESSED(int64, uint64, uint64);
-    REGISTER_COLLECT_COMPRESSED(uint32, int32, int32);
-    REGISTER_COLLECT_COMPRESSED(uint32, int32, int64);
-    REGISTER_COLLECT_COMPRESSED(uint32, int32, uint32);
-    REGISTER_COLLECT_COMPRESSED(uint32, int32, uint64);
-    REGISTER_COLLECT_COMPRESSED(uint32, int64, int32);
-    REGISTER_COLLECT_COMPRESSED(uint32, int64, int64);
-    REGISTER_COLLECT_COMPRESSED(uint32, int64, uint32);
-    REGISTER_COLLECT_COMPRESSED(uint32, int64, uint64);
-    REGISTER_COLLECT_COMPRESSED(uint32, uint32, uint32);
-    REGISTER_COLLECT_COMPRESSED(uint32, uint32, uint64);
-    REGISTER_COLLECT_COMPRESSED(uint32, uint64, uint32);
-    REGISTER_COLLECT_COMPRESSED(uint32, uint64, uint64);
-    REGISTER_COLLECT_COMPRESSED(uint64, int32, int32);
-    REGISTER_COLLECT_COMPRESSED(uint64, int32, int64);
-    REGISTER_COLLECT_COMPRESSED(uint64, int32, uint32);
-    REGISTER_COLLECT_COMPRESSED(uint64, int32, uint64);
-    REGISTER_COLLECT_COMPRESSED(uint64, int64, int32);
-    REGISTER_COLLECT_COMPRESSED(uint64, int64, int64);
-    REGISTER_COLLECT_COMPRESSED(uint64, int64, uint32);
-    REGISTER_COLLECT_COMPRESSED(uint64, int64, uint64);
-    REGISTER_COLLECT_COMPRESSED(uint64, uint32, uint32);
-    REGISTER_COLLECT_COMPRESSED(uint64, uint32, uint64);
-    REGISTER_COLLECT_COMPRESSED(uint64, uint64, uint32);
-    REGISTER_COLLECT_COMPRESSED(uint64, uint64, uint64);
+    REGISTER_COLLECT_COMPRESSED(float32_t, int32_t, int32_t);
+    REGISTER_COLLECT_COMPRESSED(float32_t, int32_t, int64_t);
+    REGISTER_COLLECT_COMPRESSED(float32_t, int32_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(float32_t, int32_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(float32_t, int64_t, int32_t);
+    REGISTER_COLLECT_COMPRESSED(float32_t, int64_t, int64_t);
+    REGISTER_COLLECT_COMPRESSED(float32_t, int64_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(float32_t, int64_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(float32_t, uint32_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(float32_t, uint32_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(float32_t, uint64_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(float32_t, uint64_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(float64_t, int32_t, int32_t);
+    REGISTER_COLLECT_COMPRESSED(float64_t, int32_t, int64_t);
+    REGISTER_COLLECT_COMPRESSED(float64_t, int32_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(float64_t, int32_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(float64_t, int64_t, int32_t);
+    REGISTER_COLLECT_COMPRESSED(float64_t, int64_t, int64_t);
+    REGISTER_COLLECT_COMPRESSED(float64_t, int64_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(float64_t, int64_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(float64_t, uint32_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(float64_t, uint32_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(float64_t, uint64_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(float64_t, uint64_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(int32_t, int32_t, int32_t);
+    REGISTER_COLLECT_COMPRESSED(int32_t, int32_t, int64_t);
+    REGISTER_COLLECT_COMPRESSED(int32_t, int32_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(int32_t, int32_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(int32_t, int64_t, int32_t);
+    REGISTER_COLLECT_COMPRESSED(int32_t, int64_t, int64_t);
+    REGISTER_COLLECT_COMPRESSED(int32_t, int64_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(int32_t, int64_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(int32_t, uint32_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(int32_t, uint32_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(int32_t, uint64_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(int32_t, uint64_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(int64_t, int32_t, int32_t);
+    REGISTER_COLLECT_COMPRESSED(int64_t, int32_t, int64_t);
+    REGISTER_COLLECT_COMPRESSED(int64_t, int32_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(int64_t, int32_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(int64_t, int64_t, int32_t);
+    REGISTER_COLLECT_COMPRESSED(int64_t, int64_t, int64_t);
+    REGISTER_COLLECT_COMPRESSED(int64_t, int64_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(int64_t, int64_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(int64_t, uint32_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(int64_t, uint32_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(int64_t, uint64_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(int64_t, uint64_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(uint32_t, int32_t, int32_t);
+    REGISTER_COLLECT_COMPRESSED(uint32_t, int32_t, int64_t);
+    REGISTER_COLLECT_COMPRESSED(uint32_t, int32_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(uint32_t, int32_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(uint32_t, int64_t, int32_t);
+    REGISTER_COLLECT_COMPRESSED(uint32_t, int64_t, int64_t);
+    REGISTER_COLLECT_COMPRESSED(uint32_t, int64_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(uint32_t, int64_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(uint32_t, uint32_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(uint32_t, uint32_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(uint32_t, uint64_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(uint32_t, uint64_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(uint64_t, int32_t, int32_t);
+    REGISTER_COLLECT_COMPRESSED(uint64_t, int32_t, int64_t);
+    REGISTER_COLLECT_COMPRESSED(uint64_t, int32_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(uint64_t, int32_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(uint64_t, int64_t, int32_t);
+    REGISTER_COLLECT_COMPRESSED(uint64_t, int64_t, int64_t);
+    REGISTER_COLLECT_COMPRESSED(uint64_t, int64_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(uint64_t, int64_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(uint64_t, uint32_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(uint64_t, uint32_t, uint64_t);
+    REGISTER_COLLECT_COMPRESSED(uint64_t, uint64_t, uint32_t);
+    REGISTER_COLLECT_COMPRESSED(uint64_t, uint64_t, uint64_t);
 }
