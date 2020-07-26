@@ -8,6 +8,8 @@ from scipy import stats  # type: ignore
 
 import metacells.utilities as ut
 
+ut.use_all_private_implementations()
+
 # pylint: disable=missing-docstring
 
 
@@ -72,18 +74,17 @@ def test_parallel_collect():
     shared_storage = ut.SharedStorage()
     shared_storage.set_private('tmp', list)
 
-    def compute(index: int) -> None:
-        tmp = shared_storage.get_private('tmp')
-        tmp.append(index)
+    def compute(indices: range) -> None:
+        tmp = shared_storage.get_private('tmp', make=list)
+        tmp.extend(list(indices))
 
-    def merge(from_thread_name: str, into_thread_name: str) -> None:
-        from_tmp = shared_storage.get_thread_private('tmp', from_thread_name)
-        into_tmp = shared_storage.get_thread_private('tmp', into_thread_name)
+    def merge(from_thread: str, into_thread: str) -> None:
+        from_tmp = shared_storage.get_private('tmp', thread=from_thread)
+        into_tmp = shared_storage.get_private('tmp', thread=into_thread)
         into_tmp.extend(from_tmp)
 
-    final_thread_name = \
-        ut.parallel_collect(compute, merge, 10000, batches_per_thread=None)
-    final_tmp = shared_storage.get_thread_private('tmp', final_thread_name)
+    final_thread = ut.parallel_collect(compute, merge, 10000)
+    final_tmp = shared_storage.get_private('tmp', thread=final_thread)
     assert len(final_tmp) == 10000
     assert np.all(np.arange(10000) == sorted(final_tmp))
 
@@ -192,3 +193,14 @@ def test_downsample_matrix():
     assert result.shape == matrix.shape
     new_row_sums = ut.sum_matrix(result, axis=1)
     assert np.all(new_row_sums == min_sum)
+
+
+def test_bincount():
+    array = np.array(np.random.rand(100000) * 100, dtype='int32')
+    numpy_bincount = np.bincount(array)
+    metacells_bincount = ut.bincount_array(array)
+    assert np.all(numpy_bincount == metacells_bincount)
+
+    numpy_bincount = np.bincount(array, minlength=110)
+    metacells_bincount = ut.bincount_array(array, minlength=110)
+    assert np.all(numpy_bincount == metacells_bincount)

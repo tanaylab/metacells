@@ -3,6 +3,7 @@ Utilities for timing operations.
 '''
 
 import os
+import sys
 from contextlib import contextmanager
 from threading import Lock, current_thread
 from threading import local as thread_local
@@ -24,17 +25,24 @@ __all__ = [
 
 #: Whether to collect timing at all. Override this by setting the ``METACELLS_COLLECT_TIMING``
 #: environment variable to ``true``.
-COLLECT_TIMING = \
-    os.environ.get('METACELLS_COLLECT_TIMING', 'False').lower() == 'true'
+COLLECT_TIMING = False
 
 #: The path of the timing CSV file to write. Override this by setting the ``METACELL_TIMING_CSV``
 #: environment variable to some path.
-TIMING_PATH: str = os.environ.get('METACELL_TIMING_CSV', 'timing.csv')
+TIMING_PATH = 'timing.csv'
 
 #: The buffering mode to use when writing to the timing CSV file. Override this by setting the
 #: ``METACELL_TIMING_BUFFERING`` environment variable to ``0`` for no buffering, ``1`` for line
 #: buffering, or the size of the buffer.
-TIMING_BUFFERING: int = int(os.environ.get('METACELL_TIMING_BUFFERING', '1'))
+TIMING_BUFFERING = 1
+
+if not 'sphinx' in sys.argv[0]:
+    COLLECT_TIMING = \
+        {'true': True,
+         'false': False}[os.environ.get('METACELLS_COLLECT_TIMING',
+                                        'False').lower()]
+    TIMING_PATH = os.environ.get('METACELL_TIMING_CSV', 'timing.csv')
+    TIMING_BUFFERING = int(os.environ.get('METACELL_TIMING_BUFFERING', '1'))
 
 TIMING_FILE: Optional[TextIO] = None
 THREAD_LOCAL = thread_local()

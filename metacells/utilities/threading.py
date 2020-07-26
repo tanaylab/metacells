@@ -2,6 +2,7 @@
 Utilities for multi-threaded code.
 '''
 import os
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from threading import current_thread
@@ -23,7 +24,6 @@ __all__ = [
     'SharedStorage',
 ]
 
-
 #: The number of threads to use. Override this by setting the ``METACELLS_THREADS_COUNT``
 #: environment variable: -1 uses half of the available processors to combat hyper-threading, 0 uses
 #: all the available processors, otherwise the value is the number of threads to use.
@@ -32,17 +32,18 @@ THREADS_COUNT = 0
 #: The executor to use for parallel tasks (only set if using multiple threads).
 EXECUTOR: Optional[ThreadPoolExecutor] = None
 
-THREADS_COUNT = \
-    int(os.environ.get('METACELLS_THREADS_COUNT', str(os.cpu_count())))
-if THREADS_COUNT == -1:
-    THREADS_COUNT = (os.cpu_count() or 1) // 2
-elif THREADS_COUNT == 0:
-    THREADS_COUNT = os.cpu_count() or 1
+if not 'sphinx' in sys.argv[0]:
+    THREADS_COUNT = \
+        int(os.environ.get('METACELLS_THREADS_COUNT', str(os.cpu_count())))
+    if THREADS_COUNT == -1:
+        THREADS_COUNT = (os.cpu_count() or 1) // 2
+    elif THREADS_COUNT == 0:
+        THREADS_COUNT = os.cpu_count() or 1
 
-assert THREADS_COUNT > 0
+    assert THREADS_COUNT > 0
 
-if THREADS_COUNT > 1:
-    EXECUTOR = ThreadPoolExecutor(THREADS_COUNT)
+    if THREADS_COUNT > 1:
+        EXECUTOR = ThreadPoolExecutor(THREADS_COUNT)
 
 
 @expand_doc()
@@ -186,32 +187,36 @@ def parallel_for(
 
 
 def parallel_collect(
-    function: Callable,
+    compute: Callable,
     merge: Callable,
     invocations_count: int,
     *,
     batches_per_thread: Optional[int] = 4,
 ) -> str:
     '''
-    Similar to ``parallel_for``, except it is assumed that each invocation of ``function`` updates
-    some private per-thread variable(s) in some storage, and ``merge(from_thread_name,
-    into_thread_name)`` will merge the data from the private storage variable(s) of one thread into
+    Similar to ``parallel_for``, except it is assumed that each invocation of ``compute`` updates
+    some private per-thread variable(s) in some storage, and ``merge(from_thread,
+    into_thread)`` will merge the data from the private storage variable(s) of one thread into
     the private storage of another.
 
     Returns the name of the thread which executed the final ``merge`` operations so the caller can
     access the final collected data.
 
-    .. todo::
-
-        Provide an example.
+    See the source of :py:func:`metacells.utilities.computations.bincount_array` for an example.
 
     .. note::
+        It is safe for ``merge`` to use :py:func:`metacells.utilities.threading.get_private`
+        :py:func:`metacells.utilities.threading.set_private` to access the data collected in the
+        ``from_thread`` and ``into_thread``.
 
-        Both ``function`` and ``merge`` can be run in parallel (on different data).
+    .. todo::
 
+        The implementation first performs all the ``compute`` invocations (in parallel) and then all
+        the ``merge`` invocations (also in parallel). A more efficient implementation would invoke
+        ``merge`` earlier in parallel to some ``compute`` calls.
     '''
     if EXECUTOR is None:
-        parallel_for(function, invocations_count,
+        parallel_for(compute, invocations_count,
                      batches_per_thread=batches_per_thread)
         return current_thread().name
 
@@ -219,37 +224,37 @@ def parallel_collect(
 
     shared_storage.set_shared('pending', set())
 
-    def thread_function(*args: Any) -> None:
-        function(*args)
-        thread_name = current_thread().name
+    def compute_function(*args: Any) -> None:
+        compute(*args)
+        thread = current_thread().name
         with shared_storage.read_shared('pending') as pending:
-            if thread_name in pending:
+            if thread in pending:
                 return
         with shared_storage.write_shared('pending') as pending:
-            pending.add(thread_name)
+            pending.add(thread)
 
-    parallel_for(thread_function, invocations_count,
+    parallel_for(compute_function, invocations_count,
                  batches_per_thread=batches_per_thread)
 
     pending = shared_storage.get_shared('pending')
 
     if len(pending) > 1:
         def merge_function(_index: int) -> None:
-            into_thread_name: Optional[str] = None
+            into_thread: Optional[str] = None
             while True:
                 with shared_storage.write_shared('pending') as pending:
-                    if into_thread_name is None:
+                    if into_thread is None:
                         if len(pending) == 0:
                             return
-                        into_thread_name = pending.pop()
+                        into_thread = pending.pop()
 
                     if len(pending) == 0:
-                        pending.add(into_thread_name)
+                        pending.add(into_thread)
                         return
 
-                    from_thread_name = pending.pop()
+                    from_thread = pending.pop()
 
-                merge(from_thread_name, into_thread_name)
+                merge(from_thread, into_thread)
 
         parallel_for(merge_function, len(pending) - 1, batches_per_thread=None)
 
@@ -350,66 +355,81 @@ class SharedStorage:
         _lock, value = self._shared[name]
         return value
 
-    def set_private(self, name: str, make: Callable[[], Any]) -> None:
+    def set_private(self, name: str, value: Any, *, thread: Optional[str] = None) -> None:
         '''
-        Set the ``value`` of private data by its ``name``.
+        Safe(-ish) set the ``value`` (which must not be ``None``) of private data for the a thread
+        by its ``name``.
 
-        Private data will have a copy per thread. The data will be lazily created on the first
-        access by invoking the ``make`` function within the thread. It must not return ``None``.
+        Private data will have a copy per thread. If the ``thread`` is not specified, sets the value
+        for the current thread.
 
         .. note::
 
-            This is meant to be invoked from the main thread before sending the storage to be used
-            by multiple threads. As such, it assumes no other thread is accessing the storage at the
-            same time.
-        '''
-        self._makers[name] = make
-
-    def get_private(self, name: str) -> Any:
-        '''
-        Safe(-ish) access to the private data of the current thread by its ``name``.
-
-        This will lazily create the data if it is the first access to it from the current thread.
-
-        .. note::
-
-            This is intended to be used from within each thread to access its own data. As such, it
+            This is intended to be used from within each thread to set its own data. As such, it
             assumes that no other thread is accessing this thread's private data at the same time.
+
+            Likewise, if ``thread`` is specified, then the caller is responsible for ensuring that
+            multiple threads are not accessing the same data at the same time.
         '''
-        thread = current_thread().name
+        assert value is not None
+        if thread is None:
+            thread = current_thread().name
 
         values = self._private.get(thread)
         if values is None:
             values = self._private[thread] = {}
 
-        value = values.get(name)
-        if value is None:
-            value = values[name] = self._makers[name]()
+        values[name] = value
+
+    def get_private(  #
+        self,
+        name: str,
+        *,
+        thread: Optional[str] = None,
+        make: Optional[Callable[[], Any]] = None,
+        update: Optional[Callable[[Any], Any]] = None,
+    ) -> Any:
+        '''
+        Safe(-ish) access to the private data of a ``thread`` by its ``name``.
+
+        Private data will have a copy per thread. If the ``thread`` is not specified, sets the value
+        for the current thread.
+
+        If the value was not set yet, this is an error, unless ``make`` is specified which will be
+        invoked to return the initial private value (which must not be ``None``).
+
+        If the value has been previously set, and ``update`` is specified, then ``update(value)`` is
+        invoked and set as the new ``value``, and returned.
+
+        .. note::
+
+            This is intended to be used from within each thread to get its own data. As such, it
+            assumes that no other thread is accessing this thread's private data at the same time.
+
+            Likewise, if ``thread`` is specified, then the caller is responsible for ensuring that
+            multiple threads are not accessing the same data at the same time.
+        '''
+        if thread is None:
+            thread = current_thread().name
+
+        values = self._private.get(thread)
+        if values is None:
+            values = self._private[thread] = {}
+
+        if make is None:
+            value = values[name]
+        else:
+            value = values.get(name)
+            if value is None:
+                value = values[name] = make()
+                assert value is not None
+                return value
+
+        if update is not None:
+            value = values[name] = update(value)
             assert value is not None
 
         return value
-
-    def get_thread_private(self, name: str, thread: str) -> Any:
-        '''
-        Unsafe access to private ``thread`` data by its ``name``.
-
-        This will not lazily create the data if it was not created by ``get_private`` from the
-        specified ``thread``. Instead it will return ``None``.
-
-        .. note::
-
-            This is intended to be used from the main thread after all the other threads are done
-            executing, in order to collect the data each collected. As such, it assumes that no
-            other thread is accessing the storage at the same time.
-
-        .. note::
-
-            Multiple threads may be accessing the same data at the same time.
-        '''
-        values = self._private.get(thread)
-        if values is None:
-            return None
-        return values.get(name)
 
     def get_threads(self) -> KeysView[str]:
         '''

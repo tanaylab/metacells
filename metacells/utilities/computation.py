@@ -1,7 +1,18 @@
 '''
 Utilities for performing efficient parallel computations.
+
+.. todo::
+
+    Further investigate performance of suspiciously slow operations:
+
+    * The builtin ``max_sparse_matrix`` seems way to slow. Parallelization helps but perhaps a
+      different implementation is called for, or opening a bug with ``scipy``.
+
+    * Parallelizing ``bincount`` did not work well. Perhaps another approach?
 '''
 
+import os
+import sys
 from typing import Callable, Optional, Union
 from warnings import warn
 
@@ -12,10 +23,15 @@ from scipy import sparse  # type: ignore
 import metacells.extensions as xt  # type: ignore
 import metacells.utilities.documentation as utd
 import metacells.utilities.timing as timed
-from metacells.utilities.threading import SharedStorage, parallel_for
+from metacells.utilities.threading import (SharedStorage, parallel_collect,
+                                           parallel_for)
 
 __all__ = [
     'DATA_TYPES',
+    'BUILTIN_OPERATIONS',
+    'PARALLELIZE_BUILTINS',
+    'use_all_private_implementations',
+
     'Matrix',
     'Vector',
 
@@ -29,6 +45,8 @@ __all__ = [
     'sum_matrix',
     'nnz_matrix',
     'max_matrix',
+
+    'bincount_array',
 
     'downsample_matrix',
     'downsample_array',
@@ -44,6 +62,47 @@ Matrix = Union[sparse.spmatrix, np.ndarray, pd.DataFrame]
 
 #: A ``mypy`` type for vectors.
 Vector = Union[np.ndarray, pd.Series]
+
+#: The list of builtin operations for which there are alternative implementations here.
+BUILTIN_OPERATIONS = ['bincount_array',
+                      'max_sparse_matrix', 'max_dense_matrix',
+                      'nnz_sparse_matrix', 'nnz_dense_matrix',
+                      'sum_sparse_matrix', 'sum_dense_matrix']
+
+#: Which built-in operations to parallelize. Override this by setting the
+#: ``METACELLS_PARALLELIZE_BUILTINS`` environment variable to a comma-separated list of values from
+#: the :py:member:`metacells.utilities.computations.BUILTIN_OPERATIONS` list.
+#:
+#: .. todo::
+#:
+#:    You would expect that the built-in implementation would be the best possible, but it seems
+#:    that for some operations it is not, specifically, ``max_sparse_matrix`` seems to be slow (even
+#:    when the data is in the most efficient ``csc``/``csr`` format). Collect
+#:    :py:module:`metacell.utilities.timing` to ensure you are using the best option.
+PARALLELIZE_BUILTINS = set(['max_sparse_matrix'])
+
+if not 'sphinx' in sys.argv[0]:
+    PARALLELIZE_BUILTINS = \
+        {name.strip() for name
+         in os.environ.get('METACELLS_PARALLELIZE_BUILTINS', ','.join(PARALLELIZE_BUILTINS)).split(',')}
+    for operation in PARALLELIZE_BUILTINS:
+        if operation not in BUILTIN_OPERATIONS:
+            raise ValueError('unknown operation: %s '
+                             'specified in METACELLS_PARALLELIZE_BUILTINS; '
+                             'valid operations are: %s'
+                             % (operation, ', '.join(BUILTIN_OPERATIONS)))
+
+
+def use_all_private_implementations() -> None:
+    '''
+    Force everything to use the private implementation.
+
+    .. note::
+
+        This will likely ruin performance. It is only meant to be used for tests.
+    '''
+    global PARALLELIZE_BUILTINS
+    PARALLELIZE_BUILTINS = set(BUILTIN_OPERATIONS)
 
 
 def to_array(data: Union[Matrix, Vector]) -> np.ndarray:
@@ -78,7 +137,7 @@ def to_array(data: Union[Matrix, Vector]) -> np.ndarray:
     return array
 
 
-@timed.call()
+@ timed.call()
 def to_layout(matrix: Matrix, *, axis: int) -> Matrix:  # pylint: disable=too-many-return-statements
     '''
     Re-layout a matrix for efficient axis slicing/processing.
@@ -123,7 +182,7 @@ def to_layout(matrix: Matrix, *, axis: int) -> Matrix:  # pylint: disable=too-ma
         return np.reshape(np.ravel(matrix, order='C'), matrix.shape, order='C')
 
 
-@timed.call()
+@ timed.call()
 def relayout_compressed(matrix: sparse.spmatrix, axis: int) -> sparse.spmatrix:
     '''
     Efficient parallel conversion of a CSR/CSC matrix to a CSC/CSR matrix.
@@ -134,13 +193,12 @@ def relayout_compressed(matrix: sparse.spmatrix, axis: int) -> sparse.spmatrix:
     _output_elements_count = matrix_bands_count = matrix.shape[axis]
     output_bands_count = matrix_elements_count = matrix.shape[1 - axis]
 
-    with timed.step('.bincount'):
-        nnz_elements_of_output_bands = \
-            np.bincount(matrix.indices, minlength=matrix_elements_count)
+    nnz_elements_of_output_bands = \
+        bincount_array(matrix.indices, minlength=matrix_elements_count)
 
     output_indptr = np.empty(output_bands_count + 1, dtype=matrix.indptr.dtype)
     output_indptr[0:2] = 0
-    with timed.step('.cumsum'):
+    with timed.step('cumsum'):
         np.cumsum(nnz_elements_of_output_bands[:-1], out=output_indptr[2:])
 
     output_indices = np.empty(matrix.indices.size, dtype=matrix.indices.dtype)
@@ -229,36 +287,36 @@ def log_matrix(
     return matrix
 
 
-@timed.call()
 def sum_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the total per row (``axis`` = 1) or column (``axis`` = 0) of some ``matrix``.
     '''
-    return _reduce_matrix(matrix, axis, lambda matrix: matrix.sum(axis=axis))
+    if sparse.issparse(matrix):
+        return _reduce_matrix('sum_sparse_matrix', matrix, axis, lambda matrix: matrix.sum(axis=axis))
+    return _reduce_matrix('sum_dense_matrix', matrix, axis, lambda matrix: matrix.sum(axis=axis))
 
 
-@timed.call()
 def nnz_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the number of non-zero elements per row (``axis`` = 1) or column (``axis`` = 0) of some
     ``matrix``.
     '''
     if sparse.issparse(matrix):
-        return _reduce_matrix(matrix, axis, lambda matrix: matrix.getnnz(axis=axis))
-    return _reduce_matrix(matrix, axis, lambda matrix: np.count_nonzero(matrix, axis=axis))
+        return _reduce_matrix('nnz_sparse_matrix', matrix, axis, lambda matrix: matrix.getnnz(axis=axis))
+    return _reduce_matrix('nnz_dense_matrix', matrix, axis, lambda matrix: np.count_nonzero(matrix, axis=axis))
 
 
-@timed.call()
 def max_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the maximal element per row (``axis`` = 1) or column (``axis`` = 0) of some ``matrix``.
     '''
     if sparse.issparse(matrix):
-        return _reduce_matrix(matrix, axis, lambda matrix: matrix.max(axis=axis))
-    return _reduce_matrix(matrix, axis, lambda matrix: np.amax(matrix, axis=axis))
+        return _reduce_matrix('max_sparse_matrix', matrix, axis, lambda matrix: matrix.max(axis=axis))
+    return _reduce_matrix('max_dense_matrix', matrix, axis, lambda matrix: np.amax(matrix, axis=axis))
 
 
 def _reduce_matrix(
+    name: str,
     matrix: Matrix,
     axis: int,
     reducer: Callable,
@@ -282,6 +340,11 @@ def _reduce_matrix(
     else:
         elements_count = matrix.shape[axis]
 
+    if name not in PARALLELIZE_BUILTINS:
+        with timed.step(name + '(builtin)'):
+            timed.parameters(obs_count=results_count, var_count=elements_count)
+            return to_array(reducer(matrix))
+
     if axis == 0:
         def batch_reducer(indices: range) -> None:
             results[indices] = to_array(reducer(matrix[:, indices]))
@@ -289,11 +352,58 @@ def _reduce_matrix(
         def batch_reducer(indices: range) -> None:
             results[indices] = to_array(reducer(matrix[indices, :]))
 
-    timed.parameters(obs_count=results_count, var_count=elements_count)
-
-    parallel_for(batch_reducer, results_count)
+    with timed.step(name + '(parallel)'):
+        timed.parameters(obs_count=results_count, var_count=elements_count)
+        parallel_for(batch_reducer, results_count)
 
     return results
+
+
+def bincount_array(
+    array: np.ndarray,
+    *,
+    minlength: int = 0,
+) -> np.ndarray:
+    '''
+    Count the number of occurrences of each value in an ``array``.
+
+    This is identical to Numpy's ``bincount``, except hopefully faster.
+    '''
+    if 'bincount_array' not in PARALLELIZE_BUILTINS:
+        with timed.step('bincount(builtin)'):
+            result = np.bincount(array, minlength=minlength)
+            timed.parameters(elements=array.size, bins=result.size)
+            return result
+
+    shared_storage = SharedStorage()
+
+    def compute(indices: range) -> None:
+        new_tmp = np.bincount(array[indices], minlength=minlength)
+        shared_storage.get_private('tmp',
+                                   make=lambda: new_tmp,
+                                   update=lambda old_tmp: _sum_bincounts(old_tmp, new_tmp))
+
+    def merge(from_thread, into_thread: str) -> None:
+        from_tmp = shared_storage.get_private('tmp', thread=from_thread)
+        into_tmp = shared_storage.get_private('tmp', thread=into_thread)
+        sum_tmp = _sum_bincounts(from_tmp, into_tmp)
+        shared_storage.set_private('tmp', sum_tmp, thread=into_thread)
+
+    with timed.step('bincount(parallel)'):
+        final_thread = \
+            parallel_collect(compute, merge, array.size, batches_per_thread=1)
+        result = shared_storage.get_private('tmp', thread=final_thread)
+        timed.parameters(elements=array.size, bins=result.size)
+        return result
+
+
+def _sum_bincounts(left: np.ndarray, right: np.ndarray) -> np.ndarray:
+    if left.size < right.size:
+        right[:left.size] += left
+        return right
+
+    left[:right.size] += right
+    return left
 
 
 @timed.call()
@@ -352,9 +462,7 @@ def _downsample_sparse_matrix(
         output = constructor((output_data, matrix.indices, matrix.indptr))
 
     shared_storage = SharedStorage()
-    mean_tmp_size = downsample_tmp_size(elements_count)
-    shared_storage.set_private('tmp',
-                               lambda: np.empty(mean_tmp_size, dtype=matrix.dtype))
+    max_tmp_size = downsample_tmp_size(elements_count)
 
     def downsample_sparse_vectors(indices: range) -> None:
         for index in indices:
@@ -364,7 +472,10 @@ def _downsample_sparse_matrix(
             input_vector = matrix.data[start_index:stop_index]
             output_vector = output.data[start_index:stop_index]
 
-            tmp = shared_storage.get_private('tmp')
+            tmp = \
+                shared_storage.get_private('tmp',
+                                           make=lambda: np.empty(max_tmp_size,
+                                                                 dtype=matrix.dtype))
 
             if random_seed != 0:
                 index_seed = random_seed + index
@@ -427,12 +538,6 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
 
     elements_count = matrix.shape[axis]
     tmp_size = downsample_tmp_size(elements_count)
-    shared_storage.set_private('tmp',
-                               lambda: np.empty(tmp_size, dtype=matrix.dtype))
-
-    if not output_is_contiguous:
-        shared_storage.set_private('output',
-                                   lambda: np.empty(elements_count, dtype=output.dtype))
 
     def downsample_dense_vectors(indices: range) -> None:
         for index in indices:
@@ -445,14 +550,19 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
             input_array = to_array(input_vector)
 
             if not output_is_contiguous:
-                output_vector = shared_storage.get_private('output')
+                output_vector = \
+                    shared_storage.get_private('output',
+                                               make=lambda: np.empty(elements_count,
+                                                                     dtype=output.dtype))
             elif axis == 0:
                 output_vector = output[:, index]
             else:
                 output_vector = output[index, :]
             output_array = to_array(output_vector)
 
-            tmp = shared_storage.get_private('tmp')
+            tmp = shared_storage.get_private('tmp',
+                                             make=lambda: np.empty(tmp_size,
+                                                                   dtype=matrix.dtype))
 
             if random_seed != 0:
                 index_seed = random_seed + index
