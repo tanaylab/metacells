@@ -37,7 +37,7 @@ tox:
 	tox
 
 docs:
-	sphinx-build docs/source docs/build
+	sphinx-build -W docs/source docs/build
 
 rst: README.rst LICENSE.rst
 

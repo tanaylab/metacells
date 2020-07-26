@@ -6,12 +6,13 @@ especially in the presence to slicing the data.
 
 .. todo::
 
-    Also deal with multi-dimensional ``obsm`` and ``varm`` annotations.
+    The :py:mod:`metacells.utilities.annotation` module should also deal with multi-dimensional
+    ``obsm`` and ``varm`` annotations.
 
 .. todo::
 
-    Mysteriously, sometimes the calls to ``adata.X`` or ``adata.layers[name]`` take a long time.
-    Time tracking is added to show this.
+    Mysteriously, the calls to ``adata.X`` or ``adata.layers[name]`` sometimes take a long time.
+    Time tracking for the ``_set_x`` and ``_get_layer`` functions reflects this.
 
 '''
 
@@ -599,12 +600,8 @@ def get_data_layer(
 
     .. todo::
 
-        A better implementation would be to cache the layout-specific data in a private variable,
-        but we do not own the ``AnnData`` object.
-
-    .. todo::
-
-        For some reason, getting/setting data in the ``.layers`` field takes a long time.
+        A better implementation of :py:func:`get_data_layer` would be to cache the layout-specific
+        data in a private variable, but we do not own the ``AnnData`` object.
     '''
 
     assert name[:2] != '__'
@@ -651,8 +648,9 @@ def del_data_layer(adata: AnnData, name: str, *, must_exist: bool = False) -> No
 
     .. todo::
 
-        This is mainly required due to the need to delete cached layout-specific data. A better way
-        would be to intercept ``del`` of the ``AnnData`` ``layers`` field, but we do not own it.
+        The function :py:func:`del_data_layer` is mainly required due to the need to delete cached
+        layout-specific data. A better way would be to intercept ``del`` of the ``AnnData``
+        ``layers`` field, but we do not own it.
     '''
     if must_exist:
         assert name in adata.layers

@@ -290,6 +290,9 @@ def call(name: Optional[str] = None) -> Callable[[Callable], Callable]:
     Automatically wrap each function invocation with ``timing.step`` using the ``name`` (by default,
     the function's qualified name).
     '''
+    if not COLLECT_TIMING:
+        return lambda function: function
+
     def wrap(function: Callable) -> Callable:
         def timed(*args: Any, **kwargs: Any) -> Any:
             with step(name or function.__qualname__):

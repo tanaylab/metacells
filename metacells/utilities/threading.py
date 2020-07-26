@@ -202,18 +202,20 @@ def parallel_collect(
     Returns the name of the thread which executed the final ``merge`` operations so the caller can
     access the final collected data.
 
-    See the source of :py:func:`metacells.utilities.computations.bincount_array` for an example.
+    See the source of :py:func:`metacells.utilities.computation.bincount_array` for an example.
 
     .. note::
-        It is safe for ``merge`` to use :py:func:`metacells.utilities.threading.get_private`
-        :py:func:`metacells.utilities.threading.set_private` to access the data collected in the
-        ``from_thread`` and ``into_thread``.
+        It is safe for ``merge`` to use
+        :py:meth:`metacells.utilities.threading.SharedStorage.get_private`
+        :py:meth:`metacells.utilities.threading.SharedStorage.set_private` to access the data
+        collected in the ``from_thread`` and ``into_thread``.
 
     .. todo::
 
-        The implementation first performs all the ``compute`` invocations (in parallel) and then all
-        the ``merge`` invocations (also in parallel). A more efficient implementation would invoke
-        ``merge`` earlier in parallel to some ``compute`` calls.
+        The :py:func:`parallel_collect` implementation first performs all the ``compute``
+        invocations (in parallel) and then all the ``merge`` invocations (also in parallel). A more
+        efficient implementation would invoke ``merge`` earlier in parallel to some ``compute``
+        calls.
     '''
     if EXECUTOR is None:
         parallel_for(compute, invocations_count,

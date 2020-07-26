@@ -1,14 +1,5 @@
 '''
 Utilities for performing efficient parallel computations.
-
-.. todo::
-
-    Further investigate performance of suspiciously slow operations:
-
-    * The builtin ``max_sparse_matrix`` seems way to slow. Parallelization helps but perhaps a
-      different implementation is called for, or opening a bug with ``scipy``.
-
-    * Parallelizing ``bincount`` did not work well. Perhaps another approach?
 '''
 
 import os
@@ -71,14 +62,24 @@ BUILTIN_OPERATIONS = ['bincount_array',
 
 #: Which built-in operations to parallelize. Override this by setting the
 #: ``METACELLS_PARALLELIZE_BUILTINS`` environment variable to a comma-separated list of values from
-#: the :py:member:`metacells.utilities.computations.BUILTIN_OPERATIONS` list.
+#: the :py:data:`metacells.utilities.computation.BUILTIN_OPERATIONS` list.
+#:
+#: Alas, the naive parallel implementation provided here does not always improve performance over
+#: the built-in serial implementation. Sometimes it does, and these functions are included in the
+#: list by default.
+#:
+#: The right decision on a given system may depends on both the hardware and the libraries (e.g.
+#: whether ``MKL`` and ``TBB`` are available). For best results, collect
+#: :py:mod:`metacells.utilities.timing` data to ensure you are using the best implementation of each
+#: function.
 #:
 #: .. todo::
 #:
-#:    You would expect that the built-in implementation would be the best possible, but it seems
-#:    that for some operations it is not, specifically, ``max_sparse_matrix`` seems to be slow (even
-#:    when the data is in the most efficient ``csc``/``csr`` format). Collect
-#:    :py:module:`metacell.utilities.timing` to ensure you are using the best option.
+#:    Remove the need for :py:data:`PARALLELIZE_BUILTINS`.
+#:
+#:    In an ideal world, the built-in implementation would already be parallel where that made
+#:    sense. This not being the case, ideally the parallel implementation here would always be
+#:    better than the serial build-in, so we would simply always use it and be done.
 PARALLELIZE_BUILTINS = set(['max_sparse_matrix'])
 
 if not 'sphinx' in sys.argv[0]:
@@ -113,8 +114,8 @@ def to_array(data: Union[Matrix, Vector]) -> np.ndarray:
 
     .. todo::
 
-        There are some strange cases where ``np.reshape(data, -1)`` returns a **matrix** rather than
-        an array. The code included a workaround but it sure is ugly.
+        The code in :py:func:`to_array` works around some strange cases where ``np.reshape(data,
+        -1)`` returns a matrix rather than an array. This needs further investigation.
     '''
     if sparse.issparse(data):
         data = data.todense()
@@ -309,6 +310,12 @@ def nnz_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
 def max_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the maximal element per row (``axis`` = 1) or column (``axis`` = 0) of some ``matrix``.
+
+    .. todo::
+
+        It seems the built-in ``max`` function for sparse matrices is slow. The parallel
+        :py:func:`max_matrix` helps, but perhaps a different implementation of the serial built-in
+        function is needed?
     '''
     if sparse.issparse(matrix):
         return _reduce_matrix('max_sparse_matrix', matrix, axis, lambda matrix: matrix.max(axis=axis))
@@ -368,6 +375,11 @@ def bincount_array(
     Count the number of occurrences of each value in an ``array``.
 
     This is identical to Numpy's ``bincount``, except hopefully faster.
+
+    .. todo::
+
+        Parallelizing ``bincount`` in :py:func:`bincount_array` did not work well. Perhaps another
+        approach?
     '''
     if 'bincount_array' not in PARALLELIZE_BUILTINS:
         with timed.step('bincount(builtin)'):
