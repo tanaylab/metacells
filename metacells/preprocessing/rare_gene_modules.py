@@ -113,8 +113,8 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
        cells are discarded.
     '''
 
-    cells_count = ut.get_obs_count(adata)
-    genes_count = ut.get_var_count(adata)
+    cells_count = adata.n_obs
+    genes_count = adata.n_vars
 
     rare_module_of_cells = np.full(cells_count, -1)
     rare_module_of_genes = np.full(genes_count, -1)

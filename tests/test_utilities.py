@@ -8,8 +8,6 @@ from scipy import stats  # type: ignore
 
 import metacells.utilities as ut
 
-ut.use_all_private_implementations()
-
 # pylint: disable=missing-docstring
 
 
@@ -72,7 +70,6 @@ def test_unbatched_parallel_for():
 
 def test_parallel_collect():
     shared_storage = ut.SharedStorage()
-    shared_storage.set_private('tmp', list)
 
     def compute(indices: range) -> None:
         tmp = shared_storage.get_private('tmp', make=list)
@@ -204,3 +201,55 @@ def test_bincount():
     numpy_bincount = np.bincount(array, minlength=110)
     metacells_bincount = ut.bincount_array(array, minlength=110)
     assert np.all(numpy_bincount == metacells_bincount)
+
+
+def test_freeze_dense():
+    array = np.arange(10)
+
+    assert not ut.frozen(array)
+    array[0] = -1
+    assert array[0] == -1
+
+    ut.freeze(array)
+    assert ut.frozen(array)
+    try:
+        array[0] = -2
+        assert False, 'writing to frozen array'
+    except ValueError as exception:
+        assert 'is read-only' in str(exception)
+
+    assert array[0] == -1
+
+    ut.unfreeze(array)
+    assert not ut.frozen(array)
+    array[0] = -3
+    assert array[0] == -3
+
+
+def test_freeze_sparse():
+    matrix = sparse.rand(100, 100, density=0.1, format='csr')
+
+    row = 0
+    while matrix.indptr[row + 1] == 0:
+        row += 1
+    column = matrix.indices[0]
+    assert matrix[row, column] != 0
+
+    assert not ut.frozen(matrix)
+    matrix.data[0] = -1
+    assert matrix[row, column] == -1
+
+    ut.freeze(matrix)
+    assert ut.frozen(matrix)
+    try:
+        matrix.data[0] = -2
+        assert False, 'writing to frozen matrix'
+    except ValueError as exception:
+        assert 'is read-only' in str(exception)
+
+    assert matrix.data[0] == -1
+
+    ut.unfreeze(matrix)
+    assert not ut.frozen(matrix)
+    matrix.data[0] = -3
+    assert matrix[row, column] == -3

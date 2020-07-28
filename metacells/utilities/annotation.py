@@ -9,19 +9,14 @@ especially in the presence to slicing the data.
     The :py:mod:`metacells.utilities.annotation` module should also deal with multi-dimensional
     ``obsm`` and ``varm`` annotations.
 
-.. todo::
-
-    Mysteriously, the calls to ``adata.X`` or ``adata.layers[name]`` sometimes take a long time.
-    Time tracking for the ``_set_x`` and ``_get_layer`` functions reflects this.
-
 '''
 
-from typing import (Any, Callable, Collection, Dict, List, NamedTuple,
-                    Optional, Tuple, Union)
+from typing import Any, Callable, Collection, Dict, Optional, Set, Tuple, Union
 from warnings import warn
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
+import scipy.sparse as sparse  # type: ignore
 from anndata import AnnData  # type: ignore
 from readerwriterlock import rwlock
 
@@ -35,14 +30,10 @@ __all__ = [
     'slicing_obs_annotation',
     'slicing_var_annotation',
     'slicing_uns_annotation',
-    'SlicingContext',
 
     'annotate_as_base',
 
-    'get_obs_count',
-    'get_var_count',
-
-    'declare_focus_of_data',
+    'set_x_layer',
 
     'get_data_layer',
     'del_data_layer',
@@ -62,41 +53,14 @@ __all__ = [
 ]
 
 
-class SlicingContext(NamedTuple):
-    '''
-    Context of slicing operation.
-
-    Used as a parameter for function fixing the value of affected annotations.
-    '''
-    full_adata: AnnData  #: The data before the slicing.
-    sliced_adata: AnnData  #: The data sliced using the builtin operation.
-    did_slice_obs: bool  #: Whether observations were sliced.
-    did_slice_var: bool  #: Whether variables were sliced.
-    #: If observations were sliced, the indices or mask of the kept ones.
-    slice_obs: Optional[Collection]
-    #: If variables were sliced, the indices or mask of the kept ones.
-    slice_var: Optional[Collection]
-
-
 LOCK = rwlock.RWLockRead()
 
 WARN_WHEN_SLICING_UNKNOWN_ANNOTATIONS: bool = True
 
-SAFE_SLICING_OBS_ANNOTATIONS: Dict[str,
-                                   Tuple[bool, bool,
-                                         Optional[Callable[[SlicingContext, str], None]]]] = {}
-
-SAFE_SLICING_VAR_ANNOTATIONS: Dict[str,
-                                   Tuple[bool, bool,
-                                         Optional[Callable[[SlicingContext, str], None]]]] = {}
-
-SAFE_SLICING_UNS_ANNOTATIONS: Dict[str,
-                                   Tuple[bool, bool,
-                                         Optional[Callable[[SlicingContext, str], None]]]] = {}
-
-SAFE_SLICING_DATA_LAYERS: Dict[str,
-                               Tuple[bool, bool,
-                                     Optional[Callable[[SlicingContext, str], None]]]] = {}
+SAFE_SLICING_OBS_ANNOTATIONS: Dict[str, Tuple[bool, bool]] = {}
+SAFE_SLICING_VAR_ANNOTATIONS: Dict[str, Tuple[bool, bool]] = {}
+SAFE_SLICING_UNS_ANNOTATIONS: Dict[str, Tuple[bool, bool]] = {}
+SAFE_SLICING_DATA_LAYERS: Dict[str, Tuple[bool, bool]] = {}
 
 
 def slicing_data_layer(
@@ -104,23 +68,17 @@ def slicing_data_layer(
     *,
     preserve_when_slicing_obs: bool = False,
     preserve_when_slicing_var: bool = False,
-    fix_sliced_layer: Optional[Callable[[SlicingContext, str], None]] = None,
 ) -> None:
     '''
     Specify whether the named data layer should be preserved when slicing either the observations
     (cells) or variables (genes).
 
-    A data layer is always preserved if it is the focus layer (the value of ``X``). Otherwise,
-    when the data is sliced, it may become invalidated, and will not be preserved.
-
-    If ``fix_sliced_layer`` is provided, when a slicing occurs, it will be invoked as
-    ``fix_sliced_layer(slicing_context: SlicingContext, layer_name: str)`` to allow for fixing the
-    preserved sliced data layer values.
+    When the data is sliced, a data layer may become invalidated and should not be preserved. For
+    example, the ``sum_UMIs`` of genes is invalidated when specifying a subset of the cells.
     '''
     with LOCK.gen_wlock():
-        SAFE_SLICING_DATA_LAYERS[name] = (preserve_when_slicing_obs,
-                                          preserve_when_slicing_var,
-                                          fix_sliced_layer)
+        SAFE_SLICING_DATA_LAYERS[name] = \
+            (preserve_when_slicing_obs, preserve_when_slicing_var)
 
 
 def _slicing_known_data_layers() -> None:
@@ -140,19 +98,13 @@ def slicing_obs_annotation(
     *,
     preserve_when_slicing_obs: bool = False,
     preserve_when_slicing_var: bool = False,
-    fix_sliced_annotation: Optional[Callable[[SlicingContext, str], None]] = None,
 ) -> None:
     '''
     Specify whether the named per-observation (cell) annotation should be preserved when slicing
     either the observations (cells) or variables (genes).
-
-    If ``fix_sliced_annotation`` is provided, when a slicing occurs, it will be invoked as
-    ``fix_sliced_annotation(slicing_context: SlicingContext, annotation_name: str)`` to allow for
-    fixing the preserved sliced annotation values.
     '''
-    SAFE_SLICING_OBS_ANNOTATIONS[name] = (preserve_when_slicing_obs,
-                                          preserve_when_slicing_var,
-                                          fix_sliced_annotation)
+    SAFE_SLICING_OBS_ANNOTATIONS[name] = \
+        (preserve_when_slicing_obs, preserve_when_slicing_var)
 
 
 def _slicing_known_obs_annotations() -> None:
@@ -175,19 +127,13 @@ def slicing_var_annotation(
     *,
     preserve_when_slicing_obs: bool = False,
     preserve_when_slicing_var: bool = False,
-    fix_sliced_annotation: Optional[Callable[[SlicingContext, str], None]] = None,
 ) -> None:
     '''
     Specify whether the named per-variable (gene) annotation should be preserved when slicing
     either the observations (cells) or variables (genes).
-
-    If ``fix_sliced_annotation`` is provided, when a slicing occurs, it will be invoked as
-    ``fix_sliced_annotation(slicing_context: SlicingContext, annotation_name: str)`` to allow for
-    fixing the preserved sliced annotation values.
     '''
-    SAFE_SLICING_VAR_ANNOTATIONS[name] = (preserve_when_slicing_obs,
-                                          preserve_when_slicing_var,
-                                          fix_sliced_annotation)
+    SAFE_SLICING_VAR_ANNOTATIONS[name] = \
+        (preserve_when_slicing_obs, preserve_when_slicing_var)
 
 
 def _slicing_known_var_annotations() -> None:
@@ -213,24 +159,18 @@ def slicing_uns_annotation(
     *,
     preserve_when_slicing_obs: bool = False,
     preserve_when_slicing_var: bool = False,
-    fix_sliced_annotation: Optional[Callable[[SlicingContext, str], None]] = None,
 ) -> None:
     '''
     Specify whether the named unstructured annotation should be preserved when slicing either the
     observations (cells) or variables (genes).
-
-    If ``fix_sliced_annotation`` is provided, when a slicing occurs, it will be invoked as
-    ``fix_sliced_annotation(slicing_context: SlicingContext, annotation_name: str)`` to allow for
-    fixing the preserved sliced annotation values.
     '''
     with LOCK.gen_wlock():
-        SAFE_SLICING_UNS_ANNOTATIONS[name] = (preserve_when_slicing_obs,
-                                              preserve_when_slicing_var,
-                                              fix_sliced_annotation)
+        SAFE_SLICING_UNS_ANNOTATIONS[name] = \
+            (preserve_when_slicing_obs, preserve_when_slicing_var)
 
 
 def _slicing_known_uns_annotations() -> None:
-    slicing_uns_annotation('layer',
+    slicing_uns_annotation('x_layer',
                            preserve_when_slicing_obs=True,
                            preserve_when_slicing_var=True)
 
@@ -278,52 +218,35 @@ def slice(  # pylint: disable=redefined-builtin
     assert invalidated_annotations_prefix != ''
 
     if cells is None:
-        cells = range(get_obs_count(adata))
+        cells = range(adata.n_obs)
     if genes is None:
-        genes = range(get_var_count(adata))
+        genes = range(adata.n_vars)
 
-    will_slice_obs = len(cells) != get_obs_count(adata)
-    will_slice_var = len(genes) != get_var_count(adata)
-
-    X = adata.X
-    if X is not None:
-        focus = get_annotation_of_data(adata, 'layer')
-        save_x = X
-    else:
-        focus = None
-        save_x = None
+    will_slice_obs = len(cells) != adata.n_obs
+    will_slice_var = len(genes) != adata.n_vars
 
     saved_data_layers = \
         _save_data_layers(adata, will_slice_obs, will_slice_var,
                           invalidated_annotations_prefix is not None)
 
-    with timed.step('.builtin'):
+    with timed.step('.data_layers'):
         bdata = adata[cells, genes]
 
-    did_slice_obs = get_obs_count(bdata) != get_obs_count(adata)
-    did_slice_var = get_var_count(bdata) != get_var_count(adata)
+    did_slice_obs = bdata.n_obs != adata.n_obs
+    did_slice_var = bdata.n_vars != adata.n_vars
 
     assert did_slice_obs == will_slice_obs
     assert did_slice_var == will_slice_var
 
-    slicing_context = SlicingContext(full_adata=adata, sliced_adata=bdata,
-                                     did_slice_obs=did_slice_obs, did_slice_var=did_slice_var,
-                                     slice_obs=cells, slice_var=genes)
-
     if did_slice_obs or did_slice_var:
-        _filter_layers(slicing_context, invalidated_annotations_prefix)
-        _filter_annotations('obs', bdata.obs, slicing_context,
+        _filter_layers(bdata, did_slice_obs, did_slice_var,
+                       invalidated_annotations_prefix)
+        _filter_annotations('obs', bdata.obs, did_slice_obs, did_slice_var,
                             SAFE_SLICING_OBS_ANNOTATIONS, invalidated_annotations_prefix)
-        _filter_annotations('var', bdata.var, slicing_context,
+        _filter_annotations('var', bdata.var, did_slice_obs, did_slice_var,
                             SAFE_SLICING_VAR_ANNOTATIONS, invalidated_annotations_prefix)
-        _filter_annotations('uns', bdata.uns, slicing_context,
+        _filter_annotations('uns', bdata.uns, did_slice_obs, did_slice_var,
                             SAFE_SLICING_UNS_ANNOTATIONS, invalidated_annotations_prefix)
-
-    if focus is None:
-        assert bdata.X is None
-    else:
-        _set_x(bdata, _get_layer(bdata, focus))
-        _set_x(adata, save_x)
 
     adata.layers.update(saved_data_layers)
 
@@ -337,33 +260,44 @@ def _save_data_layers(
     will_prefix_invalidated: bool
 ) -> Dict[str, Any]:
     saved_data_layers: Dict[str, Any] = {}
-    delete_data_layers: List[str] = []
+    delete_data_layers: Set[str] = set()
 
     will_slice_only_obs = will_slice_obs and not will_slice_var
     will_slice_only_var = will_slice_var and not will_slice_obs
 
     for name, data in adata.layers.items():
-        action = \
-            _analyze_data_layer(name, will_slice_obs,
-                                will_slice_var, will_prefix_invalidated)[0]
-        if action == 'discard':
-            delete_data_layers.append(name)
-            saved_data_layers[name] = data
-            continue
+        if name == adata.uns['x_layer']:
+            delete_data_layers.add(name)
 
-        if name.startswith('__'):
-            continue
+        else:
+            action = \
+                _analyze_data_layer(name, will_slice_obs,
+                                    will_slice_var, will_prefix_invalidated)
+            if action == 'discard':
+                delete_data_layers.add(name)
+                saved_data_layers[name] = data
+                continue
 
-        for will, prefix in [(will_slice_only_obs, '__per_obs__'),
-                             (will_slice_only_var, '__per_var__')]:
-            if not will:
+            if name.startswith('__'):
                 continue
-            per_name = prefix + name
-            if per_name not in adata.layers:
+
+        for will_slice_only, per in [(will_slice_only_obs, '__per_obs__'),
+                                     (will_slice_only_var, '__per_var__')]:
+            if not will_slice_only:
                 continue
+
+            per_name = per + name
+            per_data = adata.layers.get(per_name)
+            if per_data is None:
+                break
+
             saved_data_layers[name] = data
-            data = _get_layer(adata, per_name)
-            adata.layers[name] = data
+            adata.layers[name] = per_data
+            delete_data_layers.add(per_name)
+
+            if name == adata.uns['x_layer']:
+                with timed.step('.swap_x'):
+                    adata.X = per_data
 
     for name in delete_data_layers:
         del adata.layers[name]
@@ -372,30 +306,37 @@ def _save_data_layers(
 
 
 def _filter_layers(
-    slicing_context: SlicingContext,
+    bdata: AnnData,
+    did_slice_obs: bool,
+    did_slice_var: bool,
     invalidated_annotations_prefix: Optional[str],
 ) -> None:
-    layer_names = list(slicing_context.sliced_adata.layers.keys())
-    for name in layer_names:
-        action, fix_sliced_layer = \
-            _analyze_data_layer(name, slicing_context.did_slice_obs,
-                                slicing_context.did_slice_var,
+    x_layer = bdata.uns['x_layer']
+    assert x_layer not in bdata.layers.keys()
+    with timed.step('.x_layer'):
+        bdata.layers[x_layer] = bdata.X
+
+    for name in bdata.layers.keys():
+        action = \
+            _analyze_data_layer(name, did_slice_obs, did_slice_var,
                                 invalidated_annotations_prefix is not None)
 
         assert action != 'discard'
 
         if action == 'preserve':
-            if fix_sliced_layer is not None:
-                fix_sliced_layer(slicing_context, name)
+            data = bdata.layers[name]
+            utc.freeze(data)
             continue
+
+        data = bdata.layers[name]
+        utc.freeze(data)
 
         assert action == 'prefix'
         assert invalidated_annotations_prefix is not None
 
         new_name = invalidated_annotations_prefix + name
         assert new_name != name
-        slicing_context.sliced_adata.layers[new_name] = \
-            _get_layer(slicing_context.sliced_adata, name)
+        bdata.layers[new_name] = data
         _clone_slicing_annotation(SAFE_SLICING_DATA_LAYERS, name, new_name)
 
 
@@ -404,7 +345,7 @@ def _analyze_data_layer(
     do_slice_obs: bool,
     do_slice_var: bool,
     will_prefix_invalidated: bool,
-) -> Tuple[str, Optional[Callable[[SlicingContext, str], None]]]:
+) -> str:
     if name[:2] != '__':
         is_per = False
         is_per_obs = False
@@ -417,7 +358,7 @@ def _analyze_data_layer(
         assert is_per_obs or is_per_var
         base_name = name[11:]
 
-    (preserve_when_slicing_obs, preserve_when_slicing_var, fix_sliced_layer) = \
+    preserve_when_slicing_obs, preserve_when_slicing_var = \
         _get_slicing_annotation('data', 'layer',
                                 SAFE_SLICING_DATA_LAYERS, base_name)
 
@@ -427,45 +368,52 @@ def _analyze_data_layer(
         preserve_when_slicing_var = False
 
     preserve = (not do_slice_obs or preserve_when_slicing_obs) \
-        and (not do_slice_var or preserve_when_slicing_var) \
-        and (not is_per or fix_sliced_layer is None)
+        and (not do_slice_var or preserve_when_slicing_var)
 
     if preserve:
-        return 'preserve', fix_sliced_layer
+        return 'preserve'
 
     if is_per or not will_prefix_invalidated:
-        return 'discard', None
+        return 'discard'
 
-    return 'prefix', None
+    return 'prefix'
 
 
 def _filter_annotations(  # pylint: disable=too-many-locals
     kind: str,
     new_annotations: Union[pd.DataFrame, Dict[str, Any]],
-    slicing_context: SlicingContext,
-    slicing_annotations: Dict[str,
-                              Tuple[bool, bool,
-                                    Optional[Callable[[SlicingContext, str], None]]]],
+    did_slice_obs: bool,
+    did_slice_var: bool,
+    slicing_annotations: Dict[str, Tuple[bool, bool]],
     invalidated_annotations_prefix: Optional[str],
 ) -> None:
     annotation_names = list(new_annotations.keys())
     for name in annotation_names:
-        (preserve_when_slicing_obs, preserve_when_slicing_var, fix_sliced_annotation) = \
+        preserve_when_slicing_obs, preserve_when_slicing_var = \
             _get_slicing_annotation(kind, 'annotation',
                                     slicing_annotations, name)
 
-        preserve = (not slicing_context.did_slice_obs or preserve_when_slicing_obs) \
-            and (not slicing_context.did_slice_var or preserve_when_slicing_var)
+        preserve = (not did_slice_obs or preserve_when_slicing_obs) \
+            and (not did_slice_var or preserve_when_slicing_var)
 
         if preserve:
-            if fix_sliced_annotation is not None:
-                fix_sliced_annotation(slicing_context, name)
+            data = new_annotations[name]
+            if kind != 'uns' \
+                    or isinstance(data, (np.ndarray, sparse.spmatrix,
+                                         pd.Series, pd.DataFrame)):
+                utc.freeze(data)
             continue
+
+        data = new_annotations[name]
+        if kind != 'uns' \
+                or isinstance(data, (np.ndarray, sparse.spmatrix,
+                                     pd.Series, pd.DataFrame)):
+            utc.freeze(data)
 
         if invalidated_annotations_prefix is not None:
             new_name = invalidated_annotations_prefix + name
             assert new_name != name
-            new_annotations[new_name] = new_annotations[name]
+            new_annotations[new_name] = data
             _clone_slicing_annotation(slicing_annotations, name, new_name)
 
         del new_annotations[name]
@@ -474,11 +422,9 @@ def _filter_annotations(  # pylint: disable=too-many-locals
 def _get_slicing_annotation(
     kind: str,
     what: str,
-    slicing_annotations: Dict[str,
-                              Tuple[bool, bool,
-                                    Optional[Callable[[SlicingContext, str], None]]]],
+    slicing_annotations: Dict[str, Tuple[bool, bool]],
     name: str
-) -> Tuple[bool, bool, Optional[Callable[[SlicingContext, str], None]]]:
+) -> Tuple[bool, bool]:
     with LOCK.gen_rlock():
         slicing_annotation = slicing_annotations.get(name)
 
@@ -491,16 +437,14 @@ def _get_slicing_annotation(
                     'assuming it should not be preserved' \
                     .format(kind=kind, what=what, name=name)
                 warn(unknown_sliced_annotation)
-                slicing_annotation = (False, False, None)
+                slicing_annotation = (False, False)
                 slicing_annotations[name] = slicing_annotation
 
     return slicing_annotation
 
 
 def _clone_slicing_annotation(
-    slicing_annotations: Dict[str,
-                              Tuple[bool, bool,
-                                    Optional[Callable[[SlicingContext, str], None]]]],
+    slicing_annotations: Dict[str, Tuple[bool, bool]],
     old_name: str,
     new_name: str,
 ) -> None:
@@ -520,27 +464,14 @@ def annotate_as_base(adata: AnnData, *, name: str = 'base_index') -> None:
     annotations, which will be preserved when creating a :py:func:`slice` of the data to easily
     refer back to the original full data.
     '''
-    adata.obs[name] = np.arange(get_obs_count(adata))
-    adata.var[name] = np.arange(get_var_count(adata))
+    adata.obs[name] = np.arange(adata.n_obs)
+    adata.var[name] = np.arange(adata.n_vars)
 
 
-def get_obs_count(adata: AnnData) -> int:
+def set_x_layer(adata: AnnData, name: str) -> None:
     '''
-    Return the number of observations (cells) in the ``adata``.
-    '''
-    return adata.shape[0]
-
-
-def get_var_count(adata: AnnData) -> int:
-    '''
-    Return the number of variables (genes) per observation (cell) in the ``adata``.
-    '''
-    return adata.shape[1]
-
-
-def declare_focus_of_data(adata: AnnData, name: str) -> None:
-    '''
-    Declare the current layer of the data that is contained in ``X``.
+    Set the layer name of the data that is contained in ``X``. This is stored in the unstructured
+    annotation named ``x_layer``.
 
     This should be called after populating the ``X`` data for the first time (e.g., by importing the
     data). It lets rest of the code to know what kind of data it holds. All the other layer
@@ -548,13 +479,20 @@ def declare_focus_of_data(adata: AnnData, name: str) -> None:
 
     .. note::
 
-        When using the layer utilities, do not replace the value of ``X`` by writing ``adata.X =
-        ...``. Instead use ``get_data_layer(adata, ...)``.
+        When using the layer utilities, do not directly read or write the value of ``X``. Instead
+        use :py:func:`get_data_layer`.
+
+    .. todo::
+
+        Better integration with ``AnnData`` would allow accessing and even setting ``X`` in addition
+        to using :py:func:`get_data_layer`. Currently this isn't implemented since ``AnnData``
+        provides its own magic for handling ``X`` which is incompatible with the layers approach.
     '''
     X = adata.X
     assert X is not None
-    assert 'layer' not in adata.uns_keys()
-    adata.uns['layer'] = name
+    assert 'x_layer' not in adata.uns_keys()
+
+    adata.uns['x_layer'] = name
     adata.layers[name] = X
 
 
@@ -565,7 +503,6 @@ def get_data_layer(
     compute: Optional[Callable[[], utc.Vector]] = None,
     *,
     inplace: bool = False,
-    infocus: bool = False,
     per: Optional[str] = None,
 ) -> utc.Matrix:
     '''
@@ -575,17 +512,10 @@ def get_data_layer(
 
     If ``inplace``, store the annotation in ``adata``.
 
-    If ``infocus`` (implies ``inplace``), also make it the current ``X`` of the data.
-
     If ``per`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
     data in a layout optimized for per-observation (row-major / csr) or per-variable (column-major
     / csc). If also ``inplace``, this is cached in an additional layer whose name is prefixed (e.g.
     ``__per_obs__UMIs`` for the ``UMIs`` layer).
-
-    .. note::
-
-        This ``assert``s that the current ``X``, if not ``None``, was declared to be a layer of the
-        data so it isn't lost even if ``infocus`` is specified.
 
     .. note::
 
@@ -595,8 +525,7 @@ def get_data_layer(
     .. note::
 
         The original data returned by ``compute`` is always preserved under its non-prefixed layer
-        name, so even if asking for layout-optimized data ``infocus``, you can switch back to the
-        original by requesting the data ``infocus`` again without a ``per`` argument.
+        name.
 
     .. todo::
 
@@ -606,45 +535,57 @@ def get_data_layer(
 
     assert name[:2] != '__'
 
-    data = _get_layer(adata, name)
-    if data is None:
+    data = adata.layers.get(name)
+    if data is not None:
+        if name != adata.uns['x_layer']:
+            utc.freeze(data)
+    else:
         if compute is None:
             raise RuntimeError('unavailable layer data: ' + name)
         with timed.step('.compute'):
             data = compute()
         assert data.shape == adata.shape
 
-    if inplace or infocus:
-        adata.layers[name] = data
+        if inplace:
+            utc.freeze(data)
+            adata.layers[name] = data
 
     if per is not None:
         assert per in ['var', 'obs']
         per_name = '__per_%s__%s' % (per, name)
         axis = ['var', 'obs'].index(per)
 
-        per_data = _get_layer(adata, per_name)
+        per_data = adata.layers.get(per_name)
         if per_data is None:
-            data = utc.to_layout(data, axis=axis)
-        else:
-            data = per_data
+            per_data = utc.to_layout(data, axis=axis)
 
-        if inplace or infocus:
-            adata.layers[per_name] = data
+            if inplace:
+                utc.freeze(per_data)
+                adata.layers[per_name] = per_data
 
-    if infocus:
-        adata.uns['layer'] = name
-        _set_x(adata, data)
+        data = per_data
 
     return data
 
 
-def del_data_layer(adata: AnnData, name: str, *, must_exist: bool = False) -> None:
+def del_data_layer(
+    adata: AnnData, name: str,
+    *,
+    per: Optional[str] = None,
+    must_exist: bool = False,
+) -> None:
     '''
-    Delete a per-obsevration-per-variable matrix in ``adata`` by its ``name``.
+    Delete a per-observation-per-variable matrix in ``adata`` by its ``name``.
 
-    This will also delete any cached layout-specific data.
+    If ``per`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This will only
+    delete the cached layout-specific data. If ``per`` is not specified, both the data and any
+    cached layout-specific data will be deleted.
 
     If ``must_exist``, will ``raise`` if the data does not currently exist.
+
+    .. note::
+
+        You can't delete the layer of the ``X`` data.
 
     .. todo::
 
@@ -652,17 +593,23 @@ def del_data_layer(adata: AnnData, name: str, *, must_exist: bool = False) -> No
         layout-specific data. A better way would be to intercept ``del`` of the ``AnnData``
         ``layers`` field, but we do not own it.
     '''
+    assert name.startswith('__')
+    assert name != adata.uns['x_layer']
+
+    if per is not None:
+        per_name = '__per_%s__%s' % (per, name)
+        if per_name in adata.layers:
+            del adata.layers[per_name]
+        elif must_exist:
+            assert per_name in adata.layers
+        return
+
     if must_exist:
         assert name in adata.layers
-
     for prefix in ['', '__per_obs__', '__per_var__']:
         prefixed_name = prefix + name
         if prefixed_name in adata.layers:
             del adata.layers[prefixed_name]
-
-    if adata.uns.get('layer') == name:
-        del adata.uns['layer']
-        _set_x(adata, None)
 
 
 @utd.expand_doc()
@@ -674,16 +621,15 @@ def get_log_data(
     base: Optional[float] = None,
     normalization: float = 1,
     inplace: bool = False,
-    infocus: bool = False,
 ) -> utc.Matrix:
     '''
     Return a matrix with the log of some data layer.
 
-    If ``of_layer`` is specified, this specific data is used. Otherwise, the focus data layer (in
-    ``adata.X``) is used.
+    If ``of_layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
 
-    If ``inplace`` or ``infocus`` the data will be stored in ``to_layer`` (by default, this is the
-    name of the source layer with a ``log_`` prefix).
+    If ``inplace``, the data will be stored in ``to_layer`` (by default, this is the name of the
+    source layer with a ``log_`` prefix).
 
     The natural logarithm is used by default. Otherwise, the ``base`` is used.
 
@@ -695,7 +641,7 @@ def get_log_data(
         The result is always a dense matrix, as even for sparse data, the log is rarely zero.
     '''
     if of_layer is None:
-        of_layer = get_annotation_of_data(adata, 'layer')
+        of_layer = get_annotation_of_data(adata, 'x_layer')
         assert of_layer is not None
 
     if to_layer is None:
@@ -705,10 +651,10 @@ def get_log_data(
     def compute_log_data() -> np.ndarray:
         assert of_layer is not None
         matrix = \
-            get_data_layer(adata, of_layer, inplace=inplace, infocus=infocus)
+            get_data_layer(adata, of_layer, inplace=inplace)
         return utc.log_matrix(matrix, base=base, normalization=normalization)
 
-    return get_data_layer(adata, to_layer, compute_log_data, inplace=inplace, infocus=infocus)
+    return get_data_layer(adata, to_layer, compute_log_data, inplace=inplace)
 
 
 def get_annotation_of_obs(
@@ -735,9 +681,10 @@ def get_annotation_of_obs(
 
     data = compute()
     assert data is not None
-    assert data.shape == (get_obs_count(adata),)
+    assert data.shape == (adata.n_obs,)
 
     if inplace:
+        utc.freeze(data)
         adata.obs[name] = data
 
     return data
@@ -839,9 +786,10 @@ def get_annotation_of_var(
 
     data = compute()
     assert data is not None
-    assert data.shape == (get_var_count(adata),)
+    assert data.shape == (adata.n_vars,)
 
     if inplace:
+        utc.freeze(data)
         adata.var[name] = data
 
     return data
@@ -947,13 +895,3 @@ def get_annotation_of_data(
         adata.uns[name] = data
 
     return data
-
-
-@timed.call()
-def _set_x(adata: AnnData, X: Optional[utc.Matrix]) -> None:
-    adata.X = X
-
-
-@timed.call()
-def _get_layer(adata: AnnData, name: str) -> Any:
-    return adata.layers.get(name)

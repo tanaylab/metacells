@@ -202,8 +202,6 @@ def parallel_collect(
     Returns the name of the thread which executed the final ``merge`` operations so the caller can
     access the final collected data.
 
-    See the source of :py:func:`metacells.utilities.computation.bincount_array` for an example.
-
     .. note::
         It is safe for ``merge`` to use
         :py:meth:`metacells.utilities.threading.SharedStorage.get_private`
@@ -297,7 +295,6 @@ class SharedStorage:
         Create an empty storage for parallel tasks.
         '''
         self._shared: Dict[str, Tuple[rwlock.RWLockRead, Any]] = {}
-        self._makers: Dict[str, Callable[[], Any]] = {}
         self._private: Dict[str, Dict[str, Any]] = {}
 
     def set_shared(self, name: str, value: Any) -> None:

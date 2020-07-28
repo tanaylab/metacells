@@ -17,8 +17,10 @@ import metacells as mc
 def test_find_rare_genes_modules(data_path):
     with open(data_path[:-4] + 'yaml') as file:
         expected = yaml.safe_load(file)
-    adata = sc.read(data_path)
-    mc.ut.declare_focus_of_data(adata, 'UMIs')
+    with mc.ut.step('read'):
+        adata = sc.read(data_path)
+    mc.ut.canonize(adata.X)
+    mc.ut.set_x_layer(adata, 'UMIs')
     _cells_data, _genes_data, modules_data = \
         mc.pp.find_rare_genes_modules(adata)
     actual_modules = [list(module) for module in modules_data]
