@@ -32,9 +32,11 @@ __all__ = [
     'corrcoef',
 
     'log_matrix',
-    'sum_matrix',
-    'nnz_matrix',
     'max_matrix',
+    'min_matrix',
+    'nnz_matrix',
+    'sum_matrix',
+    'sum_squared_matrix',
 
     'bincount_array',
 
@@ -307,13 +309,23 @@ def log_matrix(
 
 
 @timed.call()
-def sum_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
+def max_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
     '''
-    Compute the total per row (``axis`` = 1) or column (``axis`` = 0) of some ``matrix``.
+    Compute the maximal element per row (``axis`` = 1) or column (``axis`` = 0) of some ``matrix``.
     '''
     if sparse.issparse(matrix):
-        return _reduce_matrix(matrix, axis, lambda matrix: matrix.sum(axis=axis))
-    return _reduce_matrix(matrix, axis, lambda matrix: matrix.sum(axis=axis))
+        return _reduce_matrix(matrix, axis, lambda matrix: matrix.max(axis=axis))
+    return _reduce_matrix(matrix, axis, lambda matrix: np.amax(matrix, axis=axis))
+
+
+@timed.call()
+def min_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
+    '''
+    Compute the minimal element per row (``axis`` = 1) or column (``axis`` = 0) of some ``matrix``.
+    '''
+    if sparse.issparse(matrix):
+        return _reduce_matrix(matrix, axis, lambda matrix: matrix.min(axis=axis))
+    return _reduce_matrix(matrix, axis, lambda matrix: np.amin(matrix, axis=axis))
 
 
 @timed.call()
@@ -328,21 +340,27 @@ def nnz_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
 
 
 @timed.call()
-def max_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
+def sum_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
     '''
-    Compute the maximal element per row (``axis`` = 1) or column (``axis`` = 0) of some ``matrix``.
+    Compute the total of the values per row (``axis`` = 1) or column (``axis`` = 0) of some
+    ``matrix``.
+    '''
+    return _reduce_matrix(matrix, axis, lambda matrix: matrix.sum(axis=axis))
+
+
+@timed.call()
+def sum_squared_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
+    '''
+    Compute the total of the squared values per row (``axis`` = 1) or column (``axis`` = 0) of some
+    ``matrix``.
 
     .. todo::
 
-        The built-in ``max`` function for sparse matrices is slow, because it has to consider
-        the possibility of duplicate indices
-        The parallel
-        :py:func:`max_matrix` helps, but perhaps a different implementation of the serial built-in
-        function is needed?
+        This implementation allocates and frees a complete copy of the matrix (to hold the squared
+        values). An implementation that directly squares-and-adds the elements would be more
+        efficient.
     '''
-    if sparse.issparse(matrix):
-        return _reduce_matrix(matrix, axis, lambda matrix: matrix.max(axis=axis))
-    return _reduce_matrix(matrix, axis, lambda matrix: np.amax(matrix, axis=axis))
+    return _reduce_matrix(matrix, axis, lambda matrix: np.square(matrix).sum(axis=axis))
 
 
 def _reduce_matrix(

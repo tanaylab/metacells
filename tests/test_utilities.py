@@ -3,6 +3,7 @@ Test the utility functions.
 '''
 
 import numpy as np  # type: ignore
+from anndata import AnnData  # type: ignore
 from scipy import sparse  # type: ignore
 from scipy import stats  # type: ignore
 
@@ -253,3 +254,105 @@ def test_freeze_sparse():
     assert not ut.frozen(matrix)
     matrix.data[0] = -3
     assert matrix[row, column] == -3
+
+
+def test_sum():
+    matrix = np.random.rand(100, 200)
+    adata = AnnData(matrix)
+    ut.set_x_layer(adata, 'test')
+
+    metacells_sum_per_row = ut.get_sum_per_obs(adata)
+    numpy_sum_per_row = matrix.sum(axis=1)
+    assert np.allclose(metacells_sum_per_row, numpy_sum_per_row)
+
+    metacells_sum_per_column = ut.get_sum_per_var(adata)
+    numpy_sum_per_column = matrix.sum(axis=0)
+    assert np.allclose(metacells_sum_per_column, numpy_sum_per_column)
+
+
+def test_mean():
+    matrix = np.random.rand(100, 200)
+    adata = AnnData(matrix)
+    ut.set_x_layer(adata, 'test')
+
+    metacells_mean_per_row = ut.get_mean_per_obs(adata)
+    numpy_mean_per_row = matrix.mean(axis=1)
+    assert np.allclose(metacells_mean_per_row, numpy_mean_per_row)
+
+    metacells_mean_per_column = ut.get_mean_per_var(adata)
+    numpy_mean_per_column = matrix.mean(axis=0)
+    assert np.allclose(metacells_mean_per_column, numpy_mean_per_column)
+
+
+def test_sum_squared():
+    matrix = np.random.rand(100, 200)
+    squared = np.square(matrix)
+    adata = AnnData(matrix)
+    ut.set_x_layer(adata, 'test')
+
+    metacells_sum_squared_per_row = ut.get_sum_squared_per_obs(adata)
+    numpy_sum_squared_per_row = squared.sum(axis=1)
+    assert np.allclose(metacells_sum_squared_per_row,
+                       numpy_sum_squared_per_row)
+
+    metacells_sum_squared_per_column = ut.get_sum_squared_per_var(adata)
+    numpy_sum_squared_per_column = squared.sum(axis=0)
+    assert np.allclose(metacells_sum_squared_per_column,
+                       numpy_sum_squared_per_column)
+
+
+def test_variance():
+    matrix = np.random.rand(100, 200)
+    adata = AnnData(matrix)
+    ut.set_x_layer(adata, 'test')
+
+    metacells_variance_per_row = ut.get_variance_per_obs(adata)
+    numpy_variance_per_row = matrix.var(axis=1)
+    assert np.allclose(metacells_variance_per_row, numpy_variance_per_row)
+
+    metacells_variance_per_column = ut.get_variance_per_var(adata)
+    numpy_variance_per_column = matrix.var(axis=0)
+    assert np.allclose(metacells_variance_per_column,
+                       numpy_variance_per_column)
+
+
+def test_max():
+    matrix = np.random.rand(100, 200)
+    adata = AnnData(matrix)
+    ut.set_x_layer(adata, 'test')
+
+    metacells_max_per_row = ut.get_max_per_obs(adata)
+    numpy_max_per_row = np.amax(matrix, axis=1)
+    assert np.allclose(metacells_max_per_row, numpy_max_per_row)
+
+    metacells_max_per_column = ut.get_max_per_var(adata)
+    numpy_max_per_column = np.amax(matrix, axis=0)
+    assert np.allclose(metacells_max_per_column, numpy_max_per_column)
+
+
+def test_min():
+    matrix = np.random.rand(100, 200)
+    adata = AnnData(matrix)
+    ut.set_x_layer(adata, 'test')
+
+    metacells_min_per_row = ut.get_min_per_obs(adata)
+    numpy_min_per_row = np.amin(matrix, axis=1)
+    assert np.allclose(metacells_min_per_row, numpy_min_per_row)
+
+    metacells_min_per_column = ut.get_min_per_var(adata)
+    numpy_min_per_column = np.amin(matrix, axis=0)
+    assert np.allclose(metacells_min_per_column, numpy_min_per_column)
+
+
+def test_nnz():
+    matrix = sparse.rand(100, 200, density=0.1, format='csr')
+    adata = AnnData(matrix)
+    ut.set_x_layer(adata, 'test')
+
+    metacells_nnz_per_row = ut.get_nnz_per_obs(adata)
+    scipy_nnz_per_row = matrix.getnnz(axis=1)
+    assert np.allclose(metacells_nnz_per_row, scipy_nnz_per_row)
+
+    metacells_nnz_per_column = ut.get_nnz_per_var(adata)
+    scipy_nnz_per_column = matrix.getnnz(axis=0)
+    assert np.allclose(metacells_nnz_per_column, scipy_nnz_per_column)

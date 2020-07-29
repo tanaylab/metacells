@@ -29,8 +29,8 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     minimal_size_of_modules: int = 4,
     minimal_correlation_of_modules: float = 0.1,
     minimal_umis_of_module_of_cells: int = 6,
-    intermediate: bool = False,
-    inplace: bool = False,
+    inplace: bool = True,
+    intermediate: bool = True,
 ) -> Optional[Tuple[pd.DataFrame, pd.DataFrame, np.ndarray]]:
     '''
     Detect rare genes modules.
@@ -56,11 +56,13 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     ``intermediate`` then stored in ``adata``:
 
     Observation (Cell) Annotations
-        ``total_UMIs``
+        ``sum_UMIs``
             The total number of UMIs in each cell.
 
     Variable (Gene) Annotations
-        ``total_UMIs``
+        ``max_UMIs``
+            The maximal number of UMIs each gene has in any of the cells.
+        ``nnz_UMIs``
             The number of cells for which each gene has non-zero value.
 
     **Returns**
@@ -80,8 +82,8 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
             An array of gene modules, where every entry is the array of the names of the genes of
             the module.
 
-    If ``inplace`` (default: {inplace}), these are written to ``adata``. Otherwise they are returned
-    as two data frames and an array.
+    If ``inplace`` (default: {inplace}), these are written to ``adata`` and the function returns
+    ``None``. Otherwise they are returned as tuple containing two data frames and an array.
 
     **Computation Parameters**
 
@@ -121,14 +123,11 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     list_of_names_of_genes_of_modules: List[np.ndarray] = []
 
     total_umis_of_cells = \
-        ut.get_sum_per_obs(adata, umis_layer,
-                           inplace=intermediate, intermediate=True)
-    nnz_cells_of_genes = \
-        ut.get_nnz_per_var(adata, umis_layer,
-                           inplace=intermediate, intermediate=True)
+        ut.get_sum_per_obs(adata, umis_layer, inplace=intermediate)
     max_umis_of_genes = \
-        ut.get_max_per_var(adata, umis_layer,
-                           inplace=intermediate, intermediate=True)
+        ut.get_max_per_var(adata, umis_layer, inplace=intermediate)
+    nnz_cells_of_genes = \
+        ut.get_nnz_per_var(adata, umis_layer, inplace=intermediate)
 
     def results() -> Optional[Tuple[pd.DataFrame, pd.DataFrame, np.ndarray]]:
         array_of_names_of_genes_of_modules = \

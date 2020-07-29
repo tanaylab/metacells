@@ -27,29 +27,46 @@ import metacells.utilities.timing as timed
 __all__ = [
     'slice',
     'slicing_data_layer',
+    'slicing_derived_data_layer',
+    'slicing_uns_annotation',
     'slicing_obs_annotation',
     'slicing_var_annotation',
-    'slicing_uns_annotation',
-
-    'annotate_as_base',
 
     'set_x_layer',
+    'annotate_as_base',
 
     'get_data_layer',
     'del_data_layer',
+
     'get_log_data',
-
-    'get_annotation_of_obs',
-    'get_sum_per_obs',
-    'get_nnz_per_obs',
-    'get_max_per_obs',
-
-    'get_annotation_of_var',
-    'get_sum_per_var',
-    'get_nnz_per_var',
-    'get_max_per_var',
+    'get_data_fraction_of_var_per_obs',
+    'get_data_fraction_of_obs_per_var',
 
     'get_annotation_of_data',
+
+    'get_annotation_per_obs',
+    'get_annotation_per_var',
+
+    'get_sum_per_obs',
+    'get_sum_per_var',
+
+    'get_mean_per_obs',
+    'get_mean_per_var',
+
+    'get_sum_squared_per_obs',
+    'get_sum_squared_per_var',
+
+    'get_variance_per_obs',
+    'get_variance_per_var',
+
+    'get_max_per_obs',
+    'get_max_per_var',
+
+    'get_min_per_obs',
+    'get_min_per_var',
+
+    'get_nnz_per_obs',
+    'get_nnz_per_var',
 ]
 
 
@@ -62,127 +79,7 @@ SAFE_SLICING_VAR_ANNOTATIONS: Dict[str, Tuple[bool, bool]] = {}
 SAFE_SLICING_UNS_ANNOTATIONS: Dict[str, Tuple[bool, bool]] = {}
 SAFE_SLICING_DATA_LAYERS: Dict[str, Tuple[bool, bool]] = {}
 
-
-def slicing_data_layer(
-    name: str,
-    *,
-    preserve_when_slicing_obs: bool = False,
-    preserve_when_slicing_var: bool = False,
-) -> None:
-    '''
-    Specify whether the named data layer should be preserved when slicing either the observations
-    (cells) or variables (genes).
-
-    When the data is sliced, a data layer may become invalidated and should not be preserved. For
-    example, the ``sum_UMIs`` of genes is invalidated when specifying a subset of the cells.
-    '''
-    with LOCK.gen_wlock():
-        SAFE_SLICING_DATA_LAYERS[name] = \
-            (preserve_when_slicing_obs, preserve_when_slicing_var)
-
-
-def _slicing_known_data_layers() -> None:
-    slicing_data_layer('UMIs',
-                       preserve_when_slicing_obs=True,
-                       preserve_when_slicing_var=True)
-    slicing_data_layer('log_UMIs',
-                       preserve_when_slicing_obs=True,
-                       preserve_when_slicing_var=True)
-    slicing_data_layer('downsampled_UMIs',
-                       preserve_when_slicing_obs=True,
-                       preserve_when_slicing_var=False)
-
-
-def slicing_obs_annotation(
-    name: str,
-    *,
-    preserve_when_slicing_obs: bool = False,
-    preserve_when_slicing_var: bool = False,
-) -> None:
-    '''
-    Specify whether the named per-observation (cell) annotation should be preserved when slicing
-    either the observations (cells) or variables (genes).
-    '''
-    SAFE_SLICING_OBS_ANNOTATIONS[name] = \
-        (preserve_when_slicing_obs, preserve_when_slicing_var)
-
-
-def _slicing_known_obs_annotations() -> None:
-    slicing_obs_annotation('base_index',
-                           preserve_when_slicing_obs=True,
-                           preserve_when_slicing_var=True)
-    slicing_obs_annotation('sum_UMIs',
-                           preserve_when_slicing_obs=True,
-                           preserve_when_slicing_var=False)
-    slicing_obs_annotation('nnz_UMIs',
-                           preserve_when_slicing_obs=True,
-                           preserve_when_slicing_var=False)
-    slicing_obs_annotation('max_UMIs',
-                           preserve_when_slicing_obs=True,
-                           preserve_when_slicing_var=False)
-
-
-def slicing_var_annotation(
-    name: str,
-    *,
-    preserve_when_slicing_obs: bool = False,
-    preserve_when_slicing_var: bool = False,
-) -> None:
-    '''
-    Specify whether the named per-variable (gene) annotation should be preserved when slicing
-    either the observations (cells) or variables (genes).
-    '''
-    SAFE_SLICING_VAR_ANNOTATIONS[name] = \
-        (preserve_when_slicing_obs, preserve_when_slicing_var)
-
-
-def _slicing_known_var_annotations() -> None:
-    slicing_var_annotation('gene_ids',
-                           preserve_when_slicing_obs=True,
-                           preserve_when_slicing_var=True)
-    slicing_var_annotation('base_index',
-                           preserve_when_slicing_obs=True,
-                           preserve_when_slicing_var=True)
-    slicing_var_annotation('sum_UMIs',
-                           preserve_when_slicing_obs=False,
-                           preserve_when_slicing_var=True)
-    slicing_obs_annotation('nnz_UMIs',
-                           preserve_when_slicing_obs=False,
-                           preserve_when_slicing_var=True)
-    slicing_obs_annotation('max_UMIs',
-                           preserve_when_slicing_obs=False,
-                           preserve_when_slicing_var=True)
-
-
-def slicing_uns_annotation(
-    name: str,
-    *,
-    preserve_when_slicing_obs: bool = False,
-    preserve_when_slicing_var: bool = False,
-) -> None:
-    '''
-    Specify whether the named unstructured annotation should be preserved when slicing either the
-    observations (cells) or variables (genes).
-    '''
-    with LOCK.gen_wlock():
-        SAFE_SLICING_UNS_ANNOTATIONS[name] = \
-            (preserve_when_slicing_obs, preserve_when_slicing_var)
-
-
-def _slicing_known_uns_annotations() -> None:
-    slicing_uns_annotation('x_layer',
-                           preserve_when_slicing_obs=True,
-                           preserve_when_slicing_var=True)
-
-
-def _slicing_known_annotations() -> None:
-    _slicing_known_data_layers()
-    _slicing_known_obs_annotations()
-    _slicing_known_var_annotations()
-    _slicing_known_uns_annotations()
-
-
-_slicing_known_annotations()
+DATA_TYPES = (np.ndarray, sparse.spmatrix, pd.Series, pd.DataFrame)
 
 
 @timed.call()
@@ -398,16 +295,12 @@ def _filter_annotations(  # pylint: disable=too-many-locals
 
         if preserve:
             data = new_annotations[name]
-            if kind != 'uns' \
-                    or isinstance(data, (np.ndarray, sparse.spmatrix,
-                                         pd.Series, pd.DataFrame)):
+            if kind != 'uns' or isinstance(data, DATA_TYPES):
                 utc.freeze(data)
             continue
 
         data = new_annotations[name]
-        if kind != 'uns' \
-                or isinstance(data, (np.ndarray, sparse.spmatrix,
-                                     pd.Series, pd.DataFrame)):
+        if kind != 'uns' or isinstance(data, DATA_TYPES):
             utc.freeze(data)
 
         if invalidated_annotations_prefix is not None:
@@ -458,14 +351,177 @@ def _clone_slicing_annotation(
         slicing_annotations[new_name] = slicing_annotations[old_name]
 
 
-def annotate_as_base(adata: AnnData, *, name: str = 'base_index') -> None:
+def slicing_data_layer(
+    name: str,
+    *,
+    preserve_when_slicing_obs: bool = False,
+    preserve_when_slicing_var: bool = False,
+) -> None:
     '''
-    Create ``name`` (by default, ``base_index``) per-observation (cells) and per-variable (genes)
-    annotations, which will be preserved when creating a :py:func:`slice` of the data to easily
-    refer back to the original full data.
+    Specify whether the named data layer should be preserved when slicing either the observations
+    (cells) or variables (genes).
+
+    When the data is sliced, a data layer may become invalidated and should not be preserved.
     '''
-    adata.obs[name] = np.arange(adata.n_obs)
-    adata.var[name] = np.arange(adata.n_vars)
+    with LOCK.gen_wlock():
+        SAFE_SLICING_DATA_LAYERS[name] = \
+            (preserve_when_slicing_obs, preserve_when_slicing_var)
+
+
+def _slicing_known_data_layers() -> None:
+    return
+
+
+def slicing_uns_annotation(
+    name: str,
+    *,
+    preserve_when_slicing_obs: bool = False,
+    preserve_when_slicing_var: bool = False,
+) -> None:
+    '''
+    Specify whether the named unstructured annotation should be preserved when slicing either the
+    observations (cells) or variables (genes).
+    '''
+    with LOCK.gen_wlock():
+        SAFE_SLICING_UNS_ANNOTATIONS[name] = \
+            (preserve_when_slicing_obs, preserve_when_slicing_var)
+
+
+def _slicing_known_uns_annotations() -> None:
+    slicing_uns_annotation('x_layer',
+                           preserve_when_slicing_obs=True,
+                           preserve_when_slicing_var=True)
+
+
+def slicing_obs_annotation(
+    name: str,
+    *,
+    preserve_when_slicing_obs: bool = False,
+    preserve_when_slicing_var: bool = False,
+) -> None:
+    '''
+    Specify whether the named per-observation (cell) annotation should be preserved when slicing
+    either the observations (cells) or variables (genes).
+    '''
+    SAFE_SLICING_OBS_ANNOTATIONS[name] = \
+        (preserve_when_slicing_obs, preserve_when_slicing_var)
+
+
+def _slicing_known_obs_annotations() -> None:
+    return
+
+
+def slicing_var_annotation(
+    name: str,
+    *,
+    preserve_when_slicing_obs: bool = False,
+    preserve_when_slicing_var: bool = False,
+) -> None:
+    '''
+    Specify whether the named per-variable (gene) annotation should be preserved when slicing
+    either the observations (cells) or variables (genes).
+    '''
+    SAFE_SLICING_VAR_ANNOTATIONS[name] = \
+        (preserve_when_slicing_obs, preserve_when_slicing_var)
+
+
+def _slicing_known_var_annotations() -> None:
+    slicing_var_annotation('gene_ids',
+                           preserve_when_slicing_obs=True,
+                           preserve_when_slicing_var=True)
+
+
+def _slicing_known_annotations() -> None:
+    _slicing_known_data_layers()
+    _slicing_known_obs_annotations()
+    _slicing_known_var_annotations()
+    _slicing_known_uns_annotations()
+
+
+_slicing_known_annotations()
+
+
+def slicing_derived_data_layer(
+    *,
+    of_layer: str,
+    to_layer: str,
+    preserve_when_slicing_obs: bool = False,
+    preserve_when_slicing_var: bool = False,
+) -> None:
+    '''
+    Specify how to slice some ``to_layer`` which is derived from ``of_layer``.
+
+    If, when slicing, ``of_layer`` is not preserved, then the ``to_layer`` would not be either.
+    Otherwise, ``to_layer`` will be preserved based on the flags given here.
+    '''
+    with LOCK.gen_rlock():
+        preserve_of_layer_when_slicing_obs, \
+            preserve_of_layer_when_slicing_var = SAFE_SLICING_DATA_LAYERS[of_layer]
+
+    preserve_when_slicing_obs = \
+        preserve_when_slicing_obs and preserve_of_layer_when_slicing_obs
+    preserve_when_slicing_var = \
+        preserve_when_slicing_var and preserve_of_layer_when_slicing_var
+
+    slicing_data_layer(to_layer,
+                       preserve_when_slicing_obs=preserve_when_slicing_obs,
+                       preserve_when_slicing_var=preserve_when_slicing_var)
+
+
+def slicing_derived_obs_annotation(
+    *,
+    layer: str,
+    name: str,
+    preserve_when_slicing_obs: bool = True,
+    preserve_when_slicing_var: bool = False,
+) -> None:
+    '''
+    Specify how to slice some per-observation (cell) annotation which
+    is derived from some data ``layer``.
+
+    If, when slicing, ``layer`` is not preserved, then the ``name``d annotation would not be either.
+    Otherwise, the annotation will be preserved based on the flags given here.
+    '''
+    with LOCK.gen_rlock():
+        preserve_of_layer_when_slicing_obs, \
+            preserve_of_layer_when_slicing_var = SAFE_SLICING_DATA_LAYERS[layer]
+
+    preserve_when_slicing_obs = \
+        preserve_when_slicing_obs and preserve_of_layer_when_slicing_obs
+    preserve_when_slicing_var = \
+        preserve_when_slicing_var and preserve_of_layer_when_slicing_var
+
+    slicing_obs_annotation(name,
+                           preserve_when_slicing_obs=preserve_when_slicing_obs,
+                           preserve_when_slicing_var=preserve_when_slicing_var)
+
+
+def slicing_derived_var_annotation(
+    *,
+    layer: str,
+    name: str,
+    preserve_when_slicing_obs: bool = False,
+    preserve_when_slicing_var: bool = True,
+) -> None:
+    '''
+    Specify how to slice some per-variable (cell) annotation which
+    is derived from some data ``layer``.
+
+    If, when slicing, ``layer`` is not preserved, then the ``name``d annotation would not be either.
+    Otherwise, the annotation will be preserved based on the flags given here.
+    '''
+    with LOCK.gen_rlock():
+        preserve_of_layer_when_slicing_obs, \
+            preserve_of_layer_when_slicing_var = SAFE_SLICING_DATA_LAYERS[layer]
+
+    preserve_when_slicing_obs = \
+        preserve_when_slicing_obs and preserve_of_layer_when_slicing_obs
+    preserve_when_slicing_var = \
+        preserve_when_slicing_var and preserve_of_layer_when_slicing_var
+
+    slicing_var_annotation(name,
+                           preserve_when_slicing_obs=preserve_when_slicing_obs,
+                           preserve_when_slicing_var=preserve_when_slicing_var)
 
 
 def set_x_layer(adata: AnnData, name: str) -> None:
@@ -476,6 +532,10 @@ def set_x_layer(adata: AnnData, name: str) -> None:
     This should be called after populating the ``X`` data for the first time (e.g., by importing the
     data). It lets rest of the code to know what kind of data it holds. All the other layer
     utilities ``assert`` this was done.
+
+    .. note::
+
+        This assumes it is safe to arbitrarily slice the layer.
 
     .. note::
 
@@ -495,6 +555,27 @@ def set_x_layer(adata: AnnData, name: str) -> None:
     adata.uns['x_layer'] = name
     adata.layers[name] = X
 
+    slicing_data_layer(name,
+                       preserve_when_slicing_obs=True,
+                       preserve_when_slicing_var=True)
+
+
+def annotate_as_base(adata: AnnData, *, name: str = 'base_index') -> None:
+    '''
+    Create ``name`` (by default, ``base_index``) per-observation (cells) and per-variable (genes)
+    annotations, which will be preserved when creating any :py:func:`slice` of the data to easily
+    refer back to the original full data.
+    '''
+    adata.obs[name] = np.arange(adata.n_obs)
+    slicing_obs_annotation(name,
+                           preserve_when_slicing_obs=True,
+                           preserve_when_slicing_var=True)
+
+    adata.var[name] = np.arange(adata.n_vars)
+    slicing_var_annotation(name,
+                           preserve_when_slicing_obs=True,
+                           preserve_when_slicing_var=True)
+
 
 @timed.call()
 def get_data_layer(
@@ -502,15 +583,15 @@ def get_data_layer(
     name: str,
     compute: Optional[Callable[[], utc.Vector]] = None,
     *,
-    inplace: bool = False,
+    inplace: bool = True,
     per: Optional[str] = None,
 ) -> utc.Matrix:
     '''
-    Lookup a per-obsevration-per-variable matrix in ``adata`` by its ``name``.
+    Lookup a per-observation-per-variable matrix in ``adata`` by its ``name``.
 
     If the layer does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
 
-    If ``inplace``, store the annotation in ``adata``.
+    If ``inplace``, store the annotation in ``adata`` for future reuse.
 
     If ``per`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
     data in a layout optimized for per-observation (row-major / csr) or per-variable (column-major
@@ -612,6 +693,7 @@ def del_data_layer(
             del adata.layers[prefixed_name]
 
 
+@timed.call()
 @utd.expand_doc()
 def get_log_data(
     adata: AnnData,
@@ -620,7 +702,7 @@ def get_log_data(
     to_layer: Optional[str] = None,
     base: Optional[float] = None,
     normalization: float = 1,
-    inplace: bool = False,
+    inplace: bool = True,
 ) -> utc.Matrix:
     '''
     Return a matrix with the log of some data layer.
@@ -628,8 +710,8 @@ def get_log_data(
     If ``of_layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
     used.
 
-    If ``inplace``, the data will be stored in ``to_layer`` (by default, this is the name of the
-    source layer with a ``log_`` prefix).
+    If ``inplace``, the data will be stored in ``to_layer`` for future reuse (by default, this is
+    ``log_of_<of_layer>``).
 
     The natural logarithm is used by default. Otherwise, the ``base`` is used.
 
@@ -645,32 +727,179 @@ def get_log_data(
         assert of_layer is not None
 
     if to_layer is None:
-        to_layer = 'log_' + of_layer
+        to_layer = 'log_of_' + of_layer
 
-    @timed.call()
-    def compute_log_data() -> np.ndarray:
+    if inplace:
+        slicing_derived_data_layer(of_layer=of_layer, to_layer=to_layer,
+                                   preserve_when_slicing_obs=True,
+                                   preserve_when_slicing_var=True)
+
+    @timed.call('.compute')
+    def compute() -> utc.Matrix:
         assert of_layer is not None
-        matrix = \
-            get_data_layer(adata, of_layer, inplace=inplace)
+        matrix = get_data_layer(adata, of_layer)
         return utc.log_matrix(matrix, base=base, normalization=normalization)
 
-    return get_data_layer(adata, to_layer, compute_log_data, inplace=inplace)
+    return get_data_layer(adata, to_layer, compute, inplace=inplace)
 
 
-def get_annotation_of_obs(
+@timed.call()
+def get_data_fraction_of_var_per_obs(
+    adata: AnnData,
+    *,
+    of_layer: Optional[str] = None,
+    to_layer: Optional[str] = None,
+    inplace: bool = True,
+    intermediate: bool = True,
+) -> utc.Matrix:
+    '''
+    Return a matrix containing, in each entry, the fraction the original data (UMIs) for this
+    variable (gene) is in this observation (cell) out of the total for all variables (genes).
+
+    .. note::
+
+        This is probably the version you want: here, the sum of fraction of the genes in a cell is
+        1. See :py:func:`get_data_fraction_of_obs_per_var` for the other way around.
+
+    If ``of_layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    If ``inplace``, the data will be stored in ``to_layer`` for future reuse (by default, this is
+    the name of the source layer with a ``fraction_in_obs_of_`` prefix).
+
+    If ``intermediate``, also stores the ``sum_of_<of_layer>`` per-observation (cell) annotation for
+    future reuse.
+
+    .. note::
+
+        This assumes all the data values are non-negative.
+    '''
+    if of_layer is None:
+        of_layer = get_annotation_of_data(adata, 'x_layer')
+        assert of_layer is not None
+
+    if to_layer is None:
+        to_layer = 'fraction_in_obs_of_' + of_layer
+
+    if inplace:
+        slicing_derived_data_layer(of_layer=of_layer, to_layer=to_layer,
+                                   preserve_when_slicing_obs=True)
+
+    @timed.call('.compute')
+    def compute() -> utc.Matrix:
+        assert of_layer is not None
+        matrix = get_data_layer(adata, of_layer)
+        total_per_obs = get_sum_per_obs(adata, of_layer, inplace=intermediate)
+        return matrix / total_per_obs[:, None]
+
+    return get_data_layer(adata, to_layer, compute, inplace=inplace)
+
+
+@timed.call()
+def get_data_fraction_of_obs_per_var(
+    adata: AnnData,
+    *,
+    of_layer: Optional[str] = None,
+    to_layer: Optional[str] = None,
+    inplace: bool = True,
+    intermediate: bool = True,
+) -> utc.Matrix:
+    '''
+    Return a matrix containing, in each entry, the fraction the original data (UMIs) for this
+    variable (gene) is in this observation (cell) out of the total for all observations (cells).
+
+    .. note::
+
+        This is probably not the version you want: here, the sum of fractions of the cells in each
+        gene is 1. See :py:func:`get_data_fraction_of_var_per_obs` for the other way around.
+
+    If ``of_layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    If ``inplace``, the data will be stored in ``to_layer`` (by default, this is the name of the
+    source layer with a ``fraction_in_var_of_`` prefix).
+
+    If ``intermediate``, also stores the ``sum_of_<of_layer>`` per-variable (gene) annotation for
+    future reuse.
+
+    .. note::
+
+        This assumes all the data values are non-negative.
+    '''
+    if of_layer is None:
+        of_layer = get_annotation_of_data(adata, 'x_layer')
+        assert of_layer is not None
+
+    if to_layer is None:
+        to_layer = 'fraction_of_obs_in_var_of_' + of_layer
+
+    if inplace:
+        slicing_derived_data_layer(of_layer=of_layer, to_layer=to_layer,
+                                   preserve_when_slicing_var=True)
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        assert of_layer is not None
+        matrix = get_data_layer(adata, of_layer)
+        total_per_var = get_sum_per_var(adata, of_layer, inplace=intermediate)
+        return matrix / total_per_var[None, :]
+
+    return get_data_layer(adata, to_layer, compute, inplace=inplace)
+
+
+def get_annotation_of_data(
     adata: AnnData,
     name: str,
     compute: Optional[Callable[[], utc.Vector]] = None,
     *,
-    inplace: bool = False,
-) -> np.ndarray:
+    inplace: bool = True,
+) -> Any:
+    '''
+    Lookup unstructured (data) annotation in ``adata``.
+
+    If the annotation does not exist, ``compute`` it. If no ``compute`` function was given,
+    ``raise``.
+
+    If ``inplace``, store the annotation in ``adata``.
+
+    .. note::
+
+        The caller is responsible to specify the slicing behavior of the annotation.
+    '''
+    data = adata.uns.get(name)
+    if data is not None:
+        return data
+
+    if compute is None:
+        raise RuntimeError('unavailable unstructured annotation: ' + name)
+
+    data = compute()
+    assert data is not None
+
+    if inplace:
+        adata.uns[name] = data
+
+    return data
+
+
+def get_annotation_per_obs(
+    adata: AnnData,
+    name: str,
+    compute: Optional[Callable[[], utc.Vector]] = None,
+    *,
+    inplace: bool = True,
+) -> utc.Vector:
     '''
     Lookup per-observation (cell) annotation in ``adata``.
 
     If the annotation does not exist, ``compute`` it. If no ``compute`` function was given,
     ``raise``.
 
-    If ``inplace``, store the annotation in ``adata``.
+    If ``inplace``, store the annotation in ``adata`` for future reuse.
+
+    .. note::
+
+        The caller is responsible to specify the slicing behavior of the annotation.
     '''
     data = adata.obs.get(name)
     if data is not None:
@@ -690,92 +919,24 @@ def get_annotation_of_obs(
     return data
 
 
-def get_sum_per_obs(
-    adata: AnnData,
-    layer: str,
-    *,
-    inplace: bool = False,
-    intermediate: bool = False,
-) -> np.ndarray:
-    '''
-    Return the sum of the values per observation (cell) of some ``layer``.
-
-    Use the existing ``sum_<layer>`` annotation if it exists.
-
-    If ``inplace``, store the annotation in ``adata``.
-
-    If ``intermediate``, store the layout-specific data used for the computation.
-    '''
-    @timed.call()
-    def compute_sum_per_obs() -> np.ndarray:
-        matrix = get_data_layer(adata, layer, per='obs', inplace=intermediate)
-        return utc.sum_matrix(matrix, axis=1)
-
-    return get_annotation_of_obs(adata, 'sum_' + layer, compute_sum_per_obs, inplace=inplace)
-
-
-def get_nnz_per_obs(
-    adata: AnnData,
-    layer: str,
-    *,
-    inplace: bool = False,
-    intermediate: bool = False
-) -> np.ndarray:
-    '''
-    Return the number of non-zero values per observation (cell) of some ``layer``.
-
-    Use the existing ``nnz_<layer>`` annotation if it exists.
-
-    If ``inplace``, store the annotation in ``adata``.
-
-    If ``intermediate``, store the layout-specific data used for the computation.
-    '''
-    @timed.call()
-    def compute_nnz_per_obs() -> np.ndarray:
-        matrix = get_data_layer(adata, layer, per='obs', inplace=intermediate)
-        return utc.nnz_matrix(matrix, axis=1)
-
-    return get_annotation_of_obs(adata, 'nnz_' + layer, compute_nnz_per_obs, inplace=inplace)
-
-
-def get_max_per_obs(
-    adata: AnnData,
-    layer: str,
-    *,
-    inplace: bool = False,
-    intermediate: bool = False
-) -> np.ndarray:
-    '''
-    Return the maximal value per observation (cell) of some ``layer``.
-
-    Use the existing ``max_<layer>`` annotation if it exists.
-
-    If ``inplace``, store the annotation in ``adata``.
-
-    If ``intermediate``, store the layout-specific data used for the computation.
-    '''
-    @timed.call()
-    def compute_max_per_obs() -> np.ndarray:
-        matrix = get_data_layer(adata, layer, per='obs', inplace=intermediate)
-        return utc.max_matrix(matrix, axis=1)
-
-    return get_annotation_of_obs(adata, 'max_' + layer, compute_max_per_obs, inplace=inplace)
-
-
-def get_annotation_of_var(
+def get_annotation_per_var(
     adata: AnnData,
     name: str,
     compute: Optional[Callable[[], utc.Vector]] = None,
     *,
-    inplace: bool = False
-) -> np.ndarray:
+    inplace: bool = True,
+) -> utc.Vector:
     '''
     Lookup per-variable (gene) annotation in ``adata``.
 
     If the annotation does not exist, ``compute`` it. If no ``compute`` function was given,
     ``raise``.
 
-    If ``inplace``, store the annotation in ``adata``.
+    If ``inplace``, store the annotation in ``adata`` for future reuse.
+
+    .. note::
+
+        The caller is responsible to specify the slicing behavior of the annotation.
     '''
     data = adata.var.get(name)
     if data is not None:
@@ -795,103 +956,457 @@ def get_annotation_of_var(
     return data
 
 
-def get_sum_per_var(
+@timed.call()
+def get_sum_per_obs(
     adata: AnnData,
-    layer: str,
+    layer: Optional[str] = None,
     *,
-    inplace: bool = False,
-    intermediate: bool = False
-) -> np.ndarray:
+    inplace: bool = True,
+) -> utc.Vector:
     '''
-    Return the sum of the values per variable (gene) of some ``layer``.
+    Return the sum of the values per observation (cell) of some layer.
 
-    Use the existing ``sum_<layer>`` annotation if it exists.
+    If ``layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
 
-    If ``inplace``, store the annotation in ``adata``.
+    Use the ``sum_of_<layer>`` per-observation (cell) annotation if it exists. Otherwise, compute
+    it, and if ``inplace`` store it for future reuse.
     '''
-    @timed.call()
-    def compute_sum_per_var() -> np.ndarray:
-        matrix = get_data_layer(adata, layer, per='var', inplace=intermediate)
-        return utc.sum_matrix(matrix, axis=0)
+    if layer is None:
+        layer = get_annotation_of_data(adata, 'x_layer')
+        assert layer is not None
 
-    return get_annotation_of_var(adata, 'sum_' + layer, compute_sum_per_var, inplace=inplace)
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = get_data_layer(adata, layer, per='obs')
+        return utc.sum_matrix(matrix, axis=1)
 
+    name = 'sum_of_' + layer
+    if inplace:
+        slicing_derived_obs_annotation(layer=layer, name=name)
 
-def get_nnz_per_var(
-    adata: AnnData,
-    layer: str,
-    *,
-    inplace: bool = False,
-    intermediate: bool = False
-) -> np.ndarray:
-    '''
-    Return the number of non-zero values per variable (gene) of some ``layer``.
-
-    Use the existing ``nnz_<layer>`` annotation if it exists.
-
-    If ``inplace``, store the annotation in ``adata``.
-
-    If ``intermediate``, store the layout-specific data used for the computation.
-    '''
-    @timed.call()
-    def compute_nnz_per_var() -> np.ndarray:
-        matrix = get_data_layer(adata, layer, per='var', inplace=intermediate)
-        return utc.nnz_matrix(matrix, axis=0)
-
-    return get_annotation_of_var(adata, 'nnz_' + layer, compute_nnz_per_var, inplace=inplace)
-
-
-def get_max_per_var(
-    adata: AnnData,
-    layer: str,
-    *,
-    inplace: bool = False,
-    intermediate: bool = False
-) -> np.ndarray:
-    '''
-    Return the maximal value per variable (gene) of some ``layer``.
-
-    Use the existing ``max_<layer>`` annotation if it exists.
-
-    If ``inplace``, store the annotation in ``adata``.
-
-    If ``intermediate``, store the layout-specific data used for the computation.
-    '''
-    @timed.call()
-    def compute_max_per_var() -> np.ndarray:
-        matrix = get_data_layer(adata, layer, per='var', inplace=intermediate)
-        return utc.max_matrix(matrix, axis=0)
-
-    return get_annotation_of_var(adata, 'max_' + layer, compute_max_per_var, inplace=inplace)
+    return get_annotation_per_obs(adata, name, compute, inplace=inplace)
 
 
 @timed.call()
-def get_annotation_of_data(
+def get_sum_per_var(
     adata: AnnData,
-    name: str,
-    compute: Optional[Callable[[], utc.Vector]] = None,
+    layer: Optional[str] = None,
     *,
-    inplace: bool = False
-) -> Any:
+    inplace: bool = True,
+) -> utc.Vector:
     '''
-    Lookup unstructured (data) annotation in ``adata``.
+    Return the sum of the values per variable (gene) of some layer.
 
-    If the annotation does not exist, ``compute`` it. If no ``compute`` function was given,
-    ``raise``.
+    If ``layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
 
-    If ``inplace``, store the annotation in ``adata``.
+    Use the ``sum_of_<layer>`` per-variable (gene) annotation if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+
+    If ``inplace``, store the annotation in ``adata`` for future reuse.
     '''
-    data = adata.uns.get(name)
-    if data is not None:
-        return data
+    if layer is None:
+        layer = get_annotation_of_data(adata, 'x_layer')
+        assert layer is not None
 
-    if compute is None:
-        raise RuntimeError('unavailable unstructured annotation: ' + name)
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = get_data_layer(adata, layer, per='var')
+        return utc.sum_matrix(matrix, axis=0)
 
-    data = compute()
-    assert data is not None
-
+    name = 'sum_of_' + layer
     if inplace:
-        adata.uns[name] = data
+        slicing_derived_var_annotation(layer=layer, name=name)
 
-    return data
+    return get_annotation_per_var(adata, name, compute, inplace=inplace)
+
+
+@timed.call()
+def get_mean_per_obs(
+    adata: AnnData,
+    layer: Optional[str] = None,
+    *,
+    inplace: bool = True,
+) -> utc.Vector:
+    '''
+    Return the mean of the values per observation (cell) of some layer.
+
+    If ``layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    Use the ``sum_of_<layer>`` per-observation (cell) annotation if it exists. Otherwise, compute
+    it, and if ``inplace`` store it for future reuse.
+    '''
+    if layer is None:
+        layer = get_annotation_of_data(adata, 'x_layer')
+        assert layer is not None
+
+    sum_per_obs = get_sum_per_obs(adata, layer, inplace=inplace)
+    with timed.step('.compute'):
+        return sum_per_obs / adata.n_vars
+
+
+@timed.call()
+def get_mean_per_var(
+    adata: AnnData,
+    layer: Optional[str] = None,
+    *,
+    inplace: bool = True,
+) -> utc.Vector:
+    '''
+    Return the mean of the values per variable (gene) of some layer.
+
+    If ``layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    Use the ``sum_of_<layer>`` per-variable (gene) annotation if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+    '''
+    if layer is None:
+        layer = get_annotation_of_data(adata, 'x_layer')
+        assert layer is not None
+
+    sum_per_var = get_sum_per_var(adata, layer, inplace=inplace)
+    with timed.step('.compute'):
+        return sum_per_var / adata.n_obs
+
+
+@timed.call()
+def get_sum_squared_per_obs(
+    adata: AnnData,
+    layer: Optional[str] = None,
+    *,
+    inplace: bool = True,
+) -> utc.Vector:
+    '''
+    Return the sum of the squared values per observation (cell) of some layer.
+
+    If ``layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    Use the ``sum_squared_of_<layer>`` per-observation (cell) annotation if it exists. Otherwise,
+    compute it, and if ``inplace`` store it for future reuse.
+    '''
+    if layer is None:
+        layer = get_annotation_of_data(adata, 'x_layer')
+        assert layer is not None
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = get_data_layer(adata, layer, per='obs')
+        return utc.sum_squared_matrix(matrix, axis=1)
+
+    name = 'sum_squared_of_' + layer
+    if inplace:
+        slicing_derived_obs_annotation(layer=layer, name=name)
+
+    return get_annotation_per_obs(adata, name, compute, inplace=inplace)
+
+
+@timed.call()
+def get_sum_squared_per_var(
+    adata: AnnData,
+    layer: Optional[str] = None,
+    *,
+    inplace: bool = True,
+) -> utc.Vector:
+    '''
+    Return the sum of the squared values per variable (gene) of some layer.
+
+    If ``layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    Use the ``sum_squared_of_<layer>`` per-variable (gene) annotation if it exists. Otherwise,
+    compute it, and if ``inplace`` store it for future reuse.
+    '''
+    if layer is None:
+        layer = get_annotation_of_data(adata, 'x_layer')
+        assert layer is not None
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = get_data_layer(adata, layer, per='var')
+        return utc.sum_squared_matrix(matrix, axis=0)
+
+    name = 'sum_squared_of_' + layer
+    if inplace:
+        slicing_derived_var_annotation(layer=layer, name=name)
+
+    return get_annotation_per_var(adata, name, compute, inplace=inplace)
+
+
+@timed.call()
+def get_variance_per_obs(
+    adata: AnnData,
+    layer: Optional[str] = None,
+    *,
+    inplace: bool = True,
+    intermediate: bool = True,
+) -> utc.Vector:
+    '''
+    Return the variance of the values per observation (cell) of some layer.
+
+    If ``layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    Use the ``variance_of_<layer>`` per-observation (cell) annotation if it exists. Otherwise,
+    compute it, and if ``inplace`` store it for future reuse.
+
+    If ``intermediate``, also store the intermediate per-observation annotations ``sum_of_<layer>``
+    and ``sum_squared_of_<layer>`` for future reuse.
+    '''
+    if layer is None:
+        layer = get_annotation_of_data(adata, 'x_layer')
+        assert layer is not None
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        sum_per_obs = get_sum_per_obs(adata, layer, inplace=intermediate)
+        sum_squared_per_obs = \
+            get_sum_squared_per_obs(adata, layer, inplace=intermediate)
+        result = np.square(sum_per_obs)
+        result /= -adata.n_vars
+        result += sum_squared_per_obs
+        result /= adata.n_vars
+        return result
+
+    name = 'variance_of_' + layer
+    if inplace:
+        slicing_derived_obs_annotation(layer=layer, name=name)
+
+    return get_annotation_per_obs(adata, name, compute, inplace=inplace)
+
+
+@timed.call()
+def get_variance_per_var(
+    adata: AnnData,
+    layer: Optional[str] = None,
+    *,
+    inplace: bool = True,
+    intermediate: bool = True,
+) -> utc.Vector:
+    '''
+    Return the variance of the values per varervation (cell) of some layer.
+
+    If ``layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    Use the ``variance_of_<layer>`` per-variable (gene) annotation if it exists. Otherwise, compute
+    it, and if ``inplace`` store it for future reuse.
+
+    If ``intermediate``, also store the intermediate per-variable annotations ``sum_of_<layer>`` and
+    ``sum_squared_of_<layer>`` for future reuse.
+    '''
+    if layer is None:
+        layer = get_annotation_of_data(adata, 'x_layer')
+        assert layer is not None
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        sum_per_var = get_sum_per_var(adata, layer, inplace=intermediate)
+        sum_squared_per_var = \
+            get_sum_squared_per_var(adata, layer, inplace=intermediate)
+        result = np.square(sum_per_var)
+        result /= -adata.n_obs
+        result += sum_squared_per_var
+        result /= adata.n_obs
+        return result
+
+    name = 'variance_of_' + layer
+    if inplace:
+        slicing_derived_var_annotation(layer=layer, name=name)
+
+    return get_annotation_per_var(adata, name, compute, inplace=inplace)
+
+
+@timed.call()
+def get_max_per_obs(
+    adata: AnnData,
+    layer: Optional[str] = None,
+    *,
+    inplace: bool = True,
+) -> utc.Vector:
+    '''
+    Return the maximal value per observation (cell) of some layer.
+
+    If ``layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    Use the ``max_of_<layer>`` per-observation (cell) annotation if it exists. Otherwise, compute
+    it, and if ``inplace`` store it for future reuse.
+    '''
+    if layer is None:
+        layer = get_annotation_of_data(adata, 'x_layer')
+        assert layer is not None
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = get_data_layer(adata, layer, per='obs')
+        return utc.max_matrix(matrix, axis=1)
+
+    name = 'max_of_' + layer
+    if inplace:
+        slicing_derived_obs_annotation(layer=layer, name=name)
+
+    return get_annotation_per_obs(adata, name, compute, inplace=inplace)
+
+
+@timed.call()
+def get_max_per_var(
+    adata: AnnData,
+    layer: Optional[str] = None,
+    *,
+    inplace: bool = True,
+) -> utc.Vector:
+    '''
+    Return the maximal value per variable (gene) of some layer.
+
+    If ``layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    Use the ``max_of_<layer>`` per-variable annotation (gene) if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+    '''
+    if layer is None:
+        layer = get_annotation_of_data(adata, 'x_layer')
+        assert layer is not None
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = get_data_layer(adata, layer, per='var')
+        return utc.max_matrix(matrix, axis=0)
+
+    name = 'max_of_' + layer
+    if inplace:
+        slicing_derived_var_annotation(layer=layer, name=name)
+
+    return get_annotation_per_var(adata, name, compute, inplace=inplace)
+
+
+@timed.call()
+def get_min_per_obs(
+    adata: AnnData,
+    layer: Optional[str] = None,
+    *,
+    inplace: bool = True,
+) -> utc.Vector:
+    '''
+    Return the minimal value per observation (cell) of some layer.
+
+    If ``layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    Use the ``min_of_<layer>`` per-observation (cell) annotation if it exists. Otherwise, compute
+    it, and if ``inplace`` store it for future reuse.
+    '''
+    if layer is None:
+        layer = get_annotation_of_data(adata, 'x_layer')
+        assert layer is not None
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = get_data_layer(adata, layer, per='obs')
+        return utc.min_matrix(matrix, axis=1)
+
+    name = 'min_of_' + layer
+    if inplace:
+        slicing_derived_obs_annotation(layer=layer, name=name)
+
+    return get_annotation_per_obs(adata, name, compute, inplace=inplace)
+
+
+@timed.call()
+def get_min_per_var(
+    adata: AnnData,
+    layer: Optional[str] = None,
+    *,
+    inplace: bool = True,
+) -> utc.Vector:
+    '''
+    Return the minimal value per variable (gene) of some layer.
+
+    If ``layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    Use the ``min_of_<layer>`` per-variable annotation (gene) if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+    '''
+    if layer is None:
+        layer = get_annotation_of_data(adata, 'x_layer')
+        assert layer is not None
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = get_data_layer(adata, layer, per='var')
+        return utc.min_matrix(matrix, axis=0)
+
+    name = 'min_of_' + layer
+    if inplace:
+        slicing_derived_var_annotation(layer=layer, name=name)
+
+    return get_annotation_per_var(adata, name, compute, inplace=inplace)
+
+
+@timed.call()
+def get_nnz_per_obs(
+    adata: AnnData,
+    layer: Optional[str] = None,
+    *,
+    inplace: bool = True,
+) -> utc.Vector:
+    '''
+    Return the number of non-zero values per observation (cell) of some layer.
+
+    If ``layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    Use the ``nnz_of_<layer>`` per-observation (cell) annotation if it exists. Otherwise, compute
+    it, and if ``inplace`` store it for future reuse.
+    '''
+    if layer is None:
+        layer = get_annotation_of_data(adata, 'x_layer')
+        assert layer is not None
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = get_data_layer(adata, layer, per='obs')
+        return utc.nnz_matrix(matrix, axis=1)
+
+    name = 'nnz_of_' + layer
+    if inplace:
+        slicing_derived_obs_annotation(layer=layer, name=name)
+
+    return get_annotation_per_obs(adata, name, compute, inplace=inplace)
+
+
+@timed.call()
+def get_nnz_per_var(
+    adata: AnnData,
+    layer: Optional[str] = None,
+    *,
+    inplace: bool = True,
+) -> utc.Vector:
+    '''
+    Return the number of non-zero values per variable (gene) of some layer.
+
+    If ``layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    Use the ``nnz_of_<layer>`` per-variable (gene) annotation if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+    '''
+    if layer is None:
+        layer = get_annotation_of_data(adata, 'x_layer')
+        assert layer is not None
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = get_data_layer(adata, layer, per='var')
+        return utc.nnz_matrix(matrix, axis=0)
+
+    name = 'nnz_of_' + layer
+    if inplace:
+        slicing_derived_var_annotation(layer=layer, name=name)
+
+    return get_annotation_per_var(adata, name, compute, inplace=inplace)

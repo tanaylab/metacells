@@ -5,9 +5,12 @@ all: for-commit
 
 for-commit: reformat format isort rst unstaged todo mypy pylint test tox docs
 
-reformat:
+reformat: .clang-formatted
 	autopep8 -i -r metacells tests setup.py
+
+.clang-formatted: .clang-format metacells/extensions.cpp
 	clang-format -i metacells/extensions.cpp
+	@touch .clang-formatted
 
 format:
 	@if grep -n '^[ ].*[(%<>/+-]$$\|[^ =][[]$$\|[^:`]`[^:`][^:`]*`[^`]' `git ls-files | grep '\.py$$'`; then false; fi

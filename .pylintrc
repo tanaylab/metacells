@@ -11,6 +11,7 @@ disable=C0330,
         no-member,
         too-few-public-methods,
         too-many-arguments,
+        too-many-lines,
         wrong-import-order,
 
 [STRING]

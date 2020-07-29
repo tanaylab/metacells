@@ -21,8 +21,10 @@ def test_find_rare_genes_modules(data_path):
         adata = sc.read(data_path)
     mc.ut.canonize(adata.X)
     mc.ut.set_x_layer(adata, 'UMIs')
-    _cells_data, _genes_data, modules_data = \
-        mc.pp.find_rare_genes_modules(adata)
-    actual_modules = [list(module) for module in modules_data]
+    mc.pp.find_rare_genes_modules(adata)
+    actual_modules = [
+        list(module_gene_names) for module_gene_names
+        in mc.ut.get_annotation_of_data(adata, 'rare_gene_modules')
+    ]
     expected_modules = expected['rare_gene_modules']
     assert actual_modules == expected_modules
