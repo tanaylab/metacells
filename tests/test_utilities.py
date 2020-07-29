@@ -356,3 +356,17 @@ def test_nnz():
     metacells_nnz_per_column = ut.get_nnz_per_var(adata)
     scipy_nnz_per_column = matrix.getnnz(axis=0)
     assert np.allclose(metacells_nnz_per_column, scipy_nnz_per_column)
+
+
+def test_sliding_window_function():
+    array = np.arange(3)
+    actual_result = \
+        ut.sliding_window_function(array, function='mean', window_size=3)
+    expected_result = np.array([1/3, 1, 5/3])
+    assert np.allclose(actual_result, expected_result)
+
+    order_by = np.array([0, 2, 1])
+    actual_result = ut.sliding_window_function(array, function='mean',
+                                               window_size=3, order_by=order_by)
+    expected_result = np.array([2/3, 4/3, 1])
+    assert np.allclose(actual_result, expected_result)

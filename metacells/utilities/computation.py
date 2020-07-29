@@ -43,6 +43,8 @@ __all__ = [
     'downsample_matrix',
     'downsample_array',
     'downsample_tmp_size',
+
+    'sliding_window_function',
 ]
 
 #: The data types supported by the C++ extensions code.
@@ -682,3 +684,69 @@ def downsample_tmp_size(size: int) -> int:
     Return the size of the temporary array needed to ``downsample`` an array of the specified size.
     '''
     return xt.downsample_tmp_size(size)
+
+
+ROLLING_FUNCTIONS = {
+    'mean': pd.core.window.Rolling.mean,
+    'median': pd.core.window.Rolling.median,
+    'std': pd.core.window.Rolling.std,
+    'var': pd.core.window.Rolling.var,
+}
+
+
+@utd.expand_doc(functions=', '.join(['``%s``' % function for function in ROLLING_FUNCTIONS]))
+def sliding_window_function(
+    array: np.ndarray,
+    *,
+    function: str,
+    window_size: int,
+    order_by: Optional[np.ndarray] = None,
+) -> np.ndarray:
+    """
+    Return an array of the same size as the input ``array``, where each entry is the result of
+    applying the ``function`` (one of {functions}) to a sliding window of size ``window_size``
+    centered on the matching array entry.
+
+    If ``order_by`` is specified, the ``array`` is first sorted by this order, and the end result is
+    unsorted back to the original order. That is, the sliding window centered at each position will
+    contain the ``window_size`` of entries which have the nearest ``order_by`` values to the center
+    entry.
+
+    .. note::
+
+        The window size must be an odd positive integer. If an even value is specified, it is
+        automatically increased by one.
+    """
+    if window_size % 2 == 0:
+        window_size += 1
+
+    half_window_size = (window_size - 1) // 2
+
+    if order_by is not None:
+        assert array.size == order_by.size
+        order_indices = np.argsort(order_by)
+        reverse_order_indices = np.argsort(order_indices)
+    else:
+        reverse_order_indices = order_indices = np.arange(array.size)
+
+    minimal_index = order_indices[0]
+    maximal_index = order_indices[-1]
+
+    extended_order_indices = np.concatenate([  #
+        np.repeat(minimal_index, half_window_size),
+        order_indices,
+        np.repeat(maximal_index, half_window_size),
+    ])
+
+    extended_series = pd.Series(array[extended_order_indices])
+    rolling_windows = extended_series.rolling(window_size)
+
+    compute = ROLLING_FUNCTIONS[function]
+    computed = compute(rolling_windows).values
+    reordered = computed[window_size - 1:]
+    assert reordered.size == array.size
+
+    if order_by is not None:
+        reordered = reordered[reverse_order_indices]
+
+    return reordered
