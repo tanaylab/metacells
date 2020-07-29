@@ -39,8 +39,10 @@ __all__ = [
     'del_data_layer',
 
     'get_log_data',
-    'get_data_fraction_of_var_per_obs',
-    'get_data_fraction_of_obs_per_var',
+    'get_fraction_of_var_per_obs',
+    'get_fraction_of_obs_per_var',
+    'get_downsample_of_var_per_obs',
+    'get_downsample_of_obs_per_var',
 
     'get_annotation_of_data',
 
@@ -711,7 +713,7 @@ def get_log_data(
     used.
 
     If ``inplace``, the data will be stored in ``to_layer`` for future reuse (by default, this is
-    ``log_of_<of_layer>``).
+    ``log_<base>_of_<normalization>_plus_<of_layer>``).
 
     The natural logarithm is used by default. Otherwise, the ``base`` is used.
 
@@ -727,7 +729,8 @@ def get_log_data(
         assert of_layer is not None
 
     if to_layer is None:
-        to_layer = 'log_of_' + of_layer
+        to_layer = \
+            'log_%s_of_%s_plus_%s' % (base or 'e', normalization, of_layer)
 
     if inplace:
         slicing_derived_data_layer(of_layer=of_layer, to_layer=to_layer,
@@ -744,7 +747,7 @@ def get_log_data(
 
 
 @timed.call()
-def get_data_fraction_of_var_per_obs(
+def get_fraction_of_var_per_obs(
     adata: AnnData,
     *,
     of_layer: Optional[str] = None,
@@ -759,13 +762,13 @@ def get_data_fraction_of_var_per_obs(
     .. note::
 
         This is probably the version you want: here, the sum of fraction of the genes in a cell is
-        1. See :py:func:`get_data_fraction_of_obs_per_var` for the other way around.
+        1. See :py:func:`get_fraction_of_obs_per_var` for the other way around.
 
     If ``of_layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
     used.
 
     If ``inplace``, the data will be stored in ``to_layer`` for future reuse (by default, this is
-    the name of the source layer with a ``fraction_in_obs_of_`` prefix).
+    the name of the source layer with a ``fraction_of_var_per_obs_of_`` prefix).
 
     If ``intermediate``, also stores the ``sum_of_<of_layer>`` per-observation (cell) annotation for
     future reuse.
@@ -779,7 +782,7 @@ def get_data_fraction_of_var_per_obs(
         assert of_layer is not None
 
     if to_layer is None:
-        to_layer = 'fraction_in_obs_of_' + of_layer
+        to_layer = 'fraction_of_var_per_obs_of_' + of_layer
 
     if inplace:
         slicing_derived_data_layer(of_layer=of_layer, to_layer=to_layer,
@@ -796,7 +799,7 @@ def get_data_fraction_of_var_per_obs(
 
 
 @timed.call()
-def get_data_fraction_of_obs_per_var(
+def get_fraction_of_obs_per_var(
     adata: AnnData,
     *,
     of_layer: Optional[str] = None,
@@ -811,13 +814,13 @@ def get_data_fraction_of_obs_per_var(
     .. note::
 
         This is probably not the version you want: here, the sum of fractions of the cells in each
-        gene is 1. See :py:func:`get_data_fraction_of_var_per_obs` for the other way around.
+        gene is 1. See :py:func:`get_fraction_of_var_per_obs` for the other way around.
 
     If ``of_layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
     used.
 
     If ``inplace``, the data will be stored in ``to_layer`` (by default, this is the name of the
-    source layer with a ``fraction_in_var_of_`` prefix).
+    source layer with a ``fraction_of_obs_per_var_of_`` prefix).
 
     If ``intermediate``, also stores the ``sum_of_<of_layer>`` per-variable (gene) annotation for
     future reuse.
@@ -831,7 +834,7 @@ def get_data_fraction_of_obs_per_var(
         assert of_layer is not None
 
     if to_layer is None:
-        to_layer = 'fraction_of_obs_in_var_of_' + of_layer
+        to_layer = 'fraction_of_obs_per_var_of_' + of_layer
 
     if inplace:
         slicing_derived_data_layer(of_layer=of_layer, to_layer=to_layer,
@@ -843,6 +846,112 @@ def get_data_fraction_of_obs_per_var(
         matrix = get_data_layer(adata, of_layer)
         total_per_var = get_sum_per_var(adata, of_layer, inplace=intermediate)
         return matrix / total_per_var[None, :]
+
+    return get_data_layer(adata, to_layer, compute, inplace=inplace)
+
+
+@timed.call()
+def get_downsample_of_var_per_obs(
+    adata: AnnData,
+    *,
+    samples: int,
+    random_seed: int = 0,
+    of_layer: Optional[str] = None,
+    to_layer: Optional[str] = None,
+    inplace: bool = True,
+) -> utc.Matrix:
+    '''
+    Return a matrix containing, for each observation (cell), downsampled data
+    for each variable (gene), such that the total sum would be no more
+    than ``samples``.
+
+    .. note::
+
+        This is probably the version you want: here, the sum of the genes in a cell will be (at
+        most) ``samples``. See :py:func:`get_downsample_of_obs_per_var` for the other way around.
+
+    If ``of_layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    If ``inplace``, the data will be stored in ``to_layer`` for future reuse (by default, this is
+    the name of the source layer with a ``downsample_<samples>_var_per_obs_of_`` prefix).
+
+    A ``random_seed`` can be provided to make the operation replicable.
+
+    .. note::
+
+        This assumes all the data values are non-negative integer values (even if the ``dtype`` is a
+        floating-point type).
+    '''
+    if of_layer is None:
+        of_layer = get_annotation_of_data(adata, 'x_layer')
+        assert of_layer is not None
+
+    if to_layer is None:
+        to_layer = 'downsample_%s_var_per_obs_of_%s' % (samples, of_layer)
+
+    if inplace:
+        slicing_derived_data_layer(of_layer=of_layer, to_layer=to_layer,
+                                   preserve_when_slicing_obs=True)
+
+    @timed.call('.compute')
+    def compute() -> utc.Matrix:
+        assert of_layer is not None
+        matrix = get_data_layer(adata, of_layer)
+        return utc.downsample_matrix(matrix, axis=1, samples=samples, random_seed=random_seed)
+
+    return get_data_layer(adata, to_layer, compute, inplace=inplace)
+
+
+@timed.call()
+def get_downsample_of_obs_per_var(
+    adata: AnnData,
+    *,
+    samples: int,
+    random_seed: int = 0,
+    of_layer: Optional[str] = None,
+    to_layer: Optional[str] = None,
+    inplace: bool = True,
+) -> utc.Matrix:
+    '''
+    Return a matrix containing, for each variable (gene), downsampled data
+    for each observation (cell), such that the total sum would be no more
+    than ``samples``.
+
+    .. note::
+
+        This is probably not the version you want: here, the sum of the cells in a gene will be (at
+        most) ``samples``. See :py:func:`get_downsample_of_var_per_obs` for the other way around.
+
+    If ``of_layer`` is specified, this specific data is used. Otherwise, the data layer of ``X`` is
+    used.
+
+    If ``inplace``, the data will be stored in ``to_layer`` for future reuse (by default, this is
+    the name of the source layer with a ``downsample_<samples>_obs_per_var_of_`` prefix).
+
+    A ``random_seed`` can be provided to make the operation replicable.
+
+    .. note::
+
+        This assumes all the data values are non-negative integer values (even if the ``dtype`` is a
+        floating-point type).
+    '''
+    if of_layer is None:
+        of_layer = get_annotation_of_data(adata, 'x_layer')
+        assert of_layer is not None
+
+    if to_layer is None:
+        to_layer = 'downsample_%s_obs_per_var_of_%s' % (samples, of_layer)
+
+    if inplace:
+        slicing_derived_data_layer(of_layer=of_layer, to_layer=to_layer,
+                                   preserve_when_slicing_obs=True)
+
+    @timed.call('.compute')
+    def compute() -> utc.Matrix:
+        assert of_layer is not None
+        matrix = get_data_layer(adata, of_layer)
+        return utc.downsample_matrix(matrix, axis=0, samples=samples, random_seed=random_seed)
 
     return get_data_layer(adata, to_layer, compute, inplace=inplace)
 

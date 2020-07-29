@@ -239,6 +239,7 @@ def relayout_compressed(matrix: sparse.spmatrix, axis: int) -> sparse.spmatrix:
     constructor = [sparse.csc_matrix, sparse.csr_matrix][axis]
     matrix = constructor((output_data, output_indices,
                           output_indptr), shape=matrix.shape)
+    matrix.has_sorted_indices = True
     matrix.has_canonical_format = True
     return matrix
 
@@ -425,11 +426,12 @@ def downsample_matrix(
     random_seed: int = 0,
 ) -> Matrix:
     '''
-    Downsample the rows (``axis`` = 1) or columns (``axis`` = 0) of some ``matrix`` such that the
+    Downsample the rows (``axis = 1``) or columns (``axis = 0``) of some ``matrix`` such that the
     sum of each one becomes ``samples``.
 
     If the matrix is sparse, if not ``eliminate_zeros``, then do not perform the final phase of
-    eliminating leftover zero values from the compressed format.
+    eliminating leftover zero values from the compressed format. This means the result will not be
+    in "canonical format" so some ``scipy`` sparse operations on it will be slower.
 
     If ``inplace``, modify the matrix, otherwise, return a modified copy.
 
@@ -437,6 +439,8 @@ def downsample_matrix(
     '''
     assert matrix.ndim == 2
     assert 0 <= axis <= 1
+
+    assert samples > 0
 
     if not sparse.issparse(matrix):
         return _downsample_dense_matrix(matrix, axis, samples, inplace, random_seed)
@@ -496,9 +500,11 @@ def _downsample_sparse_matrix(
     with timed.step('.sparse'):
         parallel_for(downsample_sparse_vectors, results_count)
 
+    output.has_sorted_indices = True
     if eliminate_zeros:
         with timed.step('.eliminate_zeros'):
             output.eliminate_zeros()
+            output.has_canonical_format = True
 
     return output
 
