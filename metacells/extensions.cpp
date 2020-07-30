@@ -253,7 +253,14 @@ initialize_tree(ConstArraySlice<D> input, ArraySlice<T> tree) {
 
         input_size /= 2;
         for (auto index : Range<int>(input_size)) {
-            tree[index] = input[index * 2] + input[index * 2 + 1];
+            auto left = input[index * 2];
+            auto right = input[index * 2 + 1];
+            tree[index] = left + right;
+
+            SlowAssertCompare(left, >=, 0);
+            SlowAssertCompare(right, >=, 0);
+            SlowAssertCompare(left, ==, T(left));
+            SlowAssertCompare(right, ==, T(right));
         }
     }
     FastAssertCompare(tree.size(), ==, 1);
@@ -325,7 +332,7 @@ downsample(const pybind11::array_t<D>& input_array,
     initialize_tree(input, tree);
     T& total = tree[tree.size() - 1];
 
-    if (double(total) <= double(samples)) {
+    if (total <= T(samples)) {
         if (static_cast<const void*>(output.begin()) != static_cast<const void*>(input.begin())) {
             std::copy(input.begin(), input.end(), output.begin());
         }

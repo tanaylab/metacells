@@ -73,6 +73,7 @@ def frozen(data: Union[Matrix, Vector]) -> bool:
     return not data.data.flags.writeable
 
 
+@timed.call()
 def freeze(data: Union[Matrix, Vector]) -> None:
     '''
     Protect data against future modification.
@@ -90,6 +91,7 @@ def freeze(data: Union[Matrix, Vector]) -> None:
                                   % data.getformat())
 
 
+@timed.call()
 def unfreeze(data: Union[Matrix, Vector]) -> None:
     '''
     Permit data future modification of some data.

@@ -39,7 +39,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     with each other, allowing for robust detection. Global analysis algorithms (such as metacells)
     tend to ignore or at least discount such genes.
 
-    It is therefore useful to explicitly identify in a pre-processing step the few cells which
+    It is therefore useful to explicitly identify, in a pre-processing step, the few cells which
     express such rare gene modules. Once identified, these cells can be exempt from the global
     algorithm, or the global algorithm can be tweaked in some way to pay extra attention to them.
 
@@ -56,13 +56,13 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     ``intermediate`` then stored in ``adata``:
 
     Observation (Cell) Annotations
-        ``sum_UMIs``
+        ``sum_of_<umis_layer>``
             The total number of UMIs in each cell.
 
     Variable (Gene) Annotations
-        ``max_UMIs``
+        ``max_of_<umis_layer>``
             The maximal number of UMIs each gene has in any of the cells.
-        ``nnz_UMIs``
+        ``nnz_of_<umis_layer>``
             The number of cells for which each gene has non-zero value.
 
     **Returns**
@@ -166,7 +166,8 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         candidate_data = ut.slice(adata, genes=candidate_genes_indices)
 
     with ut.step('.correlate'):
-        candidate_umis = ut.get_data_layer(candidate_data, umis_layer)
+        candidate_umis = \
+            ut.get_data_per_var_per_obs(candidate_data, umis_layer)
         correlations_between_candidate_genes = ut.corrcoef(candidate_umis.T)
         correlations_between_candidate_genes = \
             np.corrcoef(correlations_between_candidate_genes)
@@ -219,7 +220,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         maximal_strength_of_cells = np.zeros(cells_count)
         gene_indices_of_modules: List[np.ndarray] = []
         candidate_umis = \
-            ut.get_data_layer(candidate_data, umis_layer, per='var')
+            ut.get_data_per_var_per_obs(candidate_data, umis_layer, by='var')
 
         for link_index, module_candidate_indices in combined_candidate_indices.items():
             if len(module_candidate_indices) < minimal_size_of_modules:

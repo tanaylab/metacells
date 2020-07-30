@@ -1,5 +1,12 @@
 '''
 Utilities for multi-threaded code.
+
+.. todo::
+
+    While multi-threading does seem to work reasonably well (given the limitations of the GIL), it
+    seems that direct C++ re-implementations of common builtin operations (such as ``bincount``) are
+    not as efficient as the builtin implementations, so the gains from a parallel version are
+    negated. This requires further investigation.
 '''
 import os
 import sys

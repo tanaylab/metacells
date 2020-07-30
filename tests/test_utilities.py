@@ -259,7 +259,7 @@ def test_freeze_sparse():
 def test_sum():
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
-    ut.set_x_layer(adata, 'test')
+    ut.set_x_name(adata, 'test')
 
     metacells_sum_per_row = ut.get_sum_per_obs(adata)
     numpy_sum_per_row = matrix.sum(axis=1)
@@ -273,7 +273,7 @@ def test_sum():
 def test_mean():
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
-    ut.set_x_layer(adata, 'test')
+    ut.set_x_name(adata, 'test')
 
     metacells_mean_per_row = ut.get_mean_per_obs(adata)
     numpy_mean_per_row = matrix.mean(axis=1)
@@ -288,7 +288,7 @@ def test_sum_squared():
     matrix = np.random.rand(100, 200)
     squared = np.square(matrix)
     adata = AnnData(matrix)
-    ut.set_x_layer(adata, 'test')
+    ut.set_x_name(adata, 'test')
 
     metacells_sum_squared_per_row = ut.get_sum_squared_per_obs(adata)
     numpy_sum_squared_per_row = squared.sum(axis=1)
@@ -304,7 +304,7 @@ def test_sum_squared():
 def test_variance():
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
-    ut.set_x_layer(adata, 'test')
+    ut.set_x_name(adata, 'test')
 
     metacells_variance_per_row = ut.get_variance_per_obs(adata)
     numpy_variance_per_row = matrix.var(axis=1)
@@ -319,7 +319,7 @@ def test_variance():
 def test_max():
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
-    ut.set_x_layer(adata, 'test')
+    ut.set_x_name(adata, 'test')
 
     metacells_max_per_row = ut.get_max_per_obs(adata)
     numpy_max_per_row = np.amax(matrix, axis=1)
@@ -333,7 +333,7 @@ def test_max():
 def test_min():
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
-    ut.set_x_layer(adata, 'test')
+    ut.set_x_name(adata, 'test')
 
     metacells_min_per_row = ut.get_min_per_obs(adata)
     numpy_min_per_row = np.amin(matrix, axis=1)
@@ -347,7 +347,7 @@ def test_min():
 def test_nnz():
     matrix = sparse.rand(100, 200, density=0.1, format='csr')
     adata = AnnData(matrix)
-    ut.set_x_layer(adata, 'test')
+    ut.set_x_name(adata, 'test')
 
     metacells_nnz_per_row = ut.get_nnz_per_obs(adata)
     scipy_nnz_per_row = matrix.getnnz(axis=1)
@@ -356,6 +356,41 @@ def test_nnz():
     metacells_nnz_per_column = ut.get_nnz_per_var(adata)
     scipy_nnz_per_column = matrix.getnnz(axis=0)
     assert np.allclose(metacells_nnz_per_column, scipy_nnz_per_column)
+
+
+def test_focus_on():
+    rvs = stats.poisson(10, loc=10).rvs
+    matrix = sparse.random(100, 1000, format='csr',
+                           dtype='int32', random_state=123456, data_rvs=rvs)
+    adata = AnnData(matrix)
+
+    ut.set_x_name(adata, 'test')
+    assert adata.uns['focus'] == 'test'
+
+    with ut.focus_on(ut.get_log_data_per_var_per_obs, adata) as log_data:
+        outer_focus = 'log_e_of_1_plus_test'
+        assert adata.uns['focus'] == outer_focus
+        assert id(log_data) == id(adata.layers[outer_focus])
+
+        with ut.focus_on(ut.get_downsample_of_var_per_obs, adata, of='test', samples=10) \
+                as downsamled_data:
+            inner_focus = 'downsample_10_var_per_obs_of_test'
+            assert adata.uns['focus'] == inner_focus
+            assert id(downsamled_data) == id(adata.layers[inner_focus])
+
+        assert adata.uns['focus'] == outer_focus
+        assert id(log_data) == id(adata.layers[outer_focus])
+
+        with ut.focus_on(ut.get_downsample_of_var_per_obs, adata, of='test', samples=10) \
+                as downsamled_data:
+            inner_focus = 'downsample_10_var_per_obs_of_test'
+            assert adata.uns['focus'] == inner_focus
+            assert id(downsamled_data) == id(adata.layers[inner_focus])
+            ut.del_data_per_var_per_obs(adata, outer_focus)
+
+        assert adata.uns['focus'] == 'test'
+
+    assert adata.uns['focus'] == 'test'
 
 
 def test_sliding_window_function():

@@ -18,4 +18,4 @@ disable=C0330,
 check-quote-consistency=yes
 
 [BASIC]
-good-names=X,n,m,O_N,O_N_Log_N
+good-names=X,n,m,O_N,O_N_Log_N,by,of,to
