@@ -24,7 +24,7 @@ def test_find_rare_genes_modules(data_path):
     mc.pp.find_rare_genes_modules(adata)
     actual_modules = [
         list(module_gene_names) for module_gene_names
-        in mc.ut.get_metadata(adata, 'rare_gene_modules')
+        in mc.ut.get_data(adata, 'm:rare_gene_modules')
     ]
     expected_modules = expected['rare_gene_modules']
     assert actual_modules == expected_modules

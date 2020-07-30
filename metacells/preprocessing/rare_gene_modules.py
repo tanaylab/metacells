@@ -123,11 +123,11 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     list_of_names_of_genes_of_modules: List[np.ndarray] = []
 
     total_umis_of_cells = \
-        ut.get_sum_per_obs(adata, umis_layer, inplace=intermediate)
+        ut.get_sum_per_obs(adata, umis_layer, inplace=intermediate)[0]
     max_umis_of_genes = \
-        ut.get_max_per_var(adata, umis_layer, inplace=intermediate)
+        ut.get_max_per_var(adata, umis_layer, inplace=intermediate)[0]
     nnz_cells_of_genes = \
-        ut.get_nnz_per_var(adata, umis_layer, inplace=intermediate)
+        ut.get_nnz_per_var(adata, umis_layer, inplace=intermediate)[0]
 
     def results() -> Optional[Tuple[pd.DataFrame, pd.DataFrame, np.ndarray]]:
         array_of_names_of_genes_of_modules = \
@@ -166,11 +166,9 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         candidate_data = ut.slice(adata, genes=candidate_genes_indices)
 
     with ut.step('.correlate'):
-        candidate_umis = \
-            ut.get_data_per_var_per_obs(candidate_data, umis_layer)
-        correlations_between_candidate_genes = ut.corrcoef(candidate_umis.T)
+        name = ut.get_var_var_correlation(candidate_data, umis_layer)[1]
         correlations_between_candidate_genes = \
-            np.corrcoef(correlations_between_candidate_genes)
+            ut.get_var_var_correlation(candidate_data, name, inplace=False)[0]
 
     with ut.step('.linkage'):
         linkage = \
@@ -220,7 +218,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         maximal_strength_of_cells = np.zeros(cells_count)
         gene_indices_of_modules: List[np.ndarray] = []
         candidate_umis = \
-            ut.get_data_per_var_per_obs(candidate_data, umis_layer, by='var')
+            ut.get_vo_data(candidate_data, umis_layer, by='var')[0]
 
         for link_index, module_candidate_indices in combined_candidate_indices.items():
             if len(module_candidate_indices) < minimal_size_of_modules:

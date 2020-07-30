@@ -68,7 +68,7 @@ are three sources of (implementation) code complexity here:
 
     Therefore, the managed ``AnnData`` allows for requesting a specific layout, and caches the
     results. Instead of monkey-patching the ``AnnData`` object, this is done by creating "hidden"
-    layers with prefixed names (``__by_obs__XXX`` and ``__by_var__XXX``).
+    layers with suffixed names (``...:__by_obs__`` and ``...:__by_var__``).
 
     Changing the layout of a matrix using the builtin operations is very slow; therefore a parallel
     C++ extension is provided.
@@ -79,8 +79,8 @@ are three sources of (implementation) code complexity here:
     slicing.
 
     To achieve this, the code tracks, for each possible data, whether it is/not safe to slice it
-    along each of the axis (e.g., per-observation ``sum_of_UMIs`` data is invalidated when slicing
-    some of the variables).
+    along each of the axis (e.g., the per-observation ``o:sum_of_vo:...`` data is invalidated when
+    slicing some of the variables).
 
     In addition, since slicing layout-optimized data is much faster, the code ensures that,
     as much as possible, slicing is always applied to the proper layout form of the data.
@@ -98,9 +98,25 @@ that in principle one never needs to mutate any data. This is (not 100%) enforce
 :py:func:`metacells.utilities.computation.freeze`-ing the data whenever possible.
 
 The managed ``AnnData`` provides standard functions that compute and cache new data from existing
-data, using arbitrary compute functions (e.g., :py:func:`get_data_per_var_per_obs`,
-:py:func:`get_data_per_obs`, etc.). A set of standard common functions is also provided (e.g.,
-:py:func:`get_downsample_of_var_per_obs`, :py:func:`get_mean_per_var`, etc.).
+data, using arbitrary compute functions (e.g., :py:func:`get_data`, :py:func:`get_vo_data`). A set
+of standard common functions is also provided (e.g., :py:func:`get_downsample_of_var_per_obs`,
+:py:func:`get_mean_per_var`, etc.).
+
+Data Names
+----------
+
+The name of data stored in a managed ``AnnData`` is ``prefix:suffix``, where the suffix is arbitrary
+and the prefix is one of ``vo`` for per-variable-per-observation, ``v`` for per-variable, ``o`` for
+per-observation, ``vv`` for per-observation-per-observation, or ``oo`` for for
+per-observation-per-observation. Similarly, metadata names should start with ``m:``.
+
+This ensures that names of different kinds of data do not get mixed up. For example, it allows for
+the generic :py:func:`get_data` function to safely fetch any kind data without ambiguity.
+
+.. note::
+
+    The keys of the data structures containing the data do not contain the prefix. For example,
+    ``v:gene_ids`` references the normal ``gene_ids`` per-variable data.
 '''
 
 from contextlib import contextmanager
@@ -119,7 +135,6 @@ import metacells.utilities.documentation as utd
 import metacells.utilities.timing as timed
 
 __all__ = [
-    'WhichData',
     'SlicingMask',
     'ALWAYS_SAFE',
     'NEVER_SAFE',
@@ -133,8 +148,17 @@ __all__ = [
     'set_x_name',
     'track_base_indices',
 
-    'get_data_per_var_per_obs',
-    'del_data_per_var_per_obs',
+    'get_data',
+    'has_data',
+
+    'get_m_data',
+    'get_o_data',
+    'get_v_data',
+    'get_oo_data',
+    'get_vv_data',
+
+    'get_vo_data',
+    'del_vo_data',
     'focus_on',
 
     'get_log_data_per_var_per_obs',
@@ -142,11 +166,6 @@ __all__ = [
     'get_fraction_of_obs_per_var',
     'get_downsample_of_var_per_obs',
     'get_downsample_of_obs_per_var',
-
-    'get_metadata',
-
-    'get_data_per_obs',
-    'get_data_per_var',
 
     'get_sum_per_obs',
     'get_sum_per_var',
@@ -168,24 +187,16 @@ __all__ = [
 
     'get_nnz_per_obs',
     'get_nnz_per_var',
+
+    'get_obs_obs_correlation',
+    'get_var_var_correlation',
 ]
 
 
 LOCK = rwlock.RWLockRead()
 
 
-class WhichData(NamedTuple):
-    '''
-    Identify some data held in the ``AnnData`` object.
-    '''
-
-    #: One of ``metadata``, ``per_var_per_obs``, ``per_var``, ``per_obs``, ``per_var_per_var`` and
-    #: ``per_obs_per_obs``. This determines the expected data type and, for matrix and vector data,
-    #: the expected dimensions.
-    per: str
-
-    #: The name of the data, which should be unique within its "per".
-    name: str
+Annotations = Union[Dict[str, Any], pd.DataFrame]
 
 
 class SlicingMask(NamedTuple):
@@ -222,27 +233,27 @@ SAFE_WHEN_SLICING_VAR = SlicingMask(per_obs=False, per_var=True)
 #: but not when slicing variables (genes).
 SAFE_WHEN_SLICING_OBS = SlicingMask(per_obs=True, per_var=False)
 
-SAFE_SLICING: Dict[WhichData, SlicingMask] = {}
+SAFE_SLICING: Dict[str, SlicingMask] = {}
 
 DIMENSIONAL_DATA_TYPES = (np.ndarray, sparse.spmatrix, pd.Series, pd.DataFrame)
 
 
-def safe_slicing_data(data: WhichData, slicing_mask: SlicingMask) -> None:
+def safe_slicing_data(name: str, slicing_mask: SlicingMask) -> None:
     '''
-    Specify when it is safe to slice some ``data`` using the ``slicing_mask``.
+    Specify when it is safe to slice the ``name``d data, using the ``slicing_mask``.
 
     .. note::
 
         This is thread-safe.
     '''
     with LOCK.gen_wlock():
-        SAFE_SLICING[data] = slicing_mask
+        SAFE_SLICING[name] = slicing_mask
 
 
 def _known_safe_slicing() -> None:
-    safe_slicing_data(WhichData('metadata', 'x_name'), ALWAYS_SAFE)
-    safe_slicing_data(WhichData('metadata', 'focus'), ALWAYS_SAFE)
-    safe_slicing_data(WhichData('per_var', 'gene_ids'), ALWAYS_SAFE)
+    safe_slicing_data('m:x_name', ALWAYS_SAFE)
+    safe_slicing_data('m:focus', ALWAYS_SAFE)
+    safe_slicing_data('v:gene_ids', ALWAYS_SAFE)
 
 
 _known_safe_slicing()
@@ -250,26 +261,25 @@ _known_safe_slicing()
 
 def safe_slicing_derived(
     *,
-    base_data: List[WhichData],
-    derived_data: WhichData,
+    base: Union[str, List[str]],
+    derived: str,
     slicing_mask: SlicingMask,
 ) -> None:
     '''
-    Specify how to slice some ``derived`` data which is computed
-    from some ``bases`` such data.
-
-    Each data description is a tuple of its "per" (one of ``per_var_per_obs``, ``per_var``,
-    ``per_obs``, ``per_var_per_var`` and ``per_obs_per_obs``) and its name.
+    Specify how to slice some ``derived`` data which is computed from some ``base_data``.
 
     If, when slicing, any of the bases data is not preserved, then the derived data would not be
     either. Otherwise, the derived will be preserved based on the flags given here.
     '''
     with LOCK.gen_rlock():
-        for base_datum in base_data:
-            slicing_mask = slicing_mask & SAFE_SLICING[base_datum]
+        if isinstance(base, str):
+            slicing_mask = slicing_mask & SAFE_SLICING[base]
+        else:
+            for name in base:
+                slicing_mask = slicing_mask & SAFE_SLICING[name]
 
     with LOCK.gen_wlock():
-        SAFE_SLICING[derived_data] = slicing_mask
+        SAFE_SLICING[derived] = slicing_mask
 
 
 @timed.call()
@@ -287,10 +297,10 @@ def slice(  # pylint: disable=redefined-builtin
     mask or a collection of indices to include in the data slice. In the case of an indices array,
     it is assumed the indices are unique and sorted, that is that their effect is similar to a mask.
 
-    In general, data might become invalid when slicing (e.g., the ``sum_of_UMIs`` of genes is
-    invalidated when specifying a subset of the cells). Therefore, such data will be removed from
-    the result unless it was explicitly marked as preserved using :py:func:`safe_slicing_data` or
-    :py:func:`safe_slicing_derived`.
+    In general, data might become invalid when slicing (e.g., the per-observation
+    ``o:sum_of_vo:...`` data is invalidated when slicing some of the variables). Therefore, such
+    data will be removed from the result unless it was explicitly marked as preserved using
+    :py:func:`safe_slicing_data` or :py:func:`safe_slicing_derived`.
 
     If ``invalidated_prefix`` is specified, then invalidated data will not be removed; instead it
     will be renamed with the addition of the provided prefix.
@@ -302,10 +312,10 @@ def slice(  # pylint: disable=redefined-builtin
         slicing operation, invoke the built-in ``adata[..., ...]``.
     '''
     assert invalidated_prefix != ''
-    x_name = get_metadata(adata, 'x_name')
-    focus = get_metadata(adata, 'focus')
+    x_name = get_m_data(adata, 'm:x_name')
+    focus = get_m_data(adata, 'm:focus')
     assert x_name not in adata.layers
-    assert has_data(adata, 'per_var_per_obs', focus)
+    assert has_data(adata, focus)
 
     if cells is None:
         cells = range(adata.n_obs)
@@ -341,7 +351,7 @@ def slice(  # pylint: disable=redefined-builtin
     assert adata.uns['x_name'] == x_name
     assert adata.uns['focus'] == focus
     assert x_name not in adata.layers
-    assert has_data(adata, 'per_var_per_obs', focus)
+    assert has_data(adata, focus)
 
     assert bdata.uns['x_name'] == x_name
     if focus == x_name or focus in bdata.layers:
@@ -349,7 +359,7 @@ def slice(  # pylint: disable=redefined-builtin
     else:
         focus = bdata.uns['focus'] = x_name
     assert x_name not in bdata.layers
-    assert has_data(bdata, 'per_var_per_obs', focus)
+    assert has_data(bdata, focus)
 
     return bdata
 
@@ -359,25 +369,26 @@ def _save_data(
     will_slice_obs: bool,
     will_slice_var: bool,
     invalidated_prefix: Optional[str],
-) -> Dict[WhichData, Any]:
-    saved_data: Dict[WhichData, Any] = {}
+) -> Dict[str, Any]:
+    saved_data: Dict[str, Any] = {}
 
-    for per, annotations in [('per_var_per_obs', adata.layers),
-                             ('per_obs', adata.obs),
-                             ('per_var', adata.var),
-                             ('per_obs_per_obs', adata.obsp),
-                             ('per_var_per_var', adata.varp)]:
-        _save_per_data(saved_data, adata, per, annotations,
+    for per_prefix, annotations in [('vo:', adata.layers),
+                                    ('o:', adata.obs),
+                                    ('v:', adata.var),
+                                    ('oo:', adata.obsp),
+                                    ('vv:', adata.varp),
+                                    ('m:', adata.uns)]:
+        _save_per_data(saved_data, adata, per_prefix, annotations,
                        will_slice_obs, will_slice_var, invalidated_prefix)
 
     return saved_data
 
 
 def _save_per_data(  # pylint: disable=too-many-locals
-    saved_data: Dict[WhichData, Any],
+    saved_data: Dict[str, Any],
     adata: AnnData,
-    per: str,
-    annotations: Union[Dict[str, Any], pd.DataFrame],
+    per_prefix: str,
+    annotations: Annotations,
     will_slice_obs: bool,
     will_slice_var: bool,
     invalidated_prefix: Optional[str],
@@ -385,7 +396,7 @@ def _save_per_data(  # pylint: disable=too-many-locals
     delete_names: Set[str] = set()
     prefixed_data: Dict[str, Any] = {}
 
-    if per != 'per_var_per_obs':
+    if per_prefix != 'vo:':
         def patch(name: str) -> None:  # pylint: disable=unused-argument
             pass
     else:
@@ -394,27 +405,27 @@ def _save_per_data(  # pylint: disable=too-many-locals
 
         def patch(name: str) -> None:
             if will_slice_only_obs:
-                patch_only(name, '__by_obs__')
+                patch_only(name, ':__by_obs__')
             if will_slice_only_var:
-                patch_only(name, '__by_var__')
+                patch_only(name, ':__by_var__')
 
-        def patch_only(name: str, by_prefix: str) -> None:
-            if not name.startswith(by_prefix):
+        def patch_only(name: str, by_suffix: str) -> None:
+            if not name.endswith(by_suffix):
                 return
 
             data = adata.layers[name]
             delete_names.add(name)
 
-            base_name = name[len(by_prefix):]
-            if base_name == adata.uns['x_name']:
+            base_name = name[:-len(by_suffix)]
+            if base_name == adata.uns['x_name'][3:]:
                 with timed.step('.swap_x'):
                     adata.X = data
             else:
                 base_data = adata.layers[base_name]
-                saved_data[WhichData('per_var_per_obs', base_name)] = base_data
+                saved_data['vo:' + base_name] = base_data
 
     for name, data in _items(annotations):
-        which_data = WhichData(per, name)
+        which_data = per_prefix + name
         action = _slice_action(which_data, will_slice_obs, will_slice_var,
                                invalidated_prefix is not None)
 
@@ -439,36 +450,38 @@ def _save_per_data(  # pylint: disable=too-many-locals
         del annotations[name]
 
 
-def _restore_data(saved_data: Dict[WhichData, Any], adata: AnnData) -> None:
-    per_annotations = dict(per_var_per_obs=adata.layers,
-                           per_obs=adata.obs,
-                           per_var=adata.var,
-                           per_obs_per_obs=adata.obsp,
-                           per_var_per_var=adata.varp)
-    for which_data, data in saved_data.items():
-        annotations = per_annotations[which_data.per]
-        annotations[which_data.name] = data
+def _restore_data(saved_data: Dict[str, Any], adata: AnnData) -> None:
+    per_annotations = dict(vo=adata.layers,
+                           o=adata.obs,
+                           v=adata.var,
+                           oo=adata.obsp,
+                           vv=adata.varp,
+                           m=adata.uns)
+    for name, data in saved_data.items():
+        per_prefix, name_suffix = name.split(':', 1)
+        per_annotations[per_prefix][name_suffix] = data
 
 
 def _prefix_data(
-    saved_data: Dict[WhichData, Any],
+    saved_data: Dict[str, Any],
     bdata: AnnData,
     did_slice_obs: bool,
     did_slice_var: bool,
     invalidated_prefix: str,
 ) -> None:
-    for per, annotations in [('per_var_per_obs', bdata.layers),
-                             ('per_obs', bdata.obs),
-                             ('per_var', bdata.var),
-                             ('per_obs_per_obs', bdata.obsp),
-                             ('per_var_per_var', bdata.varp)]:
-        _prefix_per_data(saved_data, per, annotations,
+    for per_prefix, annotations in [('vo:', bdata.layers),
+                                    ('o:', bdata.obs),
+                                    ('v:', bdata.var),
+                                    ('oo:', bdata.obsp),
+                                    ('vv:', bdata.varp),
+                                    ('m:', bdata.uns)]:
+        _prefix_per_data(saved_data, per_prefix, annotations,
                          did_slice_obs, did_slice_var, invalidated_prefix)
 
 
 def _prefix_per_data(
-    saved_data: Dict[WhichData, Any],
-    per: str,
+    saved_data: Dict[str, Any],
+    per_prefix: str,
     annotations: Dict[str, Any],
     did_slice_obs: bool,
     did_slice_var: bool,
@@ -477,8 +490,8 @@ def _prefix_per_data(
     delete_names: List[str] = []
 
     for name, data in _items(annotations):
-        which_data = WhichData(per, name)
-        action = _slice_action(which_data, did_slice_obs, did_slice_var, True)
+        full_name = per_prefix + name
+        action = _slice_action(full_name, did_slice_obs, did_slice_var, True)
 
         if action == 'preserve':
             continue
@@ -486,64 +499,65 @@ def _prefix_per_data(
 
         prefixed_name = invalidated_prefix + name
         assert prefixed_name != name
+        full_prefixed_name = per_prefix + prefixed_name
 
-        prefixed_which_data = WhichData(per, prefixed_name)
-        saved_data[prefixed_which_data] = data
+        saved_data[full_prefixed_name] = data
         delete_names.append(name)
 
         with LOCK.gen_wlock():
-            SAFE_SLICING[prefixed_which_data] = SAFE_SLICING[which_data]
+            SAFE_SLICING[full_prefixed_name] = SAFE_SLICING[full_name]
 
     for name in delete_names:
         del annotations[name]
 
 
-def _items(annotation: Union[Dict, pd.DataFrame]) -> Iterable[Tuple[str, Any]]:
-    if isinstance(annotation, pd.DataFrame):
-        return annotation.iteritems()
-    return annotation.items()
+def _items(annotations: Annotations) -> Iterable[Tuple[str, Any]]:
+    if isinstance(annotations, pd.DataFrame):
+        return annotations.iteritems()
+    return annotations.items()
 
 
-def _get(annotation: Union[Dict, pd.DataFrame], name: str) -> Any:
-    if isinstance(annotation, pd.DataFrame):
-        if name not in annotation.columns:
+def _get(annotations: Annotations, name: str) -> Any:
+    if isinstance(annotations, pd.DataFrame):
+        if name not in annotations.columns:
             return None
-        return annotation[:, name]
-    return annotation.get(name)
+        return annotations[name]
+    return annotations.get(name)
 
 
 def _slice_action(
-    which_data: WhichData,
+    name: str,
     do_slice_obs: bool,
     do_slice_var: bool,
     will_prefix_invalidated: bool,
 ) -> str:
-    if which_data.name[:2] != '__':
+    per_prefix, name_suffix = name.split(':', 1)
+    if '__' in name_suffix:
+        is_per = True
+        is_per_obs = name_suffix.endswith(':__by_obs__')
+        is_per_var = name_suffix.endswith(':__by_var__')
+        assert is_per_obs or is_per_var
+        base_name = name_suffix[:-11]
+    else:
         is_per = False
         is_per_obs = False
         is_per_var = False
-        base_name = which_data.name
-    else:
-        is_per = True
-        is_per_obs = which_data.name.startswith('__by_obs__')
-        is_per_var = which_data.name.startswith('__by_var__')
-        assert is_per_obs or is_per_var
-        base_name = which_data.name[10:]
+        base_name = name_suffix
 
-    base_which_data = WhichData(which_data.per, base_name)
+    full_base_name = '%s:%s' % (per_prefix, base_name)
     with LOCK.gen_rlock():
-        slicing_mask = SAFE_SLICING.get(base_which_data)
+        slicing_mask = SAFE_SLICING.get(full_base_name)
 
     if slicing_mask is None:
         with LOCK.gen_wlock():
-            slicing_mask = SAFE_SLICING.get(base_which_data)
+            slicing_mask = SAFE_SLICING.get(full_base_name)
             if slicing_mask is None:
                 unknown_sliced_data = \
-                    'Slicing an unknown %s data: %s; ' \
+                    'Slicing an unknown data: %s; ' \
                     'assuming it should not be preserved' \
-                    % (base_which_data.per, base_which_data.name)
+                    % full_base_name
                 warn(unknown_sliced_data)
-                slicing_mask = SAFE_SLICING[base_which_data] = NEVER_SAFE
+                slicing_mask = SAFE_SLICING[full_base_name] = NEVER_SAFE
 
     if is_per_var:
         slicing_mask = slicing_mask & SAFE_WHEN_SLICING_VAR
@@ -564,39 +578,39 @@ def _slice_action(
 
 def set_x_name(adata: AnnData, name: str) -> None:
     '''
-    Set the name of the per-variable-per-observation data that is contained in ``X``. This name is
-    stored in the metadata (unstructured annotation) named ``x_name``.
+    Set the ``name`` of the data contained in ``adata.X``.
+
+    The name must start with ``vo:`` as ``X`` contains per-variable-per-observation data.
+
+    The name is stored in the metadata (unstructured annotation) named ``x_name``. It also sets the
+    ``focus``, which is also stored there.
 
     This should be called after populating the ``X`` data for the first time (e.g., by importing the
     data). It lets rest of the code to know what kind of data it holds. All the other
     per-variable-per-observation data utilities ``assert`` this was done.
 
-    This also sets the name to be the ``focus``, which is also stored in the metadata (unstructured
-    annotations).
-
     .. note::
 
-        This assumes it is safe to arbitrarily slice the layer.
+        This assumes it is safe to arbitrarily slice the data.
 
     .. note::
 
         When using the layer utilities, do not directly read or write the value of ``X``. Instead
-        use :py:func:`get_data_per_var_per_obs`.
-
-    .. todo::
-
-        Better integration with ``AnnData`` would allow accessing and even setting ``X`` in addition
-        to using :py:func:`get_data_per_var_per_obs`. Currently this isn't implemented since
-        ``AnnData`` provides its own magic for handling ``X`` which is incompatible with the layers
-        approach.
+        use :py:func:`get_vo_data`.
     '''
+    if name.startswith('vo:'):
+        full_name = name
+    else:
+        _assert_not_prefixed(name, ['vo:'])
+        full_name = 'vo:' + name
+
     X = adata.X
     assert X is not None
     assert 'x_name' not in adata.uns_keys()
 
-    adata.uns['focus'] = adata.uns['x_name'] = name
+    adata.uns['focus'] = adata.uns['x_name'] = full_name
 
-    safe_slicing_data(WhichData('per_var_per_obs', name), ALWAYS_SAFE)
+    safe_slicing_data(full_name, ALWAYS_SAFE)
 
 
 def track_base_indices(adata: AnnData, *, name: str = 'base_index') -> None:
@@ -606,37 +620,252 @@ def track_base_indices(adata: AnnData, *, name: str = 'base_index') -> None:
     back to the original full data.
     '''
     adata.obs[name] = np.arange(adata.n_obs)
-    safe_slicing_data(WhichData('per_obs', name), ALWAYS_SAFE)
+    safe_slicing_data('o' + name, ALWAYS_SAFE)
 
     adata.var[name] = np.arange(adata.n_vars)
-    safe_slicing_data(WhichData('per_var', name), ALWAYS_SAFE)
+    safe_slicing_data('v' + name, ALWAYS_SAFE)
+
+
+@timed.call()
+def get_data(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utc.Vector]] = None,
+    inplace: bool = True,
+) -> Any:
+    '''
+    Lookup any data by its full ``name``.
+
+    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
+
+    If ``inplace``, store the result in ``adata`` for future reuse.
+
+    .. note::
+
+        This works for any kind data, based on the name's prefix (e.g., ``m:`` for metadata, ``vo:``
+        for per-variable-per-observation). As such, it does not provide the full functionality
+        offered by specific accessors (e.g., :py:func:`get_vo_data`).
+    '''
+    if name.startswith('vo:'):
+        return get_vo_data(adata, name, compute=compute, inplace=inplace)
+
+    if name.startswith('m:'):
+        return get_m_data(adata, name, compute=compute, inplace=inplace)
+
+    if name.startswith('v:'):
+        return get_v_data(adata, name, compute=compute, inplace=inplace)
+
+    if name.startswith('o:'):
+        return get_o_data(adata, name, compute=compute, inplace=inplace)
+
+    if name.startswith('oo:'):
+        return get_oo_data(adata, name, compute=compute, inplace=inplace)
+
+    if name.startswith('vv:'):
+        return get_vv_data(adata, name, compute=compute, inplace=inplace)
+
+    raise ValueError('the data name: %s does not start with a valid prefix '
+                     '("vo:", "v:", "o:", "vv:", "oo", or "m:")' % name)
 
 
 def has_data(
     adata: AnnData,
-    per: str,
     name: str,
 ) -> bool:
     '''
     Test whether we have the specified data.
+
+    .. note::
+
+        This works for any kind data, based on the name's prefix (e.g., ``m:`` for metadata, ``vo:``
+        for per-variable-per-observation).
     '''
-    if per == 'per_var_per_obs':
-        return name == adata.uns['x_name'] or name in adata.layers
-    if per == 'per_obs':
-        return name in adata.obs
-    if per == 'per_var':
-        return name in adata.var
-    if per == 'per_obs_per_obs':
-        return name in adata.obsp
-    if per == 'per_var_per_var':
-        return name in adata.varp
-    assert per in ['per_var_per_obs', 'per_obs', 'per_var',
-                   'per_obs_per_obs', 'per_var_per_var']
-    return False
+    if name.startswith('vo:'):
+        return name == adata.uns['x_name'] or name[3:] in adata.layers
+
+    if name.startswith('m:'):
+        return name[2:] in adata.uns
+
+    if name.startswith('o:'):
+        return name[2:] in adata.obs
+
+    if name.startswith('v:'):
+        return name[2:] in adata.var
+
+    if name.startswith('oo:'):
+        return name[3:] in adata.obsp
+
+    if name.startswith('vv:'):
+        return name[3:] in adata.varp
+
+    raise ValueError('the data name: %s does not start with a valid prefix '
+                     '("vo:", "v:", "o:", "vv:", "oo", or "m:")' % name)
+
+
+def get_m_data(
+    adata: AnnData,
+    name: str,
+    compute: Optional[Callable[[], utc.Vector]] = None,
+    *,
+    inplace: bool = True,
+) -> Any:
+    '''
+    Lookup metadata (unstructured annotation) in ``adata``.
+
+    If the name does not start with a ``m:`` prefix, one is assumed.
+
+    If the metadata does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
+
+    If ``inplace``, store the result in ``adata``.
+
+    .. note::
+
+        The caller is responsible for specifying the slicing behavior of the data.
+    '''
+    if name.startswith('m:'):
+        name = name[2:]
+
+    data = adata.uns.get(name)
+    if data is not None:
+        return data
+
+    if compute is None:
+        raise KeyError('unavailable metadata: ' + name)
+
+    data = compute()
+    assert data is not None
+
+    if inplace:
+        adata.uns[name] = data
+
+    return data
+
+
+def get_o_data(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utc.Vector]] = None,
+    inplace: bool = True,
+) -> utc.Vector:
+    '''
+    Lookup per-observation (cell) data in ``adata``.
+
+    If the name does not start with a ``o:`` prefix, one is assumed.
+
+    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
+
+    If ``inplace``, store the result in ``adata`` for future reuse.
+
+    .. note::
+
+        The caller is responsible for specifying the slicing behavior of the data.
+    '''
+    return _get_shaped_data(adata.obs, (adata.n_obs,),
+                            'per-observation', 'o:', name, compute, inplace)
+
+
+def get_v_data(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utc.Vector]] = None,
+    inplace: bool = True,
+) -> utc.Vector:
+    '''
+    Lookup per-variable (gene) data in ``adata``.
+
+    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
+
+    If ``inplace``, store the result in ``adata`` for future reuse.
+
+    .. note::
+
+        The caller is responsible for specifying the slicing behavior of the data.
+    '''
+    return _get_shaped_data(adata.var, (adata.n_vars,),
+                            'per-variable', 'v:', name, compute, inplace)
+
+
+def get_oo_data(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utc.Matrix]] = None,
+    inplace: bool = True,
+) -> utc.Matrix:
+    '''
+    Lookup per-observation-per-observation (cell) data in ``adata``.
+
+    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
+
+    If ``inplace``, store the result in ``adata`` for future reuse.
+
+    .. note::
+
+        The caller is responsible for specifying the slicing behavior of the data.
+    '''
+    return _get_shaped_data(adata.obsp, (adata.n_obs, adata.n_obs),
+                            'per-observation-per-observation', 'oo:',
+                            name, compute, inplace)
+
+
+def get_vv_data(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utc.Vector]] = None,
+    inplace: bool = True,
+) -> utc.Matrix:
+    '''
+    Lookup per-variable-per-variable (gene) data in ``adata``.
+
+    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
+
+    If ``inplace``, store the result in ``adata`` for future reuse.
+
+    .. note::
+
+        The caller is responsible for specifying the slicing behavior of the data.
+    '''
+    return _get_shaped_data(adata.varp, (adata.n_vars, adata.n_vars),
+                            'per-variable-per-variable', 'vv:',
+                            name, compute, inplace)
+
+
+def _get_shaped_data(
+    annotations: Annotations,
+    shape: Tuple[int, ...],
+    per_text: str,
+    per_prefix: str,
+    name: str,
+    compute: Optional[Callable[[], Any]],
+    inplace: bool
+) -> Any:
+    if name.startswith(per_prefix):
+        name = name[len(per_prefix):]
+
+    data = _get(annotations, name)
+    if data is not None:
+        return data
+
+    if compute is None:
+        raise KeyError('unavailable %s data: %s' % (per_text, name))
+
+    data = compute()
+    assert data is not None
+    assert data.shape == shape
+
+    if inplace:
+        utc.freeze(data)
+        annotations[name] = data
+
+    return data
 
 
 @timed.call()
-def get_data_per_var_per_obs(
+def get_vo_data(
     adata: AnnData,
     name: Optional[str] = None,
     *,
@@ -644,11 +873,12 @@ def get_data_per_var_per_obs(
     inplace: bool = True,
     infocus: bool = False,
     by: Optional[str] = None,
-) -> utc.Matrix:
+) -> Tuple[utc.Matrix, str]:
     '''
     Lookup a per-observation-per-variable matrix (data layer) in ``adata``.
 
-    If the ``name`` is not specified, get the ``focus``.
+    If the ``name`` is not specified, get the ``focus``. If the name does not start with a ``vo:``
+    prefix, one is assumed.
 
     If the layer does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
 
@@ -658,12 +888,14 @@ def get_data_per_var_per_obs(
 
     If ``by`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
     data in a layout optimized for by-observation (row-major / csr) or by-variable (column-major
-    / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional layer whose name
-    is prefixed (e.g. ``__by_obs__UMIs`` for the ``UMIs`` layer).
+    / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional "hidden" layer
+    whose name is suffixed (e.g. ``...:__by_obs__``).
+
+    Returns the result and its full name.
 
     .. note::
 
-        In general names that start with ``__`` are reserved and should not be explicitly used.
+        In general names that contain ``__`` are reserved and should not be explicitly used.
 
     .. note::
 
@@ -671,25 +903,30 @@ def get_data_per_var_per_obs(
 
     .. todo::
 
-        A better implementation of :py:func:`get_data_per_var_per_obs` would be to cache the
+        A better implementation of :py:func:`get_vo_data` would be to cache the
         layout-specific data in a private variable, but we do not own the ``AnnData`` object.
     '''
     if name is None:
-        name = get_metadata(adata, 'focus')
+        name = get_m_data(adata, 'm:focus')
+
+    assert '__' not in name
+
+    if name.startswith('vo:'):
+        full_name = name
+        name = full_name[3:]
+    else:
+        full_name = 'vo:' + name
 
     if infocus:
-        adata.uns['focus'] = name
+        adata.uns['focus'] = full_name
 
-    assert name[:2] != '__'
-
-    if name == adata.uns['x_name']:
-        def get_data() -> utc.Matrix:
+    if full_name == adata.uns['x_name']:
+        def get_base_data() -> utc.Matrix:
             with timed.step('.get_x'):
-                timed.parameters(name=name, all='+'.join(adata.layers.keys()))
                 data = adata.X
             return data
     else:
-        def get_data() -> utc.Matrix:
+        def get_base_data() -> utc.Matrix:
             data = adata.layers.get(name)
             if data is not None:
                 utc.freeze(data)
@@ -698,8 +935,8 @@ def get_data_per_var_per_obs(
             if compute is None:
                 assert name is not None
                 raise \
-                    RuntimeError('unavailable per-variable-per-observation data: '
-                                 + name)
+                    KeyError('unavailable per-variable-per-observation data: '
+                             + name)
             data = compute()
             assert data.shape == adata.shape
 
@@ -710,31 +947,34 @@ def get_data_per_var_per_obs(
             return data
 
     if by is None:
-        return get_data()
+        return get_base_data(), full_name
 
     assert by in ['var', 'obs']
-    by_name = '__by_%s__%s' % (by, name)
+    by_name = '%s:__by_%s__' % (name, by)
     axis = ['var', 'obs'].index(by)
 
     by_data = adata.layers.get(by_name)
     if by_data is None:
-        by_data = utc.to_layout(get_data(), axis=axis)
+        by_data = utc.to_layout(get_base_data(), axis=axis)
 
         if inplace or infocus:
             utc.freeze(by_data)
             adata.layers[by_name] = by_data
 
-    return by_data
+    return by_data, name
 
 
-def del_data_per_var_per_obs(
-    adata: AnnData, name: str,
+def del_vo_data(
+    adata: AnnData,
+    name: str,
     *,
     by: Optional[str] = None,
     must_exist: bool = False,
 ) -> None:
     '''
     Delete a per-observation-per-variable matrix in ``adata`` by its ``name``.
+
+    If the name does not start with a ``vo:`` prefix, one is assumed.
 
     If ``by`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This will only
     delete the cached layout-specific data. If ``by`` is not specified, both the data and any
@@ -749,17 +989,26 @@ def del_data_per_var_per_obs(
 
     .. todo::
 
-        The function :py:func:`del_data_per_var_per_obs` is only required due to the need to delete
-        cached layout-specific data. A better way would be to intercept ``del`` of the ``AnnData``
+        The function :py:func:`del_vo_data` is only required due to the need to delete cached
+        layout-specific data. A better way would be to intercept ``del`` of the ``AnnData``
         ``layers`` field, but we do not own it.
     '''
-    assert not name.startswith('__')
-    assert name != get_metadata(adata, 'x_name')
-    if name == get_metadata(adata, 'focus'):
-        adata.uns['focus'] = adata.uns['x_name']
+    assert '__' not in name
+
+    if name.startswith('vo:'):
+        full_name = name
+        name = name[3:]
+    else:
+        full_name = 'vo:' + name
+
+    x_name = get_m_data(adata, 'm:x_name')
+    assert full_name != x_name
+
+    if full_name == get_m_data(adata, 'm:focus'):
+        adata.uns['focus'] = x_name
 
     if by is not None:
-        by_name = '__by_%s__%s' % (by, name)
+        by_name = '%s:__by_%s__' % (name, by)
         if by_name in adata.layers:
             del adata.layers[by_name]
         elif must_exist:
@@ -768,10 +1017,10 @@ def del_data_per_var_per_obs(
 
     if must_exist:
         assert name in adata.layers
-    for prefix in ['', '__by_obs__', '__by_var__']:
-        prefixed_name = prefix + name
-        if prefixed_name in adata.layers:
-            del adata.layers[prefixed_name]
+    for suffix in ['', ':__by_obs__', ':__by_var__']:
+        suffixed_name = name + suffix
+        if suffixed_name in adata.layers:
+            del adata.layers[suffixed_name]
 
 
 @contextmanager
@@ -820,7 +1069,7 @@ def focus_on(
     old_focus = adata.uns['focus']
     data = accessor(adata, of=of, by=by, infocus=True, **kwargs)
     yield data
-    if has_data(adata, 'per_var_per_obs', old_focus):
+    if has_data(adata, old_focus):
         adata.uns['focus'] = old_focus
     else:
         adata.uns['focus'] = adata.uns['x_name']
@@ -837,50 +1086,45 @@ def get_log_data_per_var_per_obs(
     inplace: bool = True,
     infocus: bool = False,
     by: Optional[str] = None,
-) -> utc.Matrix:
+) -> Tuple[utc.Matrix, str]:
     '''
     Return a matrix with the log of some per-variable-per-observation data.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
     If ``inplace`` (or ``infocus``), the data will be stored in
-    ``log_<base>_of_<normalization>_plus_<of>`` for future reuse.
+    ``vo:log_<base>_of_<normalization>_plus_vo:<of>`` for future reuse.
 
     If ``infocus`` (implies ``inplace``), also makes the result the new ``focus``.
 
     If ``by`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
     data in a layout optimized for by-observation (row-major / csr) or by-variable (column-major
-    / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional layer whose name
-    is prefixed (e.g. ``__by_obs__log_2_of_1_plus_UMIs``).
+    / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional "hidden" layer
+    whose name is prefixed (e.g. ``...:__by_obs__``).
 
     The natural logarithm is used by default. Otherwise, the ``base`` is used.
 
     The ``normalization`` (default: {normalization}) is added to the count before the log is
     applied, to handle the common case of sparse data.
 
+    Returns the result and its full name.
+
     .. note::
 
         The result is always a dense matrix, as even for sparse data, the log is rarely zero.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
-
-    to = 'log_%s_of_%s_plus_%s' % (base or 'e', normalization, of)
-
-    if inplace or infocus:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_var_per_obs', to),
-                             slicing_mask=ALWAYS_SAFE)
+    full_of = _full_of(adata, of)
+    full_to = \
+        'vo:log_%s_of_%s_plus_%s' % (base or 'e', normalization, full_of[3:])
 
     @timed.call('.compute')
     def compute() -> utc.Matrix:
-        assert of is not None
-        matrix = get_data_per_var_per_obs(adata, of, by=by)
+        matrix = get_vo_data(adata, full_of, by=by)[0]
         return utc.log_matrix(matrix, base=base, normalization=normalization)
 
-    return get_data_per_var_per_obs(adata, to, compute=compute,
-                                    inplace=inplace, infocus=infocus, by=by)
+    return _derive_vo_data(adata, full_of, full_to, ALWAYS_SAFE,
+                           compute, inplace, infocus, by)
 
 
 @timed.call()
@@ -892,7 +1136,7 @@ def get_fraction_of_var_per_obs(
     infocus: bool = True,
     intermediate: bool = True,
     by: Optional[str] = None,
-) -> utc.Matrix:
+) -> Tuple[utc.Matrix, str]:
     '''
     Return a matrix containing, in each entry, the fraction the original data (e.g. UMIs) for this
     variable (gene) is in this observation (cell) out of the total for all variables (genes).
@@ -902,44 +1146,39 @@ def get_fraction_of_var_per_obs(
         This is probably the version you want: here, the sum of fraction of the genes in a cell is
         1. See :py:func:`get_fraction_of_obs_per_var` for the other way around.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    If ``inplace``, the data will be stored in ``fraction_of_var_per_obs_of_<of>`` for future reuse.
+    If ``inplace``, the data will be stored in ``vo:fraction_of_v_per_o_of_vo:<of>`` for future
+    reuse.
 
     If ``infocus`` (implies ``inplace``), also makes the result the new ``focus``.
 
-    If ``intermediate``, also stores the ``sum_of_<of>`` per-observation (cell) data for future
+    If ``intermediate``, also stores the ``o:sum_of_vo:<of>`` per-observation (cell) data for future
     reuse.
 
     If ``by`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
     data in a layout optimized for by-observation (row-major / csr) or by-variable (column-major
-    / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional layer whose name
-    is prefixed (e.g. ``__by_obs__fraction_of_var_per_obs_of_UMIs``).
+    / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional "hidden" layer
+    whose name is suffixed (e.g. ``...:__by_obs__``).
+
+    Returns the result and its full name.
 
     .. note::
 
         This assumes all the data values are non-negative.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
-
-    to = 'fraction_of_var_per_obs_of_' + of
-
-    if inplace or infocus:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_var_per_obs', to),
-                             slicing_mask=SAFE_WHEN_SLICING_OBS)
+    full_of = _full_of(adata, of)
+    full_to = 'vo:fraction_of_v_per_o_of_' + full_of
 
     @timed.call('.compute')
     def compute() -> utc.Matrix:
-        assert of is not None
-        matrix = get_data_per_var_per_obs(adata, of, by=by)
-        total_per_obs = get_sum_per_obs(adata, of, inplace=intermediate)
-        return matrix / total_per_obs[:, None]
+        matrix = get_vo_data(adata, full_of, by=by)
+        sum_per_obs = get_sum_per_obs(adata, full_of, inplace=intermediate)[0]
+        return matrix / sum_per_obs[:, None]
 
-    return get_data_per_var_per_obs(adata, to, compute=compute,
-                                    inplace=inplace, infocus=infocus, by=by)
+    return _derive_vo_data(adata, full_of, full_to, SAFE_WHEN_SLICING_OBS,
+                           compute, inplace, infocus, by)
 
 
 @timed.call()
@@ -951,7 +1190,7 @@ def get_fraction_of_obs_per_var(
     infocus: bool = True,
     intermediate: bool = True,
     by: Optional[str] = None,
-) -> utc.Matrix:
+) -> Tuple[utc.Matrix, str]:
     '''
     Return a matrix containing, in each entry, the fraction the original data (e.g. UMIs) for this
     variable (gene) is in this observation (cell) out of the total for all observations (cells).
@@ -961,43 +1200,39 @@ def get_fraction_of_obs_per_var(
         This is probably not the version you want: here, the sum of fractions of the cells in each
         gene is 1. See :py:func:`get_fraction_of_var_per_obs` for the other way around.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    If ``inplace``, the data will be stored in ``fraction_of_obs_per_var_of_<of>`` for future reuse.
+    If ``inplace``, the data will be stored in ``vv:fraction_of_o_per_v_of_vo:<of>`` for future
+    reuse.
 
     If ``infocus`` (implies ``inplace``), also makes the result the new ``focus``.
 
-    If ``intermediate``, also stores the ``sum_of_<of>`` per-variable (gene) data for future reuse.
+    If ``intermediate``, also stores the ``v:sum_of_vo:<of>`` per-variable (gene) data for future
+    reuse.
 
     If ``by`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
     data in a layout optimized for by-observation (row-major / csr) or by-variable (column-major
-    / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional layer whose name
-    is prefixed (e.g. ``__by_obs__fraction_of_obs_per_var_of_UMIs``).
+    / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional "hidden" layer
+    whose name is prefixed (e.g. ``...:__by_obs__``).
+
+    Returns the result and its full name.
 
     .. note::
 
         This assumes all the data values are non-negative.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
-
-    to = 'fraction_of_obs_per_var_of_' + of
-
-    if inplace or infocus:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_var_per_obs', to),
-                             slicing_mask=SAFE_WHEN_SLICING_VAR)
+    full_of = _full_of(adata, of)
+    full_to = 'vo:fraction_of_o_per_v_of_' + full_of
 
     @timed.call('.compute')
     def compute() -> utc.Vector:
-        assert of is not None
-        matrix = get_data_per_var_per_obs(adata, of, by=by)
-        total_per_var = get_sum_per_var(adata, of, inplace=intermediate)
-        return matrix / total_per_var[None, :]
+        matrix = get_vo_data(adata, full_of, by=by)[0]
+        sum_per_var = get_sum_per_var(adata, full_of, inplace=intermediate)[0]
+        return matrix / sum_per_var[None, :]
 
-    return get_data_per_var_per_obs(adata, to, compute=compute,
-                                    inplace=inplace, infocus=infocus, by=by)
+    return _derive_vo_data(adata, full_of, full_to, SAFE_WHEN_SLICING_VAR,
+                           compute, inplace, infocus, by)
 
 
 @timed.call()
@@ -1010,7 +1245,7 @@ def get_downsample_of_var_per_obs(
     inplace: bool = True,
     infocus: bool = True,
     by: Optional[str] = None,
-) -> utc.Matrix:
+) -> Tuple[utc.Matrix, str]:
     '''
     Return a matrix containing, for each observation (cell), downsampled data
     for each variable (gene), such that the total sum would be no more
@@ -1021,9 +1256,10 @@ def get_downsample_of_var_per_obs(
         This is probably the version you want: here, the sum of the genes in a cell will be (at
         most) ``samples``. See :py:func:`get_downsample_of_obs_per_var` for the other way around.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    If ``inplace``, the data will be stored in ``downsample_<samples>_var_per_obs_of_<of>`` for
+    If ``inplace``, the data will be stored in ``vo:downsample_<samples>_v_per_o_of_vo:<of>`` for
     future reuse.
 
     If ``infocus`` (implies ``inplace``), also makes the result the new ``focus``.
@@ -1031,34 +1267,28 @@ def get_downsample_of_var_per_obs(
     If ``by`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
     data in a layout optimized for by-observation (row-major / csr) or by-variable (column-major
     / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional layer whose name
-    is prefixed (e.g. ``__by_obs__downsample_<samples>_var_per_obs_of_<of>``).
+    is prefixed (e.g. ``vo:downsample_<samples>_v_per_o_of_vo:<of>``).
 
     A ``random_seed`` can be provided to make the operation replicable.
+
+    Returns the result and its full name.
 
     .. note::
 
         This assumes all the data values are non-negative integer values (even if the ``dtype`` is a
         floating-point type).
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
-
-    to = 'downsample_%s_var_per_obs_of_%s' % (samples, of)
-
-    if inplace or infocus:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_var_per_obs', to),
-                             slicing_mask=SAFE_WHEN_SLICING_OBS)
+    full_of = _full_of(adata, of)
+    full_to = 'vo:downsample_%s_v_per_o_of_%s' % (samples, full_of)
 
     @timed.call('.compute')
     def compute() -> utc.Matrix:
-        assert of is not None
-        matrix = get_data_per_var_per_obs(adata, of, by=by)
-        return utc.downsample_matrix(matrix, axis=1, samples=samples, random_seed=random_seed)
+        matrix = get_vo_data(adata, full_of, by=by)[0]
+        return utc.downsample_matrix(matrix, axis=1, samples=samples,
+                                     random_seed=random_seed)
 
-    return get_data_per_var_per_obs(adata, to, compute=compute,
-                                    inplace=inplace, infocus=infocus, by=by)
+    return _derive_vo_data(adata, full_of, full_to, SAFE_WHEN_SLICING_OBS,
+                           compute, inplace, infocus, by)
 
 
 @timed.call()
@@ -1068,11 +1298,10 @@ def get_downsample_of_obs_per_var(
     samples: int,
     random_seed: int = 0,
     of: Optional[str] = None,
-    to: Optional[str] = None,
     inplace: bool = True,
     infocus: bool = True,
     by: Optional[str] = None,
-) -> utc.Matrix:
+) -> Tuple[utc.Matrix, str]:
     '''
     Return a matrix containing, for each variable (gene), downsampled data
     for each observation (cell), such that the total sum would be no more
@@ -1083,150 +1312,39 @@ def get_downsample_of_obs_per_var(
         This is probably not the version you want: here, the sum of the cells in a gene will be (at
         most) ``samples``. See :py:func:`get_downsample_of_var_per_obs` for the other way around.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    If ``inplace``, the data will be stored in ``downsample_<samples>_obs_per_var_of_<of>`` for
+    If ``inplace``, the data will be stored in ``vv:downsample_<samples>_o_per_v_of_vo:<of>`` for
     future reuse.
 
     If ``infocus`` (implies ``inplace``), also makes the result the new ``focus``.
 
     If ``by`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
     data in a layout optimized for by-observation (row-major / csr) or by-variable (column-major
-    / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional layer whose name
-    is prefixed (e.g. ``__by_obs__downsample_800_obs_per_var_of_UMIs``).
+    / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional "hidden" layer
+    whose name is prefixed (e.g. ``...:__by_obs__``).
 
     A ``random_seed`` can be provided to make the operation replicable.
+
+    Returns the result and its full name.
 
     .. note::
 
         This assumes all the data values are non-negative integer values (even if the ``dtype`` is a
         floating-point type).
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
-
-    to = 'downsample_%s_obs_per_var_of_%s' % (samples, of)
-
-    if inplace or infocus:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_var_per_obs', to),
-                             slicing_mask=SAFE_WHEN_SLICING_VAR)
+    full_of = _full_of(adata, of)
+    full_to = 'vo:downsample_%s_obs_per_var_of_%s' % (samples, full_of)
 
     @timed.call('.compute')
     def compute() -> utc.Matrix:
-        assert of is not None
-        matrix = get_data_per_var_per_obs(adata, of, by=by)
-        return utc.downsample_matrix(matrix, axis=0, samples=samples, random_seed=random_seed)
+        matrix = get_vo_data(adata, full_of, by=by)[0]
+        return utc.downsample_matrix(matrix, axis=0, samples=samples,
+                                     random_seed=random_seed)
 
-    return get_data_per_var_per_obs(adata, to, compute=compute,
-                                    inplace=inplace, infocus=infocus, by=by)
-
-
-def get_metadata(
-    adata: AnnData,
-    name: str,
-    compute: Optional[Callable[[], utc.Vector]] = None,
-    *,
-    inplace: bool = True,
-) -> Any:
-    '''
-    Lookup metadata (unstructured annotation) in ``adata``.
-
-    If the metadata does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
-
-    If ``inplace``, store the result in ``adata``.
-
-    .. note::
-
-        The caller is responsible for specifying the slicing behavior of the data.
-    '''
-    data = adata.uns.get(name)
-    if data is not None:
-        return data
-
-    if compute is None:
-        raise RuntimeError('unavailable metadata: ' + name)
-
-    data = compute()
-    assert data is not None
-
-    if inplace:
-        adata.uns[name] = data
-
-    return data
-
-
-def get_data_per_obs(
-    adata: AnnData,
-    name: str,
-    *,
-    compute: Optional[Callable[[], utc.Vector]] = None,
-    inplace: bool = True,
-) -> utc.Vector:
-    '''
-    Lookup per-observation (cell) data in ``adata``.
-
-    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
-
-    If ``inplace``, store the result in ``adata`` for future reuse.
-
-    .. note::
-
-        The caller is responsible for specifying the slicing behavior of the data.
-    '''
-    data = adata.obs.get(name)
-    if data is not None:
-        return data
-
-    if compute is None:
-        raise RuntimeError('unavailable per-observation data: ' + name)
-
-    data = compute()
-    assert data is not None
-    assert data.shape == (adata.n_obs,)
-
-    if inplace:
-        utc.freeze(data)
-        adata.obs[name] = data
-
-    return data
-
-
-def get_data_per_var(
-    adata: AnnData,
-    name: str,
-    *,
-    compute: Optional[Callable[[], utc.Vector]] = None,
-    inplace: bool = True,
-) -> utc.Vector:
-    '''
-    Lookup per-variable (gene) data in ``adata``.
-
-    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
-
-    If ``inplace``, store the result in ``adata`` for future reuse.
-
-    .. note::
-
-        The caller is responsible for specifying the slicing behavior of the data.
-    '''
-    data = adata.var.get(name)
-    if data is not None:
-        return data
-
-    if compute is None:
-        raise RuntimeError('unavailable per-variable data: ' + name)
-
-    data = compute()
-    assert data is not None
-    assert data.shape == (adata.n_vars,)
-
-    if inplace:
-        utc.freeze(data)
-        adata.var[name] = data
-
-    return data
+    return _derive_vo_data(adata, full_of, full_to, SAFE_WHEN_SLICING_VAR,
+                           compute, inplace, infocus, by)
 
 
 @timed.call()
@@ -1235,31 +1353,27 @@ def get_sum_per_obs(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> utc.Vector:
+) -> Tuple[utc.Vector, str]:
     '''
     Return the sum of the values per-observation (cell) of some per-variable-per-observation data.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    Use the ``sum_of_<of>`` per-observation (cell) data if it exists. Otherwise, compute it, and if
-    ``inplace`` store it for future reuse.
+    Use the ``o:sum_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+
+    Returns the result and its full name.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
+    full_of = _full_of(adata, of)
+    full_to = 'o:sum_of_' + full_of
 
     @timed.call('.compute')
     def compute() -> utc.Vector:
-        matrix = get_data_per_var_per_obs(adata, of, by='obs')
+        matrix = get_vo_data(adata, full_of, by='obs')[0]
         return utc.sum_matrix(matrix, axis=1)
 
-    name = 'sum_of_' + of
-    if inplace:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_obs', name),
-                             slicing_mask=SAFE_WHEN_SLICING_OBS)
-
-    return get_data_per_obs(adata, name, compute=compute, inplace=inplace)
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
 
 
 @timed.call()
@@ -1268,33 +1382,27 @@ def get_sum_per_var(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> utc.Vector:
+) -> Tuple[utc.Vector, str]:
     '''
     Return the sum of the values per-variable (gene) of some per-variable-per-observation data.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    Use the ``sum_of_<of>`` per-variable (gene) data if it exists. Otherwise, compute it, and if
-    ``inplace`` store it for future reuse.
+    Use the ``v:sum_of_vo:<of>`` per-variable (gene) data if it exists. Otherwise, compute it, and
+    if ``inplace`` store it for future reuse.
 
     If ``inplace``, store the result in ``adata`` for future reuse.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
+    full_of = _full_of(adata, of)
+    full_to = 'v:sum_of_' + full_of
 
     @timed.call('.compute')
     def compute() -> utc.Vector:
-        matrix = get_data_per_var_per_obs(adata, of, by='var')
+        matrix = get_vo_data(adata, full_of, by='var')[0]
         return utc.sum_matrix(matrix, axis=0)
 
-    name = 'sum_of_' + of
-    if inplace:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_var', name),
-                             slicing_mask=SAFE_WHEN_SLICING_VAR)
-
-    return get_data_per_var(adata, name, compute=compute, inplace=inplace)
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
 
 
 @timed.call()
@@ -1303,22 +1411,31 @@ def get_mean_per_obs(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> utc.Vector:
+    intermediate: bool = True,
+) -> Tuple[utc.Vector, str]:
     '''
     Return the mean of the values per-observation (cell) of some per-variable-per-observation data.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    Use the ``sum_of_<of>`` per-observation (cell) data if it exists. Otherwise, compute it, and if
-    ``inplace`` store it for future reuse.
+    Use the ``o:mean_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+
+    If ``intermediate``, also store the intermediate per-observation ``o:sum_of_vo:<of>`` for future
+    reuse.
+
+    Returns the result and its full name.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
+    full_of = _full_of(adata, of)
+    full_to = 'o:mean_of_' + full_of
 
-    sum_per_obs = get_sum_per_obs(adata, of, inplace=inplace)
-    with timed.step('.compute'):
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        sum_per_obs = get_sum_per_obs(adata, full_of, inplace=intermediate)[0]
         return sum_per_obs / adata.n_vars
+
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
 
 
 @timed.call()
@@ -1327,22 +1444,31 @@ def get_mean_per_var(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> utc.Vector:
+    intermediate: bool = True,
+) -> Tuple[utc.Vector, str]:
     '''
     Return the mean of the values per-variable (gene) of some per-variable-per-observation data.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    Use the ``sum_of_<of>`` per-variable (gene) data if it exists. Otherwise, compute it, and if
-    ``inplace`` store it for future reuse.
+    Use the ``v:mean_of_vo:<of>`` per-variable (cell) data if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+
+    If ``intermediate``, also store the intermediate per-variable ``v:sum_of_vo:<of>`` for future
+    reuse.
+
+    Returns the result and its full name.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
+    full_of = _full_of(adata, of)
+    full_to = 'v:mean_of_' + full_of
 
-    sum_per_var = get_sum_per_var(adata, of, inplace=inplace)
-    with timed.step('.compute'):
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        sum_per_var = get_sum_per_var(adata, full_of, inplace=intermediate)[0]
         return sum_per_var / adata.n_obs
+
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
 
 
 @timed.call()
@@ -1351,32 +1477,26 @@ def get_sum_squared_per_obs(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> utc.Vector:
+) -> Tuple[utc.Vector, str]:
     '''
     Return the sum of the squared values per-observation (cell) of some per-variable-per-observation
     data.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    Use the ``sum_squared_of_<of>`` per-observation (cell) data if it exists. Otherwise, compute it,
-    and if ``inplace`` store it for future reuse.
+    Use the ``o:sum_squared_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise,
+    compute it, and if ``inplace`` store it for future reuse.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
+    full_of = _full_of(adata, of)
+    full_to = 'o:sum_squared_of_' + full_of
 
     @timed.call('.compute')
     def compute() -> utc.Vector:
-        matrix = get_data_per_var_per_obs(adata, of, by='obs')
+        matrix = get_vo_data(adata, full_of, by='obs')[0]
         return utc.sum_squared_matrix(matrix, axis=1)
 
-    name = 'sum_squared_of_' + of
-    if inplace:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_obs', name),
-                             slicing_mask=SAFE_WHEN_SLICING_OBS)
-
-    return get_data_per_obs(adata, name, compute=compute, inplace=inplace)
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
 
 
 @timed.call()
@@ -1385,32 +1505,26 @@ def get_sum_squared_per_var(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> utc.Vector:
+) -> Tuple[utc.Vector, str]:
     '''
     Return the sum of the squared values per-variable (gene) of some per-variable-per-observation
     data.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    Use the ``sum_squared_of_<of>`` per-variable (gene) data if it exists. Otherwise, compute it,
-    and if ``inplace`` store it for future reuse.
+    Use the ``v:sum_squared_of_vo:<of>`` per-variable (gene) data if it exists. Otherwise, compute
+    it, and if ``inplace`` store it for future reuse.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
+    full_of = _full_of(adata, of)
+    full_to = 'v:sum_squared_of_' + full_of
 
     @timed.call('.compute')
     def compute() -> utc.Vector:
-        matrix = get_data_per_var_per_obs(adata, of, by='var')
+        matrix = get_vo_data(adata, full_of, by='var')[0]
         return utc.sum_squared_matrix(matrix, axis=0)
 
-    name = 'sum_squared_of_' + of
-    if inplace:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_var', name),
-                             slicing_mask=SAFE_WHEN_SLICING_VAR)
-
-    return get_data_per_var(adata, name, compute=compute, inplace=inplace)
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
 
 
 @timed.call()
@@ -1420,41 +1534,35 @@ def get_variance_per_obs(
     *,
     inplace: bool = True,
     intermediate: bool = True,
-) -> utc.Vector:
+) -> Tuple[utc.Vector, str]:
     '''
     Return the variance of the values per-observation (cell) of some per-variable-per-observation
     data.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    Use the ``variance_of_<of>`` per-observation (cell) data if it exists. Otherwise, compute it,
-    and if ``inplace`` store it for future reuse.
+    Use the ``o:variance_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise, compute
+    it, and if ``inplace`` store it for future reuse.
 
-    If ``intermediate``, also store the intermediate per-observation ``sum_of_<of>`` and
-    ``sum_squared_of_<of>`` data for future reuse.
+    If ``intermediate``, also store the intermediate per-observation ``o:sum_of_vo:<of>`` and
+    ``o:sum_squared_of_vo:<of>`` data for future reuse.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
+    full_of = _full_of(adata, of)
+    full_to = 'o:variance_of_' + full_of
 
     @timed.call('.compute')
     def compute() -> utc.Vector:
-        sum_per_obs = get_sum_per_obs(adata, of, inplace=intermediate)
+        sum_per_obs = get_sum_per_obs(adata, full_of, inplace=intermediate)[0]
         sum_squared_per_obs = \
-            get_sum_squared_per_obs(adata, of, inplace=intermediate)
+            get_sum_squared_per_obs(adata, full_of, inplace=intermediate)[0]
         result = np.square(sum_per_obs)
         result /= -adata.n_vars
         result += sum_squared_per_obs
         result /= adata.n_vars
         return result
 
-    name = 'variance_of_' + of
-    if inplace:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_obs', name),
-                             slicing_mask=SAFE_WHEN_SLICING_OBS)
-
-    return get_data_per_obs(adata, name, compute=compute, inplace=inplace)
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
 
 
 @timed.call()
@@ -1464,40 +1572,34 @@ def get_variance_per_var(
     *,
     inplace: bool = True,
     intermediate: bool = True,
-) -> utc.Vector:
+) -> Tuple[utc.Vector, str]:
     '''
     Return the variance of the values per-variable (gene) of some per-variable-per-observation data.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    Use the ``variance_of_<of>`` per-variable (gene) data if it exists. Otherwise, compute it,
+    Use the ``v:variance_of_vo:<of>`` per-variable (gene) data if it exists. Otherwise, compute it,
     and if ``inplace`` store it for future reuse.
 
-    If ``intermediate``, also store the intermediate per-variable ``sum_of_<of>`` and
-    ``sum_squared_of_<of>`` data for future reuse.
+    If ``intermediate``, also store the intermediate per-variable ``v:sum_of_vo:<of>`` and
+    ``v:sum_squared_of_vo:<of>`` data for future reuse.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
+    full_of = _full_of(adata, of)
+    full_to = 'v:variance_of_' + full_of
 
     @timed.call('.compute')
     def compute() -> utc.Vector:
-        sum_per_var = get_sum_per_var(adata, of, inplace=intermediate)
+        sum_per_var = get_sum_per_var(adata, full_of, inplace=intermediate)[0]
         sum_squared_per_var = \
-            get_sum_squared_per_var(adata, of, inplace=intermediate)
+            get_sum_squared_per_var(adata, full_of, inplace=intermediate)[0]
         result = np.square(sum_per_var)
         result /= -adata.n_obs
         result += sum_squared_per_var
         result /= adata.n_obs
         return result
 
-    name = 'variance_of_' + of
-    if inplace:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_var', name),
-                             slicing_mask=SAFE_WHEN_SLICING_VAR)
-
-    return get_data_per_var(adata, name, compute=compute, inplace=inplace)
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
 
 
 @timed.call()
@@ -1506,31 +1608,25 @@ def get_max_per_obs(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> utc.Vector:
+) -> Tuple[utc.Vector, str]:
     '''
     Return the maximal value per-observation (cell) of some per-variable-per-observation data.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    Use the ``max_of_<of>`` per-observation (cell) data if it exists. Otherwise, compute it, and if
-    ``inplace`` store it for future reuse.
+    Use the ``o:max_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
+    full_of = _full_of(adata, of)
+    full_to = 'o:max_of_' + full_of
 
     @timed.call('.compute')
     def compute() -> utc.Vector:
-        matrix = get_data_per_var_per_obs(adata, of, by='obs')
+        matrix = get_vo_data(adata, full_of, by='obs')[0]
         return utc.max_matrix(matrix, axis=1)
 
-    name = 'max_of_' + of
-    if inplace:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_obs', name),
-                             slicing_mask=SAFE_WHEN_SLICING_OBS)
-
-    return get_data_per_obs(adata, name, compute=compute, inplace=inplace)
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
 
 
 @timed.call()
@@ -1539,31 +1635,25 @@ def get_max_per_var(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> utc.Vector:
+) -> Tuple[utc.Vector, str]:
     '''
     Return the maximal value per-variable (gene) of some per-variable-per-observation data.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    Use the ``max_of_<of>`` per-variable (gene) data if it exists. Otherwise, compute it, and if
-    ``inplace`` store it for future reuse.
+    Use the ``v:max_of_vo:<of>`` per-variable (gene) data if it exists. Otherwise, compute it, and
+    if ``inplace`` store it for future reuse.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
+    full_of = _full_of(adata, of)
+    full_to = 'v:max_of_' + full_of
 
     @timed.call('.compute')
     def compute() -> utc.Vector:
-        matrix = get_data_per_var_per_obs(adata, of, by='var')
+        matrix = get_vo_data(adata, full_of, by='var')[0]
         return utc.max_matrix(matrix, axis=0)
 
-    name = 'max_of_' + of
-    if inplace:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_var', name),
-                             slicing_mask=SAFE_WHEN_SLICING_VAR)
-
-    return get_data_per_var(adata, name, compute=compute, inplace=inplace)
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
 
 
 @timed.call()
@@ -1572,31 +1662,25 @@ def get_min_per_obs(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> utc.Vector:
+) -> Tuple[utc.Vector, str]:
     '''
     Return the minimal value per-observation (cell) of some per-variable-per-observation data.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    Use the ``min_of_<of>`` per-observation (cell) data if it exists. Otherwise, compute it, and if
-    ``inplace`` store it for future reuse.
+    Use the ``o:min_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
+    full_of = _full_of(adata, of)
+    full_to = 'o:min_of_' + full_of
 
     @timed.call('.compute')
     def compute() -> utc.Vector:
-        matrix = get_data_per_var_per_obs(adata, of, by='obs')
+        matrix = get_vo_data(adata, full_of, by='obs')[0]
         return utc.min_matrix(matrix, axis=1)
 
-    name = 'min_of_' + of
-    if inplace:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_obs', name),
-                             slicing_mask=SAFE_WHEN_SLICING_OBS)
-
-    return get_data_per_obs(adata, name, compute=compute, inplace=inplace)
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
 
 
 @timed.call()
@@ -1605,31 +1689,25 @@ def get_min_per_var(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> utc.Vector:
+) -> Tuple[utc.Vector, str]:
     '''
     Return the minimal value per-variable (gene) of some per-variable-per-observation data.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    Use the ``min_of_<of>`` per-variable (gene) data if it exists. Otherwise, compute it, and if
-    ``inplace`` store it for future reuse.
+    Use the ``v:min_of_vo:<of>`` per-variable (gene) data if it exists. Otherwise, compute it, and
+    if ``inplace`` store it for future reuse.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
+    full_of = _full_of(adata, of)
+    full_to = 'v:min_of_' + full_of
 
     @timed.call('.compute')
     def compute() -> utc.Vector:
-        matrix = get_data_per_var_per_obs(adata, of, by='var')
+        matrix = get_vo_data(adata, full_of, by='var')[0]
         return utc.min_matrix(matrix, axis=0)
 
-    name = 'min_of_' + of
-    if inplace:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_var', name),
-                             slicing_mask=SAFE_WHEN_SLICING_VAR)
-
-    return get_data_per_var(adata, name, compute=compute, inplace=inplace)
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
 
 
 @timed.call()
@@ -1638,32 +1716,26 @@ def get_nnz_per_obs(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> utc.Vector:
+) -> Tuple[utc.Vector, str]:
     '''
     Return the number of non-zero values per-observation (cell) of some per-variable-per-observation
     data.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    Use the ``nnz_of_<of>`` per-observation (cell) data if it exists. Otherwise, compute it, and if
-    ``inplace`` store it for future reuse.
+    Use the ``o:nnz_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
+    full_of = _full_of(adata, of)
+    full_to = 'o:nnz_of_' + full_of
 
     @timed.call('.compute')
     def compute() -> utc.Vector:
-        matrix = get_data_per_var_per_obs(adata, of, by='obs')
+        matrix = get_vo_data(adata, full_of, by='obs')[0]
         return utc.nnz_matrix(matrix, axis=1)
 
-    name = 'nnz_of_' + of
-    if inplace:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_obs', name),
-                             slicing_mask=SAFE_WHEN_SLICING_OBS)
-
-    return get_data_per_obs(adata, name, compute=compute, inplace=inplace)
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
 
 
 @timed.call()
@@ -1672,29 +1744,203 @@ def get_nnz_per_var(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> utc.Vector:
+) -> Tuple[utc.Vector, str]:
     '''
     Return the number of non-zero values per-variable (gene) of some per-variable-per-observation
     data.
 
-    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
 
-    Use the ``nnz_of_<of>`` per-variable (gene) data if it exists. Otherwise, compute it, and if
-    ``inplace`` store it for future reuse.
+    Use the ``v:nnz_of_vo:<of>`` per-variable (gene) data if it exists. Otherwise, compute it, and
+    if ``inplace`` store it for future reuse.
     '''
-    if of is None:
-        of = get_metadata(adata, 'focus')
-        assert of is not None
+    full_of = _full_of(adata, of)
+    full_to = 'v:sum_of_' + full_of
 
     @timed.call('.compute')
     def compute() -> utc.Vector:
-        matrix = get_data_per_var_per_obs(adata, of, by='var')
+        matrix = get_vo_data(adata, full_of, by='var')[0]
         return utc.nnz_matrix(matrix, axis=0)
 
-    name = 'nnz_of_' + of
-    if inplace:
-        safe_slicing_derived(base_data=[WhichData('per_var_per_obs', of)],
-                             derived_data=WhichData('per_var', name),
-                             slicing_mask=SAFE_WHEN_SLICING_VAR)
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
 
-    return get_data_per_var(adata, name, compute=compute, inplace=inplace)
+
+@timed.call()
+def get_obs_obs_correlation(
+    adata: AnnData,
+    of: Optional[str] = None,
+    *,
+    inplace: bool = True,
+    intermediate: bool = True,
+) -> Tuple[utc.Matrix, str]:
+    '''
+    Compute correlation between observations (cells) of the ``adata``.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    If ``inplace``, store the result in ``adata`` for future reuse.
+
+    If ``intermediate``, also stores the ``o:sum_of_vo:<of>`` per-observation (cell) data for future
+    reuse.
+
+    Returns the matrix and its full name.
+    '''
+    full_of = _full_of(adata, of, 'oo:')
+    full_to = 'oo:correlation_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        if full_of.startswith('vo:'):
+            matrix = get_vo_data(adata, full_of, by='obs')[0]
+            sum_of_rows = \
+                get_sum_per_obs(adata, full_of, inplace=intermediate)[0]
+            return utc.corrcoef(matrix, sum_of_rows)
+
+        matrix = get_oo_data(adata, full_of)
+        return utc.corrcoef(matrix)
+
+    return _derive_oo_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_var_var_correlation(
+    adata: AnnData,
+    of: Optional[str] = None,
+    *,
+    inplace: bool = True,
+    intermediate: bool = True,
+) -> Tuple[utc.Matrix, str]:
+    '''
+    Compute correlation between variables (genes) of the ``adata``.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    If ``inplace``, store the result in ``adata`` for future reuse.
+
+    If ``intermediate``, also stores the ``v:sum_of_vo:<of>`` per-variable (gene) data for future
+    reuse.
+
+    Returns the matrix and its full name.
+    '''
+    full_of = _full_of(adata, of, 'vv:')
+    full_to = 'vv:correlation_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        if full_of.startswith('vo:'):
+            matrix = get_vo_data(adata, full_of, by='var')[0].T
+            sum_of_rows = \
+                get_sum_per_var(adata, full_of, inplace=intermediate)[0]
+            return utc.corrcoef(matrix, sum_of_rows)
+
+        matrix = get_vv_data(adata, full_of)
+        return utc.corrcoef(matrix)
+
+    return _derive_vv_data(adata, full_of, full_to, compute, inplace)
+
+
+def _full_of(adata: AnnData, of: Optional[str], per_prefix: str = 'vo:') -> str:
+    if of is None:
+        of = get_m_data(adata, 'm:focus')
+
+    if of.startswith('vo:'):
+        return of
+
+    if per_prefix == 'vo:':
+        _assert_not_prefixed(of, ['vo:'])
+    elif of.startswith(per_prefix):
+        return of
+    else:
+        _assert_not_prefixed(of, ['vo:', per_prefix])
+
+    return 'vo:' + of
+
+
+def _assert_not_prefixed(name: str, prefixes: List[str]) -> None:
+    for prefix in [':m', ':vo', ':o', ':v', ':oo', ':vv']:
+        if not name.startswith(prefix):
+            continue
+        raise ValueError('the data: %s does not have the expected prefix: %s'
+                         % (name, ', '.join(['"%s"' % expected
+                                             for expected in prefixes])))
+
+
+def _derive_vo_data(
+    adata: AnnData,
+    full_of: str,
+    full_to: str,
+    slicing_mask: SlicingMask,
+    compute: Callable[[], utc.Matrix],
+    inplace: bool,
+    infocus: bool,
+    by: Optional[str],
+) -> Tuple[utc.Matrix, str]:
+    if inplace or infocus:
+        safe_slicing_derived(base=full_of, derived=full_to,
+                             slicing_mask=slicing_mask)
+
+    return get_vo_data(adata, full_to, compute=compute,
+                       inplace=inplace, infocus=infocus, by=by)
+
+
+def _derive_o_data(
+    adata: AnnData,
+    full_of: str,
+    full_to: str,
+    compute: Callable[[], utc.Vector],
+    inplace: bool,
+) -> Tuple[utc.Vector, str]:
+    return _derive_p_data(adata, full_of, full_to, compute, inplace,
+                          SAFE_WHEN_SLICING_OBS, get_o_data)
+
+
+def _derive_v_data(
+    adata: AnnData,
+    full_of: str,
+    full_to: str,
+    compute: Callable[[], utc.Vector],
+    inplace: bool,
+) -> Tuple[utc.Vector, str]:
+    return _derive_p_data(adata, full_of, full_to, compute, inplace,
+                          SAFE_WHEN_SLICING_VAR, get_v_data)
+
+
+def _derive_oo_data(
+    adata: AnnData,
+    full_of: str,
+    full_to: str,
+    compute: Callable[[], utc.Vector],
+    inplace: bool,
+) -> Tuple[utc.Matrix, str]:
+    return _derive_p_data(adata, full_of, full_to, compute, inplace,
+                          SAFE_WHEN_SLICING_OBS, get_oo_data)
+
+
+def _derive_vv_data(
+    adata: AnnData,
+    full_of: str,
+    full_to: str,
+    compute: Callable[[], utc.Vector],
+    inplace: bool,
+) -> Tuple[utc.Matrix, str]:
+    return _derive_p_data(adata, full_of, full_to, compute, inplace,
+                          SAFE_WHEN_SLICING_VAR, get_vv_data)
+
+
+def _derive_p_data(
+    adata: AnnData,
+    full_of: str,
+    full_to: str,
+    compute: Callable[[], utc.Vector],
+    inplace: bool,
+    slicing_mask: SlicingMask,
+    getter: Callable,
+) -> Tuple[Any, str]:
+    if inplace:
+        safe_slicing_derived(base=full_of, derived=full_to,
+                             slicing_mask=slicing_mask)
+
+    return getter(adata, full_to, compute=compute, inplace=inplace), full_to

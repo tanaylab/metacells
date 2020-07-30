@@ -249,7 +249,7 @@ def relayout_compressed(matrix: sparse.spmatrix, axis: int) -> sparse.spmatrix:
 
 
 @timed.call()
-def corrcoef(matrix: Matrix) -> np.ndarray:
+def corrcoef(matrix: Matrix, sum_of_rows: Optional[Vector] = None) -> np.ndarray:
     '''
     Compute correlations between all observations (rows, cells) containing variables (columns,
     genes).
@@ -267,13 +267,25 @@ def corrcoef(matrix: Matrix) -> np.ndarray:
     obs_count = matrix.shape[0]
     var_count = matrix.shape[1]
     timed.parameters(obs_count=obs_count, var_count=var_count)
-    sum_of_rows = matrix.sum(axis=1)
+    assert obs_count > 1
+    assert var_count > 1
+
+    if sum_of_rows is None:
+        sum_of_rows = matrix.sum(axis=1)
+    sum_of_rows = to_array(sum_of_rows)
     assert sum_of_rows.size == obs_count
+
+    sum_of_rows = sum_of_rows[:, None]
     centering = sum_of_rows.dot(sum_of_rows.T) / var_count
-    correlations = (matrix.dot(matrix.T) - centering) / (var_count - 1)
+
+    correlations = matrix.dot(matrix.T)
+    correlations -= centering
+    correlations /= var_count - 1
     assert correlations.shape == (obs_count, obs_count)
+
     diagonal = np.diag(correlations)
     correlations /= np.sqrt(np.outer(diagonal, diagonal))
+
     return correlations
 
 

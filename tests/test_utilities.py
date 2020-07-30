@@ -261,11 +261,11 @@ def test_sum():
     adata = AnnData(matrix)
     ut.set_x_name(adata, 'test')
 
-    metacells_sum_per_row = ut.get_sum_per_obs(adata)
+    metacells_sum_per_row = ut.get_sum_per_obs(adata)[0]
     numpy_sum_per_row = matrix.sum(axis=1)
     assert np.allclose(metacells_sum_per_row, numpy_sum_per_row)
 
-    metacells_sum_per_column = ut.get_sum_per_var(adata)
+    metacells_sum_per_column = ut.get_sum_per_var(adata)[0]
     numpy_sum_per_column = matrix.sum(axis=0)
     assert np.allclose(metacells_sum_per_column, numpy_sum_per_column)
 
@@ -275,11 +275,11 @@ def test_mean():
     adata = AnnData(matrix)
     ut.set_x_name(adata, 'test')
 
-    metacells_mean_per_row = ut.get_mean_per_obs(adata)
+    metacells_mean_per_row = ut.get_mean_per_obs(adata)[0]
     numpy_mean_per_row = matrix.mean(axis=1)
     assert np.allclose(metacells_mean_per_row, numpy_mean_per_row)
 
-    metacells_mean_per_column = ut.get_mean_per_var(adata)
+    metacells_mean_per_column = ut.get_mean_per_var(adata)[0]
     numpy_mean_per_column = matrix.mean(axis=0)
     assert np.allclose(metacells_mean_per_column, numpy_mean_per_column)
 
@@ -290,12 +290,12 @@ def test_sum_squared():
     adata = AnnData(matrix)
     ut.set_x_name(adata, 'test')
 
-    metacells_sum_squared_per_row = ut.get_sum_squared_per_obs(adata)
+    metacells_sum_squared_per_row = ut.get_sum_squared_per_obs(adata)[0]
     numpy_sum_squared_per_row = squared.sum(axis=1)
     assert np.allclose(metacells_sum_squared_per_row,
                        numpy_sum_squared_per_row)
 
-    metacells_sum_squared_per_column = ut.get_sum_squared_per_var(adata)
+    metacells_sum_squared_per_column = ut.get_sum_squared_per_var(adata)[0]
     numpy_sum_squared_per_column = squared.sum(axis=0)
     assert np.allclose(metacells_sum_squared_per_column,
                        numpy_sum_squared_per_column)
@@ -306,11 +306,11 @@ def test_variance():
     adata = AnnData(matrix)
     ut.set_x_name(adata, 'test')
 
-    metacells_variance_per_row = ut.get_variance_per_obs(adata)
+    metacells_variance_per_row = ut.get_variance_per_obs(adata)[0]
     numpy_variance_per_row = matrix.var(axis=1)
     assert np.allclose(metacells_variance_per_row, numpy_variance_per_row)
 
-    metacells_variance_per_column = ut.get_variance_per_var(adata)
+    metacells_variance_per_column = ut.get_variance_per_var(adata)[0]
     numpy_variance_per_column = matrix.var(axis=0)
     assert np.allclose(metacells_variance_per_column,
                        numpy_variance_per_column)
@@ -321,11 +321,11 @@ def test_max():
     adata = AnnData(matrix)
     ut.set_x_name(adata, 'test')
 
-    metacells_max_per_row = ut.get_max_per_obs(adata)
+    metacells_max_per_row = ut.get_max_per_obs(adata)[0]
     numpy_max_per_row = np.amax(matrix, axis=1)
     assert np.allclose(metacells_max_per_row, numpy_max_per_row)
 
-    metacells_max_per_column = ut.get_max_per_var(adata)
+    metacells_max_per_column = ut.get_max_per_var(adata)[0]
     numpy_max_per_column = np.amax(matrix, axis=0)
     assert np.allclose(metacells_max_per_column, numpy_max_per_column)
 
@@ -335,11 +335,11 @@ def test_min():
     adata = AnnData(matrix)
     ut.set_x_name(adata, 'test')
 
-    metacells_min_per_row = ut.get_min_per_obs(adata)
+    metacells_min_per_row = ut.get_min_per_obs(adata)[0]
     numpy_min_per_row = np.amin(matrix, axis=1)
     assert np.allclose(metacells_min_per_row, numpy_min_per_row)
 
-    metacells_min_per_column = ut.get_min_per_var(adata)
+    metacells_min_per_column = ut.get_min_per_var(adata)[0]
     numpy_min_per_column = np.amin(matrix, axis=0)
     assert np.allclose(metacells_min_per_column, numpy_min_per_column)
 
@@ -349,11 +349,11 @@ def test_nnz():
     adata = AnnData(matrix)
     ut.set_x_name(adata, 'test')
 
-    metacells_nnz_per_row = ut.get_nnz_per_obs(adata)
+    metacells_nnz_per_row = ut.get_nnz_per_obs(adata)[0]
     scipy_nnz_per_row = matrix.getnnz(axis=1)
     assert np.allclose(metacells_nnz_per_row, scipy_nnz_per_row)
 
-    metacells_nnz_per_column = ut.get_nnz_per_var(adata)
+    metacells_nnz_per_column = ut.get_nnz_per_var(adata)[0]
     scipy_nnz_per_column = matrix.getnnz(axis=0)
     assert np.allclose(metacells_nnz_per_column, scipy_nnz_per_column)
 
@@ -365,32 +365,32 @@ def test_focus_on():
     adata = AnnData(matrix)
 
     ut.set_x_name(adata, 'test')
-    assert adata.uns['focus'] == 'test'
+    assert adata.uns['focus'] == 'vo:test'
 
     with ut.focus_on(ut.get_log_data_per_var_per_obs, adata) as log_data:
-        outer_focus = 'log_e_of_1_plus_test'
+        outer_focus = 'vo:log_e_of_1_plus_test'
         assert adata.uns['focus'] == outer_focus
-        assert id(log_data) == id(adata.layers[outer_focus])
+        assert id(log_data[0]) == id(adata.layers[outer_focus[3:]])
 
         with ut.focus_on(ut.get_downsample_of_var_per_obs, adata, of='test', samples=10) \
                 as downsamled_data:
-            inner_focus = 'downsample_10_var_per_obs_of_test'
+            inner_focus = 'vo:downsample_10_v_per_o_of_vo:test'
             assert adata.uns['focus'] == inner_focus
-            assert id(downsamled_data) == id(adata.layers[inner_focus])
+            assert id(downsamled_data[0]) == id(adata.layers[inner_focus[3:]])
 
         assert adata.uns['focus'] == outer_focus
-        assert id(log_data) == id(adata.layers[outer_focus])
+        assert id(log_data[0]) == id(adata.layers[outer_focus[3:]])
 
         with ut.focus_on(ut.get_downsample_of_var_per_obs, adata, of='test', samples=10) \
                 as downsamled_data:
-            inner_focus = 'downsample_10_var_per_obs_of_test'
+            inner_focus = 'vo:downsample_10_v_per_o_of_vo:test'
             assert adata.uns['focus'] == inner_focus
-            assert id(downsamled_data) == id(adata.layers[inner_focus])
-            ut.del_data_per_var_per_obs(adata, outer_focus)
+            assert id(downsamled_data[0]) == id(adata.layers[inner_focus[3:]])
+            ut.del_vo_data(adata, outer_focus)
 
-        assert adata.uns['focus'] == 'test'
+        assert adata.uns['focus'] == 'vo:test'
 
-    assert adata.uns['focus'] == 'test'
+    assert adata.uns['focus'] == 'vo:test'
 
 
 def test_sliding_window_function():
