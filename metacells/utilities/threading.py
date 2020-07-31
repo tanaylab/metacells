@@ -159,7 +159,7 @@ def parallel_for(
         if step_timing is None:
             timed_function = function
         else:
-            def timed_function(index: int) -> None:  # type: ignore
+            def timed_function(index: int) -> None:
                 with timed.step(step_timing):  # type: ignore
                     function(index)
 

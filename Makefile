@@ -25,7 +25,12 @@ todo:
 	@if grep -i -n TODO''X `git ls-files | grep -v pybind11`; then false; fi
 
 mypy:
-	mypy metacells tests
+	mypy \
+	    --warn-redundant-casts \
+	    --disallow-untyped-defs \
+	    --warn-unused-ignores \
+	    --scripts-are-modules \
+	    metacells tests
 
 build:
 	python setup.py build_ext --inplace
@@ -34,6 +39,7 @@ pylint: build
 	pylint metacells tests
 
 test: build
+	@rm -f timing.csv
 	pytest -s --cov=metacells tests
 
 tox:

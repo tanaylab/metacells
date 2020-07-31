@@ -2,19 +2,21 @@
 Test the utility functions.
 '''
 
+from typing import Any
+
 import numpy as np  # type: ignore
-from anndata import AnnData  # type: ignore
+from anndata import AnnData
 from scipy import sparse  # type: ignore
-from scipy import stats  # type: ignore
+from scipy import stats
 
 import metacells.utilities as ut
 
 # pylint: disable=missing-docstring
 
 
-def test_expand_doc():
+def test_expand_doc() -> None:
     @ut.expand_doc(foo=7)
-    def bar(baz, vaz=5):  # pylint: disable=blacklisted-name,unused-argument
+    def bar(baz: Any, vaz: int = 5) -> None:  # pylint: disable=blacklisted-name,unused-argument
         '''
         Bar with {foo} foos and parameter vaz (default: {vaz}).
         '''
@@ -24,31 +26,31 @@ def test_expand_doc():
         '''
 
 
-def test_sparse_corrcoef():
+def test_sparse_corrcoef() -> None:
     matrix = sparse.rand(100, 10000, density=0.1, format='csr')
     sparse_correlation = ut.corrcoef(matrix)
-    numpy_correlation = np.corrcoef(matrix.todense())
+    numpy_correlation = np.corrcoef(matrix.toarray())
     assert numpy_correlation.shape == (100, 100)
     assert np.allclose(sparse_correlation, numpy_correlation)
 
 
-def test_parallel_map():
+def test_parallel_map() -> None:
     actual = list(ut.parallel_map(lambda index: index, 10000))
     expected = list(range(10000))
     assert actual == expected
 
 
-def test_unbatched_parallel_map():
+def test_unbatched_parallel_map() -> None:
     actual = list(ut.parallel_map(lambda index: index,
                                   10000, batches_per_thread=None))
     expected = list(range(10000))
     assert actual == expected
 
 
-def test_parallel_for():
+def test_parallel_for() -> None:
     mask = np.zeros(10000, dtype='bool')
 
-    def invocation(indices):
+    def invocation(indices: range) -> None:
         assert not np.any(mask[indices])
         mask[indices] = True
 
@@ -57,10 +59,10 @@ def test_parallel_for():
     assert np.all(mask)
 
 
-def test_unbatched_parallel_for():
+def test_unbatched_parallel_for() -> None:
     mask = np.zeros(10000, dtype='bool')
 
-    def invocation(index):
+    def invocation(index: int) -> None:
         assert not mask[index]
         mask[index] = True
 
@@ -69,7 +71,7 @@ def test_unbatched_parallel_for():
     assert np.all(mask)
 
 
-def test_parallel_collect():
+def test_parallel_collect() -> None:
     shared_storage = ut.SharedStorage()
 
     def compute(indices: range) -> None:
@@ -87,7 +89,7 @@ def test_parallel_collect():
     assert np.all(np.arange(10000) == sorted(final_tmp))
 
 
-def test_relayout_matrix():
+def test_relayout_matrix() -> None:
     rvs = stats.poisson(10, loc=10).rvs
     csr_matrix = sparse.random(1000, 10000, format='csr',
                                dtype='int32', random_state=123456, data_rvs=rvs)
@@ -100,7 +102,7 @@ def test_relayout_matrix():
     assert metacells_csc_matrix.getformat() == 'csc'
 
     assert np.all(metacells_csc_matrix.indptr == scipy_csc_matrix.indptr)
-    assert np.all(metacells_csc_matrix.todense() == scipy_csc_matrix.todense())
+    assert np.all(metacells_csc_matrix.toarray() == scipy_csc_matrix.toarray())
 
     scipy_csr_matrix = scipy_csc_matrix.tocsr()
 
@@ -110,10 +112,10 @@ def test_relayout_matrix():
     assert metacells_csr_matrix.getformat() == 'csr'
 
     assert np.all(metacells_csr_matrix.indptr == scipy_csr_matrix.indptr)
-    assert np.all(metacells_csr_matrix.todense() == scipy_csr_matrix.todense())
+    assert np.all(metacells_csr_matrix.toarray() == scipy_csr_matrix.toarray())
 
 
-def test_downsample_tmp_size():
+def test_downsample_tmp_size() -> None:
     assert ut.downsample_tmp_size(0) == 0
     assert ut.downsample_tmp_size(1) == 0
     assert ut.downsample_tmp_size(2) == 3
@@ -126,7 +128,7 @@ def test_downsample_tmp_size():
     assert ut.downsample_tmp_size(9) == 31
 
 
-def test_downsample_with_tmp():
+def test_downsample_with_tmp() -> None:
     size = 10
     total = (size * (size - 1)) // 2
     samples = 20
@@ -146,7 +148,7 @@ def test_downsample_with_tmp():
     assert np.sum(output) == samples
 
 
-def test_downsample_array_inplace():
+def test_downsample_array_inplace() -> None:
     size = 10
     samples = 20
     random_seed = 123456
@@ -160,7 +162,7 @@ def test_downsample_array_inplace():
     assert np.sum(data) == samples
 
 
-def test_downsample_array_too_few():
+def test_downsample_array_too_few() -> None:
     size = 10
     total = (size * (size - 1)) // 2
     samples = total * 2
@@ -174,7 +176,7 @@ def test_downsample_array_too_few():
     assert np.all(data == safe)
 
 
-def test_downsample_matrix():
+def test_downsample_matrix() -> None:
     rvs = stats.poisson(10, loc=10).rvs
     matrix = sparse.random(1000, 10000, format='csr',
                            dtype='int32', random_state=123456, data_rvs=rvs)
@@ -186,14 +188,14 @@ def test_downsample_matrix():
     new_row_sums = ut.sum_matrix(result, axis=1)
     assert np.all(new_row_sums == min_sum)
 
-    matrix = matrix.todense()
+    matrix = matrix.toarray()
     result = ut.downsample_matrix(matrix, axis=1, samples=int(min_sum))
     assert result.shape == matrix.shape
     new_row_sums = ut.sum_matrix(result, axis=1)
     assert np.all(new_row_sums == min_sum)
 
 
-def test_bincount():
+def test_bincount() -> None:
     array = np.array(np.random.rand(100000) * 100, dtype='int32')
     numpy_bincount = np.bincount(array)
     metacells_bincount = ut.bincount_array(array)
@@ -204,7 +206,7 @@ def test_bincount():
     assert np.all(numpy_bincount == metacells_bincount)
 
 
-def test_freeze_dense():
+def test_freeze_dense() -> None:
     array = np.arange(10)
 
     assert not ut.frozen(array)
@@ -227,7 +229,7 @@ def test_freeze_dense():
     assert array[0] == -3
 
 
-def test_freeze_sparse():
+def test_freeze_sparse() -> None:
     matrix = sparse.rand(100, 100, density=0.1, format='csr')
 
     row = 0
@@ -256,7 +258,7 @@ def test_freeze_sparse():
     assert matrix[row, column] == -3
 
 
-def test_sum():
+def test_sum() -> None:
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
     ut.set_x_name(adata, 'test')
@@ -270,7 +272,7 @@ def test_sum():
     assert np.allclose(metacells_sum_per_column, numpy_sum_per_column)
 
 
-def test_mean():
+def test_mean() -> None:
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
     ut.set_x_name(adata, 'test')
@@ -284,7 +286,7 @@ def test_mean():
     assert np.allclose(metacells_mean_per_column, numpy_mean_per_column)
 
 
-def test_sum_squared():
+def test_sum_squared() -> None:
     matrix = np.random.rand(100, 200)
     squared = np.square(matrix)
     adata = AnnData(matrix)
@@ -301,7 +303,7 @@ def test_sum_squared():
                        numpy_sum_squared_per_column)
 
 
-def test_variance():
+def test_variance() -> None:
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
     ut.set_x_name(adata, 'test')
@@ -316,7 +318,7 @@ def test_variance():
                        numpy_variance_per_column)
 
 
-def test_max():
+def test_max() -> None:
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
     ut.set_x_name(adata, 'test')
@@ -330,7 +332,7 @@ def test_max():
     assert np.allclose(metacells_max_per_column, numpy_max_per_column)
 
 
-def test_min():
+def test_min() -> None:
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
     ut.set_x_name(adata, 'test')
@@ -344,7 +346,7 @@ def test_min():
     assert np.allclose(metacells_min_per_column, numpy_min_per_column)
 
 
-def test_nnz():
+def test_nnz() -> None:
     matrix = sparse.rand(100, 200, density=0.1, format='csr')
     adata = AnnData(matrix)
     ut.set_x_name(adata, 'test')
@@ -358,7 +360,7 @@ def test_nnz():
     assert np.allclose(metacells_nnz_per_column, scipy_nnz_per_column)
 
 
-def test_focus_on():
+def test_focus_on() -> None:
     rvs = stats.poisson(10, loc=10).rvs
     matrix = sparse.random(100, 1000, format='csr',
                            dtype='int32', random_state=123456, data_rvs=rvs)
@@ -393,7 +395,7 @@ def test_focus_on():
     assert adata.uns['focus'] == 'vo:test'
 
 
-def test_sliding_window_function():
+def test_sliding_window_function() -> None:
     array = np.arange(3)
     actual_result = \
         ut.sliding_window_function(array, function='mean', window_size=3)
@@ -405,3 +407,72 @@ def test_sliding_window_function():
                                                window_size=3, order_by=order_by)
     expected_result = np.array([2/3, 4/3, 1])
     assert np.allclose(actual_result, expected_result)
+
+
+def test_dense_annotations() -> None:
+    matrix = np.array([[0, 1, 2], [3, 4, 5]], dtype='float')
+    adata = AnnData(matrix)
+    _test_annotations(adata)
+
+
+def test_sparse_annotations() -> None:
+    matrix = np.array([[0, 1, 2],
+                       [3, 4, 5]], dtype='float')
+    matrix = sparse.csr_matrix(matrix)
+    adata = AnnData(matrix)
+    _test_annotations(adata)
+
+
+def _test_annotations(adata: AnnData) -> None:
+    ut.set_x_name(adata, 'test')
+
+    assert np.allclose(ut.get_sum_per_obs(adata)[0], np.array([3, 12]))
+    assert np.allclose(ut.get_sum_per_var(adata)[0], np.array([3, 5, 7]))
+
+    assert np.allclose(ut.get_nnz_per_obs(adata)[0], np.array([2, 3]))
+    assert np.allclose(ut.get_nnz_per_var(adata)[0], np.array([1, 2, 2]))
+
+    assert np.allclose(ut.get_sum_per_obs(adata)[0], np.array([3, 12]))
+    assert np.allclose(ut.get_sum_per_var(adata)[0], np.array([3, 5, 7]))
+
+    assert np.allclose(ut.get_min_per_obs(adata)[0], np.array([0, 3]))
+    assert np.allclose(ut.get_min_per_var(adata)[0], np.array([0, 1, 2]))
+
+    assert np.allclose(ut.get_max_per_obs(adata)[0], np.array([2, 5]))
+    assert np.allclose(ut.get_max_per_var(adata)[0], np.array([3, 4, 5]))
+
+    assert np.allclose(ut.get_sum_squared_per_obs(adata)[0], np.array([5, 50]))
+    assert np.allclose(ut.get_sum_squared_per_var(adata)
+                       [0], np.array([9, 17, 29]))
+
+    assert np.allclose(ut.get_fraction_per_obs(adata)
+                       [0], np.array([3/15, 12/15]))
+    assert np.allclose(ut.get_fraction_per_var(adata)[0],
+                       np.array([3/15, 5/15, 7/15]))
+
+    assert np.allclose(ut.get_mean_per_obs(adata)[0], np.array([3/3, 12/3]))
+    assert np.allclose(ut.get_mean_per_var(adata)[0],
+                       np.array([3/2, 5/2, 7/2]))
+
+    assert np.allclose(ut.get_variance_per_obs(adata)[0],
+                       np.array([5/3 - (3/3)**2, 50/3 - (12/3)**2]))
+    assert np.allclose(ut.get_variance_per_var(adata)[0],
+                       np.array([9/2 - (3/2)**2, 17/2 - (5/2)**2, 29/2 - (7/2)**2]))
+
+    assert np.allclose(ut.get_relative_variance_per_obs(adata)[0],
+                       np.log2(np.array([(5/3 - (3/3)**2) / (3/3),
+                                         (50/3 - (12/3)**2) / (12/3)])))
+    assert np.allclose(ut.get_relative_variance_per_var(adata)[0],
+                       np.log2(np.array([(9/2 - (3/2)**2) / (3/2),
+                                         (17/2 - (5/2)**2) / (5/2),
+                                         (29/2 - (7/2)**2) / (7/2)])))
+
+    data = ut.get_fraction_of_var_per_obs(adata)[0]
+    if sparse.issparse(data):
+        data = data.toarray()
+    assert np.allclose(data, np.array([[0/3, 1/3, 2/3], [3/12, 4/12, 5/12]]))
+
+    data = ut.get_fraction_of_obs_per_var(adata)[0]
+    if sparse.issparse(data):
+        data = data.toarray()
+    assert np.allclose(data, np.array([[0/3, 1/5, 2/7], [3/3, 4/5, 5/7]]))

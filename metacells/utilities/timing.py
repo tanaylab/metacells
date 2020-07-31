@@ -184,7 +184,7 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
 
         foo,elapsed_ns,123,cpu_ns,456
 
-    To a timing log file (``timing.csv`` by default). Additional fields can be appended to the line
+    To a timing log file (default: ``timing.csv``). Additional fields can be appended to the line
     using the ``metacells.utilities.timing.parameters`` function.
 
     If the ``name`` starts with a ``.``, then it is prefixed with the names of the innermost
@@ -218,7 +218,12 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
     steps_stack.append(step_timing)
 
     try:
+        # import sys
+        # sys.stderr.write(step_timing.context + ' BEGIN {\n')
+        # sys.stderr.flush()
         yield None
+        # sys.stderr.write(step_timing.context + ' END }\n')
+        # sys.stderr.flush()
     finally:
         total_times = Counters.now() - start_point
         assert total_times.elapsed_ns >= 0

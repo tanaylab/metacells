@@ -13,6 +13,6 @@ import importlib_metadata  # type: ignore
 try:
     __version__ = importlib_metadata.version(__name__)
 except:  # pylint: disable=bare-except
-    from warnings import warn  # type: ignore
+    from warnings import warn
     warn('unknown metacells version')
     __version__ = 'unknown'

@@ -133,7 +133,10 @@ def to_array(data: Union[Matrix, Vector]) -> np.ndarray:
         -1)`` returns a matrix rather than an array. This needs further investigation.
     '''
     if sparse.issparse(data):
-        data = data.todense()
+        data = data.toarray()
+
+    if isinstance(data, (pd.Series, pd.DataFrame)):
+        data = data.values
 
     if data.ndim == 1:
         return data
@@ -249,44 +252,25 @@ def relayout_compressed(matrix: sparse.spmatrix, axis: int) -> sparse.spmatrix:
 
 
 @timed.call()
-def corrcoef(matrix: Matrix, sum_of_rows: Optional[Vector] = None) -> np.ndarray:
+def corrcoef(matrix: Matrix, *, rowvar: bool = True) -> np.ndarray:
     '''
     Compute correlations between all observations (rows, cells) containing variables (columns,
     genes).
 
-    This should give the same results as ``numpy.corrcoef``, but faster for sparse matrices.
+    .. todo::
 
-    .. note::
-
-        To correlate between observations (cells), the expected layout is the transpose of the
-        layout of ``X`` in ``AnnData``.
+        This always uses the dense implementation, which seems to be the best choice for correlating
+        the less-sparse "feature" genes.
     '''
-    if not sparse.issparse(matrix):
-        return np.corrcoef(matrix)
+    if sparse.issparse(matrix):
+        matrix = matrix.toarray()
 
-    obs_count = matrix.shape[0]
-    var_count = matrix.shape[1]
-    timed.parameters(obs_count=obs_count, var_count=var_count)
-    assert obs_count > 1
-    assert var_count > 1
+    if rowvar:
+        timed.parameters(results=matrix.shape[0], elements=matrix.shape[1])
+    else:
+        timed.parameters(results=matrix.shape[1], elements=matrix.shape[0])
 
-    if sum_of_rows is None:
-        sum_of_rows = matrix.sum(axis=1)
-    sum_of_rows = to_array(sum_of_rows)
-    assert sum_of_rows.size == obs_count
-
-    sum_of_rows = sum_of_rows[:, None]
-    centering = sum_of_rows.dot(sum_of_rows.T) / var_count
-
-    correlations = matrix.dot(matrix.T)
-    correlations -= centering
-    correlations /= var_count - 1
-    assert correlations.shape == (obs_count, obs_count)
-
-    diagonal = np.diag(correlations)
-    correlations /= np.sqrt(np.outer(diagonal, diagonal))
-
-    return correlations
+    return np.corrcoef(matrix, rowvar=rowvar)
 
 
 @timed.call()
@@ -306,7 +290,7 @@ def log_matrix(
     applied, to handle the common case of sparse data.
     '''
     if sparse.issparse(matrix):
-        matrix = matrix.todense()
+        matrix = matrix.toarray()
     elif isinstance(matrix, pd.DataFrame):
         matrix = np.copy(matrix.values)
     else:
@@ -377,6 +361,9 @@ def sum_squared_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
         values). An implementation that directly squares-and-adds the elements would be more
         efficient.
     '''
+    if sparse.issparse(matrix):
+        return _reduce_matrix(matrix, axis, lambda matrix: matrix.multiply(matrix).sum(axis=axis))
+
     return _reduce_matrix(matrix, axis, lambda matrix: np.square(matrix).sum(axis=axis))
 
 
@@ -390,11 +377,8 @@ def _reduce_matrix(
 
     results_count = matrix.shape[1 - axis]
 
-    if not sparse.issparse(matrix):
+    if sparse.issparse(matrix):
         step = '.sparse'
-        elements_count = matrix.shape[axis]
-    else:
-        step = '.dense'
         elements_count = matrix.nnz / results_count
         axis_format = ['csc', 'csr'][axis]
         if matrix.getformat() != axis_format:
@@ -404,9 +388,25 @@ def _reduce_matrix(
                 'instead of the efficient format: %s' \
                 % (axis, matrix.getformat(), axis_format)
             warn(reducing_sparse_matrix_of_inefficient_format)
+    else:
+        step = '.dense'
+        elements_count = matrix.shape[axis]
+        axis_flag = [matrix.flags.f_contiguous,
+                     matrix.flags.c_contiguous][axis]
+        if not axis_flag:
+            reducing_dense_matrix_of_inefficient_format = \
+                'reducing axis: %s ' \
+                'of a dense matrix with layout: %s ' \
+                'instead of the efficient layout: %s' \
+                % (axis,
+                   'f_contiguous' if matrix.flags.f_contiguous
+                   else 'c_contiguous' if matrix.flags.c_contiguous
+                   else 'non-contiguous',
+                   ['f_contiguous', 'c_contiguous'][axis])
+            warn(reducing_dense_matrix_of_inefficient_format)
 
     with timed.step(step):
-        timed.parameters(obs_count=results_count, var_count=elements_count)
+        timed.parameters(results=results_count, elements=elements_count)
         return to_array(reducer(matrix))
 
 
@@ -514,11 +514,13 @@ def _downsample_sparse_matrix(
                               output_vector, index_seed)
 
     with timed.step('.sparse'):
+        timed.parameters(results=results_count, elements=elements_count)
         parallel_for(downsample_sparse_vectors, results_count)
 
     output.has_sorted_indices = True
     if eliminate_zeros:
         with timed.step('.eliminate_zeros'):
+            unfreeze(output)
             output.eliminate_zeros()
             output.has_canonical_format = True
 
@@ -611,7 +613,9 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
                 output[index, :] = output_array
 
     results_count = matrix.shape[1 - axis]
+
     with timed.step('.dense'):
+        timed.parameters(results=results_count, elements=elements_count)
         parallel_for(downsample_dense_vectors, results_count)
 
     return output
