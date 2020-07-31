@@ -121,7 +121,7 @@ the generic :py:func:`get_data` function to safely fetch any kind data without a
 
 from contextlib import contextmanager
 from typing import (Any, Callable, Collection, Dict, Iterable, Iterator, List,
-                    NamedTuple, Optional, Set, Tuple, Union)
+                    MutableMapping, NamedTuple, Optional, Set, Tuple, Union)
 from warnings import warn
 
 import numpy as np  # type: ignore
@@ -196,7 +196,7 @@ __all__ = [
 LOCK = rwlock.RWLockRead()
 
 
-Annotations = Union[Dict[str, Any], pd.DataFrame]
+Annotations = Union[MutableMapping[Any, Any], pd.DataFrame]
 
 
 class SlicingMask(NamedTuple):
@@ -482,7 +482,7 @@ def _prefix_data(
 def _prefix_per_data(
     saved_data: Dict[str, Any],
     per_prefix: str,
-    annotations: Dict[str, Any],
+    annotations: MutableMapping[str, Any],
     did_slice_obs: bool,
     did_slice_var: bool,
     invalidated_prefix: str,
@@ -927,6 +927,7 @@ def get_vo_data(
             return data
     else:
         def get_base_data() -> utc.Matrix:
+            assert name is not None
             data = adata.layers.get(name)
             if data is not None:
                 utc.freeze(data)

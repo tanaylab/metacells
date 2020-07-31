@@ -1,4 +1,7 @@
 include metacells/extension/*.hpp
+include metacells/preprocessing/py.typed
+include metacells/py.typed
+include metacells/utilities/py.typed
 include pybind11/include/pybind11/*
 include pybind11/include/pybind11/*/*
 include tests/*.py
