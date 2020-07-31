@@ -426,7 +426,8 @@ def _save_per_data(  # pylint: disable=too-many-locals
             base_name = name[:-len(by_suffix)]
             if base_name == adata.uns['x_name'][3:]:
                 with timed.step('.swap_x'):
-                    adata.X = data
+                    with _modify(adata):
+                        adata.X = data
             else:
                 base_data = adata.layers[base_name]
                 saved_data['vo:' + base_name] = base_data
@@ -615,7 +616,8 @@ def set_x_name(adata: AnnData, name: str) -> None:
     assert X is not None
     assert 'x_name' not in adata.uns_keys()
 
-    adata.uns['focus'] = adata.uns['x_name'] = full_name
+    with _modify(adata):
+        adata.uns['focus'] = adata.uns['x_name'] = full_name
 
     safe_slicing_data(full_name, ALWAYS_SAFE)
 
@@ -626,10 +628,11 @@ def track_base_indices(adata: AnnData, *, name: str = 'base_index') -> None:
     which will be preserved when creating any :py:func:`slice` of the data to easily refer back to
     the original full data.
     '''
-    adata.obs[name] = np.arange(adata.n_obs)
-    safe_slicing_data('o' + name, ALWAYS_SAFE)
+    with _modify(adata):
+        adata.obs[name] = np.arange(adata.n_obs)
+        adata.var[name] = np.arange(adata.n_vars)
 
-    adata.var[name] = np.arange(adata.n_vars)
+    safe_slicing_data('o' + name, ALWAYS_SAFE)
     safe_slicing_data('v' + name, ALWAYS_SAFE)
 
 
@@ -726,27 +729,32 @@ def set_data(
     SAFE_SLICING[name] = slicing_mask
 
     if name.startswith('m:'):
-        adata.uns[name[2:]] = data
-        return
+        with _modify(adata):
+            adata.uns[name[2:]] = data
+            return
 
     if name.startswith('o:'):
-        adata.obs[name[2:]] = data
-        return
+        with _modify(adata):
+            adata.obs[name[2:]] = data
+            return
 
     if name.startswith('v:'):
-        adata.var[name[2:]] = data
-        return
+        with _modify(adata):
+            adata.var[name[2:]] = data
+            return
 
     if name.startswith('oo:'):
-        adata.obsp[name[3:]] = data
-        return
+        with _modify(adata):
+            adata.obsp[name[3:]] = data
+            return
 
     if name.startswith('vv:'):
-        adata.varp[name[3:]] = data
-        return
+        with _modify(adata):
+            adata.varp[name[3:]] = data
+            return
 
-    raise ValueError('the data name: %s does not start with a valid prefix '
-                     '("vo:", "v:", "o:", "vv:", "oo", or "m:")' % name)
+        raise ValueError('the data name: %s does not start with a valid prefix '
+                         '("vo:", "v:", "o:", "vv:", "oo", or "m:")' % name)
 
 
 def get_m_data(
@@ -783,7 +791,8 @@ def get_m_data(
     assert data is not None
 
     if inplace:
-        adata.uns[name] = data
+        with _modify(adata):
+            adata.uns[name] = data
 
     return data
 
@@ -968,7 +977,8 @@ def get_vo_data(
         full_name = 'vo:' + name
 
     if infocus:
-        adata.uns['focus'] = full_name
+        with _modify(adata):
+            adata.uns['focus'] = full_name
 
     if full_name == adata.uns['x_name']:
         def get_base_data() -> utc.Matrix:
@@ -998,7 +1008,8 @@ def get_vo_data(
                     data = data.tocsr()
 
             if inplace or infocus:
-                adata.layers[name] = data
+                with _modify(adata):
+                    adata.layers[name] = data
 
             return data
 
@@ -1014,7 +1025,8 @@ def get_vo_data(
         if data is None:
             data = utc.to_layout(get_base_data(), axis=axis)
             if inplace or infocus:
-                adata.layers[by_name] = data
+                with _modify(adata):
+                    adata.layers[by_name] = data
 
     assert data.shape == (adata.n_obs, adata.n_vars)
     if inplace or infocus:
@@ -1064,7 +1076,8 @@ def del_vo_data(
     assert full_name != x_name
 
     if full_name == get_m_data(adata, 'm:focus'):
-        adata.uns['focus'] = x_name
+        with _modify(adata):
+            adata.uns['focus'] = x_name
 
     if by is not None:
         by_name = '%s:__by_%s__' % (name, by)
@@ -1129,10 +1142,11 @@ def focus_on(
 
     yield accessor(adata, *args, infocus=True, **kwargs)
 
-    if has_data(adata, old_focus):
-        adata.uns['focus'] = old_focus
-    else:
-        adata.uns['focus'] = adata.uns['x_name']
+    with _modify(adata):
+        if has_data(adata, old_focus):
+            adata.uns['focus'] = old_focus
+        else:
+            adata.uns['focus'] = adata.uns['x_name']
 
 
 @timed.call()
@@ -2144,3 +2158,12 @@ def _derive_p_data(
                              slicing_mask=slicing_mask)
 
     return getter(adata, full_to, compute=compute, inplace=inplace), full_to
+
+
+@contextmanager
+def _modify(adata: AnnData) -> Iterator[None]:
+    if adata.is_view:
+        with timed.step('unview'):
+            yield
+    else:
+        yield

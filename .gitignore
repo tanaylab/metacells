@@ -1,10 +1,12 @@
 build
 .clang-formatted
+coverage
 .coverage
 dist
 docs/build
 *.egg-info
 .eggs
+flame.html
 junk*
 metacells/*.so
 .nfs*

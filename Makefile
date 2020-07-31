@@ -1,6 +1,8 @@
 .PHONY: all for-commit reformat format isort rst unstaged todo mypy build pylint test tox docs
 .PHONY: dist clean
 
+.PHONY: coverage flame sum
+
 all: for-commit
 
 for-commit: reformat format isort rst unstaged todo mypy pylint test tox docs
@@ -61,3 +63,18 @@ dist:
 
 clean:
 	rm -rf `cat .gitignore`
+
+coverage: coverage/index.html
+
+coverage/index.html: timing.csv
+	rm -rf coverage
+	coverage html -d coverage
+
+flame: flame.html
+
+flame.html: timing.csv
+	python metacells/scripts/timing.py flame -s < timing.csv \
+	| flameview.py --sizename 'Total Elapsed Time' --sortby size > flame.html
+
+sum:
+	python metacells/scripts/timing.py sum < timing.csv | column -t -s,
