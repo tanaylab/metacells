@@ -1,0 +1,1116 @@
+'''
+Utilities for preparing commonly used data in ``AnnData``.
+
+The functions here use the facilities of :py:mod:`metacells.utilities.annotation` to wrap the
+functions of :py:mod:`metacells.utilities.computation` in an easily accessible way.
+'''
+
+from typing import Any, Callable, List, Optional, Tuple
+
+import numpy as np  # type: ignore
+import scipy.sparse as sparse  # type: ignore
+from anndata import AnnData
+
+import metacells.utilities.annotation as uta
+import metacells.utilities.computation as utc
+import metacells.utilities.documentation as utd
+import metacells.utilities.timing as timed
+
+__all__ = [
+    'set_x_name',
+    'track_base_indices',
+
+    'get_log_data_per_var_per_obs',
+    'get_fraction_of_var_per_obs',
+    'get_fraction_of_obs_per_var',
+    'get_downsample_of_var_per_obs',
+    'get_downsample_of_obs_per_var',
+
+    'get_sum_per_obs',
+    'get_sum_per_var',
+
+    'get_mean_per_obs',
+    'get_mean_per_var',
+
+    'get_fraction_per_obs',
+    'get_fraction_per_var',
+
+    'get_sum_squared_per_obs',
+    'get_sum_squared_per_var',
+
+    'get_variance_per_obs',
+    'get_variance_per_var',
+
+    'get_relative_variance_per_obs',
+    'get_relative_variance_per_var',
+
+    'get_max_per_obs',
+    'get_max_per_var',
+
+    'get_min_per_obs',
+    'get_min_per_var',
+
+    'get_nnz_per_obs',
+    'get_nnz_per_var',
+
+    'get_obs_obs_correlation',
+    'get_var_var_correlation',
+]
+
+
+def set_x_name(adata: AnnData, name: str) -> None:
+    '''
+    Set the ``name`` of the data contained in ``adata.X``.
+
+    The name must start with ``vo:`` as ``X`` contains per-variable-per-observation data.
+
+    The name is stored in the metadata (unstructured annotation) named ``x_name``. It also sets the
+    ``focus``, which is also stored there.
+
+    This should be called after populating the ``X`` data for the first time (e.g., by importing the
+    data). It lets rest of the code to know what kind of data it holds. All the other
+    per-variable-per-observation data utilities ``assert`` this was done.
+
+    .. note::
+
+        This assumes it is safe to arbitrarily slice the data.
+
+    .. note::
+
+        When using the layer utilities, do not directly read or write the value of ``X``. Instead
+        use :py:func:`metacells.utilities.annotation.get_vo_data`.
+    '''
+    if name.startswith('vo:'):
+        full_name = name
+    else:
+        _assert_not_prefixed(name, ['vo:'])
+        full_name = 'vo:' + name
+
+    X = adata.X
+    assert X is not None
+    assert 'x_name' not in adata.uns_keys()
+
+    uta.set_data(adata, 'm:focus', full_name)
+    uta.set_data(adata, 'm:x_name', full_name)
+    uta.safe_slicing_data(full_name, uta.ALWAYS_SAFE)
+
+
+def track_base_indices(adata: AnnData, *, name: str = 'base_index') -> None:
+    '''
+    Create ``name`` (default: ``base_index``) per-observation (cells) and per-variable (genes) data,
+    which will be preserved when creating any :py:func:`metacells.utilities.annotation.slice` of the
+    data to easily refer back to the original full data.
+    '''
+    uta.set_data('o' + name, np.arange(adata.n_obs), uta.ALWAYS_SAFE)
+    uta.set_data('v' + name, np.arange(adata.n_vars), uta.ALWAYS_SAFE)
+
+
+@timed.call()
+@utd.expand_doc()
+def get_log_data_per_var_per_obs(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    base: Optional[float] = None,
+    normalization: float = 1,
+    inplace: bool = True,
+    infocus: bool = False,
+    by: Optional[str] = None,
+) -> Tuple[utc.Matrix, str]:
+    '''
+    Return a matrix with the log of some per-variable-per-observation data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    If ``inplace`` (or ``infocus``), the data will be stored in
+    ``vo:log_<base>_of_<normalization>_plus_vo:<of>`` for future reuse.
+
+    If ``infocus`` (implies ``inplace``), also makes the result the new ``focus``.
+
+    If ``by`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
+    data in a layout optimized for by-observation (row-major / csr) or by-variable (column-major
+    / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional "hidden" layer
+    whose name is prefixed (e.g. ``...:__by_obs__``).
+
+    The natural logarithm is used by default. Otherwise, the ``base`` is used.
+
+    The ``normalization`` (default: {normalization}) is added to the count before the log is
+    applied, to handle the common case of sparse data.
+
+    Returns the result and its full name.
+
+    .. note::
+
+        The result is always a dense matrix, as even for sparse data, the log is rarely zero.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = \
+        'vo:log_%s_of_%s_plus_%s' % (base or 'e', normalization, full_of[3:])
+
+    @timed.call('.compute')
+    def compute() -> utc.Matrix:
+        matrix = uta.get_vo_data(adata, full_of, by=by)[0]
+        return utc.log_matrix(matrix, base=base, normalization=normalization)
+
+    return _derive_vo_data(adata, full_of, full_to, uta.ALWAYS_SAFE,
+                           compute, inplace, infocus, by)
+
+
+@timed.call()
+def get_fraction_of_var_per_obs(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+    infocus: bool = False,
+    by: Optional[str] = None,
+) -> Tuple[utc.Matrix, str]:
+    '''
+    Return a matrix containing, in each entry, the fraction the original data (e.g. UMIs) for this
+    variable (gene) is in this observation (cell) out of the total for all variables (genes).
+
+    .. note::
+
+        This is probably the version you want: here, the sum of fraction of the genes in a cell is
+        1. See :py:func:`get_fraction_of_obs_per_var` for the other way around.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    If ``inplace``, the data will be stored in ``vo:fraction_of_v_per_o_of_vo:<of>`` for future
+    reuse, and will also store the intermediate ``o:sum_of_vo:<of>`` per-observation (cell) data.
+
+    If ``infocus`` (implies ``inplace``), also makes the result the new ``focus``.
+
+    If ``by`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
+    data in a layout optimized for by-observation (row-major / csr) or by-variable (column-major
+    / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional "hidden" layer
+    whose name is suffixed (e.g. ``...:__by_obs__``).
+
+    Returns the result and its full name.
+
+    .. note::
+
+        This assumes all the data values are non-negative.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'vo:fraction_of_v_per_o_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Matrix:
+        matrix = uta.get_vo_data(adata, full_of, by='obs')[0]
+        sum_per_obs = get_sum_per_obs(adata, of=full_of, inplace=inplace)[0]
+
+        zeros_mask = sum_per_obs == 0
+        tmp = np.reciprocal(sum_per_obs, where=~zeros_mask)
+        tmp[zeros_mask] = 0
+
+        if sparse.issparse(matrix):
+            return matrix.multiply(tmp[:, None])
+        return matrix * tmp[:, None]
+
+    return _derive_vo_data(adata, full_of, full_to, uta.SAFE_WHEN_SLICING_OBS,
+                           compute, inplace, infocus, by)
+
+
+@timed.call()
+def get_fraction_of_obs_per_var(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+    infocus: bool = False,
+    by: Optional[str] = None,
+) -> Tuple[utc.Matrix, str]:
+    '''
+    Return a matrix containing, in each entry, the fraction the original data (e.g. UMIs) for this
+    variable (gene) is in this observation (cell) out of the total for all observations (cells).
+
+    .. note::
+
+        This is probably not the version you want: here, the sum of fractions of the cells in each
+        gene is 1. See :py:func:`get_fraction_of_var_per_obs` for the other way around.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    If ``inplace``, the data will be stored in ``vv:fraction_of_o_per_v_of_vo:<of>`` for future
+    reuse, and will also store the intermediate ``v:sum_of_vo:<of>`` per-variable (gene) data.
+
+    If ``infocus`` (implies ``inplace``), also makes the result the new ``focus``.
+
+    If ``by`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
+    data in a layout optimized for by-observation (row-major / csr) or by-variable (column-major
+    / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional "hidden" layer
+    whose name is prefixed (e.g. ``...:__by_obs__``).
+
+    Returns the result and its full name.
+
+    .. note::
+
+        This assumes all the data values are non-negative.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'vo:fraction_of_o_per_v_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = uta.get_vo_data(adata, full_of, by='var')[0]
+        sum_per_var = get_sum_per_var(adata, of=full_of, inplace=inplace)[0]
+
+        zeros_mask = sum_per_var == 0
+        tmp = np.reciprocal(sum_per_var, where=~zeros_mask)
+        tmp[zeros_mask] = 0
+
+        if sparse.issparse(matrix):
+            return matrix.multiply(tmp[None, :])
+        return matrix * tmp[None, :]
+
+    return _derive_vo_data(adata, full_of, full_to, uta.SAFE_WHEN_SLICING_VAR,
+                           compute, inplace, infocus, by)
+
+
+@timed.call()
+def get_downsample_of_var_per_obs(
+    adata: AnnData,
+    *,
+    samples: int,
+    random_seed: int = 0,
+    of: Optional[str] = None,
+    inplace: bool = True,
+    infocus: bool = False,
+    by: Optional[str] = None,
+) -> Tuple[utc.Matrix, str]:
+    '''
+    Return a matrix containing, for each observation (cell), downsampled data
+    for each variable (gene), such that the total sum would be no more
+    than ``samples``.
+
+    .. note::
+
+        This is probably the version you want: here, the sum of the genes in a cell will be (at
+        most) ``samples``. See :py:func:`get_downsample_of_obs_per_var` for the other way around.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    If ``inplace``, the data will be stored in ``vo:downsample_<samples>_v_per_o_of_vo:<of>`` for
+    future reuse.
+
+    If ``infocus`` (implies ``inplace``), also makes the result the new ``focus``.
+
+    If ``by`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
+    data in a layout optimized for by-observation (row-major / csr) or by-variable (column-major
+    / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional layer whose name
+    is prefixed (e.g. ``vo:downsample_<samples>_v_per_o_of_vo:<of>``).
+
+    A ``random_seed`` can be provided to make the operation replicable.
+
+    Returns the result and its full name.
+
+    .. note::
+
+        This assumes all the data values are non-negative integer values (even if the ``dtype`` is a
+        floating-point type).
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'vo:downsample_%s_v_per_o_of_%s' % (samples, full_of)
+
+    @timed.call('.compute')
+    def compute() -> utc.Matrix:
+        matrix = uta.get_vo_data(adata, full_of, by=by)[0]
+        return utc.downsample_matrix(matrix, axis=1, samples=samples,
+                                     random_seed=random_seed)
+
+    return _derive_vo_data(adata, full_of, full_to, uta.SAFE_WHEN_SLICING_OBS,
+                           compute, inplace, infocus, by)
+
+
+@timed.call()
+def get_downsample_of_obs_per_var(
+    adata: AnnData,
+    *,
+    samples: int,
+    random_seed: int = 0,
+    of: Optional[str] = None,
+    inplace: bool = True,
+    infocus: bool = False,
+    by: Optional[str] = None,
+) -> Tuple[utc.Matrix, str]:
+    '''
+    Return a matrix containing, for each variable (gene), downsampled data
+    for each observation (cell), such that the total sum would be no more
+    than ``samples``.
+
+    .. note::
+
+        This is probably not the version you want: here, the sum of the cells in a gene will be (at
+        most) ``samples``. See :py:func:`get_downsample_of_var_per_obs` for the other way around.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    If ``inplace``, the data will be stored in ``vv:downsample_<samples>_o_per_v_of_vo:<of>`` for
+    future reuse.
+
+    If ``infocus`` (implies ``inplace``), also makes the result the new ``focus``.
+
+    If ``by`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
+    data in a layout optimized for by-observation (row-major / csr) or by-variable (column-major
+    / csc). If also ``inplace`` (or ``infocus``), this is cached in an additional "hidden" layer
+    whose name is prefixed (e.g. ``...:__by_obs__``).
+
+    A ``random_seed`` can be provided to make the operation replicable.
+
+    Returns the result and its full name.
+
+    .. note::
+
+        This assumes all the data values are non-negative integer values (even if the ``dtype`` is a
+        floating-point type).
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'vo:downsample_%s_o_per_v_of_%s' % (samples, full_of)
+
+    @timed.call('.compute')
+    def compute() -> utc.Matrix:
+        matrix = uta.get_vo_data(adata, full_of, by=by)[0]
+        return utc.downsample_matrix(matrix, axis=0, samples=samples,
+                                     random_seed=random_seed)
+
+    return _derive_vo_data(adata, full_of, full_to, uta.SAFE_WHEN_SLICING_VAR,
+                           compute, inplace, infocus, by)
+
+
+@timed.call()
+def get_sum_per_obs(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the sum of the values per-observation (cell) of some per-variable-per-observation data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``o:sum_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+
+    Returns the result and its full name.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'o:sum_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = uta.get_vo_data(adata, full_of, by='obs')[0]
+        return utc.sum_matrix(matrix, axis=1)
+
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_sum_per_var(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the sum of the values per-variable (gene) of some per-variable-per-observation data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``v:sum_of_vo:<of>`` per-variable (gene) data if it exists. Otherwise, compute it, and
+    if ``inplace`` store it for future reuse.
+
+    If ``inplace``, store the result in ``adata`` for future reuse.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'v:sum_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = uta.get_vo_data(adata, full_of, by='var')[0]
+        return utc.sum_matrix(matrix, axis=0)
+
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_mean_per_obs(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the mean of the values per-observation (cell) of some per-variable-per-observation data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``o:mean_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+
+    If ``inplace``, also store the intermediate per-observation ``o:sum_of_vo:<of>`` for future
+    reuse.
+
+    Returns the result and its full name.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'o:mean_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        sum_per_obs = get_sum_per_obs(adata, of=full_of, inplace=inplace)[0]
+        return sum_per_obs / adata.n_vars
+
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_mean_per_var(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the mean of the values per-variable (gene) of some per-variable-per-observation data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``v:mean_of_vo:<of>`` per-variable (cell) data if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+
+    If ``inplace``, will also store the intermediate per-variable ``v:sum_of_vo:<of>`` for future
+    reuse.
+
+    Returns the result and its full name.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'v:mean_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        sum_per_var = get_sum_per_var(adata, of=full_of, inplace=inplace)[0]
+        return sum_per_var / adata.n_obs
+
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_fraction_per_obs(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the fraction of the values per-observation (cell) of the total some
+    per-variable-per-observation data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``o:fraction_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise, compute
+    it, and if ``inplace`` store it for future reuse.
+
+    If ``inplace``, also store the intermediate per-observation ``o:sum_of_vo:<of>`` for future
+    reuse.
+
+    Returns the result and its full name.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'o:fraction_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        sum_per_obs = get_sum_per_obs(adata, of=full_of, inplace=inplace)[0]
+        return sum_per_obs / sum_per_obs.sum()
+
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_fraction_per_var(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the fraction of the values per-variable (gene) of the total of some
+    per-variable-per-observation data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``v:fraction_of_vo:<of>`` per-variable (cell) data if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+
+    If ``inplace``, will also store the intermediate per-variable ``v:sum_of_vo:<of>`` for future
+    reuse.
+
+    Returns the result and its full name.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'v:fraction_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        sum_per_var = get_sum_per_var(adata, of=full_of, inplace=inplace)[0]
+        return sum_per_var / sum_per_var.sum()
+
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_sum_squared_per_obs(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the sum of the squared values per-observation (cell) of some per-variable-per-observation
+    data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``o:sum_squared_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise,
+    compute it, and if ``inplace`` store it for future reuse.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'o:sum_squared_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = uta.get_vo_data(adata, full_of, by='obs')[0]
+        return utc.sum_squared_matrix(matrix, axis=1)
+
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_sum_squared_per_var(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the sum of the squared values per-variable (gene) of some per-variable-per-observation
+    data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``v:sum_squared_of_vo:<of>`` per-variable (gene) data if it exists. Otherwise, compute
+    it, and if ``inplace`` store it for future reuse.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'v:sum_squared_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = uta.get_vo_data(adata, full_of, by='var')[0]
+        return utc.sum_squared_matrix(matrix, axis=0)
+
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_variance_per_obs(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the variance of the values per-observation (cell) of some per-variable-per-observation
+    data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``o:variance_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise, compute
+    it, and if ``inplace`` store it for future reuse.
+
+    If ``inplace``, also store the intermediate per-observation ``o:sum_of_vo:<of>`` and
+    ``o:sum_squared_of_vo:<of>`` data for future reuse.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'o:variance_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        sum_per_obs = get_sum_per_obs(adata, of=full_of, inplace=inplace)[0]
+        sum_squared_per_obs = \
+            get_sum_squared_per_obs(adata, of=full_of, inplace=inplace)[0]
+        result = np.square(sum_per_obs).astype(float)
+        result /= -adata.n_vars
+        result += sum_squared_per_obs
+        result /= adata.n_vars
+        return result
+
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_variance_per_var(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the variance of the values per-variable (gene) of some per-variable-per-observation data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``v:variance_of_vo:<of>`` per-variable (gene) data if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+
+    If ``inplace``, also store the intermediate per-variable ``v:sum_of_vo:<of>`` and
+    ``v:sum_squared_of_vo:<of>`` data for future reuse.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'v:variance_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        sum_per_var = get_sum_per_var(adata, of=full_of, inplace=inplace)[0]
+        sum_squared_per_var = \
+            get_sum_squared_per_var(adata, of=full_of, inplace=inplace)[0]
+        result = np.square(sum_per_var).astype(float)
+        result /= -adata.n_obs
+        result += sum_squared_per_var
+        result /= adata.n_obs
+        return result
+
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_relative_variance_per_obs(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the log_2(variance/mean) of the values per-observation (cell) of some
+    per-variable-per-observation data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``o:relative_variance_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise,
+    compute it, and if ``inplace`` store it for future reuse.
+
+    If ``inplace``, also store the intermediate per-observation ``o:variance_of_vo:<of>``,
+    ``o:mean_of_vo:<of>``, ``o:sum_of_vo:<of>`` and the ``o:sum_squared_of_vo:<of>`` data for future
+    reuse.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'o:relative_variance_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        variance_per_obs = \
+            get_variance_per_obs(adata, of=full_of, inplace=inplace)[0]
+        mean_per_obs = get_mean_per_obs(adata, of=full_of, inplace=inplace)[0]
+        zeros_mask = mean_per_obs == 0
+
+        result = np.reciprocal(mean_per_obs, where=~zeros_mask)
+        result *= variance_per_obs
+        result[zeros_mask] = 1
+        np.log2(result, out=result)
+
+        return result
+
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_relative_variance_per_var(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the log_2(variance/mean) of the values per-variable (gene) of some
+    per-variable-per-observation data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``v:relative_variance_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise,
+    compute it, and if ``inplace`` store it for future reuse.
+
+    If ``inplace``, also store the intermediate per-variable ``v:variance_of_vo:<of>``,
+    ``v:mean_of_vo:<of>``, ``v:sum_of_vo:<of>`` and the ``v:sum_squared_of_vo:<of>`` data for future
+    reuse.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'v:relative_variance_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        variance_per_var = \
+            get_variance_per_var(adata, of=full_of, inplace=inplace)[0]
+        mean_per_var = get_mean_per_var(adata, of=full_of, inplace=inplace)[0]
+        zeros_mask = mean_per_var == 0
+
+        result = np.reciprocal(mean_per_var, where=~zeros_mask)
+        result *= variance_per_var
+        result[zeros_mask] = 1
+        np.log2(result, out=result)
+
+        return result
+
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_max_per_obs(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the maximal value per-observation (cell) of some per-variable-per-observation data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``o:max_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'o:max_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = uta.get_vo_data(adata, full_of, by='obs')[0]
+        return utc.max_matrix(matrix, axis=1)
+
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_max_per_var(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the maximal value per-variable (gene) of some per-variable-per-observation data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``v:max_of_vo:<of>`` per-variable (gene) data if it exists. Otherwise, compute it, and
+    if ``inplace`` store it for future reuse.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'v:max_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = uta.get_vo_data(adata, full_of, by='var')[0]
+        return utc.max_matrix(matrix, axis=0)
+
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_min_per_obs(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the minimal value per-observation (cell) of some per-variable-per-observation data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``o:min_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'o:min_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = uta.get_vo_data(adata, full_of, by='obs')[0]
+        return utc.min_matrix(matrix, axis=1)
+
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_min_per_var(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the minimal value per-variable (gene) of some per-variable-per-observation data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``v:min_of_vo:<of>`` per-variable (gene) data if it exists. Otherwise, compute it, and
+    if ``inplace`` store it for future reuse.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'v:min_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = uta.get_vo_data(adata, full_of, by='var')[0]
+        return utc.min_matrix(matrix, axis=0)
+
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_nnz_per_obs(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the number of non-zero values per-observation (cell) of some per-variable-per-observation
+    data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``o:nnz_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise, compute it,
+    and if ``inplace`` store it for future reuse.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'o:nnz_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = uta.get_vo_data(adata, full_of, by='obs')[0]
+        return utc.nnz_matrix(matrix, axis=1)
+
+    return _derive_o_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_nnz_per_var(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Vector, str]:
+    '''
+    Return the number of non-zero values per-variable (gene) of some per-variable-per-observation
+    data.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``v:nnz_of_vo:<of>`` per-variable (gene) data if it exists. Otherwise, compute it, and
+    if ``inplace`` store it for future reuse.
+    '''
+    full_of = _full_name(adata, of)
+    full_to = 'v:nnz_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        matrix = uta.get_vo_data(adata, full_of, by='var')[0]
+        return utc.nnz_matrix(matrix, axis=0)
+
+    return _derive_v_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_obs_obs_correlation(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Matrix, str]:
+    '''
+    Compute correlation between observations (cells) of the ``adata``.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    If ``inplace``, store the result in ``adata`` for future reuse, and also stores the intermediate
+    ``o:sum_of_vo:<of>`` per-observation (cell) data.
+
+    Returns the matrix and its full name.
+    '''
+    full_of = _full_name(adata, of, 'oo:')
+    full_to = 'oo:correlation_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        if full_of.startswith('vo:'):
+            matrix = uta.get_vo_data(adata, full_of, by='obs')[0]
+            return utc.corrcoef(matrix, rowvar=True)
+
+        matrix = uta.get_oo_data(adata, full_of)
+        return utc.corrcoef(matrix)
+
+    return _derive_oo_data(adata, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_var_var_correlation(
+    adata: AnnData,
+    *,
+    of: Optional[str] = None,
+    inplace: bool = True,
+) -> Tuple[utc.Matrix, str]:
+    '''
+    Compute correlation between variables (genes) of the ``adata``.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the ``focus`` is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    If ``inplace``, store the result in ``adata`` for future reuse, and also stores the intermediate
+    ``v:sum_of_vo:<of>`` per-variable (gene) data.
+
+    Returns the matrix and its full name.
+    '''
+    full_of = _full_name(adata, of, 'vv:')
+    full_to = 'vv:correlation_of_' + full_of
+
+    @timed.call('.compute')
+    def compute() -> utc.Vector:
+        if full_of.startswith('vo:'):
+            matrix = uta.get_vo_data(adata, full_of, by='var')[0]
+            return utc.corrcoef(matrix, rowvar=False)
+
+        matrix = uta.get_vv_data(adata, full_of)
+        return utc.corrcoef(matrix)
+
+    return _derive_vv_data(adata, full_of, full_to, compute, inplace)
+
+
+def _full_name(adata: AnnData, of: Optional[str], per_prefix: str = 'vo:') -> str:
+    if of is None:
+        of = uta.get_m_data(adata, 'm:focus')
+
+    if of.startswith('vo:'):
+        return of
+
+    if per_prefix == 'vo:':
+        _assert_not_prefixed(of, ['vo:'])
+    elif of.startswith(per_prefix):
+        return of
+    else:
+        _assert_not_prefixed(of, ['vo:', per_prefix])
+
+    return 'vo:' + of
+
+
+def _assert_not_prefixed(name: str, prefixes: List[str]) -> None:
+    for prefix in [':m', ':vo', ':o', ':v', ':oo', ':vv']:
+        if not name.startswith(prefix):
+            continue
+        raise ValueError('the data: %s does not have the expected prefix: %s'
+                         % (name, ', '.join(['"%s"' % expected
+                                             for expected in prefixes])))
+
+
+def _derive_vo_data(
+    adata: AnnData,
+    full_of: str,
+    full_to: str,
+    slicing_mask: uta.SlicingMask,
+    compute: Callable[[], utc.Matrix],
+    inplace: bool,
+    infocus: bool,
+    by: Optional[str],
+) -> Tuple[utc.Matrix, str]:
+    if inplace or infocus:
+        uta.safe_slicing_derived(base=full_of, derived=full_to,
+                                 slicing_mask=slicing_mask)
+
+    return uta.get_vo_data(adata, full_to, compute=compute,
+                           inplace=inplace, infocus=infocus, by=by)
+
+
+def _derive_o_data(
+    adata: AnnData,
+    full_of: str,
+    full_to: str,
+    compute: Callable[[], utc.Vector],
+    inplace: bool,
+) -> Tuple[utc.Vector, str]:
+    return _derive_p_data(adata, full_of, full_to, compute, inplace,
+                          uta.SAFE_WHEN_SLICING_OBS, uta.get_o_data)
+
+
+def _derive_v_data(
+    adata: AnnData,
+    full_of: str,
+    full_to: str,
+    compute: Callable[[], utc.Vector],
+    inplace: bool,
+) -> Tuple[utc.Vector, str]:
+    return _derive_p_data(adata, full_of, full_to, compute, inplace,
+                          uta.SAFE_WHEN_SLICING_VAR, uta.get_v_data)
+
+
+def _derive_oo_data(
+    adata: AnnData,
+    full_of: str,
+    full_to: str,
+    compute: Callable[[], utc.Vector],
+    inplace: bool,
+) -> Tuple[utc.Matrix, str]:
+    return _derive_p_data(adata, full_of, full_to, compute, inplace,
+                          uta.SAFE_WHEN_SLICING_OBS, uta.get_oo_data)
+
+
+def _derive_vv_data(
+    adata: AnnData,
+    full_of: str,
+    full_to: str,
+    compute: Callable[[], utc.Vector],
+    inplace: bool,
+) -> Tuple[utc.Matrix, str]:
+    return _derive_p_data(adata, full_of, full_to, compute, inplace,
+                          uta.SAFE_WHEN_SLICING_VAR, uta.get_vv_data)
+
+
+def _derive_p_data(
+    adata: AnnData,
+    full_of: str,
+    full_to: str,
+    compute: Callable[[], utc.Vector],
+    inplace: bool,
+    slicing_mask: uta.SlicingMask,
+    getter: Callable,
+) -> Tuple[Any, str]:
+    if inplace:
+        uta.safe_slicing_derived(base=full_of, derived=full_to,
+                                 slicing_mask=slicing_mask)
+
+    return getter(adata, full_to, compute=compute, inplace=inplace), full_to

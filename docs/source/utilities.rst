@@ -9,10 +9,16 @@ Annotation
 .. automodule:: metacells.utilities.annotation
     :members:
 
-Timing
-------
+Preparation
+-----------
 
-.. automodule:: metacells.utilities.timing
+.. automodule:: metacells.utilities.preparation
+    :members:
+
+Computation
+-----------
+
+.. automodule:: metacells.utilities.computation
     :members:
 
 Threading
@@ -21,10 +27,10 @@ Threading
 .. automodule:: metacells.utilities.threading
     :members:
 
-Computation
------------
+Timing
+------
 
-.. automodule:: metacells.utilities.computation
+.. automodule:: metacells.utilities.timing
     :members:
 
 Documentation
