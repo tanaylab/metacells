@@ -3,15 +3,17 @@ Utilities for documentation generation.
 '''
 
 from inspect import Parameter, signature
-from typing import Any, Callable
+from typing import Any, Callable, TypeVar
 from warnings import warn
 
 __all__ = [
     'expand_doc',
 ]
 
+CALLABLE = TypeVar('CALLABLE')
 
-def expand_doc(**kwargs: Any) -> Callable[[Callable], Callable]:
+
+def expand_doc(**kwargs: Any) -> Callable[[CALLABLE], CALLABLE]:
     '''
     Expand the keyword arguments and the annotated function's default argument values inside the
     function's document string.
@@ -54,4 +56,4 @@ def expand_doc(**kwargs: Any) -> Callable[[Callable], Callable]:
         function.__doc__ = expanded_doc
         return function
 
-    return documented
+    return documented  # type: ignore

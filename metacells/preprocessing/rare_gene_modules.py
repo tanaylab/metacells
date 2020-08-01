@@ -108,9 +108,9 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         rare_module_of_genes = np.full(genes_count, -1)
         list_of_names_of_genes_of_modules: List[np.ndarray] = []
 
-        total_umis_of_cells = ut.get_sum_per_obs(adata)[0]
-        max_umis_of_genes = ut.get_max_per_var(adata)[0]
-        nnz_cells_of_genes = ut.get_nnz_per_var(adata)[0]
+        total_umis_of_cells = ut.get_sum_per_obs(adata).data
+        max_umis_of_genes = ut.get_max_per_var(adata).data
+        nnz_cells_of_genes = ut.get_nnz_per_var(adata).data
 
         def results() -> Optional[Tuple[pd.DataFrame, pd.DataFrame, np.ndarray]]:
             array_of_names_of_genes_of_modules = \
@@ -150,21 +150,22 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
             candidate_data = ut.slice(adata, genes=candidate_genes_indices)
 
         with ut.step('.correlate'):
-            name = ut.get_var_var_correlation(candidate_data)[1]
             correlations_between_candidate_genes = \
-                np.copy(ut.get_var_var_correlation(candidate_data, of=name)[0])
+                ut.get_var_var_correlation(candidate_data)
+            similarities_between_candidate_genes = \
+                ut.get_var_var_correlation(candidate_data,
+                                           of=correlations_between_candidate_genes,
+                                           inplace=False).data
 
         with ut.step('.linkage'):
             linkage = \
-                sch.linkage(scd.pdist(correlations_between_candidate_genes),
+                sch.linkage(scd.pdist(similarities_between_candidate_genes),
                             method=cluster_method_of_genes)
 
         with ut.step('.identify_genes'):
-            np.fill_diagonal(correlations_between_candidate_genes, None)
-            combined_candidate_indices = {index: [index]
-                                          for index in range(candidate_genes_count)}
-            combined_correlation = {
-                index: 0 for index in range(candidate_genes_count)}
+            np.fill_diagonal(similarities_between_candidate_genes, None)
+            combined_candidate_indices = \
+                {index: [index] for index in range(candidate_genes_count)}
 
             for link_index, link_data in enumerate(linkage):
                 link_index += candidate_genes_count
@@ -183,34 +184,30 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
                     sorted(left_combined_candidates
                            + right_combined_candidates)
                 assert link_combined_candidates
-                link_correlations = \
-                    correlations_between_candidate_genes[link_combined_candidates,  #
+                link_similarities = \
+                    similarities_between_candidate_genes[link_combined_candidates,  #
                                                          :][:,  #
                                                             link_combined_candidates]
-                average_link_correlation = np.nanmean(link_correlations)
-                if average_link_correlation < minimal_correlation_of_modules:
+                average_link_similarity = np.nanmean(link_similarities)
+                if average_link_similarity < minimal_correlation_of_modules:
                     continue
 
                 combined_candidate_indices[link_index] = link_combined_candidates
                 del combined_candidate_indices[left_index]
                 del combined_candidate_indices[right_index]
 
-                combined_correlation[link_index] = average_link_correlation
-                del combined_correlation[left_index]
-                del combined_correlation[right_index]
-
         with ut.step('.identify_cells'):
             maximal_strength_of_cells = np.zeros(cells_count)
             gene_indices_of_modules: List[np.ndarray] = []
-            candidate_umis = ut.get_vo_data(candidate_data, of, by='var')[0]
+            candidate_umis = ut.get_vo_data(candidate_data, of, by='var').data
 
             for link_index, module_candidate_indices in combined_candidate_indices.items():
                 if len(module_candidate_indices) < minimal_size_of_modules:
                     continue
 
                 total_umis_of_module_of_cells = \
-                    ut.to_array(candidate_umis[:,
-                                               module_candidate_indices].sum(axis=1))
+                    ut.to_1d_array(candidate_umis[:,
+                                                  module_candidate_indices].sum(axis=1))
                 assert total_umis_of_module_of_cells.size == cells_count
 
                 minimal_total_umis_of_module_mask_of_cells = \
@@ -267,7 +264,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
                     rare_module_of_genes[module_gene_indices] = module_index
 
                 names_of_genes_of_module = \
-                    np.array(adata.var.index[module_gene_indices])
+                    np.array(adata.var_names[module_gene_indices])
                 list_of_names_of_genes_of_modules.append(  #
                     names_of_genes_of_module)
 

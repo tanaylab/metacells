@@ -21,6 +21,12 @@ Computation
 .. automodule:: metacells.utilities.computation
     :members:
 
+Typing
+------
+
+.. automodule:: metacells.utilities.typing
+    :members:
+
 Threading
 ---------
 

@@ -96,7 +96,7 @@ def test_relayout_matrix() -> None:
     assert csr_matrix.getformat() == 'csr'
 
     scipy_csc_matrix = csr_matrix.tocsc()
-    metacells_csc_matrix = ut.relayout_compressed(csr_matrix, axis=0)
+    metacells_csc_matrix = ut.relayout_compressed(csr_matrix)
 
     assert scipy_csc_matrix.getformat() == 'csc'
     assert metacells_csc_matrix.getformat() == 'csc'
@@ -106,7 +106,7 @@ def test_relayout_matrix() -> None:
 
     scipy_csr_matrix = scipy_csc_matrix.tocsr()
 
-    metacells_csr_matrix = ut.relayout_compressed(metacells_csc_matrix, axis=1)
+    metacells_csr_matrix = ut.relayout_compressed(metacells_csc_matrix)
 
     assert scipy_csr_matrix.getformat() == 'csr'
     assert metacells_csr_matrix.getformat() == 'csr'
@@ -261,13 +261,13 @@ def test_freeze_sparse() -> None:
 def test_sum() -> None:
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
-    ut.set_x_name(adata, 'test')
+    ut.prepare(adata, 'test')
 
-    metacells_sum_per_row = ut.get_sum_per_obs(adata)[0]
+    metacells_sum_per_row = ut.get_sum_per_obs(adata).data
     numpy_sum_per_row = matrix.sum(axis=1)
     assert np.allclose(metacells_sum_per_row, numpy_sum_per_row)
 
-    metacells_sum_per_column = ut.get_sum_per_var(adata)[0]
+    metacells_sum_per_column = ut.get_sum_per_var(adata).data
     numpy_sum_per_column = matrix.sum(axis=0)
     assert np.allclose(metacells_sum_per_column, numpy_sum_per_column)
 
@@ -275,13 +275,13 @@ def test_sum() -> None:
 def test_mean() -> None:
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
-    ut.set_x_name(adata, 'test')
+    ut.prepare(adata, 'test')
 
-    metacells_mean_per_row = ut.get_mean_per_obs(adata)[0]
+    metacells_mean_per_row = ut.get_mean_per_obs(adata).data
     numpy_mean_per_row = matrix.mean(axis=1)
     assert np.allclose(metacells_mean_per_row, numpy_mean_per_row)
 
-    metacells_mean_per_column = ut.get_mean_per_var(adata)[0]
+    metacells_mean_per_column = ut.get_mean_per_var(adata).data
     numpy_mean_per_column = matrix.mean(axis=0)
     assert np.allclose(metacells_mean_per_column, numpy_mean_per_column)
 
@@ -290,14 +290,14 @@ def test_sum_squared() -> None:
     matrix = np.random.rand(100, 200)
     squared = np.square(matrix)
     adata = AnnData(matrix)
-    ut.set_x_name(adata, 'test')
+    ut.prepare(adata, 'test')
 
-    metacells_sum_squared_per_row = ut.get_sum_squared_per_obs(adata)[0]
+    metacells_sum_squared_per_row = ut.get_sum_squared_per_obs(adata).data
     numpy_sum_squared_per_row = squared.sum(axis=1)
     assert np.allclose(metacells_sum_squared_per_row,
                        numpy_sum_squared_per_row)
 
-    metacells_sum_squared_per_column = ut.get_sum_squared_per_var(adata)[0]
+    metacells_sum_squared_per_column = ut.get_sum_squared_per_var(adata).data
     numpy_sum_squared_per_column = squared.sum(axis=0)
     assert np.allclose(metacells_sum_squared_per_column,
                        numpy_sum_squared_per_column)
@@ -306,13 +306,13 @@ def test_sum_squared() -> None:
 def test_variance() -> None:
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
-    ut.set_x_name(adata, 'test')
+    ut.prepare(adata, 'test')
 
-    metacells_variance_per_row = ut.get_variance_per_obs(adata)[0]
+    metacells_variance_per_row = ut.get_variance_per_obs(adata).data
     numpy_variance_per_row = matrix.var(axis=1)
     assert np.allclose(metacells_variance_per_row, numpy_variance_per_row)
 
-    metacells_variance_per_column = ut.get_variance_per_var(adata)[0]
+    metacells_variance_per_column = ut.get_variance_per_var(adata).data
     numpy_variance_per_column = matrix.var(axis=0)
     assert np.allclose(metacells_variance_per_column,
                        numpy_variance_per_column)
@@ -321,13 +321,13 @@ def test_variance() -> None:
 def test_max() -> None:
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
-    ut.set_x_name(adata, 'test')
+    ut.prepare(adata, 'test')
 
-    metacells_max_per_row = ut.get_max_per_obs(adata)[0]
+    metacells_max_per_row = ut.get_max_per_obs(adata).data
     numpy_max_per_row = np.amax(matrix, axis=1)
     assert np.allclose(metacells_max_per_row, numpy_max_per_row)
 
-    metacells_max_per_column = ut.get_max_per_var(adata)[0]
+    metacells_max_per_column = ut.get_max_per_var(adata).data
     numpy_max_per_column = np.amax(matrix, axis=0)
     assert np.allclose(metacells_max_per_column, numpy_max_per_column)
 
@@ -335,13 +335,13 @@ def test_max() -> None:
 def test_min() -> None:
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
-    ut.set_x_name(adata, 'test')
+    ut.prepare(adata, 'test')
 
-    metacells_min_per_row = ut.get_min_per_obs(adata)[0]
+    metacells_min_per_row = ut.get_min_per_obs(adata).data
     numpy_min_per_row = np.amin(matrix, axis=1)
     assert np.allclose(metacells_min_per_row, numpy_min_per_row)
 
-    metacells_min_per_column = ut.get_min_per_var(adata)[0]
+    metacells_min_per_column = ut.get_min_per_var(adata).data
     numpy_min_per_column = np.amin(matrix, axis=0)
     assert np.allclose(metacells_min_per_column, numpy_min_per_column)
 
@@ -349,13 +349,13 @@ def test_min() -> None:
 def test_nnz() -> None:
     matrix = sparse.rand(100, 200, density=0.1, format='csr')
     adata = AnnData(matrix)
-    ut.set_x_name(adata, 'test')
+    ut.prepare(adata, 'test')
 
-    metacells_nnz_per_row = ut.get_nnz_per_obs(adata)[0]
+    metacells_nnz_per_row = ut.get_nnz_per_obs(adata).data
     scipy_nnz_per_row = matrix.getnnz(axis=1)
     assert np.allclose(metacells_nnz_per_row, scipy_nnz_per_row)
 
-    metacells_nnz_per_column = ut.get_nnz_per_var(adata)[0]
+    metacells_nnz_per_column = ut.get_nnz_per_var(adata).data
     scipy_nnz_per_column = matrix.getnnz(axis=0)
     assert np.allclose(metacells_nnz_per_column, scipy_nnz_per_column)
 
@@ -366,33 +366,35 @@ def test_focus_on() -> None:
                            dtype='int32', random_state=123456, data_rvs=rvs)
     adata = AnnData(matrix)
 
-    ut.set_x_name(adata, 'test')
-    assert adata.uns['focus'] == 'vo:test'
+    ut.prepare(adata, 'test')
+    assert ut.get_focus_name(adata) == 'vo:test'
 
-    with ut.focus_on(ut.get_log_data_per_var_per_obs, adata) as log_data:
+    with ut.focus_on(ut.get_log_data, adata) as log_data:
         outer_focus = 'vo:log_e_of_1_plus_test'
-        assert adata.uns['focus'] == outer_focus
-        assert id(log_data[0]) == id(adata.layers[outer_focus[3:]])
+        assert ut.get_focus_name(adata) == outer_focus
+        assert id(log_data.data) == id(adata.layers[outer_focus[3:]])
 
         with ut.focus_on(ut.get_downsample_of_var_per_obs, adata, of='test', samples=10) \
                 as downsamled_data:
             inner_focus = 'vo:downsample_10_v_per_o_of_vo:test'
-            assert adata.uns['focus'] == inner_focus
-            assert id(downsamled_data[0]) == id(adata.layers[inner_focus[3:]])
+            assert ut.get_focus_name(adata) == inner_focus
+            assert id(downsamled_data.data) \
+                == id(adata.layers[inner_focus[3:]])
 
-        assert adata.uns['focus'] == outer_focus
-        assert id(log_data[0]) == id(adata.layers[outer_focus[3:]])
+        assert ut.get_focus_name(adata) == outer_focus
+        assert id(log_data.data) == id(adata.layers[outer_focus[3:]])
 
         with ut.focus_on(ut.get_downsample_of_var_per_obs, adata, of='test', samples=10) \
                 as downsamled_data:
             inner_focus = 'vo:downsample_10_v_per_o_of_vo:test'
-            assert adata.uns['focus'] == inner_focus
-            assert id(downsamled_data[0]) == id(adata.layers[inner_focus[3:]])
+            assert ut.get_focus_name(adata) == inner_focus
+            assert id(downsamled_data.data) == \
+                id(adata.layers[inner_focus[3:]])
             ut.del_vo_data(adata, outer_focus)
 
-        assert adata.uns['focus'] == 'vo:test'
+        assert ut.get_focus_name(adata) == 'vo:test'
 
-    assert adata.uns['focus'] == 'vo:test'
+    assert ut.get_focus_name(adata) == 'vo:test'
 
 
 def test_sliding_window_function() -> None:
@@ -411,68 +413,71 @@ def test_sliding_window_function() -> None:
 
 def test_dense_annotations() -> None:
     matrix = np.array([[0, 1, 2], [3, 4, 5]], dtype='float')
-    adata = AnnData(matrix)
-    _test_annotations(adata)
+    _test_annotations(matrix)
 
 
 def test_sparse_annotations() -> None:
-    matrix = np.array([[0, 1, 2],
-                       [3, 4, 5]], dtype='float')
+    matrix = np.array([[0, 1, 2], [3, 4, 5]], dtype='float')
     matrix = sparse.csr_matrix(matrix)
-    adata = AnnData(matrix)
-    _test_annotations(adata)
+    _test_annotations(matrix)
 
 
-def _test_annotations(adata: AnnData) -> None:
-    ut.set_x_name(adata, 'test')
+def _test_annotations(full_matrix: ut.Matrix) -> None:
+    adata = AnnData(full_matrix)
+    ut.prepare(adata, 'test')
 
-    assert np.allclose(ut.get_sum_per_obs(adata)[0], np.array([3, 12]))
-    assert np.allclose(ut.get_sum_per_var(adata)[0], np.array([3, 5, 7]))
+    assert np.allclose(ut.get_nnz_per_obs(adata).data, np.array([2, 3]))
+    assert np.allclose(ut.get_nnz_per_var(adata).data, np.array([1, 2, 2]))
 
-    assert np.allclose(ut.get_nnz_per_obs(adata)[0], np.array([2, 3]))
-    assert np.allclose(ut.get_nnz_per_var(adata)[0], np.array([1, 2, 2]))
+    assert np.allclose(ut.get_sum_per_obs(adata).data, np.array([3, 12]))
+    assert np.allclose(ut.get_sum_per_var(adata).data, np.array([3, 5, 7]))
 
-    assert np.allclose(ut.get_sum_per_obs(adata)[0], np.array([3, 12]))
-    assert np.allclose(ut.get_sum_per_var(adata)[0], np.array([3, 5, 7]))
+    assert np.allclose(ut.get_nnz_per_obs(adata).data, np.array([2, 3]))
+    assert np.allclose(ut.get_nnz_per_var(adata).data, np.array([1, 2, 2]))
 
-    assert np.allclose(ut.get_min_per_obs(adata)[0], np.array([0, 3]))
-    assert np.allclose(ut.get_min_per_var(adata)[0], np.array([0, 1, 2]))
+    assert np.allclose(ut.get_sum_per_obs(adata).data, np.array([3, 12]))
+    assert np.allclose(ut.get_sum_per_var(adata).data, np.array([3, 5, 7]))
 
-    assert np.allclose(ut.get_max_per_obs(adata)[0], np.array([2, 5]))
-    assert np.allclose(ut.get_max_per_var(adata)[0], np.array([3, 4, 5]))
+    assert np.allclose(ut.get_max_per_obs(adata).data, np.array([2, 5]))
+    assert np.allclose(ut.get_max_per_var(adata).data, np.array([3, 4, 5]))
 
-    assert np.allclose(ut.get_sum_squared_per_obs(adata)[0], np.array([5, 50]))
+    assert np.allclose(ut.get_min_per_obs(adata).data, np.array([0, 3]))
+    assert np.allclose(ut.get_min_per_var(adata).data, np.array([0, 1, 2]))
+
+    assert np.allclose(ut.get_sum_squared_per_obs(adata).data,
+                       np.array([5, 50]))
     assert np.allclose(ut.get_sum_squared_per_var(adata)
-                       [0], np.array([9, 17, 29]))
+                       .data, np.array([9, 17, 29]))
 
     assert np.allclose(ut.get_fraction_per_obs(adata)
-                       [0], np.array([3/15, 12/15]))
-    assert np.allclose(ut.get_fraction_per_var(adata)[0],
+                       .data, np.array([3/15, 12/15]))
+    assert np.allclose(ut.get_fraction_per_var(adata).data,
                        np.array([3/15, 5/15, 7/15]))
 
-    assert np.allclose(ut.get_mean_per_obs(adata)[0], np.array([3/3, 12/3]))
-    assert np.allclose(ut.get_mean_per_var(adata)[0],
+    assert np.allclose(ut.get_mean_per_obs(adata).data, np.array([3/3, 12/3]))
+    assert np.allclose(ut.get_mean_per_var(adata).data,
                        np.array([3/2, 5/2, 7/2]))
 
-    assert np.allclose(ut.get_variance_per_obs(adata)[0],
+    assert np.allclose(ut.get_variance_per_obs(adata).data,
                        np.array([5/3 - (3/3)**2, 50/3 - (12/3)**2]))
-    assert np.allclose(ut.get_variance_per_var(adata)[0],
+
+    assert np.allclose(ut.get_variance_per_var(adata).data,
                        np.array([9/2 - (3/2)**2, 17/2 - (5/2)**2, 29/2 - (7/2)**2]))
 
-    assert np.allclose(ut.get_relative_variance_per_obs(adata)[0],
+    assert np.allclose(ut.get_relative_variance_per_obs(adata).data,
                        np.log2(np.array([(5/3 - (3/3)**2) / (3/3),
                                          (50/3 - (12/3)**2) / (12/3)])))
-    assert np.allclose(ut.get_relative_variance_per_var(adata)[0],
+    assert np.allclose(ut.get_relative_variance_per_var(adata).data,
                        np.log2(np.array([(9/2 - (3/2)**2) / (3/2),
                                          (17/2 - (5/2)**2) / (5/2),
                                          (29/2 - (7/2)**2) / (7/2)])))
 
-    data = ut.get_fraction_of_var_per_obs(adata)[0]
+    data = ut.get_fraction_of_var_per_obs(adata).data
     if sparse.issparse(data):
         data = data.toarray()
     assert np.allclose(data, np.array([[0/3, 1/3, 2/3], [3/12, 4/12, 5/12]]))
 
-    data = ut.get_fraction_of_obs_per_var(adata)[0]
+    data = ut.get_fraction_of_obs_per_var(adata).data
     if sparse.issparse(data):
         data = data.toarray()
     assert np.allclose(data, np.array([[0/3, 1/5, 2/7], [3/3, 4/5, 5/7]]))

@@ -24,15 +24,10 @@ unstaged:
 	@if git status| grep 'not staged' > /dev/null; then git status; false; fi
 
 todo:
-	@if grep -i -n TODO''X `git ls-files | grep -v pybind11`; then false; fi
+	@if grep -i -n 'TODO''X\|reveal_''type' `git ls-files | grep -v pybind11`; then false; fi
 
 mypy:
-	mypy \
-	    --warn-redundant-casts \
-	    --disallow-untyped-defs \
-	    --warn-unused-ignores \
-	    --scripts-are-modules \
-	    metacells tests
+	mypy metacells tests
 
 build:
 	python setup.py build_ext --inplace

@@ -58,9 +58,6 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
     An annotated ``adata``, where the observations are cells and the variables are genes, containing
     the UMIs count in the ``of`` (default: the ``focus``) per-variable-per-observation data.
 
-    Various intermediate data (sums, variances, etc.) is used if already available. Otherwise it is
-    computed and cached for future reuse.
-
     **Returns**
 
     Variable (Gene) Annotations
@@ -91,28 +88,31 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
         :py:func:`find_noisy_lonely_genes`?
     '''
     with ut.focus_on(ut.get_vo_data, adata, of):
-        fraction_of_genes = ut.get_fraction_per_var(adata)[0]
-        relative_variance_of_genes = ut.get_relative_variance_per_var(adata)[0]
+        fraction_of_genes = ut.get_fraction_per_var(adata).data
+        relative_variance_of_genes = \
+            ut.get_relative_variance_per_var(adata).data
 
         fraction_mask = fraction_of_genes >= minimal_gene_fraction
         variance_mask = relative_variance_of_genes >= minimal_gene_relative_variance
         noisy_mask = fraction_mask & variance_mask
 
-        candidate_adata = adata[:, noisy_mask]
-        correlation_of_genes = \
-            np.copy(np.array(ut.get_var_var_correlation(candidate_adata)[0]))
-        np.fill_diagonal(correlation_of_genes, 0)
-        max_correlation_of_genes = \
-            ut.to_array(correlation_of_genes.max(axis=0))
+        noisy_adata = adata[:, noisy_mask]
 
-        lonely_mask = max_correlation_of_genes <= maximal_gene_correlation
+        correlation_of_noisy_genes = \
+            ut.get_var_var_correlation(noisy_adata, inplace=False).data
+        np.fill_diagonal(correlation_of_noisy_genes, None)
+
+        max_correlation_of_noisy_genes = \
+            np.nanmax(correlation_of_noisy_genes, axis=0)
+
+        lonely_mask = max_correlation_of_noisy_genes <= maximal_gene_correlation
 
         noisy_lonely_mask = noisy_mask
         noisy_lonely_mask[noisy_mask] = lonely_mask
 
-        if inplace:
-            ut.set_data(adata, 'v:noisy_lonely_mask', noisy_lonely_mask,
-                        ut.SAFE_WHEN_SLICING_VAR)
-            return None
+    if inplace:
+        ut.set_data(adata, 'v:noisy_lonely_mask', noisy_lonely_mask,
+                    ut.SAFE_WHEN_SLICING_VAR)
+        return None
 
-        return pd.Series(noisy_lonely_mask, index=adata.var_names)
+    return pd.Series(noisy_lonely_mask, index=adata.var_names)

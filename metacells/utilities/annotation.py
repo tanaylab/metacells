@@ -47,7 +47,7 @@ are three sources of (implementation) code complexity here:
 
 1.  Per-variable-per-observation data.
 
-    In the managed ``AnnData``, all the layers are equal. A special metadata property ``focus``
+    In the managed ``AnnData``, all the layers are equal. A special metadata property ``__focus__``
     provides the default layer name for all layer functions. Similarly, operations that output a
     layer allow specifying that the result will be ``infocus``, and the :py:func:`focus_on` function
     allows for code to safely shift the focus for specific code regions.
@@ -56,10 +56,10 @@ are three sources of (implementation) code complexity here:
     the data layers. There is a strong assumption that all work will be done on ``X`` and the other
     layers are secondary at best.
 
-    The managed ``AnnData`` therefore keeps a second special metadata property ``x_name`` which must
-    be initialized using :py:func:`metacells.utilities.preparation.set_x_name`, and pretends that
-    the value of ``X`` is just another layer. This gives rise to some edge cases (e.g., one can't
-    delete the ``X`` layer).
+    The managed ``AnnData`` therefore keeps a second special metadata property ``__x__`` which must
+    be initialized using :py:func:`metacells.utilities.preparation.prepare`, and pretends that the
+    value of ``X`` is just another layer. This gives rise to some edge cases (e.g., one can't delete
+    the ``X`` layer).
 
 2.  Layout-optimized data.
 
@@ -132,6 +132,7 @@ from readerwriterlock import rwlock
 
 import metacells.utilities.computation as utc
 import metacells.utilities.timing as timed
+import metacells.utilities.typing as utt
 
 __all__ = [
     'SlicingMask',
@@ -144,7 +145,10 @@ __all__ = [
 
     'slice',
 
+    'NamedData',
+
     'get_data',
+    'get_named_data',
     'has_data',
     'set_data',
 
@@ -157,6 +161,9 @@ __all__ = [
     'get_vo_data',
     'del_vo_data',
     'focus_on',
+    'get_focus_name',
+    'get_x_name',
+
 ]
 
 
@@ -218,8 +225,8 @@ def safe_slicing_data(name: str, slicing_mask: SlicingMask) -> None:
 
 
 def _known_safe_slicing() -> None:
-    safe_slicing_data('m:x_name', ALWAYS_SAFE)
-    safe_slicing_data('m:focus', ALWAYS_SAFE)
+    safe_slicing_data('m:__x__', ALWAYS_SAFE)
+    safe_slicing_data('m:__focus__', ALWAYS_SAFE)
     safe_slicing_data('v:gene_ids', ALWAYS_SAFE)
 
 
@@ -279,8 +286,8 @@ def slice(  # pylint: disable=redefined-builtin
         slicing operation, invoke the built-in ``adata[..., ...]``.
     '''
     assert invalidated_prefix != ''
-    x_name = get_m_data(adata, 'm:x_name')
-    focus = get_m_data(adata, 'm:focus')
+    x_name = get_x_name(adata)
+    focus = get_focus_name(adata)
     assert x_name not in adata.layers
     assert has_data(adata, focus)
 
@@ -315,16 +322,16 @@ def slice(  # pylint: disable=redefined-builtin
 
     _restore_data(saved_data, adata)
 
-    assert adata.uns['x_name'] == x_name
-    assert adata.uns['focus'] == focus
+    assert get_x_name(adata) == x_name
+    assert get_focus_name(adata) == focus
     assert x_name not in adata.layers
     assert has_data(adata, focus)
 
-    assert bdata.uns['x_name'] == x_name
+    assert get_x_name(bdata) == x_name
     if focus == x_name or focus in bdata.layers:
-        assert bdata.uns['focus'] == focus
+        assert get_focus_name(bdata) == focus
     else:
-        focus = bdata.uns['focus'] = x_name
+        focus = bdata.uns['__focus__'] = x_name
     assert x_name not in bdata.layers
     assert has_data(bdata, focus)
 
@@ -384,7 +391,7 @@ def _save_per_data(  # pylint: disable=too-many-locals
             delete_names.add(name)
 
             base_name = name[:-len(by_suffix)]
-            if base_name == adata.uns['x_name'][3:]:
+            if base_name == get_x_name(adata)[3:]:
                 with timed.step('.swap_x'):
                     with _modify(adata):
                         adata.X = data
@@ -500,7 +507,7 @@ def _slice_action(
     will_prefix_invalidated: bool,
 ) -> str:
     per_prefix, name_suffix = name.split(':', 1)
-    if '__' in name_suffix:
+    if ':__by_' in name_suffix:
         is_per = True
         is_per_obs = name_suffix.endswith(':__by_obs__')
         is_per_var = name_suffix.endswith(':__by_var__')
@@ -544,13 +551,34 @@ def _slice_action(
     return 'prefix'
 
 
+class NamedData(NamedTuple):
+    '''
+    Data stored in ``AnnData`` with its full name.
+    '''
+
+    #: The full name of the data, including the prefix (``m:``, ``o:``, ``v:``, ``vo:``', ``oo:``,
+    #: ``vv:``).
+    name: str
+
+    #: The actual data.
+    #:
+    #: This will be anything at all for metadata, This will be a
+    #: :py:typ:`metacells.utilities.computation.Matrix` for per-variable-per-observation,
+    #: per-observation-per-observation, or per-variable-per-variable, data; a
+    #: :py:typ:`metacells.utilities.computation.Vector` for per-observation or per-variable data;
+    #: and anything at all for metadata.
+    data: Any
+
+
 @timed.call()
 def get_data(
     adata: AnnData,
     name: str,
     *,
-    compute: Optional[Callable[[], utc.Vector]] = None,
+    compute: Optional[Callable[[], utt.Vector]] = None,
     inplace: bool = True,
+    infocus: bool = False,
+    by: Optional[str] = None,
 ) -> Any:
     '''
     Lookup any data by its full ``name``.
@@ -559,28 +587,60 @@ def get_data(
 
     If ``inplace``, store the result in ``adata`` for future reuse.
 
+    If the data is per-variable-per-observation, and ``infocus`` (implies ``inplace``), also makes
+    the result the new focus.
+
+    If the data is per-variable-per-observation, and ``by`` is specified, it forces the layout of
+    the returned data (see :py:func:`get_vo_data`).
+
     .. note::
 
-        This works for any kind data, based on the name's prefix (e.g., ``m:`` for metadata, ``vo:``
-        for per-variable-per-observation). As such, it does not provide the full functionality
-        offered by specific accessors (e.g., :py:func:`get_vo_data`).
+        This is given the full name, and works for any kind data, based on the full name's prefix
+        (e.g., ``m:`` for metadata, ``vo:`` for per-variable-per-observation). Therefore it returns
+        just the data instead of a :py:typ:`NamedData`.
+    '''
+    return get_named_data(adata, name, compute=compute, inplace=inplace,
+                          infocus=infocus, by=by).data
+
+
+@timed.call()
+def get_named_data(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Vector]] = None,
+    inplace: bool = True,
+    infocus: bool = False,
+    by: Optional[str] = None,
+) -> NamedData:
+    '''
+    Same as :py:func:`get_data` but return the full :py:typ:`NamedData`.
+        just the data instead of a :py:typ:`NamedData`.
     '''
     if name.startswith('vo:'):
-        return get_vo_data(adata, name, compute=compute, inplace=inplace)
+        return get_vo_data(adata, name, compute=compute, inplace=inplace,
+                           infocus=infocus, by=by)
+
+    assert not infocus
 
     if name.startswith('m:'):
+        assert by is None
         return get_m_data(adata, name, compute=compute, inplace=inplace)
 
-    if name.startswith('v:'):
-        return get_v_data(adata, name, compute=compute, inplace=inplace)
-
     if name.startswith('o:'):
+        assert by is None or by == 'obs'
         return get_o_data(adata, name, compute=compute, inplace=inplace)
 
+    if name.startswith('v:'):
+        assert by is None or by == 'var'
+        return get_v_data(adata, name, compute=compute, inplace=inplace)
+
     if name.startswith('oo:'):
+        assert by is None or by == 'obs'
         return get_oo_data(adata, name, compute=compute, inplace=inplace)
 
     if name.startswith('vv:'):
+        assert by is None or by == 'var'
         return get_vv_data(adata, name, compute=compute, inplace=inplace)
 
     raise ValueError('the data name: %s does not start with a valid prefix '
@@ -600,7 +660,7 @@ def has_data(
         for per-variable-per-observation).
     '''
     if name.startswith('vo:'):
-        return name == adata.uns['x_name'] or name[3:] in adata.layers
+        return name == get_x_name(adata) or name[3:] in adata.layers
 
     if name.startswith('m:'):
         return name[2:] in adata.uns
@@ -668,10 +728,10 @@ def set_data(
 def get_m_data(
     adata: AnnData,
     name: str,
-    compute: Optional[Callable[[], utc.Vector]] = None,
+    compute: Optional[Callable[[], utt.Vector]] = None,
     *,
     inplace: bool = True,
-) -> Any:
+) -> NamedData:
     '''
     Lookup metadata (unstructured annotation) in ``adata``.
 
@@ -686,11 +746,14 @@ def get_m_data(
         The caller is responsible for specifying the slicing behavior of the data.
     '''
     if name.startswith('m:'):
+        full_name = name
         name = name[2:]
+    else:
+        full_name = 'm:' + name
 
     data = adata.uns.get(name)
     if data is not None:
-        return data
+        return NamedData(name=full_name, data=data)
 
     if compute is None:
         raise KeyError('unavailable metadata: ' + name)
@@ -702,16 +765,16 @@ def get_m_data(
         with _modify(adata):
             adata.uns[name] = data
 
-    return data
+    return NamedData(name=full_name, data=data)
 
 
 def get_o_data(
     adata: AnnData,
     name: str,
     *,
-    compute: Optional[Callable[[], utc.Vector]] = None,
+    compute: Optional[Callable[[], utt.Vector]] = None,
     inplace: bool = True,
-) -> utc.Vector:
+) -> utt.Vector:
     '''
     Lookup per-observation (cell) data in ``adata``.
 
@@ -733,9 +796,9 @@ def get_v_data(
     adata: AnnData,
     name: str,
     *,
-    compute: Optional[Callable[[], utc.Vector]] = None,
+    compute: Optional[Callable[[], utt.Vector]] = None,
     inplace: bool = True,
-) -> utc.Vector:
+) -> utt.Vector:
     '''
     Lookup per-variable (gene) data in ``adata``.
 
@@ -755,9 +818,9 @@ def get_oo_data(
     adata: AnnData,
     name: str,
     *,
-    compute: Optional[Callable[[], utc.Matrix]] = None,
+    compute: Optional[Callable[[], utt.Matrix]] = None,
     inplace: bool = True,
-) -> utc.Matrix:
+) -> utt.Matrix:
     '''
     Lookup per-observation-per-observation (cell) data in ``adata``.
 
@@ -778,9 +841,9 @@ def get_vv_data(
     adata: AnnData,
     name: str,
     *,
-    compute: Optional[Callable[[], utc.Vector]] = None,
+    compute: Optional[Callable[[], utt.Vector]] = None,
     inplace: bool = True,
-) -> utc.Matrix:
+) -> utt.Matrix:
     '''
     Lookup per-variable-per-variable (gene) data in ``adata``.
 
@@ -807,13 +870,16 @@ def _get_shaped_data(
     inplace: bool
 ) -> Any:
     if name.startswith(per_prefix):
+        full_name = name
         name = name[len(per_prefix):]
+    else:
+        full_name = per_prefix + name
 
     data = _get(annotations, name)
     if data is not None:
         if isinstance(data, (pd.Series, pd.DataFrame)):
             data = data.values
-        return data
+        return NamedData(name=full_name, data=data)
 
     if compute is None:
         raise KeyError('unavailable %s data: %s' % (per_text, name))
@@ -825,10 +891,10 @@ def _get_shaped_data(
         data = data.values
 
     if inplace:
-        utc.freeze(data)
+        utt.freeze(data)
         annotations[name] = data
 
-    return data
+    return NamedData(name=full_name, data=data)
 
 
 @timed.call()
@@ -836,22 +902,22 @@ def get_vo_data(
     adata: AnnData,
     name: Optional[str] = None,
     *,
-    compute: Optional[Callable[[], utc.Vector]] = None,
+    compute: Optional[Callable[[], utt.Vector]] = None,
     inplace: bool = True,
     infocus: bool = False,
     by: Optional[str] = None,
-) -> Tuple[utc.Matrix, str]:
+) -> NamedData:
     '''
-    Lookup a per-observation-per-variable matrix (data layer) in ``adata``.
+    Lookup a per-variable-per-observation matrix (data layer) in ``adata``.
 
-    If the ``name`` is not specified, get the ``focus``. If the name does not start with a ``vo:``
+    If the ``name`` is not specified, get the focus data. If the name does not start with a ``vo:``
     prefix, one is assumed.
 
     If the layer does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
 
     If ``inplace``, store the result in ``adata`` for future reuse.
 
-    If ``infocus`` (implies ``inplace``), also makes the result the new ``focus``.
+    If ``infocus`` (implies ``inplace``), also makes the result the new focus data.
 
     If ``by`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
     data in a layout optimized for by-observation (row-major / csr) or by-variable (column-major
@@ -874,7 +940,7 @@ def get_vo_data(
         layout-specific data in a private variable, but we do not own the ``AnnData`` object.
     '''
     if name is None:
-        name = get_m_data(adata, 'm:focus')
+        name = get_focus_name(adata)
 
     assert '__' not in name
 
@@ -886,10 +952,10 @@ def get_vo_data(
 
     if infocus:
         with _modify(adata):
-            adata.uns['focus'] = full_name
+            adata.uns['__focus__'] = full_name
 
-    if full_name == adata.uns['x_name']:
-        def get_base_data() -> utc.Matrix:
+    if full_name == get_x_name(adata):
+        def get_base_data() -> utt.Matrix:
             with timed.step('.get_x'):
                 data = adata.X
 
@@ -897,7 +963,7 @@ def get_vo_data(
             assert data.shape == (adata.n_obs, adata.n_vars)
             return data
     else:
-        def get_base_data() -> utc.Matrix:
+        def get_base_data() -> utt.Matrix:
             assert name is not None
             data = adata.layers.get(name)
             if data is not None:
@@ -928,19 +994,20 @@ def get_vo_data(
         assert by in ['var', 'obs']
         by_name = '%s:__by_%s__' % (name, by)
         axis = ['var', 'obs'].index(by)
+        layout = ['column_major', 'row_major'][axis]
 
         data = adata.layers.get(by_name)
         if data is None:
-            data = utc.to_layout(get_base_data(), axis=axis)
+            data = utc.to_layout(get_base_data(), layout=layout)
             if inplace or infocus:
                 with _modify(adata):
                     adata.layers[by_name] = data
 
     assert data.shape == (adata.n_obs, adata.n_vars)
     if inplace or infocus:
-        utc.freeze(data)
+        utt.freeze(data)
 
-    return data, full_name
+    return NamedData(name=full_name, data=data)
 
 
 def del_vo_data(
@@ -951,7 +1018,7 @@ def del_vo_data(
     must_exist: bool = False,
 ) -> None:
     '''
-    Delete a per-observation-per-variable matrix in ``adata`` by its ``name``.
+    Delete a per-variable-per-observation matrix in ``adata`` by its ``name``.
 
     If the name does not start with a ``vo:`` prefix, one is assumed.
 
@@ -963,8 +1030,8 @@ def del_vo_data(
 
     .. note::
 
-        You can't delete the ``x_name`` (layer of ``X``). Deleting the ``focus`` (default data)
-        changes it to become the same as the ``x_name``.
+        You can't delete the ``x_name`` (layer of ``X``). Deleting the focus (default) data changes
+        the focus to become whatever is in ``X``.
 
     .. todo::
 
@@ -980,12 +1047,12 @@ def del_vo_data(
     else:
         full_name = 'vo:' + name
 
-    x_name = get_m_data(adata, 'm:x_name')
+    x_name = get_x_name(adata)
     assert full_name != x_name
 
-    if full_name == get_m_data(adata, 'm:focus'):
+    if full_name == get_focus_name(adata):
         with _modify(adata):
-            adata.uns['focus'] = x_name
+            adata.uns['__focus__'] = x_name
 
     if by is not None:
         by_name = '%s:__by_%s__' % (name, by)
@@ -1011,11 +1078,11 @@ def focus_on(
     **kwargs: Any
 ) -> Iterator[Any]:
     '''
-    Get some per-observation-per-variable data by invoking the ``accessor`` with ``adata`` (and some
-    ``args`` and ``kwargs``), and make it the ``focus`` for the duration of the ``with`` statement.
+    Get some per-variable-per-observation data by invoking the ``accessor`` with ``adata`` (and some
+    ``args`` and ``kwargs``), and make it the focus for the duration of the ``with`` statement.
 
     If the original focus data is deleted inside the ``with`` statement, then when it is done, the
-    ``focus`` will be set to the ``x_name``.
+    focus will revert to whatever is in ``X``.
 
     For example, in order to temporarily focus on the log of some linear measurements,
     write:
@@ -1046,15 +1113,29 @@ def focus_on(
             warn(ignoring_redundant_explict_flags_to_focus_on)
             del kwargs[name]
 
-    old_focus = adata.uns['focus']
+    old_focus = get_focus_name(adata)
 
     yield accessor(adata, *args, infocus=True, **kwargs)
 
     with _modify(adata):
         if has_data(adata, old_focus):
-            adata.uns['focus'] = old_focus
+            adata.uns['__focus__'] = old_focus
         else:
-            adata.uns['focus'] = adata.uns['x_name']
+            adata.uns['__focus__'] = get_x_name(adata)
+
+
+def get_focus_name(adata: AnnData) -> str:
+    '''
+    Return the name of the focus per-variable-per-observation data.
+    '''
+    return adata.uns['__focus__']
+
+
+def get_x_name(adata: AnnData) -> str:
+    '''
+    Return the name of the ``X`` per-variable-per-observation data.
+    '''
+    return adata.uns['__x__']
 
 
 @contextmanager

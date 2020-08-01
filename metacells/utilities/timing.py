@@ -8,7 +8,8 @@ from contextlib import contextmanager
 from threading import Lock, current_thread
 from threading import local as thread_local
 from time import perf_counter_ns, thread_time_ns
-from typing import Any, Callable, Dict, Iterator, List, Optional, TextIO
+from typing import (Any, Callable, Dict, Iterator, List, Optional, TextIO,
+                    TypeVar)
 
 import numpy as np  # type: ignore
 
@@ -36,6 +37,13 @@ TIMING_PATH = 'timing.csv'
 #: buffering, or the size of the buffer.
 TIMING_BUFFERING = 1
 
+
+#: Whether to print and flush the name of each step when it starts, to the terminal. Override this
+#: by setting the ``METACELLS_LOG_STEPS`` environment variable to ``true``.
+#:
+#: This is only useful for easily identifying which exact step is taking a long time.
+LOG_STEPS = False
+
 if not 'sphinx' in sys.argv[0]:
     COLLECT_TIMING = \
         {'true': True,
@@ -43,6 +51,10 @@ if not 'sphinx' in sys.argv[0]:
                                         'False').lower()]
     TIMING_PATH = os.environ.get('METACELL_TIMING_CSV', 'timing.csv')
     TIMING_BUFFERING = int(os.environ.get('METACELL_TIMING_BUFFERING', '1'))
+    LOG_STEPS = \
+        {'true': True,
+         'false': False}[os.environ.get('METACELLS_LOG_STEPS',
+                                        'False').lower()]
 
 TIMING_FILE: Optional[TextIO] = None
 THREAD_LOCAL = thread_local()
@@ -218,12 +230,13 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
     steps_stack.append(step_timing)
 
     try:
-        # import sys
-        # sys.stderr.write(step_timing.context + ' BEGIN {\n')
-        # sys.stderr.flush()
+        if LOG_STEPS:
+            sys.stderr.write(step_timing.context + ' BEGIN {\n')
+            sys.stderr.flush()
         yield None
-        # sys.stderr.write(step_timing.context + ' END }\n')
-        # sys.stderr.flush()
+        if LOG_STEPS:
+            sys.stderr.write(step_timing.context + ' END }\n')
+            sys.stderr.flush()
     finally:
         total_times = Counters.now() - start_point
         assert total_times.elapsed_ns >= 0
@@ -256,7 +269,11 @@ def _print_timing(
     step_parameters: Optional[List[str]] = None,
     other_threads_count: int = 0,
 ) -> None:
-    with LOCK:
+    gc_enabled = gc.isenabled()
+    gc.disable()
+    LOCK.acquire()
+    try:
+
         global TIMING_FILE
         if TIMING_FILE is None:
             TIMING_FILE = \
@@ -270,6 +287,11 @@ def _print_timing(
         if step_parameters:
             text.extend(step_parameters)
         TIMING_FILE.write(','.join(text) + '\n')
+
+    finally:
+        LOCK.release()
+        if gc_enabled:
+            gc.enable()
 
 
 def parameters(**kwargs: Any) -> None:
@@ -290,7 +312,10 @@ def parameters(**kwargs: Any) -> None:
             step_timing.parameters.append(str(value))
 
 
-def call(name: Optional[str] = None) -> Callable[[Callable], Callable]:
+CALLABLE = TypeVar('CALLABLE')
+
+
+def call(name: Optional[str] = None) -> Callable[[CALLABLE], CALLABLE]:
     '''
     Automatically wrap each function invocation with ``timing.step`` using the ``name`` (by default,
     the function's qualified name).
@@ -304,7 +329,7 @@ def call(name: Optional[str] = None) -> Callable[[Callable], Callable]:
                 return function(*args, **kwargs)
         return timed
 
-    return wrap
+    return wrap  # type: ignore
 
 
 def context() -> str:

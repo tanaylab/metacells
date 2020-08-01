@@ -2,7 +2,7 @@
 Utilities for performing efficient parallel computations.
 '''
 
-from typing import Callable, Optional, Union
+from typing import Callable, Optional
 from warnings import warn
 
 import numpy as np  # type: ignore
@@ -12,20 +12,10 @@ from scipy import sparse  # type: ignore
 import metacells.extensions as xt  # type: ignore
 import metacells.utilities.documentation as utd
 import metacells.utilities.timing as timed
+import metacells.utilities.typing as utt
 from metacells.utilities.threading import SharedStorage, parallel_for
 
 __all__ = [
-    'DATA_TYPES',
-
-    'Matrix',
-    'Vector',
-
-    'frozen',
-    'freeze',
-    'unfreeze',
-
-    'canonize',
-    'to_array',
     'to_layout',
     'relayout_compressed',
 
@@ -47,121 +37,14 @@ __all__ = [
     'sliding_window_function',
 ]
 
-#: The data types supported by the C++ extensions code.
-DATA_TYPES = ['float32', 'float64', 'int32', 'int64', 'uint32', 'uint64']
-
-#: A ``mypy`` type for matrices.
-Matrix = Union[sparse.spmatrix, np.ndarray, pd.DataFrame]
-
-#: A ``mypy`` type for vectors.
-Vector = Union[np.ndarray, pd.Series]
-
-
-def frozen(data: Union[Matrix, Vector]) -> bool:
-    '''
-    Test whether the data is protected against future modification.
-    '''
-    if not sparse.issparse(data):
-        if not isinstance(data, np.ndarray):
-            data = data.values
-        return not data.flags.writeable
-
-    assert data.indices.flags.writeable \
-        == data.indptr.flags.writeable \
-        == data.data.flags.writeable
-
-    return not data.data.flags.writeable
-
-
-@timed.call()
-def freeze(data: Union[Matrix, Vector]) -> None:
-    '''
-    Protect data against future modification.
-    '''
-    if not sparse.issparse(data):
-        if not isinstance(data, np.ndarray):
-            data = data.values
-        data.setflags(write=False)
-    elif data.getformat() in ['csc', 'csr']:
-        data.indices.setflags(write=False)
-        data.indptr.setflags(write=False)
-        data.data.setflags(write=False)
-    else:
-        raise NotImplementedError('freeze of sparse data in %s format'
-                                  % data.getformat())
-
-
-@timed.call()
-def unfreeze(data: Union[Matrix, Vector]) -> None:
-    '''
-    Permit data future modification of some data.
-    '''
-    if not sparse.issparse(data):
-        if not isinstance(data, np.ndarray):
-            data = data.values
-        data.setflags(write=True)
-    elif data.getformat() in ['csc', 'csr']:
-        data.indices.setflags(write=True)
-        data.indptr.setflags(write=True)
-        data.data.setflags(write=True)
-    else:
-        raise NotImplementedError('unfreeze of sparse data in %s format'
-                                  % data.getformat())
-
-
-@timed.call()
-def canonize(matrix: Matrix) -> None:
-    '''
-    If the data is sparse, ensure it is in "canonical format", which makes most operations on it
-    much more efficient.
-
-    Otherwise, return the matrix as-is.
-    '''
-    if sparse.issparse(matrix):
-        matrix.sum_duplicates()
-
-
-def to_array(data: Union[Matrix, Vector]) -> np.ndarray:
-    '''
-    Convert some (possibly sparse) data to an (full dense size) array.
-
-    This should only be applied if only one dimension has size greater than one.
-
-    .. todo::
-
-        The code in :py:func:`to_array` works around some strange cases where ``np.reshape(data,
-        -1)`` returns a matrix rather than an array. This needs further investigation.
-    '''
-    if sparse.issparse(data):
-        data = data.toarray()
-
-    if isinstance(data, (pd.Series, pd.DataFrame)):
-        data = data.values
-
-    if data.ndim == 1:
-        return data
-
-    seen_large_dimension = False
-    for size in data.shape:
-        if size == 1:
-            continue
-        assert not seen_large_dimension
-        seen_large_dimension = True
-
-    array = np.reshape(data, -1)
-    if array.ndim > 1:
-        array = np.reshape(array.__array__(), -1)
-        assert array.ndim == 1
-
-    return array
-
 
 @ timed.call()
-def to_layout(matrix: Matrix, *, axis: int) -> Matrix:  # pylint: disable=too-many-return-statements
+def to_layout(matrix: utt.Matrix, layout: str) -> utt.Matrix:  # pylint: disable=too-many-return-statements
     '''
     Re-layout a matrix for efficient axis slicing/processing.
 
-    That is, for ``axis=0``, re-layout the matrix for efficient per-column (variable, gene)
+    That is, if ``layout`` is ``column_major``,
+    ``axis=0``, re-layout the matrix for efficient per-column (variable, gene)
     slicing/processing. For sparse matrices, this is ``csc`` format; for
     dense matrices, this is Fortran (column-major) format.
 
@@ -173,47 +56,40 @@ def to_layout(matrix: Matrix, *, axis: int) -> Matrix:  # pylint: disable=too-ma
     created. This is a costly operation as it needs to move a lot of data. However, it makes the
     following processing much more efficient, so it is typically a net performance gain overall.
     '''
-    assert matrix.ndim == 2
-    assert 0 <= axis <= 1
+    if utt.is_layout(matrix, layout):
+        return matrix
 
-    is_frozen = frozen(matrix)
+    is_frozen = utt.frozen(matrix)
 
     if sparse.issparse(matrix):
-        to_axis_format = ['csc', 'csr'][axis]
-        if matrix.getformat() != to_axis_format:
-            from_axis_format = ['csc', 'csr'][1 - axis]
-            if matrix.getformat() == from_axis_format:
-                matrix = relayout_compressed(matrix, axis)
-            else:
-                name = '.to' + to_axis_format
-                with timed.step(name):
-                    matrix = getattr(matrix, name[1:])()
+        to_axis_format = utt.SPARSE_FAST_FORMAT[layout]
+        from_axis_format = utt.SPARSE_SLOW_FORMAT[layout]
+        if matrix.getformat() == from_axis_format:
+            matrix = relayout_compressed(matrix)
+        else:
+            name = '.to' + to_axis_format
+            with timed.step(name):
+                matrix = getattr(matrix, name[1:])()
 
     else:  # Dense.
-        if axis == 0:
-            if not matrix.flags.f_contiguous:
-                with timed.step('.ravel'):
-                    matrix = np.reshape(np.ravel(matrix, order='F'),
-                                        matrix.shape, order='F')
-        else:
-            if not matrix.flags.c_contiguous:
-                with timed.step('.ravel'):
-                    matrix = np.reshape(np.ravel(matrix, order='C'),
-                                        matrix.shape, order='C')
+        order = utt.DENSE_FAST_FLAG[layout][0]
+        with timed.step('.ravel'):
+            matrix = np.reshape(np.ravel(matrix, order=order),
+                                matrix.shape, order=order)
 
     if is_frozen:
-        freeze(matrix)
+        utt.freeze(matrix)
 
     return matrix
 
 
 @ timed.call()
-def relayout_compressed(matrix: sparse.spmatrix, axis: int) -> sparse.spmatrix:
+def relayout_compressed(matrix: sparse.spmatrix) -> sparse.spmatrix:
     '''
     Efficient parallel conversion of a CSR/CSC matrix to a CSC/CSR matrix.
-    ,a'''
+    '''
     assert matrix.ndim == 2
-    assert matrix.getformat() == ['csr', 'csc'][axis]
+    axis = ['csr', 'csc'].index(matrix.getformat())
 
     _output_elements_count = matrix_bands_count = matrix.shape[axis]
     output_bands_count = matrix_elements_count = matrix.shape[1 - axis]
@@ -252,7 +128,7 @@ def relayout_compressed(matrix: sparse.spmatrix, axis: int) -> sparse.spmatrix:
 
 
 @timed.call()
-def corrcoef(matrix: Matrix, *, rowvar: bool = True) -> np.ndarray:
+def corrcoef(matrix: utt.Matrix, *, rowvar: bool = True) -> np.ndarray:
     '''
     Compute correlations between all observations (rows, cells) containing variables (columns,
     genes).
@@ -275,7 +151,7 @@ def corrcoef(matrix: Matrix, *, rowvar: bool = True) -> np.ndarray:
 
 @timed.call()
 def log_matrix(
-    matrix: Matrix,
+    matrix: utt.Matrix,
     *,
     base: Optional[float] = None,
     normalization: float = 1,
@@ -310,7 +186,7 @@ def log_matrix(
 
 
 @timed.call()
-def max_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
+def max_matrix(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the maximal element per row (``axis`` = 1) or column (``axis`` = 0) of some ``matrix``.
     '''
@@ -320,7 +196,7 @@ def max_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
 
 
 @timed.call()
-def min_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
+def min_matrix(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the minimal element per row (``axis`` = 1) or column (``axis`` = 0) of some ``matrix``.
     '''
@@ -330,7 +206,7 @@ def min_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
 
 
 @timed.call()
-def nnz_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
+def nnz_matrix(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the number of non-zero elements per row (``axis`` = 1) or column (``axis`` = 0) of some
     ``matrix``.
@@ -341,7 +217,7 @@ def nnz_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
 
 
 @timed.call()
-def sum_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
+def sum_matrix(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the total of the values per row (``axis`` = 1) or column (``axis`` = 0) of some
     ``matrix``.
@@ -350,7 +226,7 @@ def sum_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
 
 
 @timed.call()
-def sum_squared_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
+def sum_squared_matrix(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the total of the squared values per row (``axis`` = 1) or column (``axis`` = 0) of some
     ``matrix``.
@@ -368,7 +244,7 @@ def sum_squared_matrix(matrix: Matrix, *, axis: int) -> np.ndarray:
 
 
 def _reduce_matrix(
-    matrix: Matrix,
+    matrix: utt.Matrix,
     axis: int,
     reducer: Callable,
 ) -> np.ndarray:
@@ -407,7 +283,7 @@ def _reduce_matrix(
 
     with timed.step(step):
         timed.parameters(results=results_count, elements=elements_count)
-        return to_array(reducer(matrix))
+        return utt.to_1d_array(reducer(matrix))
 
 
 @timed.call()
@@ -433,14 +309,14 @@ def bincount_array(
 
 @timed.call()
 def downsample_matrix(
-    matrix: Matrix,
+    matrix: utt.Matrix,
     *,
     axis: int,
     samples: int,
     eliminate_zeros: bool = True,
     inplace: bool = False,
     random_seed: int = 0,
-) -> Matrix:
+) -> utt.Matrix:
     '''
     Downsample the rows (``axis = 1``) or columns (``axis = 0``) of some ``matrix`` such that the
     sum of each one becomes ``samples``.
@@ -520,7 +396,7 @@ def _downsample_sparse_matrix(
     output.has_sorted_indices = True
     if eliminate_zeros:
         with timed.step('.eliminate_zeros'):
-            unfreeze(output)
+            utt.unfreeze(output)
             output.eliminate_zeros()
             output.has_canonical_format = True
 
@@ -579,7 +455,7 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
                 input_vector = matrix[index, :]
             if not input_is_contiguous:
                 input_vector = np.copy(input_vector)
-            input_array = to_array(input_vector)
+            input_array = utt.to_1d_array(input_vector)
 
             if not output_is_contiguous:
                 output_vector = \
@@ -590,7 +466,7 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
                 output_vector = output[:, index]
             else:
                 output_vector = output[index, :]
-            output_array = to_array(output_vector)
+            output_array = utt.to_1d_array(output_vector)
 
             tmp = shared_storage.get_private('tmp',
                                              make=lambda: np.empty(tmp_size,
@@ -622,7 +498,7 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
 
 
 @timed.call()
-@utd.expand_doc(data_types=','.join(['``%s``' % data_type for data_type in DATA_TYPES]))
+@utd.expand_doc(data_types=','.join(['``%s``' % data_type for data_type in utt.DATA_TYPES]))
 def downsample_array(
     array: np.ndarray,
     samples: int,

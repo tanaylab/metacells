@@ -12,3 +12,4 @@ from .documentation import *
 from .preparation import *
 from .threading import *
 from .timing import *
+from .typing import *
