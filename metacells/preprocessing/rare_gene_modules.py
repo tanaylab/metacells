@@ -108,9 +108,9 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         rare_module_of_genes = np.full(genes_count, -1)
         list_of_names_of_genes_of_modules: List[np.ndarray] = []
 
-        total_umis_of_cells = ut.get_sum_per_obs(adata).data
-        max_umis_of_genes = ut.get_max_per_var(adata).data
-        nnz_cells_of_genes = ut.get_nnz_per_var(adata).data
+        total_umis_of_cells = ut.get_per_obs(adata, ut.sum_axis).data
+        max_umis_of_genes = ut.get_per_var(adata, ut.max_axis).data
+        nnz_cells_of_genes = ut.get_per_var(adata, ut.nnz_axis).data
 
         def results() -> Optional[Tuple[pd.DataFrame, pd.DataFrame, np.ndarray]]:
             array_of_names_of_genes_of_modules = \

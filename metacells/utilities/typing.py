@@ -136,11 +136,6 @@ def to_1d_array(data: Union[Matrix, Vector]) -> np.ndarray:
     Convert some (possibly sparse) data to an (full dense size) 1-dimensional array.
 
     This should only be applied if only one dimension has size greater than one.
-
-    .. todo::
-
-        The code in :py:func:`1d` works around some strange cases where ``np.reshape(data,
-        -1)`` returns a matrix rather than an array. This needs further investigation.
     '''
     data = to_np_array(data)
 

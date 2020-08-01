@@ -96,7 +96,7 @@ The managed ``AnnData`` model prefers to consider all data as immutable. That is
 compute the log of some values, the common approach in raw ``AnnData`` is to mutate ``X`` to hold
 the log data, while in the managed ``AnnData`` the approach would be to create a new data layer, so
 that in principle one never needs to mutate any data. This is (not 100%) enforced by
-:py:func:`metacells.utilities.computation.freeze`-ing the data whenever possible.
+:py:func:`metacells.utilities.typing.freeze`-ing the data whenever possible.
 
 The managed ``AnnData`` provides standard functions that compute and cache new data from existing
 data, using arbitrary compute functions (e.g., :py:func:`get_data`, :py:func:`get_vo_data`). See the
@@ -563,10 +563,10 @@ class NamedData(NamedTuple):
     #: The actual data.
     #:
     #: This will be anything at all for metadata, This will be a
-    #: :py:typ:`metacells.utilities.computation.Matrix` for per-variable-per-observation,
+    #: :py:class:`metacells.utilities.typing.Matrix` for per-variable-per-observation,
     #: per-observation-per-observation, or per-variable-per-variable, data; a
-    #: :py:typ:`metacells.utilities.computation.Vector` for per-observation or per-variable data;
-    #: and anything at all for metadata.
+    #: :py:class:`metacells.utilities.typing.Vector` for per-observation or per-variable data; and
+    #: anything at all for metadata.
     data: Any
 
 
@@ -597,7 +597,7 @@ def get_data(
 
         This is given the full name, and works for any kind data, based on the full name's prefix
         (e.g., ``m:`` for metadata, ``vo:`` for per-variable-per-observation). Therefore it returns
-        just the data instead of a :py:typ:`NamedData`.
+        just the data instead of a :py:class:`NamedData`.
     '''
     return get_named_data(adata, name, compute=compute, inplace=inplace,
                           infocus=infocus, by=by).data
@@ -614,8 +614,7 @@ def get_named_data(
     by: Optional[str] = None,
 ) -> NamedData:
     '''
-    Same as :py:func:`get_data` but return the full :py:typ:`NamedData`.
-        just the data instead of a :py:typ:`NamedData`.
+    Same as :py:func:`get_data` but return the full :py:class:`NamedData`.
     '''
     if name.startswith('vo:'):
         return get_vo_data(adata, name, compute=compute, inplace=inplace,
@@ -691,7 +690,7 @@ def set_data(
     '''
     Set some ``name``d ``data`` in the ``adata``.
 
-    By default, it is assumed that the ``slicing_mask`` is :py:data:`ALWAYS_SAFE`, that is, it is
+    By default, it is assumed that the ``slicing_mask`` is :py:const:`ALWAYS_SAFE`, that is, it is
     allowed to preserve the data when slicing both observations (cell) and variables (genes).
     '''
     SAFE_SLICING[name] = slicing_mask

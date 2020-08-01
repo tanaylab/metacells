@@ -10,6 +10,7 @@ __all__ = [
     'expand_doc',
 ]
 
+
 CALLABLE = TypeVar('CALLABLE')
 
 

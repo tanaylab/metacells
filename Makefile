@@ -1,7 +1,7 @@
 .PHONY: all for-commit reformat format isort rst unstaged todo mypy build pylint test tox docs
 .PHONY: dist clean
 
-.PHONY: coverage flame sum
+.PHONY: tags coverage flame sum
 
 all: for-commit
 
@@ -58,6 +58,9 @@ dist:
 
 clean:
 	rm -rf `cat .gitignore`
+
+tags:
+	ctags --python-kinds=-i -R metacells tests
 
 coverage: coverage/index.html
 

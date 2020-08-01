@@ -24,6 +24,7 @@ __all__ = [
     'current_step',
 ]
 
+
 #: Whether to collect timing at all. Override this by setting the ``METACELLS_COLLECT_TIMING``
 #: environment variable to ``true``.
 COLLECT_TIMING = False
@@ -327,6 +328,8 @@ def call(name: Optional[str] = None) -> Callable[[CALLABLE], CALLABLE]:
         def timed(*args: Any, **kwargs: Any) -> Any:
             with step(name or function.__qualname__):
                 return function(*args, **kwargs)
+        timed.__name__ = function.__name__
+        timed.__qualname__ = function.__qualname__
         return timed
 
     return wrap  # type: ignore
