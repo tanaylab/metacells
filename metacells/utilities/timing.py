@@ -2,6 +2,7 @@
 Utilities for timing operations.
 '''
 
+import atexit
 import os
 import sys
 from contextlib import contextmanager
@@ -90,6 +91,10 @@ class Counters:
         '''
         return Counters(elapsed_ns=perf_counter_ns(), cpu_ns=thread_time_ns())
 
+    def __add__(self, other: 'Counters') -> 'Counters':
+        return Counters(elapsed_ns=self.elapsed_ns + other.elapsed_ns,
+                        cpu_ns=self.cpu_ns + other.cpu_ns)
+
     def __iadd__(self, other: 'Counters') -> 'Counters':
         self.elapsed_ns += other.elapsed_ns
         self.cpu_ns += other.cpu_ns
@@ -105,7 +110,16 @@ class Counters:
         return self
 
 
-class StepTiming:
+if COLLECT_TIMING:
+    OVERHEAD = Counters()
+
+    def _print_overhead() -> None:
+        _print_timing('__timing_overhead__', OVERHEAD)
+
+    atexit.register(_print_overhead)
+
+
+class StepTiming:  # pylint: disable=too-many-instance-attributes
     '''
     Timing information for some named processing step.
     '''
@@ -138,6 +152,9 @@ class StepTiming:
 
         #: Amount of resources used in other thread by parallel code.
         self.other_thread = Counters()
+
+        #: Amount of resources used in timing measurement functions
+        self.overhead = Counters()
 
         #: The set of other threads used.
         self.other_thread_mask = \
@@ -180,7 +197,7 @@ if COLLECT_TIMING:
 
 
 @contextmanager
-def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
+def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches,too-many-statements
     '''
     Collect timing information for a computation step.
 
@@ -207,6 +224,8 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
         yield None
         return
 
+    start_point = Counters.now()
+
     steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
     if steps_stack is None:
         steps_stack = THREAD_LOCAL.steps_stack = []
@@ -215,7 +234,9 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
     if isinstance(name, StepTiming):
         parent_timing = name
         if parent_timing.thread_name == current_thread().name:
+            yield_point = Counters.now()
             yield None
+            parent_timing.overhead += yield_point - start_point
             return
         name = '_'
 
@@ -226,7 +247,6 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
         if name[0] == '.':
             assert parent_timing is not None
 
-    start_point = Counters.now()
     step_timing = StepTiming(name, parent_timing)
     steps_stack.append(step_timing)
 
@@ -234,14 +254,16 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
         if LOG_STEPS:
             sys.stderr.write(step_timing.context + ' BEGIN {\n')
             sys.stderr.flush()
+        yield_point = Counters.now()
         yield None
+    finally:
+        back_point = Counters.now()
+        total_times = back_point - yield_point
+        assert total_times.elapsed_ns >= 0
+        assert total_times.cpu_ns >= 0
         if LOG_STEPS:
             sys.stderr.write(step_timing.context + ' END }\n')
             sys.stderr.flush()
-    finally:
-        total_times = Counters.now() - start_point
-        assert total_times.elapsed_ns >= 0
-        assert total_times.cpu_ns >= 0
 
         steps_stack.pop()
 
@@ -260,8 +282,14 @@ def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
             assert total_times.cpu_ns >= 0
             total_times += step_timing.other_thread
 
-            _print_timing(step_timing.context, total_times, step_timing.parameters,
-                          step_timing.other_thread_mask.sum())
+            _print_timing(step_timing.context, total_times - step_timing.overhead,
+                          step_timing.parameters, step_timing.other_thread_mask.sum())
+
+        if parent_timing is not None:
+            global OVERHEAD
+            overhead = Counters.now() - back_point + yield_point - start_point
+            OVERHEAD += overhead
+            parent_timing.overhead += overhead
 
 
 def _print_timing(

@@ -115,7 +115,7 @@ def relayout_compressed(matrix: sparse.spmatrix) -> sparse.spmatrix:
     output_indptr = np.empty(output_bands_count + 1, dtype=matrix.indptr.dtype)
     output_indptr[0:2] = 0
     with timed.step('cumsum'):
-        timed.parameters(elements=nnz_elements_of_output_bands - 1)
+        timed.parameters(elements=nnz_elements_of_output_bands.size - 1)
         np.cumsum(nnz_elements_of_output_bands[:-1], out=output_indptr[2:])
 
     output_indices = np.empty(matrix.indices.size, dtype=matrix.indices.dtype)
