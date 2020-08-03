@@ -32,6 +32,9 @@ __all__ = [
     'is_layout',
     'is_row_major',
     'is_column_major',
+
+    'is_contiguous',
+    'to_contiguous',
 ]
 
 
@@ -43,6 +46,9 @@ Matrix = Union[sparse.spmatrix, np.ndarray, pd.DataFrame]
 
 #: A ``mypy`` type for vectors.
 Vector = Union[np.ndarray, pd.Series]
+
+#: A ``mypy`` type for shaped data (matrix or vector).
+Shaped = Union[Matrix, Vector]
 
 
 @timed.call()
@@ -63,7 +69,7 @@ def canonize(matrix: Matrix) -> None:
                 freeze(matrix)
 
 
-def frozen(data: Union[Matrix, Vector]) -> bool:
+def frozen(data: Shaped) -> bool:
     '''
     Test whether the data is protected against future modification.
     '''
@@ -80,7 +86,7 @@ def frozen(data: Union[Matrix, Vector]) -> bool:
 
 
 @timed.call()
-def freeze(data: Union[Matrix, Vector]) -> None:
+def freeze(data: Shaped) -> None:
     '''
     Protect data against future modification.
     '''
@@ -98,7 +104,7 @@ def freeze(data: Union[Matrix, Vector]) -> None:
 
 
 @timed.call()
-def unfreeze(data: Union[Matrix, Vector]) -> None:
+def unfreeze(data: Shaped) -> None:
     '''
     Permit data future modification of some data.
     '''
@@ -115,12 +121,21 @@ def unfreeze(data: Union[Matrix, Vector]) -> None:
                                   % data.getformat())
 
 
-def to_np_array(data: Union[Matrix, Vector]) -> np.ndarray:
+def to_np_array(data: Shaped, *, copy: Optional[bool] = False) -> np.ndarray:
     '''
     Convert some (possibly sparse) data to an (full dense size) 1/2-dimensional Numpy array.
+
+    If ``copy``, a copy of the data is returned even if it is already a Numpy array. If ``copy`` is
+    ``None``, always returns the data without copying (fails on sparse data).
     '''
     if sparse.issparse(data):
-        data = data.toarray()
+        assert copy is not None
+        with timed.step('toarray'):
+            if data.ndim == 2:
+                timed.parameters(results=data.shape[0], elements=data.shape[1])
+            else:
+                timed.parameters(size=data.shape[0])
+            return data.toarray()
 
     if isinstance(data, (pd.Series, pd.DataFrame)):
         data = data.values
@@ -128,16 +143,22 @@ def to_np_array(data: Union[Matrix, Vector]) -> np.ndarray:
     if isinstance(data, np.matrix):
         data = np.array(data)
 
+    if copy:
+        data = np.copy(data)
+
     return data
 
 
-def to_1d_array(data: Union[Matrix, Vector]) -> np.ndarray:
+def to_1d_array(data: Shaped, *, copy: Optional[bool] = False) -> np.ndarray:
     '''
     Convert some (possibly sparse) data to an (full dense size) 1-dimensional array.
 
     This should only be applied if only one dimension has size greater than one.
+
+    If ``copy``, a copy of the data is returned even if it is already a Numpy array. If ``copy`` is
+    ``None``, always returns the data without copying (fails on sparse data).
     '''
-    data = to_np_array(data)
+    data = to_np_array(data, copy=copy)
 
     if data.ndim == 1:
         return data
@@ -172,7 +193,7 @@ def is_layout(matrix: Matrix, layout: str) -> bool:
     if sparse.issparse(matrix):
         return matrix.getformat() == SPARSE_FAST_FORMAT[layout]
 
-    matrix = to_np_array(matrix)
+    matrix = to_np_array(matrix, copy=None)
     return matrix.flags[DENSE_FAST_FLAG[layout]]
 
 
@@ -211,3 +232,31 @@ def matrix_layout(matrix: Matrix) -> Optional[str]:
                 return layout
 
     return None
+
+
+def is_contiguous(vector: Vector) -> bool:
+    '''
+    Return whether the vector is contiguous in memory.
+
+    This is only ``True`` for a dense vector.
+    '''
+    assert vector.ndim == 1
+
+    if sparse.issparse(vector):
+        return False
+
+    return vector.flags.c_contiguous and vector.flags.f_contiguous
+
+
+def to_contiguous(vector: Vector, *, copy: bool = False) -> np.ndarray:
+    '''
+    Return the vector in contiguous (dense) format.
+
+    If ``copy``, a copy of the vector is returned even if it is already a contiguous Numpy array.
+    '''
+    vector = to_1d_array(vector, copy=copy)
+
+    if copy or not is_contiguous(vector):
+        vector = np.copy(vector)
+
+    return vector

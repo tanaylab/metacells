@@ -56,14 +56,13 @@ def to_layout(matrix: utt.Matrix, layout: str) -> utt.Matrix:  # pylint: disable
     '''
     Re-layout a matrix for efficient axis slicing/processing.
 
-    That is, if ``layout`` is ``column_major``,
-    ``axis=0``, re-layout the matrix for efficient per-column (variable, gene)
-    slicing/processing. For sparse matrices, this is ``csc`` format; for
-    dense matrices, this is Fortran (column-major) format.
+    That is, if ``layout`` is ``column_major``, re-layout the matrix for efficient per-column
+    (variable, gene) slicing/processing. For sparse matrices, this is ``csc`` format; for dense
+    matrices, this is Fortran (column-major) format.
 
-    Similarly, for ``axis=1``, re-layout the matrix for efficient per-row (observation, cell)
-    slicing/processing. For sparse matrices, this is ``csr`` format; for dense matrices, this is C
-    (row-major) format.
+    Similarly, if ``layout`` is ``row_major``, re-layout the matrix for efficient per-row
+    (observation, cell) slicing/processing. For sparse matrices, this is ``csr`` format; for dense
+    matrices, this is C (row-major) format.
 
     If the matrix is already in the correct layout, it is returned as-is. Otherwise, a new copy is
     created. This is a costly operation as it needs to move a lot of data. However, it makes the
@@ -156,8 +155,7 @@ def corrcoef(matrix: utt.Matrix, *, rowvar: bool = True) -> np.ndarray:
         This always uses the dense implementation, which seems to be the best choice for correlating
         the less-sparse "feature" genes.
     '''
-    if sparse.issparse(matrix):
-        matrix = matrix.toarray()
+    matrix = utt.to_np_array(matrix)
 
     if rowvar:
         timed.parameters(results=matrix.shape[0], elements=matrix.shape[1])
@@ -223,13 +221,7 @@ def log_matrix(
 
         The result is always a dense matrix, as even for sparse data, the log is rarely zero.
     '''
-    if sparse.issparse(matrix):
-        matrix = matrix.toarray()
-    elif isinstance(matrix, pd.DataFrame):
-        matrix = np.copy(matrix.values)
-    else:
-        assert isinstance(matrix, np.ndarray)
-        matrix = np.copy(matrix)
+    matrix = utt.to_np_array(matrix, copy=True)
 
     matrix += normalization
     if base == 2:
@@ -416,9 +408,7 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
                 input_vector = matrix[:, index]
             else:
                 input_vector = matrix[index, :]
-            if not input_is_contiguous:
-                input_vector = np.copy(input_vector)
-            input_array = utt.to_1d_array(input_vector)
+            input_array = utt.to_contiguous(input_vector)
 
             if not output_is_contiguous:
                 output_vector = \
@@ -429,7 +419,7 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
                 output_vector = output[:, index]
             else:
                 output_vector = output[index, :]
-            output_array = utt.to_1d_array(output_vector)
+            output_array = utt.to_1d_array(output_vector, copy=None)
 
             tmp = shared_storage.get_private('tmp',
                                              make=lambda: np.empty(tmp_size,
@@ -663,7 +653,7 @@ def bincount_array(
         parallelization.
     '''
     result = np.bincount(array, minlength=minlength)
-    timed.parameters(elements=array.size, bins=result.size)
+    timed.parameters(size=array.size, bins=result.size)
     return result
 
 

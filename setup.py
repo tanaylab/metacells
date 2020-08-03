@@ -17,6 +17,7 @@ INSTALL_REQUIRES = [
     'numpy',
     'pandas',
     'readerwriterlock',
+    'threadpoolctl',
 ]
 
 # TODO: Repeated in setup.cfg

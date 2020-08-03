@@ -1,5 +1,42 @@
 '''
-Utilities for multi-threaded code.
+Utilities for efficient multi-threaded code.
+
+.. note::
+
+    Some Numpy builtin operations switch to a parallel invocation for "large enough" data. This
+    potentially causes disastrous over-subscription: multiple application threads, each invoking
+    multiple internal Numpy threads, can generate up to N^2 threads on an N-CPU server (e.g. 2500
+    threads on a 50-CPU machine).
+
+    To battle this, the code here uses the ``threadpoolctl`` module to reduce the number of inner
+    Numpy threads based on the number of current application threads, that is:
+
+    * If you do not invoke any of the ``parallel_XXX`` functions below, Numpy would be able
+      to take over all the CPUs.
+
+    * In the common case of "large" parallel loops, each parallel invocation
+      would be forced to be internally serial, which is reasonably efficient (but not necessarily
+      optimal).
+
+    * In intermediate cases, e.g. running only a few tasks in parallel, ``Numpy`` would be
+      restricted to using only the "fair share" of CPUs (e.g., half the CPUs for each of 2 parallel
+      tasks).
+
+       This is not optimal, since if only one of the tasks invokes Numpy, we are wasting half the
+       CPUs.
+
+    The above is "reasonably efficient" overall, but is always safe. Thar is, you will never get
+    thousands of threads (which would most likely get the application killed when the OS decides
+    "enough is enough").
+
+    Ideally, Numpy (or, more accurately, the parallel frameworks under it) would be smart enough to
+    use a fixed total number of threads, regardless of the number of threads issuing requests. For
+    optimal cache behavior, a parallel inner loop inside a parallel outer loop should "take over"
+    the whole machine, rather than executing multiple serial inner loops in parallel. TBB, for
+    example, is supposed to do exactly this, but it seems that even Intel's distribution of Python
+    with MKL-enabled Numpy doesn't do it in practice.
+
+    Or one could switch to a Julia implementation and be done :-)
 
 .. todo::
 
@@ -12,12 +49,13 @@ import os
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from threading import current_thread
+from threading import Lock, current_thread
 from typing import (Any, Callable, Dict, Iterable, Iterator, KeysView, List,
                     Optional, Tuple, Union)
 
 import numpy as np  # type: ignore
 from readerwriterlock import rwlock
+from threadpoolctl import threadpool_limits  # type: ignore
 
 import metacells.utilities.timing as timed
 from metacells.utilities.documentation import expand_doc
@@ -51,6 +89,38 @@ if not 'sphinx' in sys.argv[0]:
 
     if THREADS_COUNT > 1:
         EXECUTOR = ThreadPoolExecutor(THREADS_COUNT)
+        MAIN_THREADS_LOCK = Lock()
+        MAIN_THREADS_COUNT = 1
+        SUB_THREADS_COUNT = THREADS_COUNT
+
+
+@contextmanager
+def _in_parallel(invocations_count: int) -> Iterator[None]:
+    assert EXECUTOR is not None
+
+    threads_count = min(THREADS_COUNT, invocations_count)
+    assert threads_count > 1
+
+    global MAIN_THREADS_LOCK
+    global MAIN_THREADS_COUNT
+    global SUB_THREADS_COUNT
+
+    with MAIN_THREADS_LOCK:
+        MAIN_THREADS_COUNT += threads_count - 1
+        sub_threads_count = int(round(THREADS_COUNT / MAIN_THREADS_COUNT))
+        if sub_threads_count != SUB_THREADS_COUNT:
+            SUB_THREADS_COUNT = sub_threads_count
+            threadpool_limits(limits=sub_threads_count)
+
+    yield
+
+    with MAIN_THREADS_LOCK:
+        MAIN_THREADS_COUNT -= threads_count - 1
+        assert MAIN_THREADS_COUNT > 0
+        sub_threads_count = int(round(THREADS_COUNT / MAIN_THREADS_COUNT))
+        if sub_threads_count != SUB_THREADS_COUNT:
+            SUB_THREADS_COUNT = sub_threads_count
+            threadpool_limits(limits=sub_threads_count)
 
 
 @expand_doc()
@@ -85,7 +155,7 @@ def parallel_map(
         without requiring the GIL, so parallel execution does provide benefits for code which mostly
         invokes such computational library functions.
     '''
-    if EXECUTOR is None:
+    if EXECUTOR is None or invocations_count == 1:
         if batches_per_thread is None:
             return map(function, range(invocations_count))
         return function(range(invocations_count))
@@ -100,7 +170,8 @@ def parallel_map(
                 with timed.step(step_timing):  # type: ignore
                     function(index)
 
-        return list(EXECUTOR.map(timed_function, range(invocations_count)))
+        with _in_parallel(invocations_count):
+            return list(EXECUTOR.map(timed_function, range(invocations_count)))
 
     batches_count, batch_size = \
         _analyze_loop(invocations_count, batches_per_thread)
@@ -127,7 +198,8 @@ def parallel_map(
                 assert len(results_of_chunk) == len(indices)
                 return results_of_chunk
 
-    return _flatten(EXECUTOR.map(batch_function, range(batches_count)))
+    with _in_parallel(batches_count):
+        return _flatten(EXECUTOR.map(batch_function, range(batches_count)))
 
 
 def _flatten(list_of_lists: Iterable[Iterable[Any]]) -> List[Any]:
@@ -145,7 +217,7 @@ def parallel_for(
     the inefficiencies of collecting the results (especially when batching is used). It is often
     used when the ``function`` invocations write some result(s) into some shared-memory array(s).
     '''
-    if EXECUTOR is None:
+    if EXECUTOR is None or invocations_count == 1:
         if batches_per_thread is None:
             for _ in map(function, range(invocations_count)):
                 pass
@@ -163,8 +235,9 @@ def parallel_for(
                 with timed.step(step_timing):  # type: ignore
                     function(index)
 
-        for _ in EXECUTOR.map(timed_function, range(invocations_count)):
-            pass
+        with _in_parallel(invocations_count):
+            for _ in EXECUTOR.map(timed_function, range(invocations_count)):
+                pass
         return
 
     batches_count, batch_size = \
@@ -189,8 +262,9 @@ def parallel_for(
                 indices = range(start, stop)
                 function(indices)
 
-    for _ in EXECUTOR.map(batch_function, range(batches_count)):
-        pass
+    with _in_parallel(batches_count):
+        for _ in EXECUTOR.map(batch_function, range(batches_count)):
+            pass
 
 
 def parallel_collect(
