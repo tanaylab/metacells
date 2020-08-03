@@ -30,6 +30,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     minimal_correlation_of_modules: float = 0.1,
     minimal_umis_of_module_of_cells: int = 6,
     inplace: bool = True,
+    intermediate: bool = True,
 ) -> Optional[Tuple[pd.DataFrame, pd.DataFrame, np.ndarray]]:
     '''
     Detect rare genes modules.
@@ -47,8 +48,8 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     An annotated ``adata``, where the observations are cells and the variables are genes, containing
     the UMIs count in the ``of`` (default: the ``focus``) per-variable-per-observation data.
 
-    Various intermediate data (sums, maximal values, etc.) is used if already available. Otherwise
-    it is computed and cached for future reuse.
+    If not ``intermediate``, this discards all the intermediate data used (e.g. sums). Otherwise,
+    such data is kept for future reuse.
 
     **Returns**
 
@@ -100,7 +101,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
        cells are discarded.
     '''
 
-    with ut.focus_on(ut.get_vo_data, adata, of):
+    with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         cells_count = adata.n_obs
         genes_count = adata.n_vars
 

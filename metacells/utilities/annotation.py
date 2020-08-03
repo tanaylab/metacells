@@ -151,6 +151,7 @@ __all__ = [
     'get_named_data',
     'has_data',
     'set_data',
+    'del_data',
 
     'get_m_data',
     'get_o_data',
@@ -724,6 +725,43 @@ def set_data(
                          '("vo:", "v:", "o:", "vv:", "oo", or "m:")' % name)
 
 
+def del_data(
+    adata: AnnData,
+    name: str,
+) -> None:
+    '''
+    Delete the specified data.
+
+    .. note::
+
+        This works for any kind data, based on the name's prefix (e.g., ``m:`` for metadata, ``vo:``
+        for per-variable-per-observation).
+    '''
+    assert '__' not in name
+
+    if name.startswith('vo:'):
+        del_vo_data(adata, name)
+
+    elif name.startswith('m:'):
+        del adata.uns[name[2:]]
+
+    elif name.startswith('o:'):
+        del adata.obs[name[2:]]
+
+    elif name.startswith('v:'):
+        del adata.var[name[2:]]
+
+    elif name.startswith('oo:'):
+        del adata.obsp[name[3:]]
+
+    elif name.startswith('vv:'):
+        del adata.varp[name[3:]]
+
+    else:
+        raise ValueError('the data name: %s does not start with a valid prefix '
+                         '("vo:", "v:", "o:", "vv:", "oo", or "m:")' % name)
+
+
 def get_m_data(
     adata: AnnData,
     name: str,
@@ -1074,6 +1112,7 @@ def focus_on(
     accessor: Callable,
     adata: AnnData,
     *args: Any,
+    intermediate: bool = True,
     **kwargs: Any
 ) -> Iterator[Any]:
     '''
@@ -1082,6 +1121,9 @@ def focus_on(
 
     If the original focus data is deleted inside the ``with`` statement, then when it is done, the
     focus will revert to whatever is in ``X``.
+
+    If not ``intermediate``, this discards all the intermediate ``inplace`` data (e.g. sums) which
+    was set within the ``with`` statement block. Otherwise, such data is kept for future reuse.
 
     For example, in order to temporarily focus on the log of some linear measurements,
     write:
@@ -1112,15 +1154,68 @@ def focus_on(
             warn(ignoring_redundant_explict_flags_to_focus_on)
             del kwargs[name]
 
+    with intermediate_step(adata, intermediate=intermediate):
+        yield accessor(adata, *args, infocus=True, **kwargs)
+
+
+@contextmanager
+def intermediate_step(
+    adata: AnnData,
+    *,
+    intermediate: bool = True,
+) -> Iterator[None]:
+    '''
+    Execute some code in a ``with`` statements and restore the focus at the end, if it was modified
+    by the wrapped code.
+
+    If not ``intermediate``, this discards all the intermediate ``inplace`` data (e.g. sums) which
+    was set within the ``with`` statement block. Otherwise, such data is kept for future reuse.
+
+    .. note::
+
+        This does not protected against deletion of data by the wrapped code. If the original focus
+        data is deleted inside the ``with`` statement, then when it is done, the focus will revert
+        to whatever is in ``X``.
+    '''
+    if not intermediate:
+        old_data = _all_data(adata)
+
     old_focus = get_focus_name(adata)
 
-    yield accessor(adata, *args, infocus=True, **kwargs)
+    try:
+        yield
 
-    with _modify(adata):
-        if has_data(adata, old_focus):
-            adata.uns['__focus__'] = old_focus
-        else:
-            adata.uns['__focus__'] = get_x_name(adata)
+    finally:
+        with _modify(adata):
+            if not intermediate:
+                new_data = _all_data(adata)
+                for name in new_data:
+                    if name in old_data:
+                        continue
+                    if name.endswith(':__by_var__') or name.endswith(':__by_obs__'):
+                        if name[:-11] in old_data:
+                            continue
+                    del_data(adata, name)
+
+            if has_data(adata, old_focus):
+                adata.uns['__focus__'] = old_focus
+            else:
+                adata.uns['__focus__'] = get_x_name(adata)
+
+
+def _all_data(adata: AnnData) -> Set[str]:
+    names: Set[str] = set()
+
+    for per_prefix, annotations in [('vo:', adata.layers),
+                                    ('o:', adata.obs),
+                                    ('v:', adata.var),
+                                    ('oo:', adata.obsp),
+                                    ('vv:', adata.varp),
+                                    ('m:', adata.uns)]:
+        for name, _ in _items(annotations):
+            names.add(per_prefix + name)
+
+    return names
 
 
 def get_focus_name(adata: AnnData) -> str:

@@ -25,6 +25,7 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
     minimal_gene_relative_variance: float = 2.5,
     maximal_gene_correlation: float = 0.15,
     inplace: bool = True,
+    intermediate: bool = True,
 ) -> Optional[pd.Series]:
     '''
     Detect noisy lonely genes.
@@ -67,6 +68,9 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
     If ``inplace`` (default: {inplace}), these are written to ``adata`` and the function returns
     ``None``. Otherwise this is returned as a Pandas series (indexed by the variable names).
 
+    If not ``intermediate``, this discards all the intermediate data used (e.g. sums). Otherwise,
+    such data is kept for future reuse.
+
     **Computation Parameters**
 
     Given an annotated ``adata``, where the variables are cell RNA profiles and the observations are
@@ -87,7 +91,7 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
         Should we correlate the normalized (fraction) and/or log of the data for
         :py:func:`find_noisy_lonely_genes`?
     '''
-    with ut.focus_on(ut.get_vo_data, adata, of):
+    with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         fraction_of_genes = ut.get_fraction_per_var(adata).data
         relative_variance_of_genes = \
             ut.get_relative_variance_per_var(adata).data
