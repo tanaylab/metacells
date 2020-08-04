@@ -27,12 +27,14 @@ extensions = [
     'sphinx.ext.todo',
 ]
 
+autodoc_member_order = 'bysource'
 autosectionlabel_prefix_document = True
 nitpicky = True
 nitpick_ignore = [
     ('py:class', 'anndata._core.anndata.AnnData'),
     ('py:class', 'CALLABLE'),
     ('py:class', 'concurrent.futures.thread.ThreadPoolExecutor'),
+    ('py:class', 'IO'),
     ('py:class', 'Iterator[None]'),
     ('py:class', 'metacells.utilities.timing.StepTiming'),
     ('py:class', 'numpy.ndarray'),

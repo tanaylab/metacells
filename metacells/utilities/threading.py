@@ -24,101 +24,138 @@ import metacells.utilities.timing as timed
 from metacells.utilities.documentation import expand_doc
 
 __all__ = [
-    'THREADS_COUNT',
-    'LIMIT_INNER_THREADS',
-    'EXECUTOR',
+    'threads_count',
+    'limit_inner_threads',
     'parallel_map',
     'parallel_for',
     'parallel_collect',
     'SharedStorage',
 ]
 
-#: The number of threads to use. Override this by setting the ``METACELLS_THREADS_COUNT``
-#: environment variable: -1 uses half of the available processors to combat hyper-threading, 0 uses
-#: all the available processors, otherwise the value is the number of threads to use.
 THREADS_COUNT = 0
-
-#: The executor to use for parallel tasks (only set if using multiple threads).
 EXECUTOR: Optional[ThreadPoolExecutor] = None
 
-#: Whether to limit the number of threads used internally by Numpy (by default, we do). Override
-#: this by setting the ``METACELLS_LIMIT_INNER_THREADS=False`` environment variable.
-#:
-#: **Why do we do this?**
-#:
-#: Some Numpy builtin operations switch to a parallel execution using private inner threads, for
-#: "large enough" data. This potentially causes disastrous over-subscription: multiple application
-#: threads, each invoking multiple inner Numpy threads, can generate up to N^2 threads on an N-CPU
-#: server (e.g. 2500 threads on a 50-CPU machine).
-#:
-#: To battle this, the code here uses the ``threadpoolctl`` module to reduce the number of inner
-#: Numpy threads based on the number of current application threads, that is:
-#:
-#: * If you do not invoke any of the ``parallel_XXX`` functions below, Numpy would be able
-#:   to take over all the CPUs.
-#:
-#: * In the common case of "large" parallel loops, each parallel invocation
-#:   would be forced to be internally serial, which is reasonably efficient (but not necessarily
-#:   optimal).
-#:
-#: * In intermediate cases, e.g. running only a few tasks in parallel, ``Numpy`` would be
-#:   restricted to using only the "fair share" of CPUs (e.g., half the CPUs for each of 2 parallel
-#:   tasks). This is not optimal, since (for example) if only one of the tasks invokes Numpy, we are
-#:   wasting half the CPUs.
-#:
-#: The above is only "reasonably efficient" overall, but is always safe. Thar is, you will never get
-#: thousands of threads (which would most likely get the application killed when the OS decides
-#: "enough is enough").
-#:
-#: **When to disable this?**
-#:
-#: Ideally, Numpy (or, more accurately, the parallel frameworks under it) would be smart enough to
-#: use a fixed total number of inner threads, regardless of the number of application threads
-#: issuing Numpy requests. Given such a smart parallel framework, you should disable this flag,
-#: since limiting the number of the inner threads would only harm the application's performance.
-#:
-#: For example, if you are using `Intel's Python distribution
-#: <https://software.intel.com/content/www/us/en/develop/tools/distribution-for-python.html>`_,
-#: running ``python -m smp --kmp-composability ...`` is smart enough not to require limiting its
-#: inner threads. If you are using this specific combination, you should also set
-#: ``METACELLS_LIMIT_INNER_THREADS=False``.
-#:
-#: .. note::
-#:
-#:  As of writing this note, a plain ``python -m smp ...`` and all variants of ``python -m tbb ...``
-#:  are **not** smart enough and **do** require limiting their inner threads. Presumably, in some
-#:  future release, ``python -m tbb --ipc ...`` will become smart enough, and will also not require
-#:  limiting its inner threads.
-#:
-#: .. todo::
-#:
-#:  It would be nice if the code automatically detected whether the underlying parallel platform
-#:  does/not require limiting its inner threads. However there seems to be no practical way to do
-#:  this.
 LIMIT_INNER_THREADS = True
+MAIN_THREADS_LOCK = Lock()
+MAIN_THREADS_COUNT = 1
+SUB_THREADS_COUNT = 0
 
-if not 'sphinx' in sys.argv[0]:
-    THREADS_COUNT = \
-        int(os.environ.get('METACELLS_THREADS_COUNT', str(os.cpu_count())))
-    if THREADS_COUNT == -1:
-        THREADS_COUNT = (os.cpu_count() or 1) // 2
-    elif THREADS_COUNT == 0:
-        THREADS_COUNT = os.cpu_count() or 1
 
-    assert THREADS_COUNT > 0
+def threads_count(threads: int) -> None:
+    '''
+    The number of threads to use.
 
-    if THREADS_COUNT > 1:
+    By default, use all the available hardware threads. Override this by setting the
+    ``METACELLS_THREADS_COUNT`` environment variable or by invoking this function from the main
+    thread.
+
+    A value of ``-1`` uses half of the available threads to combat hyper-threading, ``0`` uses all
+    the available threads, and otherwise the value is the number of threads to use.
+
+    If this changes the number of threads, it will wait until all currently executing threads are
+    done before creating a new thread pool.
+    '''
+    assert current_thread().name == 'MainThread'
+
+    global THREADS_COUNT
+    global EXECUTOR
+    global MAIN_THREADS_COUNT
+    global SUB_THREADS_COUNT
+
+    if threads == -1:
+        threads = (os.cpu_count() or 1) // 2
+    elif threads == 0:
+        threads = os.cpu_count() or 1
+    assert threads > 0
+
+    if threads == THREADS_COUNT:
+        return
+
+    if EXECUTOR is not None:
+        EXECUTOR.shutdown(wait=True)
+
+    THREADS_COUNT = threads
+    MAIN_THREADS_COUNT = 1
+    MAIN_THREADS_COUNT = 1
+    SUB_THREADS_COUNT = THREADS_COUNT
+
+    if THREADS_COUNT == 1:
+        EXECUTOR = None
+    else:
         EXECUTOR = ThreadPoolExecutor(THREADS_COUNT)
 
-        LIMIT_INNER_THREADS = \
-            {'true': True,
-             'false': False}[os.environ.get('METACELLS_LIMIT_INNER_THREADS',
-                                            'True').lower()]
 
-        if LIMIT_INNER_THREADS:
-            MAIN_THREADS_LOCK = Lock()
-            MAIN_THREADS_COUNT = 1
-            SUB_THREADS_COUNT = THREADS_COUNT
+def limit_inner_threads(limit: bool) -> None:
+    '''
+    Set whether to limit the inner threads used by ``Numpy``.
+
+    By default, we do. Override this by setting the ``METACELLS_LIMIT_INNER_THREADS`` environment
+    variable to ``false`` , or by invoking this function from the main thread.
+
+    **Why do we do this?**
+
+    Some Numpy builtin operations switch to a parallel execution using private inner threads, for
+    "large enough" data. This potentially causes disastrous over-subscription: multiple application
+    threads, each invoking multiple inner Numpy threads, can generate up to N^2 threads on an N-CPU
+    server (e.g. 2500 threads on a 50-CPU machine).
+
+    To battle this, the code here uses the ``threadpoolctl`` module to reduce the number of inner
+    Numpy threads based on the number of current application threads, that is:
+
+    * If you do not invoke any of the ``parallel_XXX`` functions below, Numpy would be able
+      to take over all the CPUs.
+
+    * In the common case of "large" parallel loops, each parallel invocation
+      would be forced to be internally serial, which is reasonably efficient (but not necessarily
+      optimal).
+
+    * In intermediate cases, e.g. running only a few tasks in parallel, ``Numpy`` would be
+      restricted to using only the "fair share" of CPUs (e.g., half the CPUs for each of 2 parallel
+      tasks). This is not optimal, since (for example) if only one of the tasks invokes Numpy, we
+      are wasting half the CPUs.
+
+    The above is only "reasonably efficient" overall, but is always safe. Thar is, you will never
+    get thousands of threads (which would most likely get the application killed when the OS decides
+    "enough is enough").
+
+    **When to disable this?**
+
+    Ideally, Numpy (or, more accurately, the parallel frameworks under it) would be smart enough to
+    use a fixed total number of inner threads, regardless of the number of application threads
+    issuing Numpy requests. Given such a smart parallel framework, you should disable this flag,
+    since limiting the number of the inner threads would only harm the application's performance.
+
+    For example, if you are using `Intel's Python distribution
+    <https://software.intel.com/content/www/us/en/develop/tools/distribution-for-python.html>`_,
+    running ``python -m smp --kmp-composability ...`` is smart enough not to require limiting its
+    inner threads. If you are using this specific combination, you should also set
+    ``METACELLS_LIMIT_INNER_THREADS=False``.
+
+    .. note::
+
+     As of writing this note, a plain ``python -m smp ...`` and all variants of ``python -m tbb
+     ...`` are **not** smart enough and **do** require limiting their inner threads. Presumably, in
+     some future release, ``python -m tbb --ipc ...`` will become smart enough, and will also not
+     require limiting its inner threads.
+
+    .. todo::
+
+     Hopefully in time (years, decades, ...), the multi-threading frameworks would evolve to be
+     properly multi-threading-aware themselves (which seems to be an obvious requirement, doesn't
+     it?). This would allow getting rid of this whole mechanism.
+    '''
+    assert current_thread().name == 'MainThread'
+
+    global LIMIT_INNER_THREADS
+    LIMIT_INNER_THREADS = limit
+
+
+if not 'sphinx' in sys.argv[0]:
+    threads_count(int(os.environ.get('METACELLS_THREADS_COUNT',
+                                     str(os.cpu_count()))))
+    limit_inner_threads({'true': True,
+                         'false': False}[os.environ.get('METACELLS_LIMIT_INNER_THREADS',
+                                                        'True').lower()])
 
 
 @contextmanager
@@ -127,15 +164,15 @@ def _in_parallel(invocations_count: int) -> Iterator[None]:
         yield
         return
 
-    threads_count = min(THREADS_COUNT, invocations_count)
-    assert threads_count > 1
+    used_threads = min(THREADS_COUNT, invocations_count)
+    assert used_threads > 1
 
     global MAIN_THREADS_LOCK
     global MAIN_THREADS_COUNT
     global SUB_THREADS_COUNT
 
     with MAIN_THREADS_LOCK:
-        MAIN_THREADS_COUNT += threads_count - 1
+        MAIN_THREADS_COUNT += used_threads - 1
         sub_threads_count = int(round(THREADS_COUNT / MAIN_THREADS_COUNT))
         if sub_threads_count != SUB_THREADS_COUNT:
             SUB_THREADS_COUNT = sub_threads_count
@@ -146,7 +183,7 @@ def _in_parallel(invocations_count: int) -> Iterator[None]:
 
     finally:
         with MAIN_THREADS_LOCK:
-            MAIN_THREADS_COUNT -= threads_count - 1
+            MAIN_THREADS_COUNT -= used_threads - 1
             assert MAIN_THREADS_COUNT > 0
             sub_threads_count = int(round(THREADS_COUNT / MAIN_THREADS_COUNT))
             if sub_threads_count != SUB_THREADS_COUNT:

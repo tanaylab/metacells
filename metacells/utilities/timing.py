@@ -9,15 +9,14 @@ from contextlib import contextmanager
 from threading import Lock, current_thread
 from threading import local as thread_local
 from time import perf_counter_ns, thread_time_ns
-from typing import (Any, Callable, Dict, Iterator, List, Optional, TextIO,
-                    TypeVar)
+from typing import IO, Any, Callable, Dict, Iterator, List, Optional, TypeVar
 
 import numpy as np  # type: ignore
 
 __all__ = [
-    'COLLECT_TIMING',
-    'TIMING_PATH',
-    'TIMING_BUFFERING',
+    'timing_file',
+    'collect_timing',
+    'log_steps',
     'step',
     'call',
     'parameters',
@@ -25,44 +24,87 @@ __all__ = [
     'current_step',
 ]
 
-
-#: Whether to collect timing at all. Override this by setting the ``METACELLS_COLLECT_TIMING``
-#: environment variable to ``true``.
 COLLECT_TIMING = False
 
-#: The path of the timing CSV file to write. Override this by setting the ``METACELL_TIMING_CSV``
-#: environment variable to some path.
 TIMING_PATH = 'timing.csv'
-
-#: The buffering mode to use when writing to the timing CSV file. Override this by setting the
-#: ``METACELL_TIMING_BUFFERING`` environment variable to ``0`` for no buffering, ``1`` for line
-#: buffering, or the size of the buffer.
+TIMING_MODE = 'timing.csv'
 TIMING_BUFFERING = 1
+TIMING_FILE: Optional[IO] = None
 
-
-#: Whether to print and flush the name of each step when it starts, to the terminal. Override this
-#: by setting the ``METACELLS_LOG_STEPS`` environment variable to ``true``.
-#:
-#: This is only useful for easily identifying which exact step is taking a long time.
 LOG_STEPS = False
 
-if not 'sphinx' in sys.argv[0]:
-    COLLECT_TIMING = \
-        {'true': True,
-         'false': False}[os.environ.get('METACELLS_COLLECT_TIMING',
-                                        'False').lower()]
-    TIMING_PATH = os.environ.get('METACELL_TIMING_CSV', 'timing.csv')
-    TIMING_BUFFERING = int(os.environ.get('METACELL_TIMING_BUFFERING', '1'))
-    LOG_STEPS = \
-        {'true': True,
-         'false': False}[os.environ.get('METACELLS_LOG_STEPS',
-                                        'False').lower()]
-
-TIMING_FILE: Optional[TextIO] = None
 THREAD_LOCAL = thread_local()
 LOCK = Lock()
-
 COUNTED_THREADS = 0
+
+
+def timing_file(file: IO) -> None:
+    '''
+    Specify where to write the timing CSV lines.
+
+    By default this is ``open('timing.csv', 'a', buffering=1)``. Override this by setting the
+    ``METACELL_TIMING_PATH``, ``METACELL_TIMING_MODE`` and/or the ``METACELL_TIMING_BUFFERING``
+    environment variables, or by invoking this function from the main thread.
+
+    This will flush and close the previous timing file, if any.
+    '''
+    assert current_thread().name == 'MainThread'
+
+    global TIMING_FILE
+    if TIMING_FILE is not None:
+        TIMING_FILE.flush()
+        TIMING_FILE.close()
+    TIMING_FILE = file
+
+
+def collect_timing(collect: bool) -> None:
+    '''
+    Specify whether to collect timing information.
+
+    By default, we do not. Override this by setting the ``METACELLS_COLLECT_TIMING`` environment
+    variable to ``true``, or by invoking this function from the main thread.
+    '''
+    assert current_thread().name == 'MainThread'
+
+    global COLLECT_TIMING
+
+    if collect == COLLECT_TIMING:
+        return
+
+    if collect and TIMING_FILE is None:
+        timing_file(open(TIMING_PATH, TIMING_MODE, buffering=TIMING_BUFFERING))
+
+    COLLECT_TIMING = collect
+
+
+def log_steps(log: bool) -> None:
+    '''
+    Whether to log every step invocation to ``sys.stderr``.
+
+    By default, we do not. Override this by setting the ``METACELLS_LOG_STEPS`` environment variable
+    to ``true`` or by invoking this function from the main thread.
+
+    .. note::
+
+        This only works if :py:func:`collect_timing` was set. It is a crude instrument to hunt for
+        deadlocks, very-long-running ``Numpy`` functions, and the like. Basically, if the program is
+        taking 100% CPU and you have no idea what it is doing, turning this on would give you some
+        idea of where it is stuck.
+    '''
+    global LOG_STEPS
+    LOG_STEPS = log
+
+
+if not 'sphinx' in sys.argv[0]:
+    TIMING_PATH = os.environ.get('METACELL_TIMING_CSV', 'timing.csv')
+    TIMING_MODE = os.environ.get('METACELL_TIMING_MODE', 'a')
+    TIMING_BUFFERING = int(os.environ.get('METACELL_TIMING_BUFFERING', '1'))
+    collect_timing({'true': True,
+                    'false': False}[os.environ.get('METACELLS_COLLECT_TIMING',
+                                                   'False').lower()])
+    log_steps({'true': True,
+               'false': False}[os.environ.get('METACELLS_LOG_STEPS',
+                                              'False').lower()])
 
 
 def _thread_index() -> int:
