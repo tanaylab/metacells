@@ -43,8 +43,8 @@ __all__ = [
     'get_variance_per_obs',
     'get_variance_per_var',
 
-    'get_relative_variance_per_obs',
     'get_relative_variance_per_var',
+    'get_normalized_variance_per_var',
 
     'get_obs_obs_correlation',
     'get_var_var_correlation',
@@ -677,48 +677,6 @@ def get_variance_per_var(
 
 
 @timed.call()
-def get_relative_variance_per_obs(
-    adata: AnnData,
-    *,
-    of: Optional[WhichData] = None,
-    inplace: bool = True,
-) -> uta.NamedData:
-    '''
-    Return the log_2(variance/mean) of the values per-observation (cell) of some
-    per-variable-per-observation data.
-
-    If ``of`` is specified, this specific data is used. Otherwise, the focus data is used. If the
-    name does not start with a ``vo:`` prefix, one is assumed.
-
-    Use the ``o:relative_variance_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise,
-    compute it, and if ``inplace`` store it for future reuse.
-
-    If ``inplace``, also store the intermediate per-observation ``o:variance_of_vo:<of>``,
-    ``o:mean_of_vo:<of>``, ``o:sum_of_vo:<of>`` and the ``o:sum_squared_of_vo:<of>`` data for future
-    reuse.
-    '''
-    per, full_of = _assert_prefixed(adata, of, ['vo:', 'oo:'])
-    full_to = 'o:relative_variance_of_' + full_of
-
-    @timed.call('.compute')
-    def compute() -> utt.Vector:
-        variance_per_obs = \
-            get_variance_per_obs(adata, of=full_of, inplace=inplace).data
-        mean_per_obs = \
-            get_mean_per_obs(adata, of=full_of, inplace=inplace).data
-        zeros_mask = mean_per_obs == 0
-
-        result = np.reciprocal(mean_per_obs, where=~zeros_mask)
-        result *= variance_per_obs
-        result[zeros_mask] = 1
-        np.log2(result, out=result)
-
-        return result
-
-    return _derive_1d_data(adata, per, full_of, full_to, compute, inplace)
-
-
-@timed.call()
 def get_relative_variance_per_var(
     adata: AnnData,
     *,
@@ -732,7 +690,7 @@ def get_relative_variance_per_var(
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used. If the
     name does not start with a ``vo:`` prefix, one is assumed.
 
-    Use the ``v:relative_variance_of_vo:<of>`` per-observation (cell) data if it exists. Otherwise,
+    Use the ``v:relative_variance_of_vo:<of>`` per-variable (cell) data if it exists. Otherwise,
     compute it, and if ``inplace`` store it for future reuse.
 
     If ``inplace``, also store the intermediate per-variable ``v:variance_of_vo:<of>``,
@@ -756,6 +714,54 @@ def get_relative_variance_per_var(
         np.log2(result, out=result)
 
         return result
+
+    return _derive_1d_data(adata, per, full_of, full_to, compute, inplace)
+
+
+@timed.call()
+def get_normalized_variance_per_var(
+    adata: AnnData,
+    *,
+    of: Optional[WhichData] = None,
+    window_size: int = 100,
+    inplace: bool = True,
+) -> uta.NamedData:
+    '''
+    Return the (relative_variance - median-relative-variance-of-similar) of the values per-variable
+    (gene) of some per-variable-per-observation data.
+
+    The median-relative-variance-of-similar is the median relative variance of the ``window_size``
+    variables (genes) with the most similar mean to the one being normalized. In general, the
+    relative variance tends to (but doesn't always) go up for higher-mean variables. By normalizing
+    by the median relative variance of variables of a similar mean, we factor out this dependency on
+    the mean to decide which variables (genes) carry more meaningful information (and are more
+    suitable to be picked as "feature genes").
+
+    If ``of`` is specified, this specific data is used. Otherwise, the focus data is used. If the
+    name does not start with a ``vo:`` prefix, one is assumed.
+
+    Use the ``v:normalized_variance_by_<window_size>_of_vo:<of>`` per-variable (gene) data if it
+    exists. Otherwise, compute it, and if ``inplace`` store it for future reuse.
+
+    If ``inplace``, also store the intermediate per-variable ``v:relative_variance_of_vo:<of>``,
+    ``v:variance_of_vo:<of>``, ``v:mean_of_vo:<of>``, ``v:sum_of_vo:<of>`` and the
+    ``v:sum_squared_of_vo:<of>`` data for future reuse.
+    '''
+    per, full_of = _assert_prefixed(adata, of, ['vo:', 'vv:'])
+    full_to = 'v:normalized_variance_by_%s_of_%s' % (window_size, full_of)
+
+    @timed.call('.compute')
+    def compute() -> utt.Vector:
+        relative_variance_per_var = \
+            get_relative_variance_per_var(adata, of=full_of,
+                                          inplace=inplace).data
+        mean_per_var = \
+            get_mean_per_var(adata, of=full_of, inplace=inplace).data
+        median_variance_per_var = utc.sliding_window_function(relative_variance_per_var,
+                                                              function='median',
+                                                              window_size=window_size,
+                                                              order_by=mean_per_var)
+        return relative_variance_per_var - median_variance_per_var
 
     return _derive_1d_data(adata, per, full_of, full_to, compute, inplace)
 

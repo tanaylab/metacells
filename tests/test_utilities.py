@@ -393,9 +393,6 @@ def _test_annotations(full_matrix: ut.Matrix) -> None:
     assert np.allclose(ut.get_variance_per_var(adata).data,
                        np.array([9/2 - (3/2)**2, 17/2 - (5/2)**2, 29/2 - (7/2)**2]))
 
-    assert np.allclose(ut.get_relative_variance_per_obs(adata).data,
-                       np.log2(np.array([(5/3 - (3/3)**2) / (3/3),
-                                         (50/3 - (12/3)**2) / (12/3)])))
     assert np.allclose(ut.get_relative_variance_per_var(adata).data,
                        np.log2(np.array([(9/2 - (3/2)**2) / (3/2),
                                          (17/2 - (5/2)**2) / (5/2),
