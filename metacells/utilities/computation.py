@@ -29,9 +29,6 @@ __all__ = [
 
     'corrcoef',
 
-    'Deriver',
-
-    'matrix_logger',
     'log_matrix',
 
     'max_axis',
@@ -42,7 +39,6 @@ __all__ = [
 
     'bincount_array',
 
-    'matrix_downsampler',
     'downsample_matrix',
     'downsample_array',
     'downsample_tmp_size',
@@ -85,6 +81,7 @@ def to_layout(matrix: utt.Matrix, layout: str) -> utt.Matrix:  # pylint: disable
                 matrix = getattr(matrix, name[1:])()
 
     else:  # Dense.
+        matrix = utt.unpandas(matrix)
         order = utt.DENSE_FAST_FLAG[layout][0]
         with timed.step('.ravel'):
             timed.parameters(rows=matrix.shape[0], columns=matrix.shape[1])
@@ -166,47 +163,11 @@ def corrcoef(matrix: utt.Matrix, *, rowvar: bool = True) -> np.ndarray:
 
 
 #: A function that derives one matrix from another of the same size.
-Deriver = Callable[[utt.Matrix], utt.Matrix]
-
-
-def matrix_logger(
-    base: Optional[float] = None,
-    normalization: float = 1,
-) -> Callable[[utt.Matrix], utt.Matrix]:
-    '''
-    Return an appropriately ``derive`` function for use by
-    :py:func:`metacells.utilities.preparation.get_derived`.
-
-    The name of the function is set to ``log_<base>_plus_<normalization>`` where the default base is
-    ``e``.
-
-    The ``base`` is added to the count before ``log`` is applied, to handle the common case of zero
-    values in sparse data.
-
-    The ``normalization`` (default: {normalization}) is added to the count before the log is
-    applied, to handle the common case of sparse data.
-
-    For example, write ``get_derived(adata, matrix_logger(base=2, normalization=0.5))`` to get a
-    result containing the log base 2 of the focus data plus half.
-
-    .. note::
-
-        The result is always a dense matrix, as even for sparse data, the log is rarely zero.
-    '''
-    def derive(matrix: utt.Matrix) -> utt.Matrix:
-        return log_matrix(matrix, base=base, normalization=normalization)
-
-    derive.__name__ = derive.__qualname__ = \
-        'log_%s_plus_%s' % (base or 'e', normalization)
-
-    return derive
-
-
 def log_matrix(
     matrix: utt.Matrix,
     *,
     base: Optional[float] = None,
-    normalization: float = 1,
+    normalization: float = 0,
 ) -> Callable[[utt.Matrix], utt.Matrix]:
     '''
     Return the log of the values in the ``matrix``.
@@ -233,32 +194,6 @@ def log_matrix(
             matrix /= np.log(base)
 
     return matrix
-
-
-def matrix_downsampler(
-    samples: int,
-    *,
-    axis: int,
-    eliminate_zeros: bool = True,
-    random_seed: int = 0,
-) -> Callable[[utt.Matrix], utt.Matrix]:
-    '''
-    Return an appropriately ``derive`` function for use by
-    :py:func:`metacells.utilities.preparation.get_derived`.
-
-    The name of the function is set to ``downsample_<samples>``.
-
-    For example, write ``get_derived(adata, downsampler(samples=800, axis=1))`` to get a result
-    containing at most 800 samples (variable, gene UMIs) in each row (observation, cell)
-    '''
-    def derive(matrix: utt.Matrix) -> utt.Matrix:
-        return downsample_matrix(matrix, axis=axis, samples=samples,
-                                 eliminate_zeros=eliminate_zeros,
-                                 random_seed=random_seed)
-
-    derive.__name__ = derive.__qualname__ = 'downsample_%s' % samples
-
-    return derive
 
 
 @timed.call()
@@ -289,6 +224,7 @@ def downsample_matrix(
     assert samples > 0
 
     if not sparse.issparse(matrix):
+        matrix = utt.unpandas(matrix)
         return _downsample_dense_matrix(matrix, axis, samples, inplace, random_seed)
 
     return _downsample_sparse_matrix(matrix, axis, samples, eliminate_zeros, inplace, random_seed)
@@ -500,6 +436,7 @@ def downsample_array(
     similarity to other observations. Downsampling avoids this effect.
     '''
     timed.parameters(elements=array.size, samples=samples)
+    array = utt.unpandas(array)
     return _downsample_array(array, samples, tmp, output, random_seed)
 
 
@@ -616,6 +553,7 @@ def _reduce_matrix(
             warn(reducing_sparse_matrix_of_inefficient_format)
     else:
         step = '.dense'
+        matrix = utt.unpandas(matrix)
         elements_count = matrix.shape[axis]
         axis_flag = [matrix.flags.f_contiguous,
                      matrix.flags.c_contiguous][axis]
@@ -652,6 +590,7 @@ def bincount_array(
         This isn't lightning-fast, and seems to be the builtin operation most likely to benefit from
         parallelization.
     '''
+    array = utt.unpandas(array)
     result = np.bincount(array, minlength=minlength)
     timed.parameters(size=array.size, bins=result.size)
     return result
@@ -688,6 +627,8 @@ def sliding_window_function(
         The window size must be an odd positive integer. If an even value is specified, it is
         automatically increased by one.
     """
+    array = utt.unpandas(array)
+
     if window_size % 2 == 0:
         window_size += 1
 

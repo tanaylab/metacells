@@ -30,6 +30,7 @@ def _load(path: str) -> Tuple[AnnData, Dict[str, Any]]:
 
     mc.ut.canonize(adata.X)
     mc.ut.prepare(adata, 'UMIs')
+    mc.ut.safe_slicing_data('gene_ids', mc.ut.ALWAYS_SAFE)
 
     LOADED[path] = (adata, expected)
     return adata, expected
@@ -43,7 +44,7 @@ def test_find_rare_genes_modules(path: str) -> None:
 
     actual_rare_gene_modules = [
         list(module_gene_names) for module_gene_names
-        in mc.ut.get_data(adata, 'm:rare_gene_modules')
+        in mc.ut.get_data(adata, 'rare_gene_modules')
     ]
     expected_rare_gene_modules = expected['rare_gene_modules']
 
@@ -59,7 +60,7 @@ def test_find_noisy_lonely_genes(path: str) -> None:
     mc.pp.find_noisy_lonely_genes(adata)
 
     actual_noisy_lonely_gene_indices = \
-        mc.ut.get_v_data(adata, 'noisy_lonely_mask').data
+        mc.ut.get_v_data(adata, 'noisy_lonely_genes')
     actual_noisy_lonely_genes = \
         sorted(adata.var_names[actual_noisy_lonely_gene_indices])
     expected_noisy_lonely_genes = expected['noisy_lonely_genes']

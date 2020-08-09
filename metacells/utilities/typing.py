@@ -15,6 +15,7 @@ __all__ = [
 
     'Matrix',
     'Vector',
+    'Shaped',
 
     'canonize',
 
@@ -22,6 +23,7 @@ __all__ = [
     'freeze',
     'unfreeze',
 
+    'unpandas',
     'to_np_array',
     'to_1d_array',
 
@@ -74,8 +76,7 @@ def frozen(data: Shaped) -> bool:
     Test whether the data is protected against future modification.
     '''
     if not sparse.issparse(data):
-        if not isinstance(data, np.ndarray):
-            data = data.values
+        data = unpandas(data)
         return not data.flags.writeable
 
     assert data.indices.flags.writeable \
@@ -91,13 +92,14 @@ def freeze(data: Shaped) -> None:
     Protect data against future modification.
     '''
     if not sparse.issparse(data):
-        if not isinstance(data, np.ndarray):
-            data = data.values
+        data = unpandas(data)
         data.setflags(write=False)
+
     elif data.getformat() in ['csc', 'csr']:
         data.indices.setflags(write=False)
         data.indptr.setflags(write=False)
         data.data.setflags(write=False)
+
     else:
         raise NotImplementedError('freeze of sparse data in %s format'
                                   % data.getformat())
@@ -109,16 +111,28 @@ def unfreeze(data: Shaped) -> None:
     Permit data future modification of some data.
     '''
     if not sparse.issparse(data):
-        if not isinstance(data, np.ndarray):
-            data = data.values
+        data = unpandas(data)
         data.setflags(write=True)
+
     elif data.getformat() in ['csc', 'csr']:
         data.indices.setflags(write=True)
         data.indptr.setflags(write=True)
         data.data.setflags(write=True)
+
     else:
         raise NotImplementedError('unfreeze of sparse data in %s format'
                                   % data.getformat())
+
+
+def unpandas(data: Shaped) -> Shaped:
+    '''
+    If the data is a Pandas data frame or series, access the underlying Numpy array,
+    otherwise return it as is (sparse data).
+    '''
+    if isinstance(data, (pd.Series, pd.DataFrame)):
+        data = data.values
+
+    return data
 
 
 def to_np_array(data: Shaped, *, copy: Optional[bool] = False) -> np.ndarray:
@@ -137,8 +151,7 @@ def to_np_array(data: Shaped, *, copy: Optional[bool] = False) -> np.ndarray:
                 timed.parameters(size=data.shape[0])
             return data.toarray()
 
-    if isinstance(data, (pd.Series, pd.DataFrame)):
-        data = data.values
+    data = unpandas(data)
 
     if isinstance(data, np.matrix):
         data = np.array(data)
@@ -193,7 +206,7 @@ def is_layout(matrix: Matrix, layout: str) -> bool:
     if sparse.issparse(matrix):
         return matrix.getformat() == SPARSE_FAST_FORMAT[layout]
 
-    matrix = to_np_array(matrix, copy=None)
+    matrix = unpandas(matrix)
     return matrix.flags[DENSE_FAST_FLAG[layout]]
 
 
@@ -227,6 +240,7 @@ def matrix_layout(matrix: Matrix) -> Optional[str]:
                 return layout
 
     else:
+        matrix = unpandas(matrix)
         for layout, flag in DENSE_FAST_FLAG.items():
             if matrix.flags[flag]:
                 return layout
@@ -245,6 +259,7 @@ def is_contiguous(vector: Vector) -> bool:
     if sparse.issparse(vector):
         return False
 
+    vector = unpandas(vector)
     return vector.flags.c_contiguous and vector.flags.f_contiguous
 
 
@@ -254,9 +269,9 @@ def to_contiguous(vector: Vector, *, copy: bool = False) -> np.ndarray:
 
     If ``copy``, a copy of the vector is returned even if it is already a contiguous Numpy array.
     '''
-    vector = to_1d_array(vector, copy=copy)
+    vector = unpandas(vector)
 
-    if copy or not is_contiguous(vector):
-        vector = np.copy(vector)
+    if copy or not isinstance(vector, np.ndarray) or vector.ndim != 1 or not is_contiguous(vector):
+        return to_1d_array(vector, copy=copy)
 
     return vector

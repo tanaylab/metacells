@@ -294,34 +294,32 @@ def test_focus_on() -> None:
     adata = AnnData(matrix)
 
     ut.prepare(adata, 'test')
-    assert ut.get_focus_name(adata) == 'vo:test'
+    assert ut.get_focus_name(adata) == 'test'
 
-    with ut.focus_on(ut.get_derived, adata, ut.matrix_logger()) as log_data:
-        outer_focus = 'vo:log_e_plus_1_of_test'
+    with ut.focus_on(ut.get_log, adata, normalization=1) as log_data:
+        outer_focus = 'log_e_plus_1_of_test'
         assert ut.get_focus_name(adata) == outer_focus
-        assert id(log_data.data) == id(adata.layers[outer_focus[3:]])
+        assert id(log_data.data) == id(adata.layers[outer_focus])
 
         with ut.focus_on(ut.get_downsample_of_var_per_obs, adata, of='test', samples=10) \
                 as downsamled_data:
-            inner_focus = 'vo:downsample_10_v_per_o_of_vo:test'
+            inner_focus = 'downsampled_10_var_per_obs_of_test'
             assert ut.get_focus_name(adata) == inner_focus
-            assert id(downsamled_data.data) \
-                == id(adata.layers[inner_focus[3:]])
+            assert id(downsamled_data.data) == id(adata.layers[inner_focus])
 
         assert ut.get_focus_name(adata) == outer_focus
-        assert id(log_data.data) == id(adata.layers[outer_focus[3:]])
+        assert id(log_data.data) == id(adata.layers[outer_focus])
 
         with ut.focus_on(ut.get_downsample_of_var_per_obs, adata, of='test', samples=10) \
                 as downsamled_data:
-            inner_focus = 'vo:downsample_10_v_per_o_of_vo:test'
+            inner_focus = 'downsampled_10_var_per_obs_of_test'
             assert ut.get_focus_name(adata) == inner_focus
-            assert id(downsamled_data.data) == \
-                id(adata.layers[inner_focus[3:]])
+            assert id(downsamled_data.data) == id(adata.layers[inner_focus])
             ut.del_vo_data(adata, outer_focus)
 
-        assert ut.get_focus_name(adata) == 'vo:test'
+        assert ut.get_focus_name(adata) == 'test'
 
-    assert ut.get_focus_name(adata) == 'vo:test'
+    assert ut.get_focus_name(adata) == 'test'
 
 
 def test_sliding_window_function() -> None:
@@ -398,12 +396,8 @@ def _test_annotations(full_matrix: ut.Matrix) -> None:
                                          (17/2 - (5/2)**2) / (5/2),
                                          (29/2 - (7/2)**2) / (7/2)])))
 
-    data = ut.get_fraction_of_var_per_obs(adata).data
-    if sparse.issparse(data):
-        data = data.toarray()
+    data = ut.to_np_array(ut.get_fraction_of_var_per_obs(adata).data)
     assert np.allclose(data, np.array([[0/3, 1/3, 2/3], [3/12, 4/12, 5/12]]))
 
-    data = ut.get_fraction_of_obs_per_var(adata).data
-    if sparse.issparse(data):
-        data = data.toarray()
+    data = ut.to_np_array(ut.get_fraction_of_obs_per_var(adata).data)
     assert np.allclose(data, np.array([[0/3, 1/5, 2/7], [3/3, 4/5, 5/7]]))

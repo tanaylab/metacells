@@ -54,12 +54,12 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     **Returns**
 
     Observation (Cell) Annotations
-        ``rare_gene_module``
+        ``cells_rare_gene_module``
             The index of the gene module each cell expresses the most, or ``-1`` in the common case
             it does not express any rare genes module.
 
     Variable (Gene) Annotations
-        ``rare_gene_module``
+        ``genes_rare_gene_module``
             The index of the gene module each gene belongs to, or ``-1`` in the common case it does
             not belong to any rare genes module.
 
@@ -118,16 +118,16 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
                 np.array(list_of_names_of_genes_of_modules, dtype='object')
 
             if inplace:
-                adata.obs['rare_gene_module'] = rare_module_of_cells
-                adata.var['rare_gene_module'] = rare_module_of_genes
+                adata.obs['cells_rare_gene_module'] = rare_module_of_cells
+                adata.var['genes_rare_gene_module'] = rare_module_of_genes
                 adata.uns['rare_gene_modules'] = array_of_names_of_genes_of_modules
                 return None
 
             obs_metrics = pd.DataFrame(index=adata.obs_names)
             var_metrics = pd.DataFrame(index=adata.var_names)
 
-            obs_metrics['rare_gene_module'] = rare_module_of_cells
-            var_metrics['rare_gene_module'] = rare_module_of_genes
+            obs_metrics['cells_rare_gene_module'] = rare_module_of_cells
+            var_metrics['genes_rare_gene_module'] = rare_module_of_genes
 
             return obs_metrics, var_metrics, array_of_names_of_genes_of_modules
 
@@ -200,7 +200,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         with ut.step('.identify_cells'):
             maximal_strength_of_cells = np.zeros(cells_count)
             gene_indices_of_modules: List[np.ndarray] = []
-            candidate_umis = ut.get_vo_data(candidate_data, of, by='var').data
+            candidate_umis = ut.get_vo_data(candidate_data, of, by='var')
 
             for link_index, module_candidate_indices in combined_candidate_indices.items():
                 if len(module_candidate_indices) < minimal_size_of_modules:

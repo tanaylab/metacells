@@ -62,7 +62,7 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
     **Returns**
 
     Variable (Gene) Annotations
-        ``noisy_lonely_mask``
+        ``noisy_lonely_genes``
             A boolean indicating whether the gene was found to be a noisy lonely gene.
 
     If ``inplace`` (default: {inplace}), these are written to ``adata`` and the function returns
@@ -115,8 +115,8 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
         noisy_lonely_mask[noisy_mask] = lonely_mask
 
     if inplace:
-        ut.set_data(adata, 'v:noisy_lonely_mask', noisy_lonely_mask,
-                    ut.SAFE_WHEN_SLICING_VAR)
+        adata.var['noisy_lonely_genes'] = noisy_lonely_mask
+        ut.safe_slicing_data('noisy_lonely_genes', ut.SAFE_WHEN_SLICING_VAR)
         return None
 
     return pd.Series(noisy_lonely_mask, index=adata.var_names)
