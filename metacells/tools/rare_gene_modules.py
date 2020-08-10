@@ -12,12 +12,14 @@ from anndata import AnnData
 
 import metacells.utilities as ut
 
+from .similarity import compute_similarity
+
 __all__ = [
     'find_rare_genes_modules',
 ]
 
 
-@ut.call()
+@ut.timed_call()
 @ut.expand_doc()
 def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-statements,too-many-branches
     adata: AnnData,
@@ -25,6 +27,10 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     *,
     maximal_fraction_of_cells_of_genes: float = 1e-3,
     minimal_max_umis_of_genes: int = 6,
+    log_similarity: bool = False,
+    log_similarity_base: Optional[float] = None,
+    log_similarity_normalization: float = -1,
+    repeated_similarity: bool = True,
     cluster_method_of_genes: str = 'ward',
     minimal_size_of_modules: int = 4,
     minimal_correlation_of_modules: float = 0.1,
@@ -49,8 +55,8 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     observations are cells and the variables are genes, containing the UMIs count in the ``of``
     (default: the focus) per-variable-per-observation data.
 
-    If not ``intermediate``, this discards all the intermediate data used (e.g. sums). Otherwise,
-    such data is kept for future reuse.
+    If not ``intermediate`` (default: {intermediate}), this discards all the intermediate data used
+    (e.g. sums). Otherwise, such data is kept for future reuse.
 
     **Returns**
 
@@ -82,9 +88,11 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
        whose maximal number of UMIs in a cell is at least ``minimal_max_umis_of_genes``
        (default: {minimal_max_umis_of_genes}).
 
-    2. Correlate the expression of the candidate genes. Then, correlate the correlations.
-       That is, for a high correlation score, two genes should be similar to the rest of the genes
-       in a similar way. This compensates for the extreme sparsity of the data.
+    2. Compute the similarity between the genes using
+       :py:func:`metacells.tools.similarity.compute_similarity`. Pass it ``log_similarity``
+       (default: {log_similarity}), ``log_similarity_base`` (default: {log_similarity_base}), and
+       ``log_similarity_normalization`` (default: {log_similarity_normalization}) as well as
+       ``repeated_similarity`` (default: {repeated_similarity}).
 
     3. Create a hierarchical clustering of the candidate genes using the ``cluster_method_of_genes``
        (default: {cluster_method_of_genes}).
@@ -132,7 +140,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
 
             return obs_metrics, var_metrics, array_of_names_of_genes_of_modules
 
-        with ut.step('.pick_candidate_genes'):
+        with ut.timed_step('.pick_candidate_genes'):
             nnz_cells_fraction_of_genes = nnz_cells_of_genes / cells_count
 
             nnz_cells_fraction_mask_of_genes = \
@@ -151,20 +159,21 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
 
             candidate_data = ut.slice(adata, vars=candidate_genes_indices)
 
-        with ut.step('.correlate'):
-            correlations_between_candidate_genes = \
-                ut.get_var_var_correlation(candidate_data)
+        with ut.timed_step('.similarity'):
             similarities_between_candidate_genes = \
-                ut.get_var_var_correlation(candidate_data,
-                                           of=correlations_between_candidate_genes,
-                                           inplace=False).data
+                ut.unpandas(compute_similarity(candidate_data, 'genes',
+                                               repeated=repeated_similarity,
+                                               log=log_similarity,
+                                               log_base=log_similarity_base,
+                                               log_normalization=log_similarity_normalization,
+                                               inplace=False))
 
-        with ut.step('.linkage'):
+        with ut.timed_step('.linkage'):
             linkage = \
                 sch.linkage(scd.pdist(similarities_between_candidate_genes),
                             method=cluster_method_of_genes)
 
-        with ut.step('.identify_genes'):
+        with ut.timed_step('.identify_genes'):
             np.fill_diagonal(similarities_between_candidate_genes, None)
             combined_candidate_indices = \
                 {index: [index] for index in range(candidate_genes_count)}
@@ -198,7 +207,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
                 del combined_candidate_indices[left_index]
                 del combined_candidate_indices[right_index]
 
-        with ut.step('.identify_cells'):
+        with ut.timed_step('.identify_cells'):
             maximal_strength_of_cells = np.zeros(cells_count)
             gene_indices_of_modules: List[np.ndarray] = []
             candidate_umis = ut.get_vo_data(candidate_data, of, by='var')
@@ -251,7 +260,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
             if len(gene_indices_of_modules) == 0:
                 return results()
 
-        with ut.step('.results'):
+        with ut.timed_step('.results'):
             for raw_module_index, module_gene_indices \
                     in enumerate(gene_indices_of_modules):
                 module_cell_indices = \

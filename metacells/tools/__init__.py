@@ -10,7 +10,9 @@ Functions for analysis tools.
 All the functions included here are exported under ``metacells.tl``.
 '''
 
-from .find_named_genes import *
+from .high_normalized_variance_genes import *
+from .named_genes import *
 from .noisy_lonely_genes import *
 from .properly_sampled import *
 from .rare_gene_modules import *
+from .similarity import *

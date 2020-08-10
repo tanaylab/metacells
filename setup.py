@@ -39,7 +39,7 @@ DEVELOP_REQUIRES = [
 
 setup(
     name='metacells',
-    use_scm_version=True,
+    use_scm_version=dict(write_to='metacells/version.py'),
     description='Single-cell RNA Sequencing Analysis',
     long_description=README,
     long_description_content_type='text/x-rst',

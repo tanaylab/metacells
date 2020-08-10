@@ -3,10 +3,16 @@ Tools
 
 .. automodule:: metacells.tools
 
-.. automodule:: metacells.tools.find_named_genes
+.. automodule:: metacells.tools.similarity
     :members:
 
 .. automodule:: metacells.tools.properly_sampled
+    :members:
+
+.. automodule:: metacells.tools.named_genes
+    :members:
+
+.. automodule:: metacells.tools.high_normalized_variance_genes
     :members:
 
 .. automodule:: metacells.tools.noisy_lonely_genes

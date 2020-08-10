@@ -9,6 +9,7 @@ docs/build
 flame.html
 junk*
 metacells/*.so
+metacells/version.py
 .nfs*
 __pycache__
 .*.swo

@@ -20,7 +20,7 @@ import numpy as np  # type: ignore
 from readerwriterlock import rwlock
 from threadpoolctl import threadpool_limits  # type: ignore
 
-import metacells.utilities.timing as timed
+import metacells.utilities.timing as utm
 from metacells.utilities.documentation import expand_doc
 
 __all__ = [
@@ -228,14 +228,14 @@ def parallel_map(
             return map(function, range(invocations_count))
         return function(range(invocations_count))
 
-    step_timing = timed.current_step()
+    step_timing = utm.current_step()
 
     if batches_per_thread is None:
         if step_timing is None:
             timed_function = function
         else:
             def timed_function(index: int) -> None:  # type: ignore
-                with timed.step(step_timing):  # type: ignore
+                with utm.timed_step(step_timing):  # type: ignore
                     function(index)
 
         with _in_parallel(invocations_count):
@@ -258,7 +258,7 @@ def parallel_map(
 
     else:
         def batch_function(batch_index: int) -> List[Any]:
-            with timed.step(step_timing):  # type: ignore
+            with utm.timed_step(step_timing):  # type: ignore
                 start = round(batch_index * batch_size)
                 stop = round((batch_index + 1) * batch_size)
                 indices = range(start, stop)
@@ -278,7 +278,7 @@ def parallel_for(
     function: Callable,
     invocations_count: int,
     *,
-    batches_per_thread: Optional[int] = 4,
+    batches_per_thread: Optional[int] = 3,
 ) -> None:
     '''
     Similar to ``parallel_map`` except that the return value of ``function`` is ignored. This avoid
@@ -293,14 +293,14 @@ def parallel_for(
             function(range(invocations_count))
         return
 
-    step_timing = timed.current_step()
+    step_timing = utm.current_step()
 
     if batches_per_thread is None:
         if step_timing is None:
             timed_function = function
         else:
             def timed_function(index: int) -> None:
-                with timed.step(step_timing):  # type: ignore
+                with utm.timed_step(step_timing):  # type: ignore
                     function(index)
 
         with _in_parallel(invocations_count):
@@ -324,7 +324,7 @@ def parallel_for(
 
     else:
         def batch_function(batch_index: int) -> None:
-            with timed.step(step_timing):  # type: ignore
+            with utm.timed_step(step_timing):  # type: ignore
                 start = round(batch_index * batch_size)
                 stop = round((batch_index + 1) * batch_size)
                 indices = range(start, stop)
@@ -340,7 +340,7 @@ def parallel_collect(
     merge: Callable,
     invocations_count: int,
     *,
-    batches_per_thread: Optional[int] = 4,
+    batches_per_thread: Optional[int] = 3,
 ) -> str:
     '''
     Similar to ``parallel_for``, except it is assumed that each invocation of ``compute`` updates

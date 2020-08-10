@@ -17,9 +17,9 @@ __all__ = [
     'timing_file',
     'collect_timing',
     'log_steps',
-    'step',
-    'call',
-    'parameters',
+    'timed_step',
+    'timed_call',
+    'timed_parameters',
     'context',
     'current_step',
 ]
@@ -239,7 +239,7 @@ if COLLECT_TIMING:
 
 
 @contextmanager
-def step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches,too-many-statements
+def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches,too-many-statements
     '''
     Collect timing information for a computation step.
 
@@ -365,7 +365,7 @@ def _print_timing(
             gc.enable()
 
 
-def parameters(**kwargs: Any) -> None:
+def timed_parameters(**kwargs: Any) -> None:
     '''
     Associate relevant timing parameters to the innermost ``timing.step``.
 
@@ -386,7 +386,7 @@ def parameters(**kwargs: Any) -> None:
 CALLABLE = TypeVar('CALLABLE')
 
 
-def call(name: Optional[str] = None) -> Callable[[CALLABLE], CALLABLE]:
+def timed_call(name: Optional[str] = None) -> Callable[[CALLABLE], CALLABLE]:
     '''
     Automatically wrap each function invocation with ``timing.step`` using the ``name`` (by default,
     the function's qualified name).
@@ -396,7 +396,7 @@ def call(name: Optional[str] = None) -> Callable[[CALLABLE], CALLABLE]:
 
     def wrap(function: Callable) -> Callable:
         def timed(*args: Any, **kwargs: Any) -> Any:
-            with step(name or function.__qualname__):
+            with timed_step(name or function.__qualname__):
                 return function(*args, **kwargs)
         timed.__name__ = function.__name__
         timed.__qualname__ = function.__qualname__

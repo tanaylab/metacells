@@ -10,38 +10,24 @@ from anndata import AnnData
 import metacells.utilities as ut
 
 __all__ = [
-    'DEFAULT_FILTER_MASKS',
     'filter_data',
 ]
 
-#: The default masks used to filter the data.
-DEFAULT_FILTER_MASKS = [
-    'properly_sampled_cells?',
-    'properly_sampled_genes?',
-    '~noisy_lonely_genes?',
-    '~excluded_genes?',
-    '~excluded_cells?'
-]
 
-
-@ut.call()
-@ut.expand_doc(masks='``, ``'.join(DEFAULT_FILTER_MASKS))
+@ut.timed_call()
+@ut.expand_doc()
 def filter_data(  # pylint: disable=too-many-locals,too-many-statements,too-many-branches,dangerous-default-value
     adata: AnnData,
+    masks: List[str],
     *,
     track_base_indices: Optional[str] = 'base_index',
-    masks: List[str] = DEFAULT_FILTER_MASKS,
-    intermediate: bool = True,
+    name: Optional[str] = 'included',
 ) -> Optional[AnnData]:
     '''
-    Filter the data in preparation for computing metacells.
+    Extract a subset of the data for further processing.
 
-    This picks a subset of the cells and the genes, so that running the metacells algorithm on the
-    subset would give "optimal" results.
-
-    In general, it is useful to discard some of the data before performing any form of an analysis
-    algorithm. For example, it is useful to discard cell-cycle genes, cells which have too few UMIs
-    for meaningful analysis, etc. In general, the "best" filter depends on the data set.
+    For example, it is useful to discard cell-cycle genes, cells which have too few UMIs for
+    meaningful analysis, etc. In general, the "best" filter depends on the data set.
 
     This function makes it easy to combine different pre-computed per-observation (cell) and
     per-variable (gene) boolean mask annotations into a final overall inclusion mask, and slice the
@@ -55,9 +41,10 @@ def filter_data(  # pylint: disable=too-many-locals,too-many-statements,too-many
 
     **Returns**
 
-    An annotated data containing a subset of the cells and genes, ready for computing metacells.
+    An annotated data containing a subset of the cells and genes.
 
-    If ``intermediate``, store the ``included_cells`` and ``included_genes`` masks in the full data.
+    If ``name`` is not ``None`` (default: ``{name}``), store the mask in ``<name>_cells`` and
+    ``<name>_genes`` annotations of the full data.
 
     If no cells and/or no genes were selected by the filter, return ``None``.
 
@@ -70,9 +57,9 @@ def filter_data(  # pylint: disable=too-many-locals,too-many-statements,too-many
        :py:func:`metacells.utilities.preparation.track_base_indices` to allow for mapping the
        returned sliced data back to the full original data.
 
-    2. For each of the mask in ``masks`` (default: ``{masks}``), fetch it. Silently ignore
-       missing masks if the name has a ``?`` suffix. Invert the mask if the name has a ``~`` suffix.
-       AND the mask with the appropriate (cells or genes) mask.
+    2. For each of the mask in ``masks``, fetch it. Silently ignore missing masks if the name has a
+       ``?`` suffix. Invert the mask if the name has a ``~`` suffix. Bitwise-AND the appropriate
+       (cells or genes) mask with the result.
 
     4. If the final cells or genes mask is empty, return None. Otherwise, return a slice of the full
        data containing just the cells and genes specified by the final masks.
@@ -83,24 +70,24 @@ def filter_data(  # pylint: disable=too-many-locals,too-many-statements,too-many
     cells_mask = np.full(adata.n_obs, True, dtype='bool')
     genes_mask = np.full(adata.n_obs, True, dtype='bool')
 
-    for name in masks:
-        if name[0] == '~':
+    for mask_name in masks:
+        if mask_name[0] == '~':
             invert = True
-            name = name[1]
+            mask_name = mask_name[1]
         else:
             invert = False
 
-        if name[-1] == '?':
+        if mask_name[-1] == '?':
             must_exist = False
-            name = name[:-1]
+            mask_name = mask_name[:-1]
         else:
             must_exist = True
 
-        per = ut.which_data(adata, name, must_exist=must_exist)
+        per = ut.which_data(adata, mask_name, must_exist=must_exist)
         if per is None:
             continue
 
-        mask = ut.to_1d_array(ut.get_data(adata, name))
+        mask = ut.to_1d_array(ut.get_data(adata, mask_name))
         if mask.dtype != 'bool':
             raise ValueError('the data: %s is not a boolean mask')
         if invert:
@@ -113,13 +100,15 @@ def filter_data(  # pylint: disable=too-many-locals,too-many-statements,too-many
         else:
             raise ValueError('the data: %s '
                              'is not per-observation or per-variable'
-                             % name)
+                             % mask_name)
 
-    if intermediate:
-        adata.obs['included_cells'] = cells_mask
-        adata.var['included_genes'] = genes_mask
-        ut.safe_slicing_data('included_cells', ut.NEVER_SAFE)
-        ut.safe_slicing_data('included_genes', ut.NEVER_SAFE)
+    if name is not None:
+        cells_name = name + '_cells'
+        genes_name = name + '_genes'
+        adata.obs[cells_name] = cells_mask
+        adata.var[genes_name] = genes_mask
+        ut.safe_slicing_data(cells_name, ut.NEVER_SAFE)
+        ut.safe_slicing_data(genes_name, ut.NEVER_SAFE)
 
     if not np.any(cells_mask) or not np.any(genes_mask):
         return None

@@ -126,7 +126,8 @@ from anndata import AnnData
 from readerwriterlock import rwlock
 
 import metacells.utilities.computation as utc
-import metacells.utilities.timing as timed
+import metacells.utilities.documentation as utd
+import metacells.utilities.timing as utm
 import metacells.utilities.typing as utt
 
 __all__ = [
@@ -153,6 +154,7 @@ __all__ = [
     'get_vo_data',
     'del_vo_data',
     'focus_on',
+    'intermediate_step',
     'get_focus_name',
     'get_x_name',
 
@@ -247,7 +249,7 @@ def safe_slicing_derived(
         SAFE_SLICING[derived] = slicing_mask
 
 
-@timed.call()
+@utm.timed_call()
 def slice(  # pylint: disable=redefined-builtin
     adata: AnnData,
     *,
@@ -297,14 +299,14 @@ def slice(  # pylint: disable=redefined-builtin
         will_slice_var = len(vars) != adata.n_vars
 
     if not will_slice_obs and not will_slice_var:
-        with timed.step('.copy'):
+        with utm.timed_step('.copy'):
             return adata[:, :]
 
     saved_data = \
         _save_data(adata, will_slice_obs,
                    will_slice_var, invalidated_prefix)
 
-    with timed.step('.builtin'):
+    with utm.timed_step('.builtin'):
         bdata = adata[obs, vars]
 
     did_slice_obs = bdata.n_obs != adata.n_obs
@@ -389,7 +391,7 @@ def _save_per_data(  # pylint: disable=too-many-locals
 
             base_name = name[:-len(by_suffix)]
             if base_name == get_x_name(adata):
-                with timed.step('.swap_x'):
+                with utm.timed_step('.swap_x'):
                     with _modify(adata):
                         adata.X = data
             else:
@@ -542,7 +544,8 @@ def _slice_action(
     return 'prefix'
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_data(
     adata: AnnData,
     name: Optional[str] = None,
@@ -560,11 +563,11 @@ def get_data(
 
     If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
 
-    If ``inplace``, store the data for future reuse. This requires ``per`` (one of: ``vo``, ``vv``,
-    ``oo``, ``v``, ``o``, ``m``) to specify where to store the data.
+    If ``inplace`` (default: {inplace}), store the data for future reuse. This requires ``per`` (one
+    of: ``vo``, ``vv``, ``oo``, ``v``, ``o``, ``m``) to specify where to store the data.
 
-    If the data is per-variable-per-observation, and ``infocus`` (implies ``inplace``), also makes
-    the result the new focus.
+    If the data is per-variable-per-observation, and ``infocus`` (default: {infocus}, implies
+    ``inplace``), also makes the result the new focus.
 
     If the data is per-variable-per-observation, and ``by`` is specified, it forces the layout of
     the returned data (see :py:func:`get_vo_data`).
@@ -646,8 +649,8 @@ def which_data(  # pylint: disable=too-many-return-statements
 
     Possible return values are ``vo``, ``vv``, ``oo``, ``v``, ``o`` and ``m``.
 
-    if the data doesn't exist in ``adata``, will ``raise`` unless ``must_exist`` is ``False``, in
-    which case return ``None``.
+    If the data is missing, and ``must_exist`` (default: {must_exist}), raise ``KeyError``.
+    Otherwise, return ``None``.
     '''
 
     if name == get_x_name(adata) or name in adata.layers:
@@ -674,6 +677,8 @@ def which_data(  # pylint: disable=too-many-return-statements
     return None
 
 
+@utm.timed_call()
+@utd.expand_doc()
 def get_m_data(
     adata: AnnData,
     name: str,
@@ -686,7 +691,7 @@ def get_m_data(
 
     If the metadata does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
 
-    If ``inplace``, store the result in ``adata``.
+    If ``inplace`` (default: {inplace}), store the result in ``adata``.
 
     .. note::
 
@@ -709,6 +714,8 @@ def get_m_data(
     return data
 
 
+@utm.timed_call()
+@utd.expand_doc()
 def get_o_data(
     adata: AnnData,
     name: str,
@@ -721,7 +728,7 @@ def get_o_data(
 
     If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
 
-    If ``inplace``, store the result in ``adata`` for future reuse.
+    If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
 
     .. note::
 
@@ -731,6 +738,8 @@ def get_o_data(
                             'per-observation', name, compute, inplace)
 
 
+@utm.timed_call()
+@utd.expand_doc()
 def get_v_data(
     adata: AnnData,
     name: str,
@@ -743,7 +752,7 @@ def get_v_data(
 
     If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
 
-    If ``inplace``, store the result in ``adata`` for future reuse.
+    If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
 
     .. note::
 
@@ -753,6 +762,8 @@ def get_v_data(
                             'per-variable', name, compute, inplace)
 
 
+@utm.timed_call()
+@utd.expand_doc()
 def get_oo_data(
     adata: AnnData,
     name: str,
@@ -765,7 +776,7 @@ def get_oo_data(
 
     If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
 
-    If ``inplace``, store the result in ``adata`` for future reuse.
+    If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
 
     .. note::
 
@@ -776,6 +787,8 @@ def get_oo_data(
                             name, compute, inplace)
 
 
+@utm.timed_call()
+@utd.expand_doc()
 def get_vv_data(
     adata: AnnData,
     name: str,
@@ -788,7 +801,7 @@ def get_vv_data(
 
     If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
 
-    If ``inplace``, store the result in ``adata`` for future reuse.
+    If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
 
     .. note::
 
@@ -825,7 +838,8 @@ def _get_shaped_data(
     return data
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_vo_data(
     adata: AnnData,
     name: Optional[str] = None,
@@ -842,9 +856,10 @@ def get_vo_data(
 
     If the layer does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
 
-    If ``inplace``, store the result in ``adata`` for future reuse.
+    If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
 
-    If ``infocus`` (implies ``inplace``), also makes the result the new focus data.
+    If ``infocus`` (default: {infocus}, implies ``inplace``), also makes the result the new focus
+    data.
 
     If ``by`` is specified, it must be one of ``obs`` (cells) or ``var`` (genes). This returns the
     data in a layout optimized for by-observation (row-major / csr) or by-variable (column-major
@@ -873,7 +888,7 @@ def get_vo_data(
 
     if name == get_x_name(adata):
         def get_base_data() -> utt.Matrix:
-            with timed.step('.get_x'):
+            with utm.timed_step('.get_x'):
                 data = adata.X
 
             assert data is not None
@@ -933,6 +948,7 @@ def get_vo_data(
     return data
 
 
+@utd.expand_doc()
 def del_vo_data(
     adata: AnnData,
     name: str,
@@ -947,7 +963,7 @@ def del_vo_data(
     delete the cached layout-specific data. If ``by`` is not specified, both the data and any cached
     layout-specific data will be deleted.
 
-    If ``must_exist``, will ``raise`` if the data does not currently exist.
+    If ``must_exist`` (default: {must_exist}), will ``raise`` if the data does not currently exist.
 
     .. note::
 
@@ -987,6 +1003,7 @@ def del_vo_data(
 
 
 @contextmanager
+@utd.expand_doc()
 def focus_on(
     accessor: Callable,
     adata: AnnData,
@@ -1001,8 +1018,9 @@ def focus_on(
     If the original focus data is deleted inside the ``with`` statement, then when it is done, the
     focus will revert to whatever is in ``X``.
 
-    If not ``intermediate``, this discards all the intermediate ``inplace`` data (e.g. sums) which
-    was set within the ``with`` statement block. Otherwise, such data is kept for future reuse.
+    If not ``intermediate`` (default: {intermediate}), this discards all the intermediate
+    ``inplace`` data (e.g. sums) which was set within the ``with`` statement block. Otherwise, such
+    data is kept for future reuse.
 
     For example, in order to temporarily focus on the log of some linear measurements,
     write:
@@ -1024,7 +1042,7 @@ def focus_on(
     .. note::
 
         Do not specify ``inplace`` and/or ``infocus`` in the ``kwargs``, as they are implied by this
-        call.
+        timed_call.
     '''
     for name in ('infocus', 'inplace'):
         if name in kwargs:
@@ -1038,6 +1056,7 @@ def focus_on(
 
 
 @contextmanager
+@utd.expand_doc()
 def intermediate_step(
     adata: AnnData,
     *,
@@ -1047,8 +1066,9 @@ def intermediate_step(
     Execute some code in a ``with`` statements and restore the focus at the end, if it was modified
     by the wrapped code.
 
-    If not ``intermediate``, this discards all the intermediate ``inplace`` data (e.g. sums) which
-    was set within the ``with`` statement block. Otherwise, such data is kept for future reuse.
+    If not ``intermediate`` (default: {intermediate}), this discards all the intermediate
+    ``inplace`` data (e.g. sums) which was set within the ``with`` statement block. Otherwise, such
+    data is kept for future reuse.
 
     .. note::
 
@@ -1110,7 +1130,7 @@ def get_x_name(adata: AnnData) -> str:
 @contextmanager
 def _modify(adata: AnnData) -> Iterator[None]:
     if adata.is_view:
-        with timed.step('unview'):
+        with utm.timed_step('unview'):
             yield
     else:
         yield

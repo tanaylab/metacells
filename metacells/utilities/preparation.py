@@ -5,7 +5,7 @@ The functions here use the facilities of :py:mod:`metacells.utilities.annotation
 functions of :py:mod:`metacells.utilities.computation` in an easily accessible way.
 '''
 
-from typing import Any, Callable, List, NamedTuple, Optional, Tuple, Union
+from typing import Any, Callable, List, NamedTuple, Optional, Tuple
 
 import numpy as np  # type: ignore
 import scipy.sparse as sparse  # type: ignore
@@ -13,7 +13,8 @@ from anndata import AnnData
 
 import metacells.utilities.annotation as uta
 import metacells.utilities.computation as utc
-import metacells.utilities.timing as timed
+import metacells.utilities.documentation as utd
+import metacells.utilities.timing as utm
 import metacells.utilities.typing as utt
 from metacells.utilities.annotation import _items
 
@@ -22,7 +23,6 @@ __all__ = [
     'track_base_indices',
 
     'NamedData',
-    'WhichData',
 
     'get_derived',
 
@@ -95,8 +95,9 @@ def prepare(adata: AnnData, name: str) -> None:
 def track_base_indices(adata: AnnData, *, name: str = 'base_index') -> None:
     '''
     Create ``obs_<name>`` per-observation (cells) and ``var_<name>`` per-variable (genes) data,
-    which will be preserved when creating any :py:func:`metacells.utilities.annotation.slice` of the
-    data to easily refer back to the original full data.
+    (default ``name``: {name}), which will be preserved when creating any
+    :py:func:`metacells.utilities.annotation.slice` of the data to easily refer back to the original
+    full data.
     '''
     obs_name = 'obs_' + name
     var_name = 'var_' + name
@@ -130,16 +131,12 @@ class NamedData(NamedTuple):
     data: Any
 
 
-#: All requests for deriving data take either the base data's name or the actual previously fetched
-#: base data.
-WhichData = Union[str, NamedData]
-
-
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_derived(
     adata: AnnData,
     derive: Callable[[utt.Shaped], utt.Shaped],
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     to: Optional[str] = None,
     slicing_mask: uta.SlicingMask = uta.ALWAYS_SAFE,
@@ -157,25 +154,26 @@ def get_derived(
 
     If ``to`` is not specified, the ``__qualname__`` of the derive function is used.
 
-    Use the ``<of>|<to>`` data if it exists. Otherwise, compute it, and if ``inplace`` store it for
-    future reuse.
+    Use the ``<of>|<to>`` data if it exists. Otherwise, compute it, and if ``inplace`` (default:
+    {inplace}) store it for future reuse.
 
-    If the data is per-variable-per-observation, and ``infocus`` (implies ``inplace``), also makes
-    the result the new focus.
+    If the data is per-variable-per-observation, and ``infocus`` (default: {infocus}, implies
+    ``inplace``), also makes the result the new focus.
 
     If the data is per-variable-per-observation, and ``by`` is specified, it forces the layout of
     the returned data (see :py:func:`metacells.utilities.annotation.get_vo_data`).
 
-    The default ``slicing_mask`` assumes it is safe to arbitrarily slice the results (as long as the
-    base data is also safe to slice), that is, that this is an element-wise computation. Otherwise,
-    modify the mask to reflect the restrictions imposed by the computation itself.
+    The default ``slicing_mask`` :py:const:`metacells.utilities.annotation.ALWAYS_SAFE` assumes it
+    is safe to arbitrarily slice the results (as long as the base data is also safe to slice), that
+    is, that this is an element-wise computation. Otherwise, modify the mask to reflect the
+    restrictions imposed by the computation itself.
 
     Returns the result and its name.
     '''
     per_of, of = _per_of(adata, of, ['vo', 'vv', 'oo', 'v', 'o'])
     to = '%s|%s' % (of, to or derive.__qualname__)
 
-    @timed.call('.' + to)
+    @utm.timed_call('.' + to)
     def compute() -> utt.Shaped:
         assert isinstance(of, str)
         return derive(uta.get_data(adata, of, by=by))
@@ -183,10 +181,11 @@ def get_derived(
     return _derive_data(adata, of, per_of, to, slicing_mask, compute, inplace, infocus, by)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_log(
     adata: AnnData,
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     base: Optional[float] = None,
     normalization: float = 0,
@@ -197,19 +196,17 @@ def get_log(
     '''
     Return the logarithm of some data.
 
-    Computes log with the specified ``base`` (by default, the natural logarithm).
-
-    The ``normalization`` specifies how to deal with zeros in the data,
-    see :py:func:`metacells.utilities.computation.log_matrix` for details.
-
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
+
+    Computes the log of the data with the specified ``base`` (default: {base}) and ``normalization`` (default:
+    {normalization}). See :py:func:`metacells.utilities.computation.log_data` for details.
 
     Use the ``<of>|log_<base>`` or ``<of>|log_<base>_normalization_<normalization>`` data if it
     exists (where the default base is reported as ``e``). Otherwise, compute it, and if ``inplace``
-    store it for future reuse.
+    (default: {inplace}) store it for future reuse.
 
-    If the data is per-variable-per-observation, and ``infocus`` (implies ``inplace``), also makes
-    the result the new focus.
+    If the data is per-variable-per-observation, and ``infocus`` (default: {infocus}, implies
+    ``inplace``), also makes the result the new focus.
 
     If the data is per-variable-per-observation, and ``by`` is specified, it forces the layout of
     the returned data (see :py:func:`metacells.utilities.annotation.get_vo_data`).
@@ -221,17 +218,18 @@ def get_log(
     else:
         to = 'log_%s' % (base or 'e')
 
-    def derive(matrix: utt.Matrix) -> utt.Matrix:
-        return utc.log_matrix(matrix, base=base, normalization=normalization)
+    def derive(data: utt.Shaped) -> utt.Shaped:
+        return utc.log_data(data, base=base, normalization=normalization)
 
     return get_derived(adata, derive, of, to=to,
                        inplace=inplace, infocus=infocus, by=by)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_downsample_of_var_per_obs(
     adata: AnnData,
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     samples: int,
     random_seed: int = 0,
@@ -250,15 +248,16 @@ def get_downsample_of_var_per_obs(
 
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
-    If ``inplace``, the data will be stored in ``<of>|downsample_<samples>_var_per_obs`` for
-    future reuse.
+    If ``inplace`` (default: {inplace}), the data will be stored in
+    ``<of>|downsample_<samples>_var_per_obs`` for future reuse.
 
-    If ``infocus`` (implies ``inplace``), also makes the result the new focus.
+    If ``infocus`` (default: {infocus}, implies ``inplace``), also makes the result the new focus.
 
     If ``by`` is specified, it forces the layout of the returned data (see
     :py:func:`metacells.utilities.annotation.get_vo_data`).
 
-    A ``random_seed`` can be provided to make the operation replicable.
+    A non-zero ``random_seed`` (default: {random_seed}) can be provided to make the operation
+    replicable.
 
     Returns the result and its name.
 
@@ -278,10 +277,11 @@ def get_downsample_of_var_per_obs(
                        inplace=inplace, infocus=infocus, by=by)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_downsample_of_obs_per_var(
     adata: AnnData,
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     samples: int,
     random_seed: int = 0,
@@ -300,15 +300,16 @@ def get_downsample_of_obs_per_var(
 
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
-    If ``inplace``, the data will be stored in ``<of>|downsample_<samples>_obs_per_var`` for
-    future reuse.
+    If ``inplace`` (default: {inplace}), the data will be stored in
+    ``<of>|downsample_<samples>_obs_per_var`` for future reuse.
 
-    If ``infocus`` (implies ``inplace``), also makes the result the new focus.
+    If ``infocus`` (default: {infocus}, implies ``inplace``), also makes the result the new focus.
 
     If ``by`` is specified, it forces the layout of the returned data (see
     :py:func:`metacells.utilities.annotation.get_vo_data`).
 
-    A ``random_seed`` can be provided to make the operation replicable.
+    A non-zero ``random_seed`` (default: {random_seed}) can be provided to make the operation
+    replicable.
 
     Returns the result and its name.
 
@@ -337,11 +338,12 @@ except ModuleNotFoundError:
     __all__.remove('Reducer')
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_per_obs(
     adata: AnnData,
     reducer: 'Reducer',
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     to: Optional[str] = None,
     inplace: bool = True,
@@ -358,14 +360,14 @@ def get_per_obs(
     If ``to`` is not specified, the ``__qualname__`` of the reducer function is used.
 
     Use the ``<of>|<to>_per_obs`` data if it exists. Otherwise, compute it, and if ``inplace``
-    store it for future reuse.
+    (default: {inplace}), store it for future reuse.
 
     Returns the result and its name.
     '''
     per_of, of = _per_of(adata, of, ['vo', 'oo'])
     to = '%s|%s_per_obs' % (of, to or reducer.__qualname__)
 
-    @timed.call('.' + to)
+    @utm.timed_call('.' + to)
     def compute() -> utt.Vector:
         assert isinstance(of, str)
         matrix = uta.get_data(adata, of, by='obs')
@@ -374,11 +376,12 @@ def get_per_obs(
     return _derive_1d_data(adata, per_of, of, 'o', to, compute, inplace)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_per_var(
     adata: AnnData,
     reducer: 'Reducer',
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     to: Optional[str] = None,
     inplace: bool = True,
@@ -395,14 +398,14 @@ def get_per_var(
     If ``to`` is not specified, the ``__qualname__`` of the reducer function is used.
 
     Use the ``<of>|<to>_per_var`` data if it exists. Otherwise, compute it, and if ``inplace``
-    store it for future reuse.
+    (default: {inplace}), store it for future reuse.
 
     Returns the result and its name.
     '''
     per_of, of = _per_of(adata, of, ['vo', 'oo'])
     to = '%s|%s_per_var' % (of, to or reducer.__qualname__)
 
-    @timed.call('.' + to)
+    @utm.timed_call('.' + to)
     def compute() -> utt.Vector:
         assert isinstance(of, str)
         matrix = uta.get_data(adata, of, by='var')
@@ -411,10 +414,11 @@ def get_per_var(
     return _derive_1d_data(adata, per_of, of, 'v', to, compute, inplace)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_fraction_of_var_per_obs(
     adata: AnnData,
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     inplace: bool = True,
     infocus: bool = False,
@@ -431,10 +435,11 @@ def get_fraction_of_var_per_obs(
 
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
-    If ``inplace``, the data will be stored in ``<of>|fraction_of_var_per_obs`` for future reuse,
-    and will also store the intermediate ``<of>|sum_per_obs`` per-observation (cell) data.
+    If ``inplace`` (default: {inplace}, the data will be stored in ``<of>|fraction_of_var_per_obs``
+    for future reuse, and will also store the intermediate ``<of>|sum_per_obs`` per-observation
+    (cell) data.
 
-    If ``infocus`` (implies ``inplace``), also makes the result the new focus.
+    If ``infocus`` (default: {infocus}, implies ``inplace``), also makes the result the new focus.
 
     If ``by`` is specified, it forces the layout of the returned data (see
     :py:func:`metacells.utilities.annotation.get_vo_data`).
@@ -448,7 +453,7 @@ def get_fraction_of_var_per_obs(
     _, of = _per_of(adata, of, ['vo'])
     to = of + '|fraction_of_var_per_obs'
 
-    @timed.call('.compute')
+    @utm.timed_call('.compute')
     def compute() -> utt.Matrix:
         assert isinstance(of, str)
         matrix = utt.unpandas(uta.get_data(adata, of, by='obs'))
@@ -468,10 +473,11 @@ def get_fraction_of_var_per_obs(
                            compute, inplace, infocus, by)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_fraction_of_obs_per_var(
     adata: AnnData,
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     inplace: bool = True,
     infocus: bool = False,
@@ -488,10 +494,11 @@ def get_fraction_of_obs_per_var(
 
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
-    If ``inplace``, the data will be stored in ``<of>|fraction_of_obs_per_var`` for future reuse,
-    and will also store the intermediate ``<of>|sum_per_var`` per-variable (gene) data.
+    If ``inplace`` (default: {inplace}), the data will be stored in ``<of>|fraction_of_obs_per_var``
+    for future reuse, and will also store the intermediate ``<of>|sum_per_var`` per-variable (gene)
+    data.
 
-    If ``infocus`` (implies ``inplace``), also makes the result the new focus.
+    If ``infocus`` (default: {infocus}, implies ``inplace``), also makes the result the new focus.
 
     If ``by`` is specified, it forces the layout of the returned data (see
     :py:func:`metacells.utilities.annotation.get_vo_data`).
@@ -505,7 +512,7 @@ def get_fraction_of_obs_per_var(
     _, of = _per_of(adata, of, ['vo'])
     to = of + '|fraction_of_obs_per_var'
 
-    @timed.call('.compute')
+    @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         assert isinstance(of, str)
         matrix = utt.unpandas(uta.get_data(adata, of, by='var'))
@@ -525,10 +532,11 @@ def get_fraction_of_obs_per_var(
                            compute, inplace, infocus, by)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_mean_per_obs(
     adata: AnnData,
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     inplace: bool = True,
 ) -> NamedData:
@@ -538,7 +546,7 @@ def get_mean_per_obs(
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
     Use the ``<of>|mean_per_obs`` per-observation (cell) data if it exists. Otherwise, compute
-    it, and if ``inplace`` store it for future reuse.
+    it, and if ``inplace`` (default: {inplace}), store it for future reuse.
 
     If ``inplace``, also store the intermediate per-observation ``<of>|sum_per_obs`` for future
     reuse.
@@ -548,7 +556,7 @@ def get_mean_per_obs(
     per_of, of = _per_of(adata, of, ['vo', 'oo'])
     to = of + '|mean_per_obs'
 
-    @timed.call('.compute')
+    @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         sum_per_obs = \
             utt.unpandas(get_per_obs(adata, utc.sum_axis, of,
@@ -558,10 +566,11 @@ def get_mean_per_obs(
     return _derive_1d_data(adata, per_of, of, 'o', to, compute, inplace)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_mean_per_var(
     adata: AnnData,
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     inplace: bool = True,
 ) -> NamedData:
@@ -571,7 +580,7 @@ def get_mean_per_var(
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
     Use the ``<of>|mean_per_var`` per-variable (cell) data if it exists. Otherwise, compute it, and
-    if ``inplace`` store it for future reuse.
+    if ``inplace`` (default: {inplace}), store it for future reuse.
 
     If ``inplace``, will also store the intermediate per-variable ``<of>|sum_per_var`` for future
     reuse.
@@ -581,7 +590,7 @@ def get_mean_per_var(
     per_of, of = _per_of(adata, of, ['vo', 'vv'])
     to = of + '|mean_per_var'
 
-    @timed.call('.compute')
+    @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         sum_per_var = \
             utt.unpandas(get_per_var(adata, utc.sum_axis, of,
@@ -591,10 +600,11 @@ def get_mean_per_var(
     return _derive_1d_data(adata, per_of, of, 'v', to, compute, inplace)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_fraction_per_obs(
     adata: AnnData,
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     inplace: bool = True,
 ) -> NamedData:
@@ -605,7 +615,7 @@ def get_fraction_per_obs(
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
     Use the ``<of>|fraction_per_obs`` per-observation (cell) data if it exists. Otherwise, compute
-    it, and if ``inplace`` store it for future reuse.
+    it, and if ``inplace`` (default: {inplace}), store it for future reuse.
 
     If ``inplace``, also store the intermediate per-observation ``<of>|sum_per_obs`` for future
     reuse.
@@ -615,7 +625,7 @@ def get_fraction_per_obs(
     per_of, of = _per_of(adata, of, ['vo', 'oo'])
     to = of + '|fraction_per_obs'
 
-    @timed.call('.compute')
+    @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         sum_per_obs = \
             utt.unpandas(get_per_obs(adata, utc.sum_axis, of,
@@ -625,10 +635,11 @@ def get_fraction_per_obs(
     return _derive_1d_data(adata, per_of, of, 'o', to, compute, inplace)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_fraction_per_var(
     adata: AnnData,
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     inplace: bool = True,
 ) -> NamedData:
@@ -639,7 +650,7 @@ def get_fraction_per_var(
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
     Use the ``<of>|fraction_per_var`` per-variable (cell) data if it exists. Otherwise, compute it,
-    and if ``inplace`` store it for future reuse.
+    and if ``inplace`` (default: {inplace}) store it for future reuse.
 
     If ``inplace``, will also store the intermediate per-variable ``<of>|sum_per_var`` for future
     reuse.
@@ -649,7 +660,7 @@ def get_fraction_per_var(
     per_of, of = _per_of(adata, of, ['vo', 'vv'])
     to = of + '|fraction_per_var'
 
-    @timed.call('.compute')
+    @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         sum_per_var = \
             utt.unpandas(get_per_var(adata, utc.sum_axis, of,
@@ -659,10 +670,11 @@ def get_fraction_per_var(
     return _derive_1d_data(adata, per_of, of, 'v', to, compute, inplace)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_variance_per_obs(
     adata: AnnData,
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     inplace: bool = True,
 ) -> NamedData:
@@ -673,7 +685,7 @@ def get_variance_per_obs(
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
     Use the ``<of>|variance_per_obs`` per-observation (cell) data if it exists. Otherwise, compute
-    it, and if ``inplace`` store it for future reuse.
+    it, and if ``inplace`` (default: {inplace}), store it for future reuse.
 
     If ``inplace``, also store the intermediate per-observation ``<of>|sum_per_obs`` and
     ``<of>|sum_squared_per_obs`` data for future reuse.
@@ -681,7 +693,7 @@ def get_variance_per_obs(
     per_of, of = _per_of(adata, of, ['vo', 'oo'])
     to = of + '|variance_per_obs'
 
-    @timed.call('.compute')
+    @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         sum_per_obs = \
             utt.unpandas(get_per_obs(adata, utc.sum_axis, of,
@@ -698,10 +710,11 @@ def get_variance_per_obs(
     return _derive_1d_data(adata, per_of, of, 'o', to, compute, inplace)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_variance_per_var(
     adata: AnnData,
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     inplace: bool = True,
 ) -> NamedData:
@@ -711,7 +724,7 @@ def get_variance_per_var(
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
     Use the ``<of>|variance_per_var`` per-variable (gene) data if it exists. Otherwise, compute it,
-    and if ``inplace`` store it for future reuse.
+    and if ``inplace`` (default: {inplace}), store it for future reuse.
 
     If ``inplace``, also store the intermediate per-variable ``<of>|sum_per_var`` and
     ``<of>|sum_squared_per_var`` data for future reuse.
@@ -719,7 +732,7 @@ def get_variance_per_var(
     per_of, of = _per_of(adata, of, ['vo', 'vv'])
     to = of + '|variance_per_var'
 
-    @timed.call('.compute')
+    @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         sum_per_var = \
             utt.unpandas(get_per_var(adata, utc.sum_axis, of,
@@ -736,10 +749,11 @@ def get_variance_per_var(
     return _derive_1d_data(adata, per_of, of, 'v', to, compute, inplace)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_relative_variance_per_var(
     adata: AnnData,
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     inplace: bool = True,
 ) -> NamedData:
@@ -750,7 +764,7 @@ def get_relative_variance_per_var(
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
     Use the ``<of>|relative_variance_per_var`` per-variable (cell) data if it exists. Otherwise,
-    compute it, and if ``inplace`` store it for future reuse.
+    compute it, and if ``inplace`` (default: {inplace}), store it for future reuse.
 
     If ``inplace``, also store the intermediate per-variable ``<of>|variance``,
     ``<of>|mean_per_var``, ``<of>|sum_per_var`` and the ``<of>|sum_squared_per_var`` data for future
@@ -759,7 +773,7 @@ def get_relative_variance_per_var(
     per_of, of = _per_of(adata, of, ['vo', 'vv'])
     to = of + '|relative_variance_per_var'
 
-    @timed.call('.compute')
+    @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         variance_per_var = \
             utt.unpandas(get_variance_per_var(adata, of, inplace=inplace).data)
@@ -777,10 +791,11 @@ def get_relative_variance_per_var(
     return _derive_1d_data(adata, per_of, of, 'v', to, compute, inplace)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_normalized_variance_per_var(
     adata: AnnData,
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     window_size: int = 100,
     inplace: bool = True,
@@ -790,16 +805,17 @@ def get_normalized_variance_per_var(
     (gene) of some per-variable-per-observation data.
 
     The median-relative-variance-of-similar is the median relative variance of the ``window_size``
-    variables (genes) with the most similar mean to the one being normalized. In general, the
-    relative variance tends to (but doesn't always) go up for higher-mean variables. By normalizing
-    by the median relative variance of variables of a similar mean, we factor out this dependency on
-    the mean to decide which variables (genes) carry more meaningful information (and are more
-    suitable to be picked as "feature genes").
+    (default: {window_size}) variables (genes) with the most similar mean to the one being
+    normalized. In general, the relative variance tends to (but doesn't always) go up for
+    higher-mean variables. By normalizing by the median relative variance of variables of a similar
+    mean, we factor out this dependency on the mean to decide which variables (genes) carry more
+    meaningful information (and are more suitable to be picked as "feature genes").
 
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
     Use the ``<of>|normalized_variance_by_<window_size>_per_var`` per-variable (gene) data if it
-    exists. Otherwise, compute it, and if ``inplace`` store it for future reuse.
+    exists. Otherwise, compute it, and if ``inplace`` (default: {inplace}), store it for future
+    reuse.
 
     If ``inplace``, also store the intermediate per-variable ``<of>|relative_variance_per_var``,
     ``<of>|variance_per_var``, ``<of>|mean_per_var``, ``<of>|sum_per_var`` and the
@@ -808,7 +824,7 @@ def get_normalized_variance_per_var(
     per_of, of = _per_of(adata, of, ['vo', 'vv'])
     to = '%s|normalized_variance_by_%s_per_var' % (of, window_size)
 
-    @timed.call('.compute')
+    @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         relative_variance_per_var = \
             utt.unpandas(get_relative_variance_per_var(adata, of,
@@ -824,10 +840,11 @@ def get_normalized_variance_per_var(
     return _derive_1d_data(adata, per_of, of, 'v', to, compute, inplace)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_obs_obs_correlation(
     adata: AnnData,
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     inplace: bool = True,
 ) -> NamedData:
@@ -837,14 +854,14 @@ def get_obs_obs_correlation(
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
     Use the ``<of>|obs_obs_correlation`` per-observation-per-observation (cell) data if it exists.
-    Otherwise, compute it, and if ``inplace`` store it for future reuse.
+    Otherwise, compute it, and if ``inplace`` (default: {inplace}) store it for future reuse.
 
     Returns the matrix and its name.
     '''
     per_of, of = _per_of(adata, of, ['vo', 'oo'])
     to = of + '|obs_obs_correlation'
 
-    @timed.call('.compute')
+    @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         assert isinstance(of, str)
         if per_of == 'vo':
@@ -859,10 +876,11 @@ def get_obs_obs_correlation(
     return _derive_2d_data(adata, per_of, of, 'oo', to, compute, inplace)
 
 
-@timed.call()
+@utm.timed_call()
+@utd.expand_doc()
 def get_var_var_correlation(
     adata: AnnData,
-    of: Optional[WhichData] = None,
+    of: Optional[str] = None,
     *,
     inplace: bool = True,
 ) -> NamedData:
@@ -872,14 +890,14 @@ def get_var_var_correlation(
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
     Use the ``<of>|var_var_correlation`` per-variable-per-variable (gene) data if it exists.
-    Otherwise, compute it, and if ``inplace`` store it for future reuse.
+    Otherwise, compute it, and if ``inplace`` (default: {inplace}), store it for future reuse.
 
     Returns the matrix and its name.
     '''
     per_of, of = _per_of(adata, of, ['vo', 'vv'])
     to = of + '|var_var_correlation'
 
-    @timed.call('.compute')
+    @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         assert isinstance(of, str)
         if per_of == 'vo':
@@ -896,23 +914,19 @@ def get_var_var_correlation(
 
 def _per_of(
     adata: AnnData,
-    of: Optional[WhichData],
+    of: Optional[str],
     allowed: List[str]
 ) -> Tuple[str, str]:
     if of is None:
-        name = adata.uns['__focus__']
-    elif isinstance(of, NamedData):
-        name = of.name
-    else:
-        name = of
+        of = adata.uns['__focus__']
 
-    per_of = uta.which_data(adata, name)
+    per_of = uta.which_data(adata, of)
     if per_of not in allowed:
         raise ValueError('the data: %s is not per: %s'
-                         % (name, ', '.join(['"%s"' % expected
-                                             for expected in allowed])))
+                         % (of, ', '.join(['"%s"' % expected
+                                           for expected in allowed])))
 
-    return per_of, name
+    return per_of, of
 
 
 def _derive_vo_data(

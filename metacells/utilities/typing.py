@@ -8,7 +8,7 @@ import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from scipy import sparse  # type: ignore
 
-import metacells.utilities.timing as timed
+import metacells.utilities.timing as utm
 
 __all__ = [
     'DATA_TYPES',
@@ -53,7 +53,7 @@ Vector = Union[np.ndarray, pd.Series]
 Shaped = Union[Matrix, Vector]
 
 
-@timed.call()
+@utm.timed_call()
 def canonize(matrix: Matrix) -> None:
     '''
     If the data is sparse, ensure it is in "canonical format", which makes most operations on it
@@ -86,7 +86,7 @@ def frozen(data: Shaped) -> bool:
     return not data.data.flags.writeable
 
 
-@timed.call()
+@utm.timed_call()
 def freeze(data: Shaped) -> None:
     '''
     Protect data against future modification.
@@ -105,7 +105,7 @@ def freeze(data: Shaped) -> None:
                                   % data.getformat())
 
 
-@timed.call()
+@utm.timed_call()
 def unfreeze(data: Shaped) -> None:
     '''
     Permit data future modification of some data.
@@ -144,11 +144,12 @@ def to_np_array(data: Shaped, *, copy: Optional[bool] = False) -> np.ndarray:
     '''
     if sparse.issparse(data):
         assert copy is not None
-        with timed.step('toarray'):
+        with utm.timed_step('toarray'):
             if data.ndim == 2:
-                timed.parameters(results=data.shape[0], elements=data.shape[1])
+                utm.timed_parameters(results=data.shape[0],
+                                     elements=data.shape[1])
             else:
-                timed.parameters(size=data.shape[0])
+                utm.timed_parameters(size=data.shape[0])
             return data.toarray()
 
     data = unpandas(data)

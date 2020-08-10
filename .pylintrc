@@ -13,9 +13,10 @@ disable=C0330,
         too-many-arguments,
         too-many-lines,
         wrong-import-order,
+        missing-module-docstring,
 
 [STRING]
 check-quote-consistency=yes
 
 [BASIC]
-good-names=X,n,m,O_N,O_N_Log_N,by,of,to
+good-names=X,n,m,O_N,O_N_Log_N,by,of,to,version

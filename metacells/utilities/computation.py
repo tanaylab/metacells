@@ -21,7 +21,7 @@ from scipy import sparse  # type: ignore
 
 import metacells.extensions as xt  # type: ignore
 import metacells.utilities.documentation as utd
-import metacells.utilities.timing as timed
+import metacells.utilities.timing as utm
 import metacells.utilities.typing as utt
 from metacells.utilities.threading import SharedStorage, parallel_for
 
@@ -31,7 +31,7 @@ __all__ = [
 
     'corrcoef',
 
-    'log_matrix',
+    'log_data',
 
     'max_axis',
     'min_axis',
@@ -50,7 +50,7 @@ __all__ = [
 ]
 
 
-@ timed.call()
+@ utm.timed_call()
 def to_layout(matrix: utt.Matrix, layout: str) -> utt.Matrix:  # pylint: disable=too-many-return-statements
     '''
     Re-layout a matrix for efficient axis slicing/processing.
@@ -79,15 +79,16 @@ def to_layout(matrix: utt.Matrix, layout: str) -> utt.Matrix:  # pylint: disable
             matrix = relayout_compressed(matrix)
         else:
             name = '.to' + to_axis_format
-            with timed.step(name):
-                timed.parameters(rows=matrix.shape[0], columns=matrix.shape[1])
+            with utm.timed_step(name):
+                utm.timed_parameters(rows=matrix.shape[0],
+                                     columns=matrix.shape[1])
                 matrix = getattr(matrix, name[1:])()
 
     else:  # Dense.
         matrix = utt.unpandas(matrix)
         order = utt.DENSE_FAST_FLAG[layout][0]
-        with timed.step('.ravel'):
-            timed.parameters(rows=matrix.shape[0], columns=matrix.shape[1])
+        with utm.timed_step('.ravel'):
+            utm.timed_parameters(rows=matrix.shape[0], columns=matrix.shape[1])
             matrix = np.reshape(np.ravel(matrix, order=order),
                                 matrix.shape, order=order)
 
@@ -97,7 +98,7 @@ def to_layout(matrix: utt.Matrix, layout: str) -> utt.Matrix:  # pylint: disable
     return matrix
 
 
-@ timed.call()
+@ utm.timed_call()
 def relayout_compressed(matrix: sparse.spmatrix) -> sparse.spmatrix:
     '''
     Efficient parallel conversion of a CSR/CSC matrix to a CSC/CSR matrix.
@@ -113,8 +114,8 @@ def relayout_compressed(matrix: sparse.spmatrix) -> sparse.spmatrix:
 
     output_indptr = np.empty(output_bands_count + 1, dtype=matrix.indptr.dtype)
     output_indptr[0:2] = 0
-    with timed.step('cumsum'):
-        timed.parameters(elements=nnz_elements_of_output_bands.size - 1)
+    with utm.timed_step('cumsum'):
+        utm.timed_parameters(elements=nnz_elements_of_output_bands.size - 1)
         np.cumsum(nnz_elements_of_output_bands[:-1], out=output_indptr[2:])
 
     output_indices = np.empty(matrix.indices.size, dtype=matrix.indices.dtype)
@@ -129,9 +130,9 @@ def relayout_compressed(matrix: sparse.spmatrix) -> sparse.spmatrix:
                   matrix.data, matrix.indices, matrix.indptr,
                   output_data, output_indices, output_indptr[1:])
 
-    with timed.step('.collect_compressed'):
-        timed.parameters(results=output_bands_count,
-                         elements=matrix_bands_count)
+    with utm.timed_step('.collect_compressed'):
+        utm.timed_parameters(results=output_bands_count,
+                             elements=matrix_bands_count)
         parallel_for(collect_compressed, matrix_bands_count)
 
     assert output_indptr[-1] == matrix.indptr[-1]
@@ -144,43 +145,41 @@ def relayout_compressed(matrix: sparse.spmatrix) -> sparse.spmatrix:
     return matrix
 
 
-@timed.call()
+@utm.timed_call()
 def corrcoef(matrix: utt.Matrix, *, rowvar: bool = True) -> np.ndarray:
     '''
-    Compute correlations between all observations (rows, cells) containing variables (columns,
-    genes).
+    Drop-in replacement for ``np.corrcoef``, which also works for sparse matrices.
 
     .. todo::
 
-        This always uses the dense implementation, which seems to be the best choice for correlating
+        This always uses the dense implementation. It might still be the best choice for correlating
         the less-sparse "feature" genes.
     '''
     matrix = utt.to_np_array(matrix)
 
     if rowvar:
-        timed.parameters(results=matrix.shape[0], elements=matrix.shape[1])
+        utm.timed_parameters(results=matrix.shape[0], elements=matrix.shape[1])
     else:
-        timed.parameters(results=matrix.shape[1], elements=matrix.shape[0])
+        utm.timed_parameters(results=matrix.shape[1], elements=matrix.shape[0])
 
     return np.corrcoef(matrix, rowvar=rowvar)
 
 
-#: A function that derives one matrix from another of the same size.
-def log_matrix(
-    matrix: utt.Matrix,
+def log_data(
+    data: utt.Shaped,
     *,
     base: Optional[float] = None,
     normalization: float = 0,
 ) -> Callable[[utt.Matrix], utt.Matrix]:
     '''
-    Return the log of the values in the ``matrix``.
+    Return the log of the values in the ``data``.
 
-    The ``base`` is added to the count before ``log`` is applied, to handle the common case of zero
-    values in sparse data.
+    If ``base`` is specified (default: {base}), use this base log. Otherwise, use the natural
+    logarithm.
 
-    The ``normalization`` specifies how to deal with zeros in the data:
+    The ``normalization`` (default: {normalization}) specifies how to deal with zeros in the data:
 
-    * If it is zero (the default), an input zeros will become an output ``NaN``.
+    * If it is zero, an input zeros will become an output ``NaN``.
 
     * If it is positive, it is added to the input before computing the log.
 
@@ -190,16 +189,16 @@ def log_matrix(
 
     .. note::
 
-        The result is always a dense matrix, as even for sparse data, the log is rarely zero.
+        The result is always dense, as even for sparse data, the log is rarely zero.
     '''
-    matrix = utt.to_np_array(matrix, copy=True)
+    data = utt.to_np_array(data, copy=True)
 
     if normalization > 0:
-        matrix += normalization
+        data += normalization
     else:
-        where = matrix > 0
+        where = data > 0
         if normalization < 0:
-            matrix[~where] = np.amin(matrix[where])
+            data[~where] = np.amin(data[where])
 
     if base is None:
         log_function = np.log
@@ -216,21 +215,21 @@ def log_matrix(
         rebase = True
 
     if normalization == 0:
-        log_function(matrix, out=matrix, where=where)
-        matrix[~where] = None
+        log_function(data, out=data, where=where)
+        data[~where] = None
     else:
-        log_function(matrix, out=matrix)
+        log_function(data, out=data)
 
     if rebase:
-        matrix /= np.log(base)
+        data /= np.log(base)
 
     if normalization < 0:
-        matrix[~where] += normalization
+        data[~where] += normalization
 
-    return matrix
+    return data
 
 
-@timed.call()
+@utm.timed_call()
 def downsample_matrix(
     matrix: utt.Matrix,
     *,
@@ -244,13 +243,15 @@ def downsample_matrix(
     Downsample the rows (``axis = 1``) or columns (``axis = 0``) of some ``matrix`` such that the
     sum of each one becomes ``samples``.
 
-    If the matrix is sparse, if not ``eliminate_zeros``, then do not perform the final phase of
-    eliminating leftover zero values from the compressed format. This means the result will not be
-    in "canonical format" so some ``scipy`` sparse operations on it will be slower.
+    If the matrix is sparse, and ``eliminate_zeros`` (default: {eliminate_zeros}), then perform a
+    final phase of eliminating leftover zero values from the compressed format. This means the
+    result will be in "canonical format" so further ``scipy`` sparse operations on it will be
+    faster.
 
-    If ``inplace``, modify the matrix, otherwise, return a modified copy.
+    If ``inplace`` (default: {inplace}), modify the matrix, otherwise, return a modified copy.
 
-    A ``random_seed`` can be provided to make the operation replicable.
+    A non-zero ``random_seed`` (default: {random_seed}) can be provided to make the operation
+    replicable.
     '''
     assert matrix.ndim == 2
     assert 0 <= axis <= 1
@@ -313,14 +314,14 @@ def _downsample_sparse_matrix(
             _downsample_array(input_vector, samples, tmp,
                               output_vector, index_seed)
 
-    with timed.step('.sparse'):
-        timed.parameters(results=results_count,
-                         elements=elements_count, samples=samples)
+    with utm.timed_step('.sparse'):
+        utm.timed_parameters(results=results_count,
+                             elements=elements_count, samples=samples)
         parallel_for(downsample_sparse_vectors, results_count)
 
     output.has_sorted_indices = True
     if eliminate_zeros:
-        with timed.step('.eliminate_zeros'):
+        with utm.timed_step('.eliminate_zeros'):
             utt.unfreeze(output)
             output.eliminate_zeros()
             output.has_canonical_format = True
@@ -413,15 +414,15 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
 
     results_count = matrix.shape[1 - axis]
 
-    with timed.step('.dense'):
-        timed.parameters(results=results_count,
-                         elements=elements_count, samples=samples)
+    with utm.timed_step('.dense'):
+        utm.timed_parameters(results=results_count,
+                             elements=elements_count, samples=samples)
         parallel_for(downsample_dense_vectors, results_count)
 
     return output
 
 
-@timed.call()
+@utm.timed_call()
 @utd.expand_doc(data_types=','.join(['``%s``' % data_type for data_type in utt.DATA_TYPES]))
 def downsample_array(
     array: np.ndarray,
@@ -440,11 +441,12 @@ def downsample_array(
 
     * A desired total number of ``samples``.
 
-    * An optional temporary storage Numpy array minimize allocations for multiple invocations.
+    * An optional ``tmp`` storage Numpy array minimize allocations for multiple invocations.
 
     * An optional Numpy array ``output`` to hold the results (otherwise, the input is overwritten).
 
-    * An optional random seed to make the operation replicable.
+    * An optional non-zero ``random_seed`` (default: {random_seed}) to make the operation
+      replicable.
 
     The arrays may have any of the data types: {data_types}.
 
@@ -469,7 +471,7 @@ def downsample_array(
     observations with a higher sample count, which will result in an inflated estimation of their
     similarity to other observations. Downsampling avoids this effect.
     '''
-    timed.parameters(elements=array.size, samples=samples)
+    utm.timed_parameters(elements=array.size, samples=samples)
     array = utt.unpandas(array)
     return _downsample_array(array, samples, tmp, output, random_seed)
 
@@ -506,7 +508,7 @@ def downsample_tmp_size(size: int) -> int:
     return xt.downsample_tmp_size(size)
 
 
-@timed.call()
+@utm.timed_call()
 def max_axis(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the maximal element per row (``axis`` = 1) or column (``axis`` = 0) of some ``matrix``.
@@ -516,7 +518,7 @@ def max_axis(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     return _reduce_matrix(matrix, axis, lambda matrix: np.amax(matrix, axis=axis))
 
 
-@timed.call()
+@utm.timed_call()
 def min_axis(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the minimal element per row (``axis`` = 1) or column (``axis`` = 0) of some ``matrix``.
@@ -526,7 +528,7 @@ def min_axis(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     return _reduce_matrix(matrix, axis, lambda matrix: np.amin(matrix, axis=axis))
 
 
-@timed.call()
+@utm.timed_call()
 def nnz_axis(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the number of non-zero elements per row (``axis`` = 1) or column (``axis`` = 0) of some
@@ -537,7 +539,7 @@ def nnz_axis(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     return _reduce_matrix(matrix, axis, lambda matrix: np.count_nonzero(matrix, axis=axis))
 
 
-@timed.call()
+@utm.timed_call()
 def sum_axis(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the total of the values per row (``axis`` = 1) or column (``axis`` = 0) of some
@@ -546,7 +548,7 @@ def sum_axis(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     return _reduce_matrix(matrix, axis, lambda matrix: matrix.sum(axis=axis))
 
 
-@timed.call()
+@utm.timed_call()
 def sum_squared_axis(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the total of the squared values per row (``axis`` = 1) or column (``axis`` = 0) of some
@@ -575,7 +577,7 @@ def _reduce_matrix(
     results_count = matrix.shape[1 - axis]
 
     if sparse.issparse(matrix):
-        step = '.sparse'
+        timed_step = '.sparse'
         elements_count = matrix.nnz / results_count
         axis_format = ['csc', 'csr'][axis]
         if matrix.getformat() != axis_format:
@@ -586,7 +588,7 @@ def _reduce_matrix(
                 % (axis, matrix.getformat(), axis_format)
             warn(reducing_sparse_matrix_of_inefficient_format)
     else:
-        step = '.dense'
+        timed_step = '.dense'
         matrix = utt.unpandas(matrix)
         elements_count = matrix.shape[axis]
         axis_flag = [matrix.flags.f_contiguous,
@@ -603,21 +605,19 @@ def _reduce_matrix(
                    ['f_contiguous', 'c_contiguous'][axis])
             warn(reducing_dense_matrix_of_inefficient_format)
 
-    with timed.step(step):
-        timed.parameters(results=results_count, elements=elements_count)
+    with utm.timed_step(timed_step):
+        utm.timed_parameters(results=results_count, elements=elements_count)
         return utt.to_1d_array(reducer(matrix))
 
 
-@timed.call()
+@utm.timed_call()
 def bincount_array(
     array: np.ndarray,
     *,
     minlength: int = 0,
 ) -> np.ndarray:
     '''
-    Count the number of occurrences of each value in an ``array``.
-
-    This is identical to Numpy's ``bincount``.
+    Drop-in replacement for ``np.bincount``, which is timed and works on Pandas data.
 
     .. todo::
 
@@ -626,7 +626,7 @@ def bincount_array(
     '''
     array = utt.unpandas(array)
     result = np.bincount(array, minlength=minlength)
-    timed.parameters(size=array.size, bins=result.size)
+    utm.timed_parameters(size=array.size, bins=result.size)
     return result
 
 

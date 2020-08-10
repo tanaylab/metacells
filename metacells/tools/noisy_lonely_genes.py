@@ -15,7 +15,7 @@ __all__ = [
 ]
 
 
-@ut.call()
+@ut.timed_call()
 @ut.expand_doc()
 def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
     adata: AnnData,
@@ -69,8 +69,8 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
     If ``inplace`` (default: {inplace}), these are written to ``adata`` and the function returns
     ``None``. Otherwise this is returned as a Pandas series (indexed by the variable names).
 
-    If not ``intermediate``, this discards all the intermediate data used (e.g. sums). Otherwise,
-    such data is kept for future reuse.
+    If not ``intermediate`` (default: {intermediate}), this discards all the intermediate data used
+    (e.g. sums). Otherwise, such data is kept for future reuse.
 
     **Computation Parameters**
 

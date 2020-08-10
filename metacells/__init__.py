@@ -10,10 +10,4 @@ __license__ = 'MIT'
 __author__ = 'Oren Ben-Kiki'
 __email__ = 'oren@ben-kiki.org'
 
-import importlib_metadata  # type: ignore
-try:
-    __version__ = importlib_metadata.version(__name__)
-except:  # pylint: disable=bare-except
-    from warnings import warn
-    warn('unknown metacells version')
-    __version__ = 'unknown'
+from .version import version as __version__

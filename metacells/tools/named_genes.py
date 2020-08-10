@@ -15,7 +15,7 @@ __all__ = [
 ]
 
 
-@ut.call()
+@ut.timed_call()
 def find_named_genes(
     adata: AnnData,
     pattern: Union[str, Pattern],

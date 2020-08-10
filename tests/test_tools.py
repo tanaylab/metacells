@@ -25,7 +25,7 @@ def _load(path: str) -> Tuple[AnnData, Dict[str, Any]]:
 
     with open(path[:-4] + 'yaml') as file:
         expected = yaml.safe_load(file)
-    with mc.ut.step('read'):
+    with mc.ut.timed_step('read'):
         adata = sc.read(path)
 
     mc.ut.canonize(adata.X)

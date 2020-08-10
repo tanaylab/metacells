@@ -16,7 +16,7 @@ __all__ = [
 ]
 
 
-@ut.call()
+@ut.timed_call()
 @ut.expand_doc()
 def find_properly_sampled_cells(
     adata: AnnData,
@@ -29,6 +29,8 @@ def find_properly_sampled_cells(
 ) -> Optional[pd.Series]:
     '''
     Detect properly-sampled cells.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
     Due to both technical effects and natural variance between cells, the total number of UMIs
     varies from cell to cell.
@@ -51,8 +53,8 @@ def find_properly_sampled_cells(
     If ``inplace`` (default: {inplace}), this is written to ``adata`` and the function returns
     ``None``. Otherwise this is returned as a Pandas series (indexed by the observation names).
 
-    If not ``intermediate``, this discards all the intermediate data used (e.g. sums). Otherwise,
-    such data is kept for future reuse.
+    If not ``intermediate`` (default: {intermediate}), this discards all the intermediate data used
+    (e.g. sums). Otherwise, such data is kept for future reuse.
 
     **Computation Parameters**
 
@@ -90,18 +92,20 @@ def find_properly_sampled_cells(
     return pd.Series(cells_mask, index=adata.obs_names)
 
 
-@ut.call()
+@ut.timed_call()
 @ut.expand_doc()
 def find_properly_sampled_genes(
     adata: AnnData,
-    *,
     of: Optional[str] = None,
+    *,
     minimal_total_umis_of_genes: Optional[int] = 1,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[pd.Series]:
     '''
     Detect properly-sampled genes.
+
+    If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
     Due to both technical effects and natural variance between genes, the expression of genes
     varies greatly between cells. This is exactly the information we are trying to analyze.
@@ -130,8 +134,8 @@ def find_properly_sampled_genes(
     If ``inplace`` (default: {inplace}), this is written to ``adata`` and the function returns
     ``None``. Otherwise this is returned as a Pandas series (indexed by the variable names).
 
-    If not ``intermediate``, this discards all the intermediate data used (e.g. sums). Otherwise,
-    such data is kept for future reuse.
+    If not ``intermediate`` (default: {intermediate}), this discards all the intermediate data used
+    (e.g. sums). Otherwise, such data is kept for future reuse.
 
     **Computation Parameters**
 
