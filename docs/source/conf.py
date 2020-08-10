@@ -41,6 +41,7 @@ nitpick_ignore = [
     ('py:class', 'Optional[Callable[[metacells.utilities.annotation.SlicingContext, str], None]]'),
     ('py:class', 'pandas.core.frame.DataFrame'),
     ('py:class', 'pandas.core.series.Series'),
+    ('py:class', 're.Pattern'),
     ('py:class', 'scipy.sparse.base.spmatrix'),
 ]
 

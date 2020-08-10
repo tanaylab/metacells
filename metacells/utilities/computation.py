@@ -10,7 +10,9 @@ All the functions here (optionally) collect timing information using
 analysis pipeline.
 '''
 
-from typing import Callable, Optional
+import re
+from re import Pattern
+from typing import Callable, Collection, Optional, Union
 from warnings import warn
 
 import numpy as np  # type: ignore
@@ -44,6 +46,7 @@ __all__ = [
     'downsample_tmp_size',
 
     'sliding_window_function',
+    'regex_matches_mask',
 ]
 
 
@@ -693,3 +696,14 @@ def sliding_window_function(
         reordered = reordered[reverse_order_indices]
 
     return reordered
+
+
+def regex_matches_mask(pattern: Union[str, Pattern], strings: Collection[str]) -> np.ndarray:
+    '''
+    Given a collection of ``strings``, return a Numpy boolean mask specifying which of them the
+    given regular expression ``pattern``.
+    '''
+    if isinstance(pattern, str):
+        pattern = re.compile(pattern)
+    assert isinstance(pattern, Pattern)
+    return np.array([bool(pattern.match(string)) for string in strings], dtype='bool')

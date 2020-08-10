@@ -3,6 +3,7 @@ Metacells single-cell RNA sequencing.
 '''
 
 from . import preprocessing as pp
+from . import tools as tl
 from . import utilities as ut
 
 __license__ = 'MIT'

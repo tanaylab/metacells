@@ -19,11 +19,11 @@ __all__ = [
 @ut.expand_doc()
 def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
     adata: AnnData,
-    *,
     of: Optional[str] = None,
-    minimal_gene_fraction: float = 1e-5,
-    minimal_gene_relative_variance: float = 2.5,
-    maximal_gene_correlation: float = 0.15,
+    *,
+    minimal_fraction_of_genes: float = 1e-5,
+    minimal_relative_variance_of_genes: float = 2.5,
+    maximal_correlation_of_genes: float = 0.15,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[pd.Series]:
@@ -56,14 +56,15 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
 
     **Input**
 
-    An annotated ``adata``, where the observations are cells and the variables are genes, containing
-    the UMIs count in the ``of`` (default: the ``focus``) per-variable-per-observation data.
+    A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
+    observations are cells and the variables are genes, containing the UMIs count in the ``of``
+    (default: the focus) per-variable-per-observation data.
 
     **Returns**
 
     Variable (Gene) Annotations
         ``noisy_lonely_genes``
-            A boolean indicating whether the gene was found to be a noisy lonely gene.
+            A boolean mask indicating whether each gene was found to be a noisy lonely gene.
 
     If ``inplace`` (default: {inplace}), these are written to ``adata`` and the function returns
     ``None``. Otherwise this is returned as a Pandas series (indexed by the variable names).
@@ -77,14 +78,14 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
     gene UMI counts, do the following:
 
     1. Pick as candidates all genes whose fraction of the UMIs is at least
-       ``minimal_gene_fraction`` (default: {minimal_gene_fraction}).
+       ``minimal_fraction_of_genes`` (default: {minimal_fraction_of_genes}).
 
     2. Restrict the genes to include only genes whose relative variance is at least
-       ``minimal_gene_relative_variance`` (default: {minimal_gene_relative_variance}).
+       ``minimal_relative_variance_of_genes`` (default: {minimal_relative_variance_of_genes}).
 
     3. Finally restrict the genes to include only genes which have a correlation of at most
-       ``maximal_gene_correlation`` (default: {maximal_gene_correlation}) with at least one other
-       gene.
+       ``maximal_correlation_of_genes`` (default: {maximal_correlation_of_genes}) with at least one
+       other gene.
 
     .. todo::
 
@@ -96,8 +97,8 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
         relative_variance_of_genes = \
             ut.get_relative_variance_per_var(adata).data
 
-        fraction_mask = fraction_of_genes >= minimal_gene_fraction
-        variance_mask = relative_variance_of_genes >= minimal_gene_relative_variance
+        fraction_mask = fraction_of_genes >= minimal_fraction_of_genes
+        variance_mask = relative_variance_of_genes >= minimal_relative_variance_of_genes
         noisy_mask = fraction_mask & variance_mask
 
         noisy_adata = adata[:, noisy_mask]
@@ -109,7 +110,7 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
         max_correlation_of_noisy_genes = \
             np.nanmax(correlation_of_noisy_genes, axis=0)
 
-        lonely_mask = max_correlation_of_noisy_genes <= maximal_gene_correlation
+        lonely_mask = max_correlation_of_noisy_genes <= maximal_correlation_of_genes
 
         noisy_lonely_mask = noisy_mask
         noisy_lonely_mask[noisy_mask] = lonely_mask

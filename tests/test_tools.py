@@ -39,7 +39,7 @@ def _load(path: str) -> Tuple[AnnData, Dict[str, Any]]:
 def test_find_rare_genes_modules(path: str) -> None:
     adata, expected = _load(path)
 
-    mc.pp.find_rare_genes_modules(adata)
+    mc.tl.find_rare_genes_modules(adata)
 
     actual_rare_gene_modules = [
         list(module_gene_names) for module_gene_names
@@ -56,7 +56,7 @@ def test_find_noisy_lonely_genes(path: str) -> None:
 
     adata = adata[range(20000), :].copy()
 
-    mc.pp.find_noisy_lonely_genes(adata)
+    mc.tl.find_noisy_lonely_genes(adata)
 
     actual_noisy_lonely_gene_indices = \
         mc.ut.get_v_data(adata, 'noisy_lonely_genes')

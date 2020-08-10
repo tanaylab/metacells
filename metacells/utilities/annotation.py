@@ -251,14 +251,14 @@ def safe_slicing_derived(
 def slice(  # pylint: disable=redefined-builtin
     adata: AnnData,
     *,
-    cells: Optional[Collection] = None,
-    genes: Optional[Collection] = None,
+    obs: Optional[Collection] = None,
+    vars: Optional[Collection] = None,
     invalidated_prefix: Optional[str] = None,
 ) -> AnnData:
     '''
     Return new annotated data which includes a subset of the full ``adata``.
 
-    If ``cells`` and/or ``genes`` are specified, they should include either a boolean
+    If ``obs`` and/or ``vars`` are specified, they should include either a boolean
     mask or a collection of indices to include in the data slice. In the case of an indices array,
     it is assumed the indices are unique and sorted, that is that their effect is similar to a mask.
 
@@ -282,13 +282,19 @@ def slice(  # pylint: disable=redefined-builtin
     assert x_name not in adata.layers
     assert has_data(adata, focus)
 
-    if cells is None:
-        cells = range(adata.n_obs)
-    if genes is None:
-        genes = range(adata.n_vars)
+    if isinstance(obs, np.ndarray) and obs.dtype == 'bool':
+        will_slice_obs = not np.all(obs)
+    else:
+        if obs is None:
+            obs = range(adata.n_obs)
+        will_slice_obs = len(obs) != adata.n_obs
 
-    will_slice_obs = len(cells) != adata.n_obs
-    will_slice_var = len(genes) != adata.n_vars
+    if isinstance(vars, np.ndarray) and vars.dtype == 'bool':
+        will_slice_var = not np.all(vars)
+    else:
+        if vars is None:
+            vars = range(adata.n_vars)
+        will_slice_var = len(vars) != adata.n_vars
 
     if not will_slice_obs and not will_slice_var:
         with timed.step('.copy'):
@@ -299,7 +305,7 @@ def slice(  # pylint: disable=redefined-builtin
                    will_slice_var, invalidated_prefix)
 
     with timed.step('.builtin'):
-        bdata = adata[cells, genes]
+        bdata = adata[obs, vars]
 
     did_slice_obs = bdata.n_obs != adata.n_obs
     did_slice_var = bdata.n_vars != adata.n_vars

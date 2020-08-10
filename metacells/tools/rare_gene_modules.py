@@ -21,8 +21,8 @@ __all__ = [
 @ut.expand_doc()
 def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-statements,too-many-branches
     adata: AnnData,
-    *,
     of: Optional[str] = None,
+    *,
     maximal_fraction_of_cells_of_genes: float = 1e-3,
     minimal_max_umis_of_genes: int = 6,
     cluster_method_of_genes: str = 'ward',
@@ -45,8 +45,9 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
 
     **Input**
 
-    An annotated ``adata``, where the observations are cells and the variables are genes, containing
-    the UMIs count in the ``of`` (default: the ``focus``) per-variable-per-observation data.
+    A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
+    observations are cells and the variables are genes, containing the UMIs count in the ``of``
+    (default: the focus) per-variable-per-observation data.
 
     If not ``intermediate``, this discards all the intermediate data used (e.g. sums). Otherwise,
     such data is kept for future reuse.
@@ -55,18 +56,18 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
 
     Observation (Cell) Annotations
         ``cells_rare_gene_module``
-            The index of the gene module each cell expresses the most, or ``-1`` in the common case
-            it does not express any rare genes module.
+            The index of the rare gene module each cell expresses the most, or ``-1`` in the common
+            case it does not express any rare genes module.
 
     Variable (Gene) Annotations
         ``genes_rare_gene_module``
-            The index of the gene module each gene belongs to, or ``-1`` in the common case it does
-            not belong to any rare genes module.
+            The index of the rare gene module each gene belongs to, or ``-1`` in the common case it
+            does not belong to any rare genes module.
 
     Unstructured Annotations
         ``rare_gene_modules``
-            An array of gene modules, where every entry is the array of the names of the genes of
-            the module.
+            An array of rare gene modules, where every entry is the array of the names of the genes
+            of the module.
 
     If ``inplace``, these are written to ``adata`` and the function returns ``None``. Otherwise they
     are returned as tuple containing two data frames and an array.
@@ -148,7 +149,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
             if candidate_genes_count < minimal_size_of_modules:
                 return results()
 
-            candidate_data = ut.slice(adata, genes=candidate_genes_indices)
+            candidate_data = ut.slice(adata, vars=candidate_genes_indices)
 
         with ut.step('.correlate'):
             correlations_between_candidate_genes = \

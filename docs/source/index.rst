@@ -11,13 +11,12 @@ metacells documentation
   todo
   license
 
-Reference
-=========
+API
+===
 
 .. toctree::
   :maxdepth: 2
 
-  reference
+  API
 
 * :ref:`genindex`
-

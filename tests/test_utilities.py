@@ -401,3 +401,10 @@ def _test_annotations(full_matrix: ut.Matrix) -> None:
 
     data = ut.to_np_array(ut.get_fraction_of_obs_per_var(adata).data)
     assert np.allclose(data, np.array([[0/3, 1/5, 2/7], [3/3, 4/5, 5/7]]))
+
+
+def test_regex_matches_mask() -> None:
+    strings = ['foo', 'bar', 'baz']
+    actual = ut.regex_matches_mask('ba?', strings)
+    expected = np.array([False, True, True])
+    assert np.allclose(actual, expected)
