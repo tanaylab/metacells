@@ -30,7 +30,6 @@ def _load(path: str) -> Tuple[AnnData, Dict[str, Any]]:
 
     mc.ut.canonize(adata.X)
     mc.ut.prepare(adata, 'UMIs')
-    mc.ut.safe_slicing_data('gene_ids', mc.ut.ALWAYS_SAFE)
 
     LOADED[path] = (adata, expected)
     return adata, expected

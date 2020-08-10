@@ -15,6 +15,7 @@ import metacells.utilities.annotation as uta
 import metacells.utilities.computation as utc
 import metacells.utilities.timing as timed
 import metacells.utilities.typing as utt
+from metacells.utilities.annotation import _items
 
 __all__ = [
     'prepare',
@@ -66,7 +67,7 @@ def prepare(adata: AnnData, name: str) -> None:
 
     .. note::
 
-        This assumes it is safe to arbitrarily slice the ``X`` data.
+        This assumes it is safe to arbitrarily slice all the currently existing data.
 
     .. note::
 
@@ -77,9 +78,18 @@ def prepare(adata: AnnData, name: str) -> None:
     assert X is not None
     assert '__x__' not in adata.uns_keys()
 
+    uta.safe_slicing_data(name, uta.ALWAYS_SAFE)
     adata.uns['__x__'] = name
     adata.uns['__focus__'] = name
-    uta.safe_slicing_data(name, uta.ALWAYS_SAFE)
+
+    for annotations in (adata.layers,
+                        adata.obs,
+                        adata.var,
+                        adata.obsp,
+                        adata.varp,
+                        adata.uns):
+        for data_name, _ in _items(annotations):
+            uta.safe_slicing_data(data_name, uta.ALWAYS_SAFE)
 
 
 def track_base_indices(adata: AnnData, *, name: str = 'base_index') -> None:
