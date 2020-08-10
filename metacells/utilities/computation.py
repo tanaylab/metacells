@@ -175,8 +175,15 @@ def log_matrix(
     The ``base`` is added to the count before ``log`` is applied, to handle the common case of zero
     values in sparse data.
 
-    The ``normalization`` (default: {normalization}) is added to the count before the log is
-    applied, to handle the common case of sparse data.
+    The ``normalization`` specifies how to deal with zeros in the data:
+
+    * If it is zero (the default), an input zeros will become an output ``NaN``.
+
+    * If it is positive, it is added to the input before computing the log.
+
+    * If it is negative, input zeros will become log(minimal positive value) + normalization,
+      that is, the zeros will be given a value this much smaller than the minimal "real"
+      log value.
 
     .. note::
 
@@ -184,14 +191,38 @@ def log_matrix(
     '''
     matrix = utt.to_np_array(matrix, copy=True)
 
-    matrix += normalization
-    if base == 2:
-        np.log2(matrix, out=matrix)
+    if normalization > 0:
+        matrix += normalization
     else:
-        np.log(matrix, out=matrix)
-        if base is not None:
-            assert base > 0
-            matrix /= np.log(base)
+        where = matrix > 0
+        if normalization < 0:
+            matrix[~where] = np.amin(matrix[where])
+
+    if base is None:
+        log_function = np.log
+        rebase = False
+    elif base == 2:
+        log_function = np.log2
+        rebase = False
+    elif base == 10:
+        log_function = np.log10
+        rebase = False
+    else:
+        assert base > 0
+        log_function = np.log
+        rebase = True
+
+    if normalization == 0:
+        log_function(matrix, out=matrix, where=where)
+        matrix[~where] = None
+    else:
+        log_function(matrix, out=matrix)
+
+    if rebase:
+        matrix /= np.log(base)
+
+    if normalization < 0:
+        matrix[~where] += normalization
 
     return matrix
 

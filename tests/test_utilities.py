@@ -297,22 +297,22 @@ def test_focus_on() -> None:
     assert ut.get_focus_name(adata) == 'test'
 
     with ut.focus_on(ut.get_log, adata, normalization=1) as log_data:
-        outer_focus = 'log_e_plus_1_of_test'
+        outer_focus = 'test|log_e_normalization_1'
         assert ut.get_focus_name(adata) == outer_focus
         assert id(log_data.data) == id(adata.layers[outer_focus])
 
-        with ut.focus_on(ut.get_downsample_of_var_per_obs, adata, of='test', samples=10) \
+        with ut.focus_on(ut.get_downsample_of_var_per_obs, adata, 'test', samples=10) \
                 as downsamled_data:
-            inner_focus = 'downsampled_10_var_per_obs_of_test'
+            inner_focus = 'test|downsample_10_var_per_obs'
             assert ut.get_focus_name(adata) == inner_focus
             assert id(downsamled_data.data) == id(adata.layers[inner_focus])
 
         assert ut.get_focus_name(adata) == outer_focus
         assert id(log_data.data) == id(adata.layers[outer_focus])
 
-        with ut.focus_on(ut.get_downsample_of_var_per_obs, adata, of='test', samples=10) \
+        with ut.focus_on(ut.get_downsample_of_var_per_obs, adata, 'test', samples=10) \
                 as downsamled_data:
-            inner_focus = 'downsampled_10_var_per_obs_of_test'
+            inner_focus = 'test|downsample_10_var_per_obs'
             assert ut.get_focus_name(adata) == inner_focus
             assert id(downsamled_data.data) == id(adata.layers[inner_focus])
             ut.del_vo_data(adata, outer_focus)
