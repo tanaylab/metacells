@@ -21,7 +21,7 @@ def find_named_genes(
     pattern: Union[str, Pattern],
     *,
     name: Optional[str] = None,
-) -> Optional[pd.Series]:
+) -> Optional[ut.PandasSeries]:
     '''
     Find genes by their name.
 

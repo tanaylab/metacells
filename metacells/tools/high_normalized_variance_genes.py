@@ -23,7 +23,7 @@ def find_high_normalized_variance_genes(
     minimal_normalized_variance_of_genes: float = 0.1,
     inplace: bool = True,
     intermediate: bool = True,
-) -> Optional[pd.Series]:
+) -> Optional[ut.PandasSeries]:
     '''
     Find genes which have high normalized variance (high variance/mean compared to other genes with
     a similar level of expression).
@@ -65,8 +65,9 @@ def find_high_normalized_variance_genes(
     '''
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         normalized_variance_of_genes = \
-            ut.unpandas(ut.get_normalized_variance_per_var(adata))
-        genes_mask = normalized_variance_of_genes >= minimal_normalized_variance_of_genes
+            ut.get_normalized_variance_per_var(adata).proper
+        genes_mask = \
+            normalized_variance_of_genes >= minimal_normalized_variance_of_genes
 
     if inplace:
         adata.var['high_normalized_variance_genes'] = genes_mask

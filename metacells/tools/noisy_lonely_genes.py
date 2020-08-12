@@ -26,7 +26,7 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
     maximal_correlation_of_genes: float = 0.15,
     inplace: bool = True,
     intermediate: bool = True,
-) -> Optional[pd.Series]:
+) -> Optional[ut.PandasSeries]:
     '''
     Detect noisy lonely genes.
 
@@ -93,9 +93,9 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
         :py:func:`find_noisy_lonely_genes`?
     '''
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        fraction_of_genes = ut.get_fraction_per_var(adata).data
+        fraction_of_genes = ut.get_fraction_per_var(adata).proper
         relative_variance_of_genes = \
-            ut.get_relative_variance_per_var(adata).data
+            ut.get_relative_variance_per_var(adata).proper
 
         fraction_mask = fraction_of_genes >= minimal_fraction_of_genes
         variance_mask = relative_variance_of_genes >= minimal_relative_variance_of_genes
@@ -104,7 +104,7 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
         noisy_adata = adata[:, noisy_mask]
 
         correlation_of_noisy_genes = \
-            ut.get_var_var_correlation(noisy_adata, inplace=False).data
+            ut.get_var_var_correlation(noisy_adata, inplace=False).proper
         np.fill_diagonal(correlation_of_noisy_genes, None)
 
         max_correlation_of_noisy_genes = \

@@ -87,7 +87,7 @@ def filter_data(  # pylint: disable=too-many-locals,too-many-statements,too-many
         if per is None:
             continue
 
-        mask = ut.to_1d_array(ut.get_data(adata, mask_name))
+        mask = ut.get_proper_vector(adata, mask_name)
         if mask.dtype != 'bool':
             raise ValueError('the data: %s is not a boolean mask')
         if invert:

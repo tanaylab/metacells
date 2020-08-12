@@ -5,10 +5,9 @@ The functions here use the facilities of :py:mod:`metacells.utilities.annotation
 functions of :py:mod:`metacells.utilities.computation` in an easily accessible way.
 '''
 
-from typing import Any, Callable, List, NamedTuple, Optional, Tuple
+from typing import Callable, List, NamedTuple, Optional, Tuple, Type, TypeVar
 
 import numpy as np  # type: ignore
-import scipy.sparse as sparse  # type: ignore
 from anndata import AnnData
 
 import metacells.utilities.annotation as uta
@@ -22,9 +21,17 @@ __all__ = [
     'prepare',
     'track_base_indices',
 
-    'NamedData',
+    'NamedShaped',
+    'NamedMatrix',
+    'NamedVector',
 
     'get_derived',
+    'get_derived_matrix',
+    'get_derived_vector',
+
+    'get_log',
+    'get_log_matrix',
+    'get_log_vector',
 
     'Reducer',
 
@@ -35,8 +42,6 @@ __all__ = [
     'get_fraction_of_obs_per_var',
     'get_downsample_of_var_per_obs',
     'get_downsample_of_obs_per_var',
-
-    'get_log',
 
     'get_mean_per_obs',
     'get_mean_per_var',
@@ -76,6 +81,7 @@ def prepare(adata: AnnData, name: str) -> None:
     '''
     X = adata.X
     assert X is not None
+    assert utt.Shaped.be(X).ndim == 2
     assert '__x__' not in adata.uns_keys()
 
     uta.safe_slicing_data(name, uta.ALWAYS_SAFE)
@@ -109,9 +115,9 @@ def track_base_indices(adata: AnnData, *, name: str = 'base_index') -> None:
     uta.safe_slicing_data(var_name, uta.ALWAYS_SAFE)
 
 
-class NamedData(NamedTuple):
+class NamedShaped(NamedTuple):
     '''
-    Data stored in ``AnnData`` with its name.
+    Any :py:const:`metacells.utilities.typing.Shaped` data stored in ``AnnData``, with its name.
     '''
 
     #: The name of the data.
@@ -121,21 +127,93 @@ class NamedData(NamedTuple):
     #:    This must be globally unique across all annotations of all kinds.
     name: str
 
-    #: The actual data.
-    #:
-    #: This will be anything at all for metadata, This will be a
-    #: :py:class:`metacells.utilities.typing.Matrix` for per-variable-per-observation,
-    #: per-observation-per-observation, or per-variable-per-variable, data; a
-    #: :py:class:`metacells.utilities.typing.Vector` for per-observation or per-variable data; and
-    #: anything at all for metadata.
-    data: Any
+    #: The actual :py:const:`metacells.utilities.typing.Shaped` data.
+    shaped: utt.Shaped
+
+    @property
+    def proper(self) -> utt.ProperShaped:
+        '''
+        Access the :py:const:`metacells.utilities.typing.ProperShaped` data
+        using :py:func:`metacells.utilities.typing.to_proper`.
+        '''
+        return utt.to_proper(self.shaped)
+
+
+NS = TypeVar('NS', bound=NamedShaped)
+
+
+class NamedMatrix(NamedShaped):
+    '''
+    :py:const:`metacells.utilities.typing.Matrix` data stored in ``AnnData`` with its name.
+    '''
+    @property
+    def matrix(self) -> utt.Matrix:
+        '''
+        Access the :py:const:`metacells.utilities.typing.Matrix` data.
+        '''
+        shaped = self.shaped
+        assert shaped.ndim == 2
+        return shaped  # type: ignore
+
+    @property
+    def proper(  # type: ignore # pylint: disable=arguments-differ
+        self,
+        *,
+        layout: str = 'row_major'
+    ) -> utt.ProperMatrix:
+        '''
+        Access the :py:const:`metacells.utilities.typing.ProperMatrix` data
+        using :py:func:`metacells.utilities.typing.to_proper_matrix`.
+        '''
+        return utt.to_proper_matrix(self.matrix, layout=layout)
+
+    @staticmethod
+    def be(named: NamedShaped) -> 'NamedMatrix':
+        '''
+        Construct from arbitrary :py:const:`NamedShaped`.
+        '''
+        assert named.shaped.ndim == 2
+        return NamedMatrix(name=named.name, shaped=named.shaped)
+
+
+class NamedVector(NamedShaped):
+    '''
+    :py:const:`metacells.utilities.typing.Vector` data stored in ``AnnData`` with its name.
+    '''
+    @property
+    def vector(self) -> utt.Vector:
+        '''
+        Access the :py:const:`metacells.utilities.typing.Vector` data.
+        '''
+        shaped = self.shaped
+        assert shaped.ndim == 1
+        return shaped  # type: ignore
+
+    @property
+    def proper(self) -> utt.ProperVector:
+        '''
+        Access the :py:const:`metacells.utilities.typing.ProperVector` data
+        using :py:func:`metacells.utilities.typing.to_proper_vector`.
+        '''
+        return utt.to_proper_vector(self.vector)
+
+    @staticmethod
+    def be(named: NamedShaped) -> 'NamedVector':
+        '''
+        Construct from arbitrary :py:const:`NamedShaped`.
+        '''
+        assert named.shaped.ndim == 1
+        return NamedVector(name=named.name, shaped=named.shaped)
+
+
+S = TypeVar('S', bound=utt.Shaped)
 
 
 @utm.timed_call()
 @utd.expand_doc()
 def get_derived(
     adata: AnnData,
-    derive: Callable[[utt.Shaped], utt.Shaped],
+    derive: Callable[[S], S],
     of: Optional[str] = None,
     *,
     to: Optional[str] = None,
@@ -143,7 +221,7 @@ def get_derived(
     inplace: bool = True,
     infocus: bool = False,
     by: Optional[str] = None,
-) -> NamedData:
+) -> NamedShaped:
     '''
     Return some data which is derived from some base data.
 
@@ -176,9 +254,52 @@ def get_derived(
     @utm.timed_call('.' + to)
     def compute() -> utt.Shaped:
         assert isinstance(of, str)
-        return derive(uta.get_data(adata, of, by=by))
+        return derive(uta.get_proper(adata, of, by=by))  # type: ignore
 
-    return _derive_data(adata, of, per_of, to, slicing_mask, compute, inplace, infocus, by)
+    return _derive_data(NamedShaped, adata, of, per_of, to, slicing_mask,
+                        compute, inplace, infocus, by)
+
+
+@utm.timed_call()
+def get_derived_matrix(
+    adata: AnnData,
+    derive: Callable[[S], S],
+    of: Optional[str] = None,
+    *,
+    to: Optional[str] = None,
+    slicing_mask: uta.SlicingMask = uta.ALWAYS_SAFE,
+    inplace: bool = True,
+    infocus: bool = False,
+    by: Optional[str] = None,
+) -> NamedMatrix:
+    '''
+    Same as :py:func:`get_derived` when the result is a
+    :py:const:`metacells.utilities.typing.Matrix`.
+    '''
+    return NamedMatrix.be(get_derived(adata, derive, of, to=to,
+                                      slicing_mask=slicing_mask,
+                                      inplace=inplace, infocus=infocus, by=by))
+
+
+@utm.timed_call()
+def get_derived_vector(
+    adata: AnnData,
+    derive: Callable[[S], S],
+    of: Optional[str] = None,
+    *,
+    to: Optional[str] = None,
+    slicing_mask: uta.SlicingMask = uta.ALWAYS_SAFE,
+    inplace: bool = True,
+    infocus: bool = False,
+    by: Optional[str] = None,
+) -> NamedVector:
+    '''
+    Same as :py:func:`get_derived` when the result is a
+    :py:const:`metacells.utilities.typing.Vector`.
+    '''
+    return NamedVector.be(get_derived(adata, derive, of, to=to,
+                                      slicing_mask=slicing_mask,
+                                      inplace=inplace, infocus=infocus, by=by))
 
 
 @utm.timed_call()
@@ -192,14 +313,14 @@ def get_log(
     inplace: bool = True,
     infocus: bool = False,
     by: Optional[str] = None,
-) -> NamedData:
+) -> NamedShaped:
     '''
     Return the logarithm of some data.
 
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
-    Computes the log of the data with the specified ``base`` (default: {base}) and ``normalization`` (default:
-    {normalization}). See :py:func:`metacells.utilities.computation.log_data` for details.
+    Computes the log of the data with the specified ``base`` (default: {base}) and ``normalization``
+    (default: {normalization}). See :py:func:`metacells.utilities.computation.log_data` for details.
 
     Use the ``<of>|log_<base>`` or ``<of>|log_<base>_normalization_<normalization>`` data if it
     exists (where the default base is reported as ``e``). Otherwise, compute it, and if ``inplace``
@@ -226,6 +347,46 @@ def get_log(
 
 
 @utm.timed_call()
+def get_log_matrix(
+    adata: AnnData,
+    of: Optional[str] = None,
+    *,
+    base: Optional[float] = None,
+    normalization: float = 0,
+    inplace: bool = True,
+    infocus: bool = False,
+    by: Optional[str] = None,
+) -> NamedMatrix:
+    '''
+    Same as :py:func:`get_derived` when the result is a
+    :py:const:`metacells.utilities.typing.Matrix`.
+    '''
+    return NamedMatrix.be(get_log(adata, of, base=base,
+                                  normalization=normalization,
+                                  inplace=inplace, infocus=infocus, by=by))
+
+
+@utm.timed_call()
+def get_log_vector(
+    adata: AnnData,
+    of: Optional[str] = None,
+    *,
+    base: Optional[float] = None,
+    normalization: float = 0,
+    inplace: bool = True,
+    infocus: bool = False,
+    by: Optional[str] = None,
+) -> NamedVector:
+    '''
+    Same as :py:func:`get_derived` when the result is a
+    :py:const:`metacells.utilities.typing.Vector`.
+    '''
+    return NamedVector.be(get_log(adata, of, base=base,
+                                  normalization=normalization,
+                                  inplace=inplace, infocus=infocus, by=by))
+
+
+@utm.timed_call()
 @utd.expand_doc()
 def get_downsample_of_var_per_obs(
     adata: AnnData,
@@ -236,7 +397,7 @@ def get_downsample_of_var_per_obs(
     inplace: bool = True,
     infocus: bool = False,
     by: Optional[str] = None,
-) -> NamedData:
+) -> NamedMatrix:
     '''
     Return a matrix containing, for each observation (cell), downsampled data for each variable
     (gene), such that the total sum would be no more than ``samples``.
@@ -266,15 +427,15 @@ def get_downsample_of_var_per_obs(
         This assumes all the data values are non-negative integer values (even if the ``dtype`` is a
         floating-point type).
     '''
-    def derive(data: utt.Shaped) -> utt.Shaped:
+    def derive(data: utt.Matrix) -> utt.Matrix:
         return utc.downsample_matrix(data, axis=1, samples=samples,
                                      eliminate_zeros=True,
                                      random_seed=random_seed)
 
-    return get_derived(adata, derive, of,
-                       to='downsample_%s_var_per_obs' % samples,
-                       slicing_mask=uta.SAFE_WHEN_SLICING_OBS,
-                       inplace=inplace, infocus=infocus, by=by)
+    return get_derived_matrix(adata, derive, of,
+                              to='downsample_%s_var_per_obs' % samples,
+                              slicing_mask=uta.SAFE_WHEN_SLICING_OBS,
+                              inplace=inplace, infocus=infocus, by=by)
 
 
 @utm.timed_call()
@@ -288,7 +449,7 @@ def get_downsample_of_obs_per_var(
     inplace: bool = True,
     infocus: bool = False,
     by: Optional[str] = None,
-) -> NamedData:
+) -> NamedMatrix:
     '''
     Return a matrix containing, for each variable (gene), downsampled data for each observation
     (cell), such that the total sum would be no more than ``samples``.
@@ -318,15 +479,15 @@ def get_downsample_of_obs_per_var(
         This assumes all the data values are non-negative integer values (even if the ``dtype`` is a
         floating-point type).
     '''
-    def derive(data: utt.Shaped) -> utt.Shaped:
+    def derive(data: utt.Matrix) -> utt.Matrix:
         return utc.downsample_matrix(data, axis=0, samples=samples,
                                      eliminate_zeros=True,
                                      random_seed=random_seed)
 
-    return get_derived(adata, derive, of,
-                       to='downsample_%s_obs_per_var' % samples,
-                       slicing_mask=uta.SAFE_WHEN_SLICING_VAR,
-                       inplace=inplace, infocus=infocus, by=by)
+    return get_derived_matrix(adata, derive, of,
+                              to='downsample_%s_obs_per_var' % samples,
+                              slicing_mask=uta.SAFE_WHEN_SLICING_VAR,
+                              inplace=inplace, infocus=infocus, by=by)
 
 
 try:
@@ -347,7 +508,7 @@ def get_per_obs(
     *,
     to: Optional[str] = None,
     inplace: bool = True,
-) -> NamedData:
+) -> NamedVector:
     '''
     Return the some per-observation (cell) reduction of some 2D data.
 
@@ -370,8 +531,8 @@ def get_per_obs(
     @utm.timed_call('.' + to)
     def compute() -> utt.Vector:
         assert isinstance(of, str)
-        matrix = uta.get_data(adata, of, by='obs')
-        return utt.to_1d_array(reducer(matrix, axis=1))
+        matrix = uta.get_proper_matrix(adata, of, by='obs')
+        return utt.to_dense_vector(reducer(matrix, axis=1))
 
     return _derive_1d_data(adata, per_of, of, 'o', to, compute, inplace)
 
@@ -385,7 +546,7 @@ def get_per_var(
     *,
     to: Optional[str] = None,
     inplace: bool = True,
-) -> NamedData:
+) -> NamedVector:
     '''
     Return the some per-observation (cell) reduction of some 2D data.
 
@@ -408,8 +569,8 @@ def get_per_var(
     @utm.timed_call('.' + to)
     def compute() -> utt.Vector:
         assert isinstance(of, str)
-        matrix = uta.get_data(adata, of, by='var')
-        return utt.to_1d_array(reducer(matrix, axis=0))
+        matrix = uta.get_proper_matrix(adata, of, by='var')
+        return utt.to_dense_vector(reducer(matrix, axis=0))
 
     return _derive_1d_data(adata, per_of, of, 'v', to, compute, inplace)
 
@@ -423,7 +584,7 @@ def get_fraction_of_var_per_obs(
     inplace: bool = True,
     infocus: bool = False,
     by: Optional[str] = None,
-) -> NamedData:
+) -> NamedMatrix:
     '''
     Return a matrix containing, in each entry, the fraction the original data (e.g. UMIs) for this
     variable (gene) is in this observation (cell) out of the total for all variables (genes).
@@ -456,18 +617,20 @@ def get_fraction_of_var_per_obs(
     @utm.timed_call('.compute')
     def compute() -> utt.Matrix:
         assert isinstance(of, str)
-        matrix = utt.unpandas(uta.get_data(adata, of, by='obs'))
+        matrix = uta.get_proper_matrix(adata, of, by='obs')
         sum_per_obs = \
-            utt.unpandas(get_per_obs(adata, utc.sum_axis, of,
-                                     inplace=inplace).data)
+            get_per_obs(adata, utc.sum_axis, of, inplace=inplace).proper
 
         zeros_mask = sum_per_obs == 0
         tmp = np.reciprocal(sum_per_obs, where=~zeros_mask)
         tmp[zeros_mask] = 0
 
-        if sparse.issparse(matrix):
-            return matrix.multiply(tmp[:, None])
-        return matrix * tmp[:, None]
+        sparse = utt.SparseMatrix.maybe(matrix)
+        if sparse is not None:
+            return sparse.multiply(tmp[:, None])
+
+        dense = utt.DenseMatrix.be(matrix)
+        return dense * tmp[:, None]
 
     return _derive_vo_data(adata, of, to, uta.SAFE_WHEN_SLICING_OBS,
                            compute, inplace, infocus, by)
@@ -482,7 +645,7 @@ def get_fraction_of_obs_per_var(
     inplace: bool = True,
     infocus: bool = False,
     by: Optional[str] = None,
-) -> NamedData:
+) -> NamedMatrix:
     '''
     Return a matrix containing, in each entry, the fraction the original data (e.g. UMIs) for this
     variable (gene) is in this observation (cell) out of the total for all observations (cells).
@@ -513,20 +676,22 @@ def get_fraction_of_obs_per_var(
     to = of + '|fraction_of_obs_per_var'
 
     @utm.timed_call('.compute')
-    def compute() -> utt.Vector:
+    def compute() -> utt.Matrix:
         assert isinstance(of, str)
-        matrix = utt.unpandas(uta.get_data(adata, of, by='var'))
+        matrix = uta.get_proper_matrix(adata, of, by='var')
         sum_per_var = \
-            utt.unpandas(get_per_var(adata, utc.sum_axis, of,
-                                     inplace=inplace).data)
+            get_per_var(adata, utc.sum_axis, of, inplace=inplace).proper
 
         zeros_mask = sum_per_var == 0
         tmp = np.reciprocal(sum_per_var, where=~zeros_mask)
         tmp[zeros_mask] = 0
 
-        if sparse.issparse(matrix):
-            return matrix.multiply(tmp[None, :])
-        return matrix * tmp[None, :]
+        sparse = utt.SparseMatrix.maybe(matrix)
+        if sparse is not None:
+            return sparse.multiply(tmp[None, :])
+
+        dense = utt.DenseMatrix.be(matrix)
+        return dense * tmp[None, :]
 
     return _derive_vo_data(adata, of, to, uta.SAFE_WHEN_SLICING_VAR,
                            compute, inplace, infocus, by)
@@ -539,7 +704,7 @@ def get_mean_per_obs(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> NamedData:
+) -> NamedVector:
     '''
     Return the mean of the values per-observation (cell) of some data.
 
@@ -559,8 +724,7 @@ def get_mean_per_obs(
     @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         sum_per_obs = \
-            utt.unpandas(get_per_obs(adata, utc.sum_axis, of,
-                                     inplace=inplace).data)
+            get_per_obs(adata, utc.sum_axis, of, inplace=inplace).proper
         return sum_per_obs / adata.n_vars
 
     return _derive_1d_data(adata, per_of, of, 'o', to, compute, inplace)
@@ -573,7 +737,7 @@ def get_mean_per_var(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> NamedData:
+) -> NamedVector:
     '''
     Return the mean of the values per-variable (gene) of some data.
 
@@ -593,8 +757,7 @@ def get_mean_per_var(
     @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         sum_per_var = \
-            utt.unpandas(get_per_var(adata, utc.sum_axis, of,
-                                     inplace=inplace).data)
+            get_per_var(adata, utc.sum_axis, of, inplace=inplace).proper
         return sum_per_var / adata.n_obs
 
     return _derive_1d_data(adata, per_of, of, 'v', to, compute, inplace)
@@ -607,7 +770,7 @@ def get_fraction_per_obs(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> NamedData:
+) -> NamedVector:
     '''
     Return the fraction of the values per-observation (cell) of the total some
     per-variable-per-observation data.
@@ -628,8 +791,7 @@ def get_fraction_per_obs(
     @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         sum_per_obs = \
-            utt.unpandas(get_per_obs(adata, utc.sum_axis, of,
-                                     inplace=inplace).data)
+            get_per_obs(adata, utc.sum_axis, of, inplace=inplace).proper
         return sum_per_obs / sum_per_obs.sum()
 
     return _derive_1d_data(adata, per_of, of, 'o', to, compute, inplace)
@@ -642,7 +804,7 @@ def get_fraction_per_var(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> NamedData:
+) -> NamedVector:
     '''
     Return the fraction of the values per-variable (gene) of the total of some
     per-variable-per-observation data.
@@ -663,8 +825,7 @@ def get_fraction_per_var(
     @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         sum_per_var = \
-            utt.unpandas(get_per_var(adata, utc.sum_axis, of,
-                                     inplace=inplace).data)
+            get_per_var(adata, utc.sum_axis, of, inplace=inplace).proper
         return sum_per_var / sum_per_var.sum()
 
     return _derive_1d_data(adata, per_of, of, 'v', to, compute, inplace)
@@ -677,7 +838,7 @@ def get_variance_per_obs(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> NamedData:
+) -> NamedVector:
     '''
     Return the variance of the values per-observation (cell) of some per-variable-per-observation
     data.
@@ -696,11 +857,10 @@ def get_variance_per_obs(
     @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         sum_per_obs = \
-            utt.unpandas(get_per_obs(adata, utc.sum_axis, of,
-                                     inplace=inplace).data)
+            get_per_obs(adata, utc.sum_axis, of, inplace=inplace).proper
         sum_squared_per_obs = \
-            utt.unpandas(get_per_obs(adata, utc.sum_squared_axis, of,
-                                     inplace=inplace).data)
+            get_per_obs(adata, utc.sum_squared_axis,
+                        of, inplace=inplace).proper
         result = np.square(sum_per_obs).astype(float)
         result /= -adata.n_vars
         result += sum_squared_per_obs
@@ -717,7 +877,7 @@ def get_variance_per_var(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> NamedData:
+) -> NamedVector:
     '''
     Return the variance of the values per-variable (gene) of some per-variable-per-observation data.
 
@@ -735,11 +895,10 @@ def get_variance_per_var(
     @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         sum_per_var = \
-            utt.unpandas(get_per_var(adata, utc.sum_axis, of,
-                                     inplace=inplace).data)
+            get_per_var(adata, utc.sum_axis, of, inplace=inplace).proper
         sum_squared_per_var = \
-            utt.unpandas(get_per_var(adata, utc.sum_squared_axis, of,
-                                     inplace=inplace).data)
+            get_per_var(adata, utc.sum_squared_axis,
+                        of, inplace=inplace).proper
         result = np.square(sum_per_var).astype(float)
         result /= -adata.n_obs
         result += sum_squared_per_var
@@ -756,7 +915,7 @@ def get_relative_variance_per_var(
     of: Optional[str] = None,
     *,
     inplace: bool = True,
-) -> NamedData:
+) -> NamedVector:
     '''
     Return the log_2(variance/mean) of the values per-variable (gene) of some
     per-variable-per-observation data.
@@ -776,9 +935,9 @@ def get_relative_variance_per_var(
     @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         variance_per_var = \
-            utt.unpandas(get_variance_per_var(adata, of, inplace=inplace).data)
+            get_variance_per_var(adata, of, inplace=inplace).proper
         mean_per_var = \
-            utt.unpandas(get_mean_per_var(adata, of, inplace=inplace).data)
+            get_mean_per_var(adata, of, inplace=inplace).proper
         zeros_mask = mean_per_var == 0
 
         result = np.reciprocal(mean_per_var, where=~zeros_mask)
@@ -799,7 +958,7 @@ def get_normalized_variance_per_var(
     *,
     window_size: int = 100,
     inplace: bool = True,
-) -> NamedData:
+) -> NamedVector:
     '''
     Return the (relative_variance - median-relative-variance-of-similar) of the values per-variable
     (gene) of some per-variable-per-observation data.
@@ -827,10 +986,8 @@ def get_normalized_variance_per_var(
     @utm.timed_call('.compute')
     def compute() -> utt.Vector:
         relative_variance_per_var = \
-            utt.unpandas(get_relative_variance_per_var(adata, of,
-                                                       inplace=inplace).data)
-        mean_per_var = \
-            utt.unpandas(get_mean_per_var(adata, of, inplace=inplace).data)
+            get_relative_variance_per_var(adata, of, inplace=inplace).proper
+        mean_per_var = get_mean_per_var(adata, of, inplace=inplace).proper
         median_variance_per_var = utc.sliding_window_function(relative_variance_per_var,
                                                               function='median',
                                                               window_size=window_size,
@@ -846,30 +1003,43 @@ def get_obs_obs_correlation(
     adata: AnnData,
     of: Optional[str] = None,
     *,
+    by: Optional[str] = None,
     inplace: bool = True,
-) -> NamedData:
+) -> NamedMatrix:
     '''
     Compute correlation between observations (cells) of the ``adata``.
 
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
-    Use the ``<of>|obs_obs_correlation`` per-observation-per-observation (cell) data if it exists.
-    Otherwise, compute it, and if ``inplace`` (default: {inplace}) store it for future reuse.
+    If the data is per-observation-per-observation, then ``by`` (default: {by}) controls how to
+    correlate it. A value of ``None`` indicates the data is symmetric, so the most efficient
+    direction is chosen. Otherwise, the correlation is done by ``rows`` or by ``columns``
+    as specified.
+
+    Use the ``<of>|obs_obs_correlation`` or ``<of>|obs_obs_correlation_by_<by>``
+    per-observation-per-observation (cell) data if it exists. Otherwise, compute it, and if
+    ``inplace`` (default: {inplace}) store it for future reuse.
 
     Returns the matrix and its name.
     '''
     per_of, of = _per_of(adata, of, ['vo', 'oo'])
-    to = of + '|obs_obs_correlation'
+    if per_of == 'vo':
+        assert by is None
+
+    if by is None:
+        to = of + '|obs_obs_correlation'
+    else:
+        to = of + '|obs_obs_correlation_by_' + by
 
     @utm.timed_call('.compute')
-    def compute() -> utt.Vector:
+    def compute() -> utt.Matrix:
         assert isinstance(of, str)
         if per_of == 'vo':
-            matrix = utt.unpandas(uta.get_data(adata, of, by='obs'))
+            matrix = uta.get_proper_matrix(adata, of, by='obs')
             correlations = utc.corrcoef(matrix, rowvar=True)
         else:
-            matrix = utt.unpandas(uta.get_data(adata, of))
-            correlations = utc.corrcoef(matrix)
+            matrix = uta.get_proper_matrix(adata, of)
+            correlations = utc.corrcoef(matrix, symmetric=True)
 
         return correlations
 
@@ -882,32 +1052,45 @@ def get_var_var_correlation(
     adata: AnnData,
     of: Optional[str] = None,
     *,
+    by: Optional[str] = None,
     inplace: bool = True,
-) -> NamedData:
+) -> NamedMatrix:
     '''
     Compute correlation between variables (genes) of the ``adata``.
 
     If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
 
-    Use the ``<of>|var_var_correlation`` per-variable-per-variable (gene) data if it exists.
-    Otherwise, compute it, and if ``inplace`` (default: {inplace}), store it for future reuse.
+    If the data is per-variable-per-variable, then ``by`` (default: {by}) controls how to
+    correlate it. A value of ``None`` indicates the data is symmetric, so the most efficient
+    direction is chosen. Otherwise, the correlation is done by ``rows`` or by ``columns``
+    as specified.
+
+    Use the ``<of>|var_var_correlation`` or ``<of>|var_var_correlation_by_<by>``
+    per-variable-per-variable (gene) data if it exists. Otherwise, compute it, and if ``inplace``
+    (default: {inplace}), store it for future reuse.
 
     Returns the matrix and its name.
     '''
     per_of, of = _per_of(adata, of, ['vo', 'vv'])
-    to = of + '|var_var_correlation'
+    if per_of == 'vo':
+        assert by is None
+
+    if by is None:
+        to = of + '|obs_obs_correlation'
+    else:
+        to = of + '|obs_obs_correlation_by_' + by
 
     @utm.timed_call('.compute')
-    def compute() -> utt.Vector:
+    def compute() -> utt.Matrix:
         assert isinstance(of, str)
         if per_of == 'vo':
-            matrix = utt.unpandas(uta.get_data(adata, of, by='var'))
+            matrix = uta.get_proper_matrix(adata, of, by='var')
             correlations = utc.corrcoef(matrix, rowvar=False)
         else:
-            matrix = utt.unpandas(uta.get_data(adata, of))
-            correlations = utc.corrcoef(matrix)
+            matrix = uta.get_proper_matrix(adata, of)
+            correlations = utc.corrcoef(matrix, symmetric=True)
 
-        return correlations.T
+        return correlations.transpose()
 
     return _derive_2d_data(adata, per_of, of, 'vv', to, compute, inplace)
 
@@ -938,15 +1121,15 @@ def _derive_vo_data(
     inplace: bool,
     infocus: bool,
     by: Optional[str],
-) -> NamedData:
+) -> NamedMatrix:
     if inplace or infocus:
         uta.safe_slicing_derived(base=of, derived=to,
                                  slicing_mask=slicing_mask)
 
-    data = uta.get_vo_data(adata, to, compute=compute,
-                           inplace=inplace, infocus=infocus, by=by)
+    matrix = uta.get_vo_data(adata, to, compute=compute,
+                             inplace=inplace, infocus=infocus, by=by)
 
-    return NamedData(name=to, data=data)
+    return NamedMatrix(name=to, shaped=matrix)
 
 
 def _derive_2d_data(
@@ -959,7 +1142,7 @@ def _derive_2d_data(
     inplace: bool,
     infocus: bool = False,
     by: Optional[str] = None,
-) -> NamedData:
+) -> NamedMatrix:
     assert per_of in ('vo', 'oo', 'vv')
     assert per_to in ('vo', 'oo', 'vv')
 
@@ -971,8 +1154,8 @@ def _derive_2d_data(
         assert per_to == 'vv'
         slicing_mask = uta.SAFE_WHEN_SLICING_VAR
 
-    return _derive_data(adata, of, per_to, to, slicing_mask, compute,
-                        inplace, infocus, by)
+    return _derive_data(NamedMatrix, adata, of, per_to, to, slicing_mask,
+                        compute, inplace, infocus, by)
 
 
 def _derive_1d_data(
@@ -983,7 +1166,7 @@ def _derive_1d_data(
     to: str,
     compute: Callable[[], utt.Vector],
     inplace: bool,
-) -> NamedData:
+) -> NamedVector:
     if per_to[0] == per_of[0] == per_of[1]:
         slicing_mask = uta.ALWAYS_SAFE
     elif per_to == 'v':
@@ -992,20 +1175,22 @@ def _derive_1d_data(
         assert per_to == 'o'
         slicing_mask = uta.SAFE_WHEN_SLICING_OBS
 
-    return _derive_data(adata, of, per_to, to, slicing_mask, compute, inplace)
+    return _derive_data(NamedVector, adata, of, per_to, to, slicing_mask,
+                        compute, inplace)
 
 
 def _derive_data(
+    cls: Type[NS],
     adata: AnnData,
     of: str,
     per_to: str,
     to: str,
     slicing_mask: uta.SlicingMask,
-    compute: Callable[[], utt.Vector],
+    compute: Callable[[], utt.Shaped],
     inplace: bool,
     infocus: bool = False,
     by: Optional[str] = None,
-) -> NamedData:
+) -> NS:
     if inplace:
         uta.safe_slicing_derived(base=of, derived=to,
                                  slicing_mask=slicing_mask)
@@ -1013,4 +1198,4 @@ def _derive_data(
     data = uta.get_data(adata, to, per=per_to, compute=compute,
                         inplace=inplace, infocus=infocus, by=by)
 
-    return NamedData(name=to, data=data)
+    return cls(name=to, shaped=utt.Shaped.be(data))

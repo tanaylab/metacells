@@ -1,7 +1,7 @@
 '''
 Utilities for performing efficient uniform computations.
 
-Most of the functions defined here are thin wrappers around builtin Numpy functions. However, they
+Most of the functions defined here are thin wrappers around builtin numpy functions. However, they
 are provided with a uniform interface that works for both sparse and dense data. This allows safely
 passing them to functions such as :py:func:`metacells.utilities.preparation.get_per_obs` etc.
 
@@ -12,12 +12,12 @@ analysis pipeline.
 
 import re
 from re import Pattern
-from typing import Callable, Collection, Optional, Union
+from typing import Callable, Collection, Optional, TypeVar, Union
 from warnings import warn
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
-from scipy import sparse  # type: ignore
+import scipy.sparse as sp  # type: ignore
 
 import metacells.extensions as xt  # type: ignore
 import metacells.utilities.documentation as utd
@@ -39,10 +39,10 @@ __all__ = [
     'sum_axis',
     'sum_squared_axis',
 
-    'bincount_array',
+    'bincount_vector',
 
     'downsample_matrix',
-    'downsample_array',
+    'downsample_vector',
     'downsample_tmp_size',
 
     'sliding_window_function',
@@ -50,8 +50,14 @@ __all__ = [
 ]
 
 
-@ utm.timed_call()
-def to_layout(matrix: utt.Matrix, layout: str) -> utt.Matrix:  # pylint: disable=too-many-return-statements
+@utm.timed_call()
+@utd.expand_doc()
+def to_layout(  # pylint: disable=too-many-return-statements
+    matrix: utt.Matrix,
+    layout: str,
+    *,
+    symmetric: bool = False
+) -> utt.ProperMatrix:
     '''
     Re-layout a matrix for efficient axis slicing/processing.
 
@@ -63,71 +69,83 @@ def to_layout(matrix: utt.Matrix, layout: str) -> utt.Matrix:  # pylint: disable
     (observation, cell) slicing/processing. For sparse matrices, this is ``csr`` format; for dense
     matrices, this is C (row-major) format.
 
-    If the matrix is already in the correct layout, it is returned as-is. Otherwise, a new copy is
-    created. This is a costly operation as it needs to move a lot of data. However, it makes the
-    following processing much more efficient, so it is typically a net performance gain overall.
+    If the matrix is already in the correct layout, it is returned as-is.
+
+    If the matrix is ``symmetric`` (default: {symmetric}), it must be square and is assumed to
+    be equal to its own transpose. This allows converting it from one layout to another using
+    the efficient (almost zero-cost) transpose operation.
+
+    Otherwise, a new copy is created. This is a costly operation as it needs to move a lot of data.
+    However, it makes the following processing much more efficient, so it is typically a net
+    performance gain overall.
     '''
-    if utt.is_layout(matrix, layout):
-        return matrix
+    assert layout in utt.LAYOUT_OF_AXIS
 
-    is_frozen = utt.frozen(matrix)
+    dense, compressed, proper = utt.to_proper_matrices(matrix, layout=layout)
 
-    if sparse.issparse(matrix):
+    if utt.is_layout(proper, layout):
+        return proper
+
+    if symmetric:
+        assert proper.shape[0] == proper.shape[1]
+        proper = proper.transpose()
+        assert utt.is_layout(proper, layout)
+        return proper
+
+    is_frozen = utt.frozen(proper)
+
+    if dense is not None:
+        order = utt.DENSE_FAST_FLAG[layout][0]
+        with utm.timed_step('ravel'):
+            utm.timed_parameters(rows=dense.shape[0], columns=dense.shape[1])
+            result = np.reshape(np.ravel(dense, order=order),
+                                dense.shape, order=order)
+
+    else:
+        assert compressed is not None
         to_axis_format = utt.SPARSE_FAST_FORMAT[layout]
         from_axis_format = utt.SPARSE_SLOW_FORMAT[layout]
-        if matrix.getformat() == from_axis_format:
-            matrix = relayout_compressed(matrix)
-        else:
-            name = '.to' + to_axis_format
-            with utm.timed_step(name):
-                utm.timed_parameters(rows=matrix.shape[0],
-                                     columns=matrix.shape[1])
-                matrix = getattr(matrix, name[1:])()
-
-    else:  # Dense.
-        matrix = utt.unpandas(matrix)
-        order = utt.DENSE_FAST_FLAG[layout][0]
-        with utm.timed_step('.ravel'):
-            utm.timed_parameters(rows=matrix.shape[0], columns=matrix.shape[1])
-            matrix = np.reshape(np.ravel(matrix, order=order),
-                                matrix.shape, order=order)
+        assert compressed.getformat() == from_axis_format
+        result = relayout_compressed(compressed)
+        assert result.getformat() == to_axis_format
 
     if is_frozen:
-        utt.freeze(matrix)
+        utt.freeze(result)
+    return result
 
-    return matrix
 
-
-@ utm.timed_call()
-def relayout_compressed(matrix: sparse.spmatrix) -> sparse.spmatrix:
+@utm.timed_call()
+def relayout_compressed(matrix: utt.CompressedMatrix) -> utt.CompressedMatrix:
     '''
-    Efficient parallel conversion of a CSR/CSC matrix to a CSC/CSR matrix.
+    Efficient parallel conversion of a CSR/CSC ``matrix`` to a CSC/CSR matrix.
     '''
-    assert matrix.ndim == 2
-    axis = ['csr', 'csc'].index(matrix.getformat())
+    compressed = utt.CompressedMatrix.be(matrix)
+    axis = ['csr', 'csc'].index(compressed.getformat())
 
-    _output_elements_count = matrix_bands_count = matrix.shape[axis]
-    output_bands_count = matrix_elements_count = matrix.shape[1 - axis]
+    _output_elements_count = matrix_bands_count = compressed.shape[axis]
+    output_bands_count = matrix_elements_count = compressed.shape[1 - axis]
 
     nnz_elements_of_output_bands = \
-        bincount_array(matrix.indices, minlength=matrix_elements_count)
+        bincount_vector(compressed.indices, minlength=matrix_elements_count)
 
-    output_indptr = np.empty(output_bands_count + 1, dtype=matrix.indptr.dtype)
+    output_indptr = np.empty(output_bands_count + 1,
+                             dtype=compressed.indptr.dtype)
     output_indptr[0:2] = 0
     with utm.timed_step('cumsum'):
         utm.timed_parameters(elements=nnz_elements_of_output_bands.size - 1)
         np.cumsum(nnz_elements_of_output_bands[:-1], out=output_indptr[2:])
 
-    output_indices = np.empty(matrix.indices.size, dtype=matrix.indices.dtype)
-    output_data = np.empty(matrix.data.size, dtype=matrix.data.dtype)
+    output_indices = np.empty(compressed.indices.size,
+                              dtype=compressed.indices.dtype)
+    output_data = np.empty(compressed.nnz, dtype=compressed.data.dtype)
 
     extension_name = 'collect_compressed_%s_t_%s_t_%s_t' \
-        % (matrix.data.dtype, matrix.indices.dtype, matrix.indptr.dtype)
+        % (compressed.data.dtype, compressed.indices.dtype, compressed.indptr.dtype)
     extension = getattr(xt, extension_name)
 
     def collect_compressed(matrix_band_indices: range) -> None:
         extension(matrix_band_indices.start, matrix_band_indices.stop,
-                  matrix.data, matrix.indices, matrix.indptr,
+                  compressed.data, compressed.indices, compressed.indptr,
                   output_data, output_indices, output_indptr[1:])
 
     with utm.timed_step('.collect_compressed'):
@@ -135,44 +153,67 @@ def relayout_compressed(matrix: sparse.spmatrix) -> sparse.spmatrix:
                              elements=matrix_bands_count)
         parallel_for(collect_compressed, matrix_bands_count)
 
-    assert output_indptr[-1] == matrix.indptr[-1]
+    assert output_indptr[-1] == compressed.indptr[-1]
 
-    constructor = [sparse.csc_matrix, sparse.csr_matrix][axis]
-    matrix = constructor((output_data, output_indices,
-                          output_indptr), shape=matrix.shape)
-    matrix.has_sorted_indices = True
-    matrix.has_canonical_format = True
-    return matrix
+    constructor = [sp.csc_matrix, sp.csr_matrix][axis]
+    compressed = constructor((output_data, output_indices,
+                              output_indptr), shape=compressed.shape)
+    compressed.has_sorted_indices = True
+    compressed.has_canonical_format = True
+    return compressed
 
 
 @utm.timed_call()
-def corrcoef(matrix: utt.Matrix, *, rowvar: bool = True) -> np.ndarray:
+def corrcoef(
+    matrix: utt.Matrix,
+    *,
+    rowvar: bool = True,
+    symmetric: bool = False
+) -> utt.DenseMatrix:
     '''
     Drop-in replacement for ``np.corrcoef``, which also works for sparse matrices.
+
+    If ``symmetric``, the matrix must be square and is assumed to be symmetric,
+    so ``rowvar`` is ignored and instead the most efficient direction is used based
+    on the matrix layout.
 
     .. todo::
 
         This always uses the dense implementation. It might still be the best choice for correlating
         the less-sparse "feature" genes.
     '''
-    matrix = utt.to_np_array(matrix)
+    dense = utt.to_dense_matrix(matrix)
+    layout = utt.matrix_layout(dense)
+
+    if symmetric:
+        assert dense.shape[0] == dense.shape[1]
+        if layout is not None:
+            rowvar = layout == 'row_major'
 
     if rowvar:
-        utm.timed_parameters(results=matrix.shape[0], elements=matrix.shape[1])
+        utm.timed_parameters(results=dense.shape[0], elements=dense.shape[1])
     else:
-        utm.timed_parameters(results=matrix.shape[1], elements=matrix.shape[0])
+        utm.timed_parameters(results=dense.shape[1], elements=dense.shape[0])
 
-    return np.corrcoef(matrix, rowvar=rowvar)
+    fast_layout = 'row_major' if rowvar else 'column_major'
+    if layout != fast_layout:
+        correlating = 'rows' if rowvar else 'columns'
+        correlating_dense_input_matrix_of_inefficient_format = \
+            'correlating %s of a matrix with inefficient strides: %s' \
+            % (correlating, dense.strides)
+        warn(correlating_dense_input_matrix_of_inefficient_format)
+
+    return np.corrcoef(dense, rowvar=rowvar)
 
 
 def log_data(
-    data: utt.Shaped,
+    shaped: utt.Shaped,
     *,
     base: Optional[float] = None,
     normalization: float = 0,
-) -> Callable[[utt.Matrix], utt.Matrix]:
+) -> utt.DenseShaped:
     '''
-    Return the log of the values in the ``data``.
+    Return the log of the values in the ``shaped`` data.
 
     If ``base`` is specified (default: {base}), use this base log. Otherwise, use the natural
     logarithm.
@@ -191,14 +232,14 @@ def log_data(
 
         The result is always dense, as even for sparse data, the log is rarely zero.
     '''
-    data = utt.to_np_array(data, copy=True)
+    dense = utt.to_dense(shaped, copy=True)
 
     if normalization > 0:
-        data += normalization
+        dense += normalization
     else:
-        where = data > 0
+        where = dense > 0
         if normalization < 0:
-            data[~where] = np.amin(data[where])
+            dense[~where] = np.amin(dense[where])
 
     if base is None:
         log_function = np.log
@@ -215,18 +256,18 @@ def log_data(
         rebase = True
 
     if normalization == 0:
-        log_function(data, out=data, where=where)
-        data[~where] = None
+        log_function(dense, out=dense, where=where)
+        dense[~where] = None
     else:
-        log_function(data, out=data)
+        log_function(dense, out=dense)
 
     if rebase:
-        data /= np.log(base)
+        dense /= np.log(base)
 
     if normalization < 0:
-        data[~where] += normalization
+        dense[~where] += normalization
 
-    return data
+    return dense
 
 
 @utm.timed_call()
@@ -253,26 +294,27 @@ def downsample_matrix(
     A non-zero ``random_seed`` (default: {random_seed}) can be provided to make the operation
     replicable.
     '''
-    assert matrix.ndim == 2
     assert 0 <= axis <= 1
-
     assert samples > 0
 
-    if not sparse.issparse(matrix):
-        matrix = utt.unpandas(matrix)
-        return _downsample_dense_matrix(matrix, axis, samples, inplace, random_seed)
+    dense, compressed, _ = utt.to_proper_matrices(matrix)
 
-    return _downsample_sparse_matrix(matrix, axis, samples, eliminate_zeros, inplace, random_seed)
+    if dense is not None:
+        return _downsample_dense_matrix(dense, axis, samples, inplace, random_seed)
+
+    assert compressed is not None
+    return _downsample_compressed_matrix(compressed, axis, samples,
+                                         eliminate_zeros, inplace, random_seed)
 
 
-def _downsample_sparse_matrix(
-    matrix: sparse.spmatrix,
+def _downsample_compressed_matrix(
+    matrix: utt.CompressedMatrix,
     axis: int,
     samples: int,
     eliminate_zeros: bool,
     inplace: bool,
     random_seed: int
-) -> sparse.spmatrix:
+) -> utt.CompressedMatrix:
     elements_count = matrix.shape[axis]
     results_count = matrix.shape[1 - axis]
 
@@ -286,7 +328,7 @@ def _downsample_sparse_matrix(
     if inplace:
         output = matrix
     else:
-        constructor = [sparse.csc_matrix, sparse.csr_matrix][axis]
+        constructor = [sp.csc_matrix, sp.csr_matrix][axis]
         output_data = np.empty(matrix.data.shape, dtype=matrix.data.dtype)
         output = constructor((output_data, matrix.indices, matrix.indptr))
 
@@ -304,7 +346,7 @@ def _downsample_sparse_matrix(
             tmp = \
                 shared_storage.get_private('tmp',
                                            make=lambda: np.empty(max_tmp_size,
-                                                                 dtype=matrix.dtype))
+                                                                 dtype=output.dtype))
 
             if random_seed != 0:
                 index_seed = random_seed + index
@@ -330,12 +372,12 @@ def _downsample_sparse_matrix(
 
 
 def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statements
-    matrix: np.ndarray,
+    matrix: utt.DenseMatrix,
     axis: int,
     samples: int,
     inplace: bool,
     random_seed: int
-) -> np.ndarray:
+) -> utt.DenseMatrix:
     if inplace:
         output = matrix
     elif axis == 0:
@@ -355,7 +397,7 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
     if not input_is_contiguous:
         downsampling_dense_input_matrix_of_inefficient_format = \
             'downsampling axis: %s ' \
-            'of a dense input matrix with inefficient strides: %s' \
+            'of a matrix input matrix with inefficient strides: %s' \
             % (axis, matrix.strides)
         warn(downsampling_dense_input_matrix_of_inefficient_format)
 
@@ -364,7 +406,7 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
     if not inplace and not output_is_contiguous:
         downsampling_dense_output_matrix_of_inefficient_format = \
             'downsampling axis: %s ' \
-            'of a dense output matrix with inefficient strides: %s' \
+            'of a matrix output matrix with inefficient strides: %s' \
             % (axis, output.strides)
         warn(downsampling_dense_output_matrix_of_inefficient_format)
 
@@ -390,7 +432,7 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
                 output_vector = output[:, index]
             else:
                 output_vector = output[index, :]
-            output_array = utt.to_1d_array(output_vector, copy=None)
+            output_array = utt.to_dense_vector(output_vector, copy=None)
 
             tmp = shared_storage.get_private('tmp',
                                              make=lambda: np.empty(tmp_size,
@@ -423,9 +465,9 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
 
 
 @utm.timed_call()
-@utd.expand_doc(data_types=','.join(['``%s``' % data_type for data_type in utt.DATA_TYPES]))
-def downsample_array(
-    array: np.ndarray,
+@utd.expand_doc(data_types=','.join(['``%s``' % data_type for data_type in utt.CPP_DATA_TYPES]))
+def downsample_vector(
+    vector: utt.Vector,
     samples: int,
     *,
     tmp: Optional[np.ndarray] = None,
@@ -437,13 +479,13 @@ def downsample_array(
 
     **Input**
 
-    * A Numpy ``array`` containing non-negative integer sample counts.
+    * A numpy ``array`` containing non-negative integer sample counts.
 
     * A desired total number of ``samples``.
 
-    * An optional ``tmp`` storage Numpy array minimize allocations for multiple invocations.
+    * An optional ``tmp`` storage numpy array minimize allocations for multiple invocations.
 
-    * An optional Numpy array ``output`` to hold the results (otherwise, the input is overwritten).
+    * An optional numpy array ``output`` to hold the results (otherwise, the input is overwritten).
 
     * An optional non-zero ``random_seed`` (default: {random_seed}) to make the operation
       replicable.
@@ -471,13 +513,13 @@ def downsample_array(
     observations with a higher sample count, which will result in an inflated estimation of their
     similarity to other observations. Downsampling avoids this effect.
     '''
-    utm.timed_parameters(elements=array.size, samples=samples)
-    array = utt.unpandas(array)
-    return _downsample_array(array, samples, tmp, output, random_seed)
+    proper = utt.to_proper_vector(vector)
+    utm.timed_parameters(elements=proper.size, samples=samples)
+    return _downsample_array(proper, samples, tmp, output, random_seed)
 
 
 def _downsample_array(
-    array: np.ndarray,
+    array: utt.DenseVector,
     samples: int,
     tmp: Optional[np.ndarray] = None,
     output: Optional[np.ndarray] = None,
@@ -513,9 +555,12 @@ def max_axis(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the maximal element per row (``axis`` = 1) or column (``axis`` = 0) of some ``matrix``.
     '''
-    if sparse.issparse(matrix):
-        return _reduce_matrix(matrix, axis, lambda matrix: matrix.max(axis=axis))
-    return _reduce_matrix(matrix, axis, lambda matrix: np.amax(matrix, axis=axis))
+    sparse = utt.SparseMatrix.maybe(matrix)
+    if sparse is not None:
+        return _reduce_matrix(sparse, axis, lambda sparse: sparse.max(axis=axis))
+
+    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
+    return _reduce_matrix(dense, axis, lambda dense: np.amax(dense, axis=axis))
 
 
 @utm.timed_call()
@@ -523,9 +568,12 @@ def min_axis(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     '''
     Compute the minimal element per row (``axis`` = 1) or column (``axis`` = 0) of some ``matrix``.
     '''
-    if sparse.issparse(matrix):
-        return _reduce_matrix(matrix, axis, lambda matrix: matrix.min(axis=axis))
-    return _reduce_matrix(matrix, axis, lambda matrix: np.amin(matrix, axis=axis))
+    sparse = utt.SparseMatrix.maybe(matrix)
+    if sparse is not None:
+        return _reduce_matrix(sparse, axis, lambda sparse: sparse.min(axis=axis))
+
+    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
+    return _reduce_matrix(dense, axis, lambda dense: np.amin(dense, axis=axis))
 
 
 @utm.timed_call()
@@ -534,9 +582,12 @@ def nnz_axis(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     Compute the number of non-zero elements per row (``axis`` = 1) or column (``axis`` = 0) of some
     ``matrix``.
     '''
-    if sparse.issparse(matrix):
-        return _reduce_matrix(matrix, axis, lambda matrix: matrix.getnnz(axis=axis))
-    return _reduce_matrix(matrix, axis, lambda matrix: np.count_nonzero(matrix, axis=axis))
+    sparse = utt.SparseMatrix.maybe(matrix)
+    if sparse is not None:
+        return _reduce_matrix(sparse, axis, lambda sparse: sparse.getnnz(axis=axis))
+
+    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
+    return _reduce_matrix(dense, axis, lambda dense: np.count_nonzero(dense, axis=axis))
 
 
 @utm.timed_call()
@@ -545,7 +596,12 @@ def sum_axis(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
     Compute the total of the values per row (``axis`` = 1) or column (``axis`` = 0) of some
     ``matrix``.
     '''
-    return _reduce_matrix(matrix, axis, lambda matrix: matrix.sum(axis=axis))
+    sparse = utt.SparseMatrix.maybe(matrix)
+    if sparse is not None:
+        return _reduce_matrix(sparse, axis, lambda sparse: sparse.sum(axis=axis))
+
+    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
+    return _reduce_matrix(dense, axis, lambda dense: np.sum(dense, axis=axis))
 
 
 @utm.timed_call()
@@ -560,59 +616,75 @@ def sum_squared_axis(matrix: utt.Matrix, *, axis: int) -> np.ndarray:
         values). An implementation that directly squares-and-adds the elements would be more
         efficient.
     '''
-    if sparse.issparse(matrix):
-        return _reduce_matrix(matrix, axis, lambda matrix: matrix.multiply(matrix).sum(axis=axis))
+    sparse = utt.SparseMatrix.maybe(matrix)
+    if sparse is not None:
+        return _reduce_matrix(sparse, axis, lambda sparse: sparse.multiply(sparse).sum(axis=axis))
 
-    return _reduce_matrix(matrix, axis, lambda matrix: np.square(matrix).sum(axis=axis))
+    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
+    return _reduce_matrix(dense, axis, lambda dense: np.square(dense).sum(axis=axis))
+
+
+M = TypeVar('M', bound=utt.Matrix)
 
 
 def _reduce_matrix(
-    matrix: utt.Matrix,
+    matrix: M,
     axis: int,
-    reducer: Callable,
-) -> np.ndarray:
+    reducer: Callable[[M], utt.DenseVector],
+) -> utt.DenseVector:
     assert matrix.ndim == 2
     assert 0 <= axis <= 1
-
     results_count = matrix.shape[1 - axis]
 
-    if sparse.issparse(matrix):
+    if utt.SparseMatrix.am(matrix):
         timed_step = '.sparse'
-        elements_count = matrix.nnz / results_count
-        axis_format = ['csc', 'csr'][axis]
-        if matrix.getformat() != axis_format:
-            reducing_sparse_matrix_of_inefficient_format = \
-                'reducing axis: %s ' \
-                'of a sparse matrix in the format: %s ' \
-                'instead of the efficient format: %s' \
-                % (axis, matrix.getformat(), axis_format)
-            warn(reducing_sparse_matrix_of_inefficient_format)
+        elements_count: float = matrix.shape[axis]
     else:
-        timed_step = '.dense'
-        matrix = utt.unpandas(matrix)
-        elements_count = matrix.shape[axis]
-        axis_flag = [matrix.flags.f_contiguous,
-                     matrix.flags.c_contiguous][axis]
-        if not axis_flag:
-            reducing_dense_matrix_of_inefficient_format = \
-                'reducing axis: %s ' \
-                'of a dense matrix with layout: %s ' \
-                'instead of the efficient layout: %s' \
-                % (axis,
-                   'f_contiguous' if matrix.flags.f_contiguous
-                   else 'c_contiguous' if matrix.flags.c_contiguous
-                   else 'non-contiguous',
-                   ['f_contiguous', 'c_contiguous'][axis])
-            warn(reducing_dense_matrix_of_inefficient_format)
+        dense, compressed, _ = \
+            utt.to_proper_matrices(matrix, layout=utt.LAYOUT_OF_AXIS[axis])
+
+        if dense is not None:
+            elements_count = dense.shape[axis]
+            axis_flag = [dense.flags.f_contiguous,
+                         dense.flags.c_contiguous][axis]
+            if axis_flag:
+                timed_step = '.dense-efficient'
+            else:
+                timed_step = '.dense-inefficient'
+                reducing_dense_matrix_of_inefficient_format = \
+                    'reducing axis: %s ' \
+                    'of a dense matrix with layout: %s ' \
+                    'instead of the efficient layout: %s' \
+                    % (axis,
+                       'f_contiguous' if dense.flags.f_contiguous
+                       else 'c_contiguous' if dense.flags.c_contiguous
+                       else 'non-contiguous',
+                       ['f_contiguous', 'c_contiguous'][axis])
+                warn(reducing_dense_matrix_of_inefficient_format)
+
+        else:
+            assert compressed is not None
+            elements_count = compressed.nnz / results_count
+            axis_format = ('csc', 'csr')[axis]
+            if compressed.getformat() == axis_format:
+                timed_step = '.compressed-efficient'
+            else:
+                timed_step = '.compressed-inefficient'
+                reducing_sparse_matrix_of_inefficient_format = \
+                    'reducing axis: %s ' \
+                    'of a sparse matrix in the format: %s ' \
+                    'instead of the efficient format: %s' \
+                    % (axis, compressed.getformat(), axis_format)
+                warn(reducing_sparse_matrix_of_inefficient_format)
 
     with utm.timed_step(timed_step):
         utm.timed_parameters(results=results_count, elements=elements_count)
-        return utt.to_1d_array(reducer(matrix))
+        return reducer(matrix)
 
 
 @utm.timed_call()
-def bincount_array(
-    array: np.ndarray,
+def bincount_vector(
+    vector: utt.Vector,
     *,
     minlength: int = 0,
 ) -> np.ndarray:
@@ -624,7 +696,8 @@ def bincount_array(
         This isn't lightning-fast, and seems to be the builtin operation most likely to benefit from
         parallelization.
     '''
-    array = utt.unpandas(array)
+    proper = utt.to_proper_vector(vector)
+    array = utt.DenseVector.be(proper)
     result = np.bincount(array, minlength=minlength)
     utm.timed_parameters(size=array.size, bins=result.size)
     return result
@@ -639,13 +712,13 @@ ROLLING_FUNCTIONS = {
 
 
 @utd.expand_doc(functions=', '.join(['``%s``' % function for function in ROLLING_FUNCTIONS]))
-def sliding_window_function(
-    array: np.ndarray,
+def sliding_window_function(  # pylint: disable=too-many-locals
+    vector: utt.Vector,
     *,
     function: str,
     window_size: int,
     order_by: Optional[np.ndarray] = None,
-) -> np.ndarray:
+) -> utt.DenseVector:
     """
     Return an array of the same size as the input ``array``, where each entry is the result of
     applying the ``function`` (one of {functions}) to a sliding window of size ``window_size``
@@ -661,7 +734,8 @@ def sliding_window_function(
         The window size must be an odd positive integer. If an even value is specified, it is
         automatically increased by one.
     """
-    array = utt.unpandas(array)
+    proper = utt.to_proper_vector(vector)
+    array = utt.DenseVector.be(proper)
 
     if window_size % 2 == 0:
         window_size += 1
@@ -698,9 +772,12 @@ def sliding_window_function(
     return reordered
 
 
-def regex_matches_mask(pattern: Union[str, Pattern], strings: Collection[str]) -> np.ndarray:
+def regex_matches_mask(
+    pattern: Union[str, Pattern],
+    strings: Collection[str]
+) -> utt.DenseVector:
     '''
-    Given a collection of ``strings``, return a Numpy boolean mask specifying which of them the
+    Given a collection of ``strings``, return a numpy boolean mask specifying which of them the
     given regular expression ``pattern``.
     '''
     if isinstance(pattern, str):

@@ -37,7 +37,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     minimal_umis_of_module_of_cells: int = 6,
     inplace: bool = True,
     intermediate: bool = True,
-) -> Optional[Tuple[pd.DataFrame, pd.DataFrame, np.ndarray]]:
+) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame, np.ndarray]]:
     '''
     Detect rare genes modules.
 
@@ -118,9 +118,9 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         rare_module_of_genes = np.full(genes_count, -1)
         list_of_names_of_genes_of_modules: List[np.ndarray] = []
 
-        total_umis_of_cells = ut.get_per_obs(adata, ut.sum_axis).data
-        max_umis_of_genes = ut.get_per_var(adata, ut.max_axis).data
-        nnz_cells_of_genes = ut.get_per_var(adata, ut.nnz_axis).data
+        total_umis_of_cells = ut.get_per_obs(adata, ut.sum_axis).proper
+        max_umis_of_genes = ut.get_per_var(adata, ut.max_axis).proper
+        nnz_cells_of_genes = ut.get_per_var(adata, ut.nnz_axis).proper
 
         def results() -> Optional[Tuple[pd.DataFrame, pd.DataFrame, np.ndarray]]:
             array_of_names_of_genes_of_modules = \
@@ -160,18 +160,26 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
             candidate_data = ut.slice(adata, vars=candidate_genes_indices)
 
         with ut.timed_step('.similarity'):
+            similarity = compute_similarity(candidate_data, 'genes',
+                                            repeated=repeated_similarity,
+                                            log=log_similarity,
+                                            log_base=log_similarity_base,
+                                            log_normalization=log_similarity_normalization,
+                                            inplace=False)
+            assert similarity is not None
             similarities_between_candidate_genes = \
-                ut.unpandas(compute_similarity(candidate_data, 'genes',
-                                               repeated=repeated_similarity,
-                                               log=log_similarity,
-                                               log_base=log_similarity_base,
-                                               log_normalization=log_similarity_normalization,
-                                               inplace=False))
+                ut.to_proper_matrix(similarity)
 
-        with ut.timed_step('.linkage'):
-            linkage = \
-                sch.linkage(scd.pdist(similarities_between_candidate_genes),
-                            method=cluster_method_of_genes)
+        with ut.timed_step('.cluster'):
+            with ut.timed_step('pdist'):
+                ut.timed_parameters(  #
+                    size=similarities_between_candidate_genes.shape[0])
+                distances = scd.pdist(similarities_between_candidate_genes)
+            with ut.timed_step('linkage'):
+                ut.timed_parameters(size=distances.shape[0],
+                                    method=cluster_method_of_genes)
+                linkage = \
+                    sch.linkage(distances, method=cluster_method_of_genes)
 
         with ut.timed_step('.identify_genes'):
             np.fill_diagonal(similarities_between_candidate_genes, None)
@@ -217,8 +225,8 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
                     continue
 
                 total_umis_of_module_of_cells = \
-                    ut.to_1d_array(candidate_umis[:,
-                                                  module_candidate_indices].sum(axis=1))
+                    ut.to_dense_vector(candidate_umis[:,
+                                                      module_candidate_indices].sum(axis=1))
                 assert total_umis_of_module_of_cells.size == cells_count
 
                 minimal_total_umis_of_module_mask_of_cells = \

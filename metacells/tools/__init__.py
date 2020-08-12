@@ -11,6 +11,7 @@ All the functions included here are exported under ``metacells.tl``.
 '''
 
 from .high_normalized_variance_genes import *
+from .knn_graph import *
 from .named_genes import *
 from .noisy_lonely_genes import *
 from .properly_sampled import *

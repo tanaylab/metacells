@@ -36,13 +36,14 @@ nitpick_ignore = [
     ('py:class', 'concurrent.futures.thread.ThreadPoolExecutor'),
     ('py:class', 'IO'),
     ('py:class', 'Iterator[None]'),
-    ('py:class', 'metacells.utilities.timing.StepTiming'),
     ('py:class', 'numpy.ndarray'),
     ('py:class', 'Optional[Callable[[metacells.utilities.annotation.SlicingContext, str], None]]'),
     ('py:class', 'pandas.core.frame.DataFrame'),
     ('py:class', 'pandas.core.series.Series'),
     ('py:class', 're.Pattern'),
     ('py:class', 'scipy.sparse.base.spmatrix'),
+    ('py:class', 'S'),
+    ('py:class', 'StepTiming'),
 ]
 
 # Add any paths that contain templates here, relative to this directory.

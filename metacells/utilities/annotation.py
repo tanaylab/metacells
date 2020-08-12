@@ -142,6 +142,9 @@ __all__ = [
     'slice',
 
     'get_data',
+    'get_proper',
+    'get_proper_matrix',
+    'get_proper_vector',
     'has_data',
     'which_data',
 
@@ -605,6 +608,67 @@ def get_data(
     raise KeyError('unknown data name: %s' % name)
 
 
+@utm.timed_call()
+def get_proper(
+    adata: AnnData,
+    name: Optional[str] = None,
+    *,
+    per: Optional[str] = None,
+    compute: Optional[Callable[[], Any]] = None,
+    inplace: bool = True,
+    infocus: bool = False,
+    by: Optional[str] = None,
+) -> utt.ProperShaped:
+    '''
+    Same as :py:func:`get_data`, except that the returned data is
+    passed through :py:func:`metacells.utilities.typing.to_proper`.
+    '''
+    return utt.to_proper(get_data(adata, name, per=per, compute=compute,
+                                  inplace=inplace, infocus=infocus, by=by))
+
+
+@utm.timed_call()
+def get_proper_matrix(
+    adata: AnnData,
+    name: Optional[str] = None,
+    *,
+    per: Optional[str] = None,
+    compute: Optional[Callable[[], Any]] = None,
+    inplace: bool = True,
+    infocus: bool = False,
+    by: Optional[str] = None,
+) -> utt.ProperMatrix:
+    '''
+    Same as :py:func:`get_data`, except that the returned data is
+    passed through :py:func:`metacells.utilities.typing.to_proper_matrix`
+    ensuring it is a :py:const:`metacells.utilities.typing.ProperMatrix`.
+    '''
+    return utt.to_proper_matrix(get_data(adata, name, per=per, compute=compute,
+                                         inplace=inplace, infocus=infocus,
+                                         by=by))
+
+
+@utm.timed_call()
+def get_proper_vector(
+    adata: AnnData,
+    name: Optional[str] = None,
+    *,
+    per: Optional[str] = None,
+    compute: Optional[Callable[[], Any]] = None,
+    inplace: bool = True,
+    infocus: bool = False,
+    by: Optional[str] = None,
+) -> utt.ProperVector:
+    '''
+    Same as :py:func:`get_data`, except that the returned data is
+    passed through :py:func:`metacells.utilities.typing.to_proper_vector`
+    ensuring it is a :py:const:`metacells.utilities.typing.ProperVector`.
+    '''
+    return utt.to_proper_vector(get_data(adata, name, per=per, compute=compute,
+                                         inplace=inplace, infocus=infocus,
+                                         by=by))
+
+
 def has_data(
     adata: AnnData,
     name: str,
@@ -793,7 +857,7 @@ def get_vv_data(
     adata: AnnData,
     name: str,
     *,
-    compute: Optional[Callable[[], utt.Vector]] = None,
+    compute: Optional[Callable[[], utt.Matrix]] = None,
     inplace: bool = True,
 ) -> utt.Matrix:
     '''
@@ -817,7 +881,7 @@ def _get_shaped_data(
     shape: Tuple[int, ...],
     per_text: str,
     name: str,
-    compute: Optional[Callable[[], Any]],
+    compute: Optional[Callable[[], utt.Shaped]],
     inplace: bool
 ) -> Any:
     data = _get(annotations, name)
@@ -844,11 +908,11 @@ def get_vo_data(
     adata: AnnData,
     name: Optional[str] = None,
     *,
-    compute: Optional[Callable[[], utt.Vector]] = None,
+    compute: Optional[Callable[[], utt.Matrix]] = None,
     inplace: bool = True,
     infocus: bool = False,
     by: Optional[str] = None,
-) -> Any:
+) -> utt.Matrix:
     '''
     Lookup a per-variable-per-observation matrix (data layer) in ``adata``.
 
@@ -911,9 +975,9 @@ def get_vo_data(
             data = compute()
             if sparse.issparse(data):
                 if by == 'var':
-                    data = data.tocsc()
+                    data = utc.to_layout(data, 'column_major')
                 else:
-                    data = data.tocsr()
+                    data = utc.to_layout(data, 'row_major')
 
             if inplace or infocus:
                 with _modify(adata):
@@ -930,12 +994,13 @@ def get_vo_data(
         axis = ['var', 'obs'].index(by)
         layout = ['column_major', 'row_major'][axis]
 
-        data = adata.layers.get(by_name)
-        if data is None:
-            data = utc.to_layout(get_base_data(), layout=layout)
+        by_data = adata.layers.get(by_name)
+        if by_data is None:
+            by_data = utc.to_layout(get_base_data(), layout=layout)
             if inplace or infocus:
                 with _modify(adata):
-                    adata.layers[by_name] = data
+                    adata.layers[by_name] = by_data
+        data = by_data
 
     assert data.shape == (adata.n_obs, adata.n_vars)
     if inplace or infocus:

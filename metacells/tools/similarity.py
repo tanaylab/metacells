@@ -27,7 +27,7 @@ def compute_similarity(
     repeated: bool = True,
     inplace: bool = True,
     intermediate: bool = True,
-) -> Optional[pd.DataFrame]:
+) -> Optional[ut.PandasFrame]:
     '''
     Compute a measure of the similarity for each pair of ``elements`` (either ``cells`` or
     ``genes``).
@@ -43,7 +43,7 @@ def compute_similarity(
     **Returns**
 
     Observations-Pair (cells) or Variable-Pair (genes) Annotations
-        ``<per>_similarity``
+        ``<elements>_similarity``
             A square matrix where each entry is the similarity between a pair of cells or genes.
 
     If ``inplace`` (default: {inplace}), this is written to ``adata`` and the function returns
@@ -71,8 +71,8 @@ def compute_similarity(
 
     with ut.intermediate_step(adata, intermediate=intermediate):
         if log:
-            of = ut.get_log(adata, of, base=log_base,
-                            normalization=log_normalization).name
+            of = ut.get_log_matrix(adata, of, base=log_base,
+                                   normalization=log_normalization).name
 
         if elements == 'cells':
             similarity = ut.get_obs_obs_correlation(adata, of,
@@ -89,12 +89,17 @@ def compute_similarity(
                                                         inplace=inplace)
 
     if inplace:
-        adata.obsp['cells_similarity'] = similarity.data
-        ut.safe_slicing_data('cells_similarity', ut.SAFE_WHEN_SLICING_OBS)
+        to = elements + '_similarity'
+        if elements == 'cells':
+            adata.obsp[to] = similarity.matrix
+            ut.safe_slicing_data(to, ut.SAFE_WHEN_SLICING_OBS)
+        else:
+            adata.varp[to] = similarity.matrix
+            ut.safe_slicing_data(to, ut.SAFE_WHEN_SLICING_VAR)
         return None
 
     if elements == 'cells':
         names = adata.obs_names
     else:
         names = adata.var_names
-    return pd.DataFrame(similarity.data, index=names, columns=names)
+    return pd.DataFrame(similarity.matrix, index=names, columns=names)

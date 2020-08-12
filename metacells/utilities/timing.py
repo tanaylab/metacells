@@ -6,6 +6,7 @@ import atexit
 import os
 import sys
 from contextlib import contextmanager
+from functools import wraps
 from threading import Lock, current_thread
 from threading import local as thread_local
 from time import perf_counter_ns, thread_time_ns
@@ -22,6 +23,7 @@ __all__ = [
     'timed_parameters',
     'context',
     'current_step',
+    'StepTiming',
 ]
 
 COLLECT_TIMING = False
@@ -395,11 +397,10 @@ def timed_call(name: Optional[str] = None) -> Callable[[CALLABLE], CALLABLE]:
         return lambda function: function
 
     def wrap(function: Callable) -> Callable:
+        @wraps(function)
         def timed(*args: Any, **kwargs: Any) -> Any:
             with timed_step(name or function.__qualname__):
                 return function(*args, **kwargs)
-        timed.__name__ = function.__name__
-        timed.__qualname__ = function.__qualname__
         return timed
 
     return wrap  # type: ignore

@@ -3,8 +3,8 @@ Tools
 
 .. automodule:: metacells.tools
 
-.. automodule:: metacells.tools.similarity
-    :members:
+Filtering
+---------
 
 .. automodule:: metacells.tools.properly_sampled
     :members:
@@ -19,4 +19,13 @@ Tools
     :members:
 
 .. automodule:: metacells.tools.rare_gene_modules
+    :members:
+
+Building a Graph
+----------------
+
+.. automodule:: metacells.tools.similarity
+    :members:
+
+.. automodule:: metacells.tools.knn_graph
     :members:
