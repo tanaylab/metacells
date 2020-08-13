@@ -16,6 +16,7 @@ __all__ = [
 
 
 @ut.timed_call()
+@ut.expand_doc()
 def find_high_normalized_variance_genes(
     adata: AnnData,
     *,
@@ -25,19 +26,19 @@ def find_high_normalized_variance_genes(
     intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Find genes which have high normalized variance (high variance/mean compared to other genes with
-    a similar level of expression).
+    Find genes which have high normalized variance ``of`` some data (by default, the focus).
 
-    If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
+    The normalized variance measures the variance of the gene relative to genes with a similar
+    expression level. See :py:func:`metacells.utilities.preparation.get_normalized_variance_per_var`
+    for details.
 
-    Such genes are candidate for being "feature genes", that is, genes used to determine the
-    similarity between cells to group them into metacells.
+    Genes with a high normalized variance are candidate for being "feature genes", that is, genes
+    used to determine the similarity between cells to group them into metacells.
 
     **Input**
 
     A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes, containing the UMIs count in the ``of``
-    (default: the focus) per-variable-per-observation data.
+    observations are cells and the variables are genes.
 
     **Returns**
 
@@ -46,16 +47,13 @@ def find_high_normalized_variance_genes(
             A boolean mask indicating whether each gene was found to have a high normalized
             variance.
 
-    If ``inplace`` (default: {inplace}), these are written to ``adata`` and the function returns
-    ``None``. Otherwise this is returned as a Pandas series (indexed by the variable names).
+    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
+    ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
 
     If not ``intermediate`` (default: {intermediate}), this discards all the intermediate data used
     (e.g. sums). Otherwise, such data is kept for future reuse.
 
     **Computation Parameters**
-
-    Given an annotated ``adata``, where the variables are cell RNA profiles and the observations are
-    gene UMI counts, do the following:
 
     1. Use :py:func:`metacells.utilities.preparation.get_normalized_variance_per_var` to get the
        normalized variance of each gene.

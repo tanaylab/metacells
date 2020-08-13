@@ -4,8 +4,8 @@ Utilities for dealing with shaped data types.
 The code has to deal with many different alternative data types for what is essentially two basic
 data types: 2D matrices and 1D vectors.
 
-Specifically, we have Pandas data frames and series, Scipy sparse matrices, and Numpy
-multi-dimensional arrays (not to mention the deprecated Numpy matrix type).
+Specifically, we have pandas data frames and series, Scipy sparse matrices, and numpy
+multi-dimensional arrays (not to mention the deprecated numpy matrix type).
 
 Python has the great ability to "duck type", so in an ideal world, we could just pretend these are
 just two data types and be done. In practice, this is hopelessly broken.
@@ -16,15 +16,15 @@ First, even operations that exists for all data types sometimes have different i
 Second, operating on sparse and dense data often requires completely different code paths.
 
 This makes it very easy to write code that works today and breaks tomorrow when someone passes a
-Pandas series to a function that expects a Numpy array and it just *almost* works correctly (and god
-help the poor soul that mixes up a Numpy matrix with a 2d array).
+pandas series to a function that expects a numpy array and it just *almost* works correctly (and god
+help the poor soul that mixes up a numpy matrix with a 2d array).
 
 "Eternal vigilance is the cost of freedom" - the solution here is to define a bunch of fake types,
 which are almost entirely for the benefit of the ``mypy`` type checker (with some run-time
 assertions as well).
 
 This not only makes the code intent explicit ("explicit is better than implicit") but also allows us
-to leverage ``mypy`` to catch errors such as applying a Numpy operation on a sparse matrix, etc.
+to leverage ``mypy`` to catch errors such as applying a numpy operation on a sparse matrix, etc.
 
 To put some order in this chaos, the following concepts are used:
 
@@ -97,6 +97,7 @@ __all__ = [
     'SPARSE_FAST_FORMAT',
     'SPARSE_SLOW_FORMAT',
     'LAYOUT_OF_AXIS',
+    'PER_OF_AXIS',
 
     'is_layout',
     'is_row_major',
@@ -417,14 +418,14 @@ class CompressedMatrix(SparseMatrix):
 
 class PandasIndex(Shaped):
     '''
-    A ``mypy`` type for a Pandas index.
+    A ``mypy`` type for a pandas index.
     '''
     values: DenseVector
 
 
 class PandasFrame(Shaped):
     '''
-    A ``mypy`` type for Pandas 2-dimensional data.
+    A ``mypy`` type for pandas 2-dimensional data.
     '''
     shape: Tuple[int, int]
     values: DenseMatrix
@@ -438,7 +439,7 @@ class PandasFrame(Shaped):
 
 class PandasSeries(Shaped):
     '''
-    A ``mypy`` type for Pandas 1-dimensional data.
+    A ``mypy`` type for pandas 1-dimensional data.
     '''
     size: int
     shape: Tuple[int]
@@ -513,12 +514,12 @@ def to_proper(
     layout: str = 'row_major'
 ) -> ProperShaped:
     '''
-    Given some data, access the properly-formatted data within it.
+    Given some ``shaped`` data, access the properly-formatted data within it.
 
-    If ``ndim`` is specified, insist this is the number of dimensions.
+    If ``ndim`` (default: {ndim}) is specified, insist this is the number of dimensions.
 
     If the data is in some strange sparse format, use ``layout`` (default: {layout}) to decide
-    whether to return it in ``row_major`` (csr) or ``column_major`` (csc) format. Otherwise, this is
+    whether to return it in ``row_major`` (csr) or ``column_major`` (csc) layout. Otherwise, this is
     ignored.
     '''
     assert layout in LAYOUT_OF_AXIS
@@ -572,13 +573,13 @@ def to_proper_matrices(
     matrix: Matrix,
     *,
     layout: str = 'row_major'
-) -> Tuple[Optional[DenseMatrix], Optional[CompressedMatrix], ProperMatrix]:
+) -> Tuple[ProperMatrix, Optional[DenseMatrix], Optional[CompressedMatrix]]:
     '''
     Given some matrix, return the properly-formatted data within it using
     :py:func:`to_proper_matrix`, which may be either dense or compressed (sparse).
     '''
     proper = to_proper_matrix(matrix, layout=layout)
-    return (DenseMatrix.maybe(proper), CompressedMatrix.maybe(proper), proper)
+    return (proper, DenseMatrix.maybe(proper), CompressedMatrix.maybe(proper))
 
 
 @utm.timed_call()
@@ -664,6 +665,7 @@ def unfreeze(shaped: Shaped) -> None:
     raise NotImplementedError('unfreeze of %s' % shaped.__class__)
 
 
+@utd.expand_doc()
 def to_dense(
     shaped: Shaped,
     *,
@@ -674,10 +676,10 @@ def to_dense(
     Convert some (possibly sparse) ``shaped`` data to an (full dense size) 1/2-dimensional numpy
     array.
 
-    If ``ndim`` is specified, insist this is the number of dimensions.
+    If ``ndim`` (default: {ndim}) is specified, insist this is the number of dimensions.
 
-    If ``copy``, a copy of the data is returned even if it is already a numpy array. If ``copy`` is
-    ``None``, always returns the data without copying (fails on sparse data).
+    If ``copy`` (default: {copy}), a copy of the data is returned even if it is already a numpy
+    array. If ``copy`` is ``None``, always returns the data without copying (fails on sparse data).
     '''
     proper = to_proper(shaped, ndim=ndim)
 
@@ -699,24 +701,26 @@ def to_dense(
     return dense  # type: ignore
 
 
+@utd.expand_doc()
 def to_dense_matrix(matrix: Matrix, *, copy: Optional[bool] = False) -> DenseMatrix:
     '''
     Convert some (possibly sparse) data to an (full dense size) 2-dimensional array.
 
-    If ``copy``, a copy of the data is returned even if it is already a 2d numpy array. If ``copy``
-    is ``None``, always returns the data without copying (fails on sparse data).
+    If ``copy`` (default: {copy}), a copy of the data is returned even if it is already a 2d numpy
+    array. If ``copy`` is ``None``, always returns the data without copying (fails on sparse data).
     '''
     return to_dense(matrix, copy=copy)  # type: ignore
 
 
+@utd.expand_doc()
 def to_dense_vector(shaped: Shaped, *, copy: Optional[bool] = False) -> DenseVector:
     '''
     Convert some (possibly sparse) data to an (full dense size) 1-dimensional array.
 
     This will convert a matrix where one of the dimensions has size one to a flat array.
 
-    If ``copy``, a copy of the data is returned even if it is already a 1d numpy array. If ``copy``
-    is ``None``, always returns the data without copying (fails on sparse data).
+    If ``copy`` (default: {copy}), a copy of the data is returned even if it is already a 1d numpy
+    array. If ``copy`` is ``None``, always returns the data without copying (fails on sparse data).
     '''
     dense = to_dense(shaped, copy=copy)
 
@@ -748,10 +752,13 @@ SPARSE_SLOW_FORMAT = dict(column_major='csr', row_major='csc')
 #: The layout by the ``axis`` parameter.
 LAYOUT_OF_AXIS = ('row_major', 'column_major')
 
+#: When reducing data, get results ``per`` row or column (by the ``axis`` parameter).
+PER_OF_AXIS = ('row', 'column')
+
 
 def is_layout(matrix: Matrix, layout: str) -> bool:
     '''
-    Test whether the matrix layout is optimized for ``column_major`` or ``row_major`` layout.
+    Test whether the ``layout`` of the ``matrix`` is one of ``column_major`` or ``row_major``.
     '''
     sparse = SparseMatrix.maybe(matrix)
     if sparse is not None:
@@ -763,14 +770,14 @@ def is_layout(matrix: Matrix, layout: str) -> bool:
 
 def is_row_major(matrix: Matrix) -> bool:
     '''
-    Test whether the matrix layout is optimized for per-row (variable, gene) processing.
+    Test whether the matrix ``layout`` is optimized for per-row (variable, gene) processing.
     '''
     return is_layout(matrix, 'row_major')
 
 
 def is_column_major(matrix: Matrix) -> bool:
     '''
-    Test whether the matrix layout is optimized for per-column (observation, cell) processing.
+    Test whether the ``matrix`` layout is optimized for per-column (observation, cell) processing.
     '''
     return is_layout(matrix, 'column_major')
 
@@ -785,11 +792,11 @@ def matrix_layout(matrix: ImproperMatrix) -> Optional[str]: ...
 
 def matrix_layout(matrix):  # type: ignore
     '''
-    Return which layout the matrix is optimized for (``row_major`` or ``column_major``).
+    Return which layout the ``matrix`` is optimized for (``row_major`` or ``column_major``).
 
     .. note::
 
-        The matrix may be neither one, in which case this returns ``None``.
+        The matrix may be in neither layout, in which case this returns ``None``.
     '''
     sparse = SparseMatrix.maybe(matrix)
     if sparse is not None:
@@ -807,7 +814,7 @@ def matrix_layout(matrix):  # type: ignore
 
 def is_contiguous(vector: Vector) -> bool:
     '''
-    Return whether the vector is contiguous in memory.
+    Return whether the ``vector`` is contiguous in memory.
 
     This is only ``True`` for a dense vector.
     '''
@@ -818,9 +825,10 @@ def is_contiguous(vector: Vector) -> bool:
 
 def to_contiguous(vector: Vector, *, copy: bool = False) -> DenseVector:
     '''
-    Return the vector in contiguous (dense) format.
+    Return the ``vector`` in contiguous (dense) format.
 
-    If ``copy``, a copy of the vector is returned even if it is already a contiguous numpy array.
+    If ``copy`` (default: {copy}), a copy of the vector is returned even if it is already a
+    contiguous numpy array.
     '''
     proper = to_proper_vector(vector)
     dense = DenseVector.be(proper)

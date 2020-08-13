@@ -36,24 +36,20 @@ def filter_data(  # pylint: disable=too-many-locals,too-many-statements,too-many
     **Input**
 
     A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes, containing the UMIs count in the ``of``
-    (default: the ``focus``) per-variable-per-observation data.
+    observations are cells and the variables are genes.
 
     **Returns**
 
     An annotated data containing a subset of the cells and genes.
 
-    If ``name`` is not ``None`` (default: ``{name}``), store the mask in ``<name>_cells`` and
+    If ``name`` (default: {name}) is not ``None``, store the mask in ``<name>_cells`` and
     ``<name>_genes`` annotations of the full data.
 
     If no cells and/or no genes were selected by the filter, return ``None``.
 
     **Computation Parameters**
 
-    Given an annotated ``adata``, where the variables are cell RNA profiles and the observations are
-    gene UMI counts, do the following:
-
-    1. If ``track_base_indices`` is not ``None`` (default: ``{track_base_indices}``), then invoke
+    1. If ``track_base_indices`` (default: ``{track_base_indices}``) is not ``None``, then invoke
        :py:func:`metacells.utilities.preparation.track_base_indices` to allow for mapping the
        returned sliced data back to the full original data.
 
@@ -83,7 +79,7 @@ def filter_data(  # pylint: disable=too-many-locals,too-many-statements,too-many
         else:
             must_exist = True
 
-        per = ut.which_data(adata, mask_name, must_exist=must_exist)
+        per = ut.data_per(adata, mask_name, must_exist=must_exist)
         if per is None:
             continue
 

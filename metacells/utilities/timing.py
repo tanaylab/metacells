@@ -89,7 +89,7 @@ def log_steps(log: bool) -> None:
     .. note::
 
         This only works if :py:func:`collect_timing` was set. It is a crude instrument to hunt for
-        deadlocks, very-long-running ``Numpy`` functions, and the like. Basically, if the program is
+        deadlocks, very-long-running numpy functions, and the like. Basically, if the program is
         taking 100% CPU and you have no idea what it is doing, turning this on would give you some
         idea of where it is stuck.
     '''
@@ -249,7 +249,7 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
 
     .. code:: python
 
-        with ut.step("foo"):
+        with ut.timed_step("foo"):
             some_computation()
 
     For every invocation, the program will append a line similar to:
@@ -369,14 +369,15 @@ def _print_timing(
 
 def timed_parameters(**kwargs: Any) -> None:
     '''
-    Associate relevant timing parameters to the innermost ``timing.step``.
+    Associate relevant timing parameters to the innermost
+    :py:func:`metacells.utilities.timing.timed_step`.
 
     The specified arguments are appended at the end of the generated ``timing.csv`` line. For
-    example, ``parameters(foo=2, bar=3)`` would add ``foo,2,bar,3`` to the line ``timing.csv``.
+    example, ``timed_parameters(foo=2, bar=3)`` would add ``foo,2,bar,3`` to the line
+    in ``timing.csv``.
 
     This allows tracking parameters which affect invocation time (such as array sizes), to help
-    calibrate parameters such as ``minimal_invocations_per_batch`` for ``parallel_map`` and
-    ``parallel_for``.
+    identify the causes for the long-running operations.
     '''
     step_timing = current_step()
     if step_timing is not None:
@@ -390,8 +391,9 @@ CALLABLE = TypeVar('CALLABLE')
 
 def timed_call(name: Optional[str] = None) -> Callable[[CALLABLE], CALLABLE]:
     '''
-    Automatically wrap each function invocation with ``timing.step`` using the ``name`` (by default,
-    the function's qualified name).
+    Automatically wrap each function invocation with
+    :py:func:`metacells.utilities.timing.timed_step` using the ``name`` (by default, the function's
+    ``__qualname__``).
     '''
     if not COLLECT_TIMING:
         return lambda function: function
@@ -408,16 +410,17 @@ def timed_call(name: Optional[str] = None) -> Callable[[CALLABLE], CALLABLE]:
 
 def context() -> str:
     '''
-    Return the full current context (path of steps leading to the current point).
+    Return the full current context (path of :py:func:`metacells.utilities.timing.timed_step`-s
+    leading to the current point).
 
     .. note::
 
-        The context will be empty unless we are collecting timing.
+        * The context will be empty unless we are collecting timing.
 
-    .. note::
-
-        This correctly tracks the context across threads when using ``parallel_for`` and
-        ``parallel_map``.
+        * This correctly tracks the context across threads when using
+          :py:func:`metacells.utilities.threading.parallel_map`,
+          :py:func:`metacells.utilities.threading.parallel_for` and
+          :py:func:`metacells.utilities.threading.parallel_collect` functions.
     '''
     steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
     if not steps_stack:
@@ -427,7 +430,8 @@ def context() -> str:
 
 def current_step() -> Optional[StepTiming]:
     '''
-    The timing collector for the innermost (current) step.
+    The timing collector for the innermost (current)
+    :py:func:`metacells.utilities.timing.timed_step`.
     '''
     if not COLLECT_TIMING:
         return None

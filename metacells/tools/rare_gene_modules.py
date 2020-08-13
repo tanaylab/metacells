@@ -12,7 +12,7 @@ from anndata import AnnData
 
 import metacells.utilities as ut
 
-from .similarity import compute_similarity
+from .similarity import compute_var_var_similarity
 
 __all__ = [
     'find_rare_genes_modules',
@@ -52,8 +52,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     **Input**
 
     A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes, containing the UMIs count in the ``of``
-    (default: the focus) per-variable-per-observation data.
+    observations are cells and the variables are genes.
 
     If not ``intermediate`` (default: {intermediate}), this discards all the intermediate data used
     (e.g. sums). Otherwise, such data is kept for future reuse.
@@ -65,23 +64,26 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
             The index of the rare gene module each cell expresses the most, or ``-1`` in the common
             case it does not express any rare genes module.
 
+        ``rare_cells``
+            A boolean mask for the (few) cells that express a rare gene module.
+
     Variable (Gene) Annotations
         ``genes_rare_gene_module``
             The index of the rare gene module each gene belongs to, or ``-1`` in the common case it
             does not belong to any rare genes module.
+
+        ``rare_genes``
+            A boolean mask for the genes in any of the rare gene modules.
 
     Unstructured Annotations
         ``rare_gene_modules``
             An array of rare gene modules, where every entry is the array of the names of the genes
             of the module.
 
-    If ``inplace``, these are written to ``adata`` and the function returns ``None``. Otherwise they
-    are returned as tuple containing two data frames and an array.
+    If ``inplace``, these are written to to the data, and the function returns ``None``. Otherwise
+    they are returned as tuple containing two data frames and an array.
 
     **Computation Parameters**
-
-    Given an annotated ``adata``, where the variables are cell RNA profiles and the observations are
-    gene UMI counts, do the following:
 
     1. Pick as candidates all genes that are expressed in more than
        ``maximal_fraction_of_cells_of_genes`` (default: {maximal_fraction_of_cells_of_genes}), and
@@ -89,7 +91,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
        (default: {minimal_max_umis_of_genes}).
 
     2. Compute the similarity between the genes using
-       :py:func:`metacells.tools.similarity.compute_similarity`. Pass it ``log_similarity``
+       :py:func:`metacells.tools.similarity.compute_var_var_similarity`. Pass it ``log_similarity``
        (default: {log_similarity}), ``log_similarity_base`` (default: {log_similarity_base}), and
        ``log_similarity_normalization`` (default: {log_similarity_normalization}) as well as
        ``repeated_similarity`` (default: {repeated_similarity}).
@@ -118,9 +120,9 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         rare_module_of_genes = np.full(genes_count, -1)
         list_of_names_of_genes_of_modules: List[np.ndarray] = []
 
-        total_umis_of_cells = ut.get_per_obs(adata, ut.sum_axis).proper
-        max_umis_of_genes = ut.get_per_var(adata, ut.max_axis).proper
-        nnz_cells_of_genes = ut.get_per_var(adata, ut.nnz_axis).proper
+        total_umis_of_cells = ut.get_per_obs(adata, ut.sum_per).proper
+        max_umis_of_genes = ut.get_per_var(adata, ut.max_per).proper
+        nnz_cells_of_genes = ut.get_per_var(adata, ut.nnz_per).proper
 
         def results() -> Optional[Tuple[pd.DataFrame, pd.DataFrame, np.ndarray]]:
             array_of_names_of_genes_of_modules = \
@@ -128,7 +130,9 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
 
             if inplace:
                 adata.obs['cells_rare_gene_module'] = rare_module_of_cells
+                adata.obs['rare_cells'] = rare_module_of_cells >= 0
                 adata.var['genes_rare_gene_module'] = rare_module_of_genes
+                adata.var['rare_genes'] = rare_module_of_genes >= 0
                 adata.uns['rare_gene_modules'] = array_of_names_of_genes_of_modules
                 return None
 
@@ -136,7 +140,9 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
             var_metrics = pd.DataFrame(index=adata.var_names)
 
             obs_metrics['cells_rare_gene_module'] = rare_module_of_cells
+            obs_metrics['rare_cells'] = rare_module_of_cells >= 0
             var_metrics['genes_rare_gene_module'] = rare_module_of_genes
+            var_metrics['rare_genes'] = rare_module_of_genes >= 0
 
             return obs_metrics, var_metrics, array_of_names_of_genes_of_modules
 
@@ -160,12 +166,13 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
             candidate_data = ut.slice(adata, vars=candidate_genes_indices)
 
         with ut.timed_step('.similarity'):
-            similarity = compute_similarity(candidate_data, 'genes',
-                                            repeated=repeated_similarity,
-                                            log=log_similarity,
-                                            log_base=log_similarity_base,
-                                            log_normalization=log_similarity_normalization,
-                                            inplace=False)
+            similarity = \
+                compute_var_var_similarity(candidate_data,
+                                           repeated=repeated_similarity,
+                                           log=log_similarity,
+                                           log_base=log_similarity_base,
+                                           log_normalization=log_similarity_normalization,
+                                           inplace=False)
             assert similarity is not None
             similarities_between_candidate_genes = \
                 ut.to_proper_matrix(similarity)
@@ -218,7 +225,8 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         with ut.timed_step('.identify_cells'):
             maximal_strength_of_cells = np.zeros(cells_count)
             gene_indices_of_modules: List[np.ndarray] = []
-            candidate_umis = ut.get_vo_data(candidate_data, of, by='var')
+            candidate_umis = \
+                ut.get_vo_data(candidate_data, of, layout='column_major')
 
             for link_index, module_candidate_indices in combined_candidate_indices.items():
                 if len(module_candidate_indices) < minimal_size_of_modules:

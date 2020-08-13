@@ -30,8 +30,8 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
     '''
     Detect noisy lonely genes.
 
-    Noisy genes have high expression and high variance. Lonely genes have low correlation with all
-    other genes.
+    Noisy genes have high expression and high variance ``of`` some data (by default, the focus).
+    Lonely genes have low correlation with all other genes.
 
     Genes that are both noisy and lonely tend to throw off clustering algorithms. Since they are
     noisy, they are given significant weight in the algorithm. Since they are lonely, they don't
@@ -51,14 +51,10 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
         cells of a reasonable size (we recommend 20,000 cells), and use just these cells to detect
         the noisy lonely genes, before clustering the complete large data set.
 
-        It is also strongly recommended these cells be downsampled so their total number of UMIs
-        is the same, to get an unbiased sampling of each gene in each cell.
-
     **Input**
 
     A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes, containing the UMIs count in the ``of``
-    (default: the focus) per-variable-per-observation data.
+    observations are cells and the variables are genes.
 
     **Returns**
 
@@ -66,22 +62,20 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
         ``noisy_lonely_genes``
             A boolean mask indicating whether each gene was found to be a noisy lonely gene.
 
-    If ``inplace`` (default: {inplace}), these are written to ``adata`` and the function returns
-    ``None``. Otherwise this is returned as a Pandas series (indexed by the variable names).
+    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
+    ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
 
     If not ``intermediate`` (default: {intermediate}), this discards all the intermediate data used
     (e.g. sums). Otherwise, such data is kept for future reuse.
 
     **Computation Parameters**
 
-    Given an annotated ``adata``, where the variables are cell RNA profiles and the observations are
-    gene UMI counts, do the following:
-
     1. Pick as candidates all genes whose fraction of the UMIs is at least
        ``minimal_fraction_of_genes`` (default: {minimal_fraction_of_genes}).
 
-    2. Restrict the genes to include only genes whose relative variance is at least
-       ``minimal_relative_variance_of_genes`` (default: {minimal_relative_variance_of_genes}).
+    2. Restrict the genes to include only genes whose relative variance (that is,
+       log_2(variance/mean)) is at least ``minimal_relative_variance_of_genes`` (default:
+       {minimal_relative_variance_of_genes}).
 
     3. Finally restrict the genes to include only genes which have a correlation of at most
        ``maximal_correlation_of_genes`` (default: {maximal_correlation_of_genes}) with at least one

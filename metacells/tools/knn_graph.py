@@ -13,15 +13,15 @@ from anndata import AnnData
 import metacells.utilities as ut
 
 __all__ = [
-    'compute_knn_graph'
+    'compute_obs_obs_knn_graph',
+    'compute_var_var_knn_graph',
 ]
 
 
 @ut.timed_call()
 @ut.expand_doc()
-def compute_knn_graph(  # pylint: disable=too-many-locals
+def compute_obs_obs_knn_graph(  # pylint: disable=too-many-locals
     adata: AnnData,
-    elements: str,
     of: Optional[str] = None,
     *,
     k: int,
@@ -33,44 +33,39 @@ def compute_knn_graph(  # pylint: disable=too-many-locals
 ) -> Optional[ut.PandasFrame]:
     '''
     Compute a directed  K-Nearest-Neighbors graph based on similarity data for each pair of
-    ``elements`` (either ``cells`` or ``genes``).
+    observations (cells).
 
-    If ``of`` is specified, this specific data is used. Otherwise, ``<elements>_similarity`` is
-    used.
+    If ``of`` (default: {of}) is specified, this specific data is used. Otherwise,
+    ``obs_similarity`` is used.
 
     **Input**
 
     A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes, containing the UMIs count in the ``of``
-    (default: the ``focus``) per-variable-per-observation data.
+    observations are cells and the variables are genes.
 
     **Returns**
 
-    Observations-Pair (cells) or Variable-Pair (genes) Annotations
-        ``<elements>_outgoing_weights``
+    Observations-Pair Annotations
+        ``obs_outgoing_weights``
             A sparse square matrix where each non-zero entry is the weight of an edge between a pair
             of cells or genes, where the sum of the weights of the outgoing edges for each element
             is 1 (there is always at least one such edge).
 
-    If ``inplace`` (default: {inplace}), this is written to ``adata`` and the function returns
-    ``None``. Otherwise this is returned as a Pandas data frame (indexed by the observation or
-    variable names).
+    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
+    ``None``. Otherwise this is returned as a pandas data frame (indexed by the observation names).
 
     If not ``intermediate`` (default: {intermediate}), this discards all the intermediate data used
     (e.g. sums). Otherwise, such data is kept for future reuse.
 
     **Computation Parameters**
 
-    Given an annotated ``adata``, where the variables are cell RNA profiles and the observations are
-    gene UMI counts, do the following:
-
-    1. Use the ``<elements>_similarity`` to rank the edges, and keep the highest-ranked ``k *
+    1. Use the ``obs_similarity`` to rank the edges, and keep the highest-ranked ``k *
        balanced_ranks_factor`` (default: k * {balanced_ranks_factor}) outgoing edges for each node.
        while ensuring the highest-ranked outgoing edge of each node is also used by the other node
        it is connected to. This gives us an asymmetric sparse ``<elements>_outgoing_ranks`` matrix.
 
-    2. Convert the asymmetric outgoing ranks matrix into a symmetric ``<elements>_balanced_ranks``
-       matrix by element-wise multiplying it with its transpose. That is, for each edge to be
+    2. Convert the asymmetric outgoing ranks matrix into a symmetric ``obs_balanced_ranks`` matrix
+       by element-wise multiplying it with its transpose. That is, for each edge to be
        high-balanced-rank, it has to be high-outgoing-rank for both the nodes it connects.
 
        .. note::
@@ -85,8 +80,8 @@ def compute_knn_graph(  # pylint: disable=too-many-locals
        {incoming_degree_factor}) highest-ranked incoming edges for each node, and then only the ``k
        * outgoing_degree_factor`` (default: {outgoing_degree_factor}) highest-ranked outgoing edges
        for each node, while ensuring that the highest-balanced-ranked outgoing edge of each node is
-       preserved. This gives us an asymmetric ``<elements>_pruned_ranks`` matrix, which has the
-       structure we want, but not the correct edge weights yet.
+       preserved. This gives us an asymmetric ``obs_pruned_ranks`` matrix, which has the structure
+       we want, but not the correct edge weights yet.
 
        .. note::
 
@@ -96,8 +91,8 @@ def compute_knn_graph(  # pylint: disable=too-many-locals
 
     4. Normalize the outgoing edge weights by dividing them with the sum of their balanced ranks,
        such that the sum of the outgoing edge weights for each node is 1. Note that there is always
-       at least one outgoing edge for each node. This gives us the ``<elements>_outgoing_weights``
-       for our directed K-Nearest-Neighbors graph.
+       at least one outgoing edge for each node. This gives us the ``obs_outgoing_weights`` for our
+       directed K-Nearest-Neighbors graph.
 
        .. note::
 
@@ -105,7 +100,115 @@ def compute_knn_graph(  # pylint: disable=too-many-locals
             candidate grouping to add it to. This of course doesn't protect the node from being
             rejected by its group as an outlier.
     '''
-    assert elements in ('cells', 'genes')
+    return _compute_elements_knn_graph(adata, 'obs', of, k=k,
+                                       balanced_ranks_factor=balanced_ranks_factor,
+                                       incoming_degree_factor=incoming_degree_factor,
+                                       outgoing_degree_factor=outgoing_degree_factor,
+                                       inplace=inplace, intermediate=intermediate)
+
+
+@ut.timed_call()
+@ut.expand_doc()
+def compute_var_var_knn_graph(  # pylint: disable=too-many-locals
+    adata: AnnData,
+    of: Optional[str] = None,
+    *,
+    k: int,
+    balanced_ranks_factor: float = 4.0,
+    incoming_degree_factor: float = 3.0,
+    outgoing_degree_factor: float = 1.0,
+    inplace: bool = True,
+    intermediate: bool = True,
+) -> Optional[ut.PandasFrame]:
+    '''
+    Compute a directed  K-Nearest-Neighbors graph based on similarity data for each pair of
+    variables (genes).
+
+    If ``of`` (default: {of}) is specified, this specific data is used. Otherwise,
+    ``var_similarity`` is used.
+
+    **Input**
+
+    A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
+    observations are cells and the variables are genes.
+
+    **Returns**
+
+    Variables-Pair Annotations
+        ``var_outgoing_weights``
+            A sparse square matrix where each non-zero entry is the weight of an edge between a pair
+            of cells or genes, where the sum of the weights of the outgoing edges for each element
+            is 1 (there is always at least one such edge).
+
+    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
+    ``None``. Otherwise this is returned as a pandas data frame (indexed by the variable names).
+
+    If not ``intermediate`` (default: {intermediate}), this discards all the intermediate data used
+    (e.g. sums). Otherwise, such data is kept for future reuse.
+
+    **Computation Parameters**
+
+    1. Use the ``var_similarity`` to rank the edges, and keep the highest-ranked ``k *
+       balanced_ranks_factor`` (default: k * {balanced_ranks_factor}) outgoing edges for each node.
+       while ensuring the highest-ranked outgoing edge of each node is also used by the other node
+       it is connected to. This gives us an asymmetric sparse ``<elements>_outgoing_ranks`` matrix.
+
+    2. Convert the asymmetric outgoing ranks matrix into a symmetric ``var_balanced_ranks`` matrix
+       by element-wise multiplying it with its transpose. That is, for each edge to be
+       high-balanced-rank, it has to be high-outgoing-rank for both the nodes it connects.
+
+       .. note::
+
+            This can drastically reduce the degree of the nodes, since to survive an edge needs to
+            have been in the top ranks for both its nodes (as multiplying with zero drops the edge).
+            This is why the ``balanced_ranks_factor`` needs to be large-ish. At the same time, we
+            know at least the highest-ranked edge of each node will survive, so the minimum degree
+            of a node using the balanced rank edges is 1.
+
+    3. Prune the edges, keeping only the ``k * incoming_degree_factor`` (default: k *
+       {incoming_degree_factor}) highest-ranked incoming edges for each node, and then only the ``k
+       * outgoing_degree_factor`` (default: {outgoing_degree_factor}) highest-ranked outgoing edges
+       for each node, while ensuring that the highest-balanced-ranked outgoing edge of each node is
+       preserved. This gives us an asymmetric ``var_pruned_ranks`` matrix, which has the structure
+       we want, but not the correct edge weights yet.
+
+       .. note::
+
+            Balancing the ranks, and then pruning the incoming edges, ensures that "hub" nodes, that
+            is nodes that many other nodes prefer to connect with, end up connected to a limited
+            number of such "spoke" nodes.
+
+    4. Normalize the outgoing edge weights by dividing them with the sum of their balanced ranks,
+       such that the sum of the outgoing edge weights for each node is 1. Note that there is always
+       at least one outgoing edge for each node. This gives us the ``var_outgoing_weights`` for our
+       directed K-Nearest-Neighbors graph.
+
+       .. note::
+
+            Ensuring each node has at least one outgoing edge allows us to always have at least one
+            candidate grouping to add it to. This of course doesn't protect the node from being
+            rejected by its group as an outlier.
+    '''
+    return _compute_elements_knn_graph(adata, 'var', of, k=k,
+                                       balanced_ranks_factor=balanced_ranks_factor,
+                                       incoming_degree_factor=incoming_degree_factor,
+                                       outgoing_degree_factor=outgoing_degree_factor,
+                                       inplace=inplace, intermediate=intermediate)
+
+
+def _compute_elements_knn_graph(  # pylint: disable=too-many-locals
+    adata: AnnData,
+    elements: str,
+    of: Optional[str] = None,
+    *,
+    k: int,
+    balanced_ranks_factor: float = 4.0,
+    incoming_degree_factor: float = 3.0,
+    outgoing_degree_factor: float = 1.0,
+    inplace: bool = True,
+    intermediate: bool = True,
+) -> Optional[ut.PandasFrame]:
+    assert elements in ('obs', 'var')
     assert balanced_ranks_factor > 0.0
     assert incoming_degree_factor > 0.0
     assert outgoing_degree_factor > 0.0
@@ -113,7 +216,7 @@ def compute_knn_graph(  # pylint: disable=too-many-locals
     if of is None:
         of = elements + '_similarity'
 
-    if elements == 'cells':
+    if elements == 'obs':
         annotations = adata.obsp
         slicing_mask = ut.SAFE_WHEN_SLICING_OBS
     else:
@@ -131,41 +234,38 @@ def compute_knn_graph(  # pylint: disable=too-many-locals
     similarity = ut.DenseMatrix.be(similarity)
 
     with ut.timed_step('.outgoing_ranks'):
-        outgoing_ranks = rank_outgoing(similarity, k, balanced_ranks_factor)
+        outgoing_ranks = _rank_outgoing(similarity, k, balanced_ranks_factor)
         store_matrix(outgoing_ranks, 'outgoing_ranks', intermediate)
 
     with ut.timed_step('.balance_ranks'):
-        balanced_ranks = balance_ranks(outgoing_ranks)
+        balanced_ranks = _balance_ranks(outgoing_ranks)
         store_matrix(outgoing_ranks, 'balanced_ranks', intermediate)
 
     with ut.timed_step('.prune_ranks'):
-        pruned_ranks = prune_ranks(balanced_ranks, k,
-                                   incoming_degree_factor,
-                                   outgoing_degree_factor)
+        pruned_ranks = _prune_ranks(balanced_ranks, k,
+                                    incoming_degree_factor,
+                                    outgoing_degree_factor)
         store_matrix(outgoing_ranks, 'pruned_ranks', intermediate)
 
     with ut.timed_step('.weigh_edges'):
-        outgoing_weights = weigh_edges(pruned_ranks)
+        outgoing_weights = _weigh_edges(pruned_ranks)
         store_matrix(outgoing_weights, 'outgoing_weights', inplace)
 
     if inplace:
         return None
 
-    if elements == 'cells':
+    if elements == 'obs':
         names = adata.obs_names
     else:
         names = adata.var_names
     return pd.DataFrame(ut.to_dense_matrix(outgoing_weights), index=names, columns=names)
 
 
-def rank_outgoing(  # pylint: disable=too-many-locals
+def _rank_outgoing(  # pylint: disable=too-many-locals
     similarity: ut.DenseMatrix,
     k: int,
     balanced_ranks_factor: float
 ) -> ut.CompressedMatrix:
-    '''
-    Convert the symmetric similarity matrix to a sparse asymmetric outgoing ranks matrix.
-    '''
     similarity = ut.to_dense_matrix(similarity, copy=True)
     size = similarity.shape[0]
     assert similarity.shape == (size, size)
@@ -236,10 +336,7 @@ def rank_outgoing(  # pylint: disable=too-many-locals
     return outgoing_ranks
 
 
-def balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
-    '''
-    Convert the sparse asymmetric outgoing ranks matrix to a sparse symmetric balanced ranks matrix.
-    '''
+def _balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     size = outgoing_ranks.shape[0]
 
     transposed_ranks = \
@@ -264,16 +361,12 @@ def balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     return balanced_ranks
 
 
-def prune_ranks(  # pylint: disable=too-many-locals,too-many-statements
+def _prune_ranks(  # pylint: disable=too-many-locals,too-many-statements
     balanced_ranks: ut.CompressedMatrix,
     k: int,
     incoming_degree_factor: float,
     outgoing_degree_factor: float
 ) -> ut.CompressedMatrix:
-    '''
-    Prune the sparse symmetric balanced ranks matrix into a bounded degrees asymmetric pruned ranks
-    matrix.
-    '''
     size = balanced_ranks.shape[0]
 
     incoming_degree = int(round(k * incoming_degree_factor))
@@ -413,14 +506,10 @@ def prune_ranks(  # pylint: disable=too-many-locals,too-many-statements
     return pruned_ranks
 
 
-def weigh_edges(pruned_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
-    '''
-    Convert the sparse asymmetric balanced ranks matrix to a sparse asymmetric outgoing edge weights
-    matrix where the sum of the outgoing edges of each node is 1.
-    '''
+def _weigh_edges(pruned_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     size = pruned_ranks.shape[0]
 
-    total_ranks_per_row = ut.sum_axis(pruned_ranks, axis=1)
+    total_ranks_per_row = ut.sum_per(pruned_ranks, per='row')
     with ut.timed_step('.scale'):
         ut.timed_parameters(size=size)
         scale_per_row = \

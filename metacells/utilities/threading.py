@@ -29,6 +29,7 @@ __all__ = [
     'parallel_map',
     'parallel_for',
     'parallel_collect',
+    'is_in_parallel',
     'SharedStorage',
 ]
 
@@ -41,11 +42,23 @@ MAIN_THREADS_COUNT = 1
 SUB_THREADS_COUNT = 0
 
 
+def is_in_parallel() -> bool:
+    '''
+    Return whether, to the best of out knowledge, the current code is executing
+    in parallel with something else.
+
+    If this returns ``True``, then we know for sure of other threads.
+    If it returns ``False``, there may still be such other threads (e.g., inner threads
+    used by numpy).
+    '''
+    return MAIN_THREADS_COUNT > 1
+
+
 def threads_count(threads: int) -> None:
     '''
     The number of threads to use.
 
-    By default, use all the available hardware threads. Override this by setting the
+    By default, we use all the available hardware threads. Override this by setting the
     ``METACELLS_THREADS_COUNT`` environment variable or by invoking this function from the main
     thread.
 
@@ -87,31 +100,31 @@ def threads_count(threads: int) -> None:
 
 def limit_inner_threads(limit: bool) -> None:
     '''
-    Set whether to limit the inner threads used by ``Numpy``.
+    Set whether to limit the inner threads used by numpy.
 
     By default, we do. Override this by setting the ``METACELLS_LIMIT_INNER_THREADS`` environment
     variable to ``false`` , or by invoking this function from the main thread.
 
     **Why do we do this?**
 
-    Some Numpy builtin operations switch to a parallel execution using private inner threads, for
+    Some numpy builtin operations switch to a parallel execution using private inner threads, for
     "large enough" data. This potentially causes disastrous over-subscription: multiple application
-    threads, each invoking multiple inner Numpy threads, can generate up to N^2 threads on an N-CPU
+    threads, each invoking multiple inner numpy threads, can generate up to N^2 threads on an N-CPU
     server (e.g. 2500 threads on a 50-CPU machine).
 
     To battle this, the code here uses the ``threadpoolctl`` module to reduce the number of inner
-    Numpy threads based on the number of current application threads, that is:
+    numpy threads based on the number of current application threads, that is:
 
-    * If you do not invoke any of the ``parallel_XXX`` functions below, Numpy would be able
-      to take over all the CPUs.
+    * If you do not invoke any of the :py:func:`parallel_map` :py:func:`parallel_for` or
+      :py:func:`parallel_collect` functions below, numpy would be able to take over all the CPUs.
 
     * In the common case of "large" parallel loops, each parallel invocation
       would be forced to be internally serial, which is reasonably efficient (but not necessarily
       optimal).
 
-    * In intermediate cases, e.g. running only a few tasks in parallel, ``Numpy`` would be
+    * In intermediate cases, e.g. running only a few tasks in parallel, numpy would be
       restricted to using only the "fair share" of CPUs (e.g., half the CPUs for each of 2 parallel
-      tasks). This is not optimal, since (for example) if only one of the tasks invokes Numpy, we
+      tasks). This is not optimal, since (for example) if only one of the tasks invokes numpy, we
       are wasting half the CPUs.
 
     The above is only "reasonably efficient" overall, but is always safe. Thar is, you will never
@@ -120,9 +133,9 @@ def limit_inner_threads(limit: bool) -> None:
 
     **When to disable this?**
 
-    Ideally, Numpy (or, more accurately, the parallel frameworks under it) would be smart enough to
+    Ideally, numpy (or, more accurately, the parallel frameworks under it) would be smart enough to
     use a fixed total number of inner threads, regardless of the number of application threads
-    issuing Numpy requests. Given such a smart parallel framework, you should disable this flag,
+    issuing numpy requests. Given such a smart parallel framework, you should disable this flag,
     since limiting the number of the inner threads would only harm the application's performance.
 
     For example, if you are using `Intel's Python distribution
@@ -219,9 +232,9 @@ def parallel_map(
     .. note::
 
         Since python uses the notorious GIL, it does not benefit as much from multiple threads as
-        could be hoped. Luckily, computational libraries such as ``numpy`` perform many actions
-        without requiring the GIL, so parallel execution does provide benefits for code which mostly
-        invokes such computational library functions.
+        could be hoped. Luckily, computational libraries such as numpy perform many actions without
+        requiring the GIL, so parallel execution does provide benefits for code which mostly invokes
+        such computational library functions.
     '''
     if EXECUTOR is None or invocations_count == 1:
         if batches_per_thread is None:
@@ -281,9 +294,10 @@ def parallel_for(
     batches_per_thread: Optional[int] = 3,
 ) -> None:
     '''
-    Similar to ``parallel_map`` except that the return value of ``function`` is ignored. This avoid
-    the inefficiencies of collecting the results (especially when batching is used). It is often
-    used when the ``function`` invocations write some result(s) into some shared-memory array(s).
+    Similar to :py:func:`metacells.utilities.threading.parallel_map`, except that the return value
+    of ``function`` is ignored. This avoids the inefficiencies of collecting the results (especially
+    when batching is used). It is often used when the ``function`` invocations write some result(s)
+    into some shared-memory array(s).
     '''
     if EXECUTOR is None or invocations_count == 1:
         if batches_per_thread is None:
@@ -343,10 +357,10 @@ def parallel_collect(
     batches_per_thread: Optional[int] = 3,
 ) -> str:
     '''
-    Similar to ``parallel_for``, except it is assumed that each invocation of ``compute`` updates
-    some private per-thread variable(s) in some storage, and ``merge(from_thread,
-    into_thread)`` will merge the data from the private storage variable(s) of one thread into
-    the private storage of another.
+    Similar to :py:func:`metacells.utilities.threading.parallel_for`, except it is assumed that each
+    invocation of ``compute`` updates some private per-thread variable(s) in some storage, and
+    ``merge(from_thread, into_thread)`` will merge the data from the private storage variable(s) of
+    one thread into the private storage of another.
 
     Returns the name of the thread which executed the final ``merge`` operations so the caller can
     access the final collected data.

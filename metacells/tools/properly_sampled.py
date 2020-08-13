@@ -28,21 +28,17 @@ def find_properly_sampled_cells(
     intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Detect properly-sampled cells.
-
-    If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
+    Detect cells with a "proper" amount ``of`` some data sampled (by default, the focus).
 
     Due to both technical effects and natural variance between cells, the total number of UMIs
-    varies from cell to cell.
-
-    We often would like to work on cells that contain a sufficient number of UMIs for meaningful
-    analysis; we sometimes also wish to exclude cells which have "too many" UMIs.
+    varies from cell to cell. We often would like to work on cells that contain a sufficient number
+    of UMIs for meaningful analysis; we sometimes also wish to exclude cells which have "too many"
+    UMIs.
 
     **Input**
 
     A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes, containing the UMIs count in the ``of``
-    (default: the focus) per-variable-per-observation data.
+    observations are cells and the variables are genes.
 
     **Returns**
 
@@ -50,27 +46,24 @@ def find_properly_sampled_cells(
         ``properly_sampled_cells``
             A boolean mask indicating whether each cell has a "proper" amount of samples.
 
-    If ``inplace`` (default: {inplace}), this is written to ``adata`` and the function returns
-    ``None``. Otherwise this is returned as a Pandas series (indexed by the observation names).
+    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
+    ``None``. Otherwise this is returned as a pandas series (indexed by the observation names).
 
     If not ``intermediate`` (default: {intermediate}), this discards all the intermediate data used
     (e.g. sums). Otherwise, such data is kept for future reuse.
 
     **Computation Parameters**
 
-    Given an annotated ``adata``, where the variables are cell RNA profiles and the observations are
-    gene UMI counts, do the following:
-
     1. Exclude all cells whose total number of umis is less than the
-       ``minimal_total_umis_of_cells``, unless it is ``None`` (default:
-       {minimal_total_umis_of_cells}).
+       ``minimal_total_umis_of_cells`` (default: {minimal_total_umis_of_cells}), unless it is
+       ``None``
 
     2. Exclude all cells whose total number of umis is more than the
-       ``maximal_total_umis_of_cells``, unless it is ``None`` (default:
-       {maximal_total_umis_of_cells}).
+       ``maximal_total_umis_of_cells`` (default: {maximal_total_umis_of_cells}), unless it is
+       ``None``
     '''
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        total_umis_of_cells = ut.get_per_obs(adata, ut.sum_axis).proper
+        total_umis_of_cells = ut.get_per_obs(adata, ut.sum_per).proper
         cells_mask = np.full(adata.n_obs, True, dtype='bool')
 
         if minimal_total_umis_of_cells is not None:
@@ -98,21 +91,17 @@ def find_properly_sampled_genes(
     adata: AnnData,
     of: Optional[str] = None,
     *,
-    minimal_total_umis_of_genes: Optional[int] = 1,
+    minimal_total_umis_of_genes: int = 1,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Detect properly-sampled genes.
+    Detect genes with a "proper" amount ``of`` some data samples (by default, the focus).
 
-    If ``of`` is specified, this specific data is used. Otherwise, the focus data is used.
-
-    Due to both technical effects and natural variance between genes, the expression of genes
-    varies greatly between cells. This is exactly the information we are trying to analyze.
-
-    We often would like to work on genes that have a sufficient level of expression for meaningful
-    analysis. Specifically, it hardly (if ever) make sense to consider genes that have zero
-    expression in all the cells.
+    Due to both technical effects and natural variance between genes, the expression of genes varies
+    greatly between cells. This is exactly the information we are trying to analyze. We often would
+    like to work on genes that have a sufficient level of expression for meaningful analysis.
+    Specifically, it doesn't make sense to analyze genes that have zero expression in all the cells.
 
     .. todo::
 
@@ -122,8 +111,7 @@ def find_properly_sampled_genes(
     **Input**
 
     A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes, containing the UMIs count in the ``of``
-    (default: the focus) per-variable-per-observation data.
+    observations are cells and the variables are genes.
 
     **Returns**
 
@@ -131,29 +119,20 @@ def find_properly_sampled_genes(
         ``properly_sampled_genes``
             A boolean mask indicating whether each gene has a "proper" number of samples.
 
-    If ``inplace`` (default: {inplace}), this is written to ``adata`` and the function returns
-    ``None``. Otherwise this is returned as a Pandas series (indexed by the variable names).
+    If ``inplace`` (default: {inplace}), this is written to the data and the function returns
+    ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
 
     If not ``intermediate`` (default: {intermediate}), this discards all the intermediate data used
     (e.g. sums). Otherwise, such data is kept for future reuse.
 
     **Computation Parameters**
 
-    Given an annotated ``adata``, where the variables are cell RNA profiles and the observations are
-    gene UMI counts, do the following:
-
     1. Exclude all genes whose total number of umis is less than the
-       ``minimal_total_umis_of_genes``, unless it is ``None`` (default:
-       {minimal_total_umis_of_genes}).
+       ``minimal_total_umis_of_genes`` (default: {minimal_total_umis_of_genes}).
     '''
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        total_umis_of_genes = ut.get_per_var(adata, ut.sum_axis).proper
-        genes_mask = np.full(adata.n_obs, True, dtype='bool')
-
-        if minimal_total_umis_of_genes is not None:
-            genes_mask = \
-                genes_mask & (total_umis_of_genes >=
-                              minimal_total_umis_of_genes)
+        total_umis_of_genes = ut.get_per_var(adata, ut.sum_per).proper
+        genes_mask = total_umis_of_genes >= minimal_total_umis_of_genes
 
     if inplace:
         adata.var['properly_sampled_genes'] = genes_mask

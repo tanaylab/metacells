@@ -181,17 +181,17 @@ def test_downsample_matrix() -> None:
     matrix = sparse.random(1000, 10000, format='csr',
                            dtype='int32', random_state=123456, data_rvs=rvs)
     assert matrix.nnz == matrix.shape[0] * matrix.shape[1] * 0.01
-    old_row_sums = ut.sum_axis(matrix, axis=1)
+    old_row_sums = ut.sum_per(matrix, per='row')
     min_sum = old_row_sums.min()
-    result = ut.downsample_matrix(matrix, axis=1, samples=int(min_sum))
+    result = ut.downsample_matrix(matrix, per='row', samples=int(min_sum))
     assert result.shape == matrix.shape
-    new_row_sums = ut.sum_axis(result, axis=1)
+    new_row_sums = ut.sum_per(result, per='row')
     assert np.all(new_row_sums == min_sum)
 
     matrix = matrix.toarray()
-    result = ut.downsample_matrix(matrix, axis=1, samples=int(min_sum))
+    result = ut.downsample_matrix(matrix, per='row', samples=int(min_sum))
     assert result.shape == matrix.shape
-    new_row_sums = ut.sum_axis(result, axis=1)
+    new_row_sums = ut.sum_per(result, per='row')
     assert np.all(new_row_sums == min_sum)
 
 
@@ -351,29 +351,29 @@ def _test_annotations(full_matrix: ut.Matrix) -> None:
     adata = AnnData(full_matrix)
     ut.prepare(adata, 'test')
 
-    assert np.allclose(ut.get_per_obs(adata, ut.nnz_axis).proper,
+    assert np.allclose(ut.get_per_obs(adata, ut.nnz_per).proper,
                        np.array([2, 3]))
-    assert np.allclose(ut.get_per_var(adata, ut.nnz_axis).proper,
+    assert np.allclose(ut.get_per_var(adata, ut.nnz_per).proper,
                        np.array([1, 2, 2]))
 
-    assert np.allclose(ut.get_per_obs(adata, ut.sum_axis).proper,
+    assert np.allclose(ut.get_per_obs(adata, ut.sum_per).proper,
                        np.array([3, 12]))
-    assert np.allclose(ut.get_per_var(adata, ut.sum_axis).proper,
+    assert np.allclose(ut.get_per_var(adata, ut.sum_per).proper,
                        np.array([3, 5, 7]))
 
-    assert np.allclose(ut.get_per_obs(adata, ut.max_axis).proper,
+    assert np.allclose(ut.get_per_obs(adata, ut.max_per).proper,
                        np.array([2, 5]))
-    assert np.allclose(ut.get_per_var(adata, ut.max_axis).proper,
+    assert np.allclose(ut.get_per_var(adata, ut.max_per).proper,
                        np.array([3, 4, 5]))
 
-    assert np.allclose(ut.get_per_obs(adata, ut.min_axis).proper,
+    assert np.allclose(ut.get_per_obs(adata, ut.min_per).proper,
                        np.array([0, 3]))
-    assert np.allclose(ut.get_per_var(adata, ut.min_axis).proper,
+    assert np.allclose(ut.get_per_var(adata, ut.min_per).proper,
                        np.array([0, 1, 2]))
 
-    assert np.allclose(ut.get_per_obs(adata, ut.sum_squared_axis).proper,
+    assert np.allclose(ut.get_per_obs(adata, ut.sum_squared_per).proper,
                        np.array([5, 50]))
-    assert np.allclose(ut.get_per_var(adata, ut.sum_squared_axis).proper,
+    assert np.allclose(ut.get_per_var(adata, ut.sum_squared_per).proper,
                        np.array([9, 17, 29]))
 
     assert np.allclose(ut.get_fraction_per_obs(adata).proper,
