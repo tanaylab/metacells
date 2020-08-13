@@ -15,7 +15,8 @@ reformat: .clang-formatted
 	@touch .clang-formatted
 
 format:
-	@if grep -n '^[ ].*[(%<>/+-]$$\|[^ =][[]$$\|[^:`]`[^:`][^:`]*`[^`]' `git ls-files | grep '\.py$$'`; then false; fi
+	@if grep -n '^[ ].*[(%<>/+-]$$\|[^ =][[]$$' `git ls-files | grep '\.py$$'`; then false; fi
+	@if grep -n '[^:`]`[^:`][^:`]*`[^`]' `git ls-files | grep '\.py$$' | grep -v metacells/scripts`; then false; fi
 
 isort:
 	isort metacells/**/*.py tests/*.py setup.py
@@ -42,8 +43,26 @@ test: build
 tox:
 	tox
 
-docs:
+docs: docs/source/timing_script.rst
 	sphinx-build -W docs/source docs/build
+
+docs/source/timing_script.rst: \
+    docs/source/timing_script.part.1 \
+    docs/source/timing_script.part.2 \
+    docs/source/timing_script.part.3 \
+    docs/source/timing_script.part.4 \
+    metacells/scripts/timing.py
+	( cat docs/source/timing_script.part.1 \
+	; python metacells/scripts/timing.py --help 2>&1 \
+	| sed 's/timing.py/metacells_timing.py/;s/^/    /' \
+	; cat docs/source/timing_script.part.2 \
+	; python metacells/scripts/timing.py sum --help 2>&1 \
+	| sed 's/timing.py/metacells_timing.py/;s/^/    /' \
+	; cat docs/source/timing_script.part.3 \
+	; python metacells/scripts/timing.py flame --help 2>&1 \
+	| sed 's/timing.py/metacells_timing.py/;s/^/    /' \
+	; cat docs/source/timing_script.part.4 \
+	) > $@
 
 rst: README.rst LICENSE.rst
 

@@ -9,3 +9,4 @@ API
   tools
   preprocessing
   utilities
+  scripts

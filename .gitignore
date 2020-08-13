@@ -4,6 +4,7 @@ coverage
 .coverage
 dist
 docs/build
+docs/source/timing_script.rst
 *.egg-info
 .eggs
 flame.html

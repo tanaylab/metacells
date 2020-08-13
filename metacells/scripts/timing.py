@@ -15,9 +15,9 @@ from typing import Dict, List
 
 def main() -> None:
     '''
-    Process ``timing.csv`` a file.
+    Process a ``timing.csv`` file.
     '''
-    parser = ArgumentParser(description='Process a timing.csv file')
+    parser = ArgumentParser(description='Process a `timing.csv` file')
     subparsers = parser.add_subparsers(dest='command', metavar='COMMAND',
                                        title='commands', help='One of:')
 
@@ -25,7 +25,7 @@ def main() -> None:
 
     _sum_parser = subparsers.add_parser('sum', help='Sum the total time for each step',
                                         description=dedent('''
-        Read a ``timings.csv`` file from the input and write a sum file with one line per
+        Read a `timings.csv` file from the input and write a sum file with one line per
         step containing the sum of the data and the number of invocations to the output.
 
         The data in the sum file is presented in seconds and billions of instructions, to make it
@@ -33,15 +33,15 @@ def main() -> None:
 
         The output is sorted in descending elapsed time order.
 
-        You can pipe the output through ``column -t -s,`` to make it more legible.
+        You can pipe the output through `column -t -s,` to make it more legible.
     '''))
 
     flame_parser = \
         subparsers.add_parser('flame',
                               help='Reformat the data for visualization in flamegraph',
                               description=dedent('''
-        Read a ``timings.csv`` file from the input and write a flamegraph file with the
-        chosen data (by default, ``elapsed`` time). This can be viewed by any
+        Read a `timings.csv` file from the input and write a flamegraph file with the
+        chosen data (by default, `elapsed` time). This can be viewed by any
         flamegraph visualization tool such as flameview.
     '''))
 
