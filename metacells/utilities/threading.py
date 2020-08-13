@@ -29,7 +29,6 @@ __all__ = [
     'parallel_map',
     'parallel_for',
     'parallel_collect',
-    'is_in_parallel',
     'SharedStorage',
 ]
 
@@ -40,18 +39,6 @@ LIMIT_INNER_THREADS = True
 MAIN_THREADS_LOCK = Lock()
 MAIN_THREADS_COUNT = 1
 SUB_THREADS_COUNT = 0
-
-
-def is_in_parallel() -> bool:
-    '''
-    Return whether, to the best of out knowledge, the current code is executing
-    in parallel with something else.
-
-    If this returns ``True``, then we know for sure of other threads.
-    If it returns ``False``, there may still be such other threads (e.g., inner threads
-    used by numpy).
-    '''
-    return MAIN_THREADS_COUNT > 1
 
 
 def threads_count(threads: int) -> None:
@@ -88,7 +75,6 @@ def threads_count(threads: int) -> None:
         EXECUTOR.shutdown(wait=True)
 
     THREADS_COUNT = threads
-    MAIN_THREADS_COUNT = 1
     MAIN_THREADS_COUNT = 1
     SUB_THREADS_COUNT = THREADS_COUNT
 
@@ -192,9 +178,11 @@ def _in_parallel(invocations_count: int) -> Iterator[None]:
             threadpool_limits(limits=sub_threads_count)
 
     try:
+        utm.is_in_parallel(True)
         yield
 
     finally:
+        utm.is_in_parallel(False)
         with MAIN_THREADS_LOCK:
             MAIN_THREADS_COUNT -= used_threads - 1
             assert MAIN_THREADS_COUNT > 0

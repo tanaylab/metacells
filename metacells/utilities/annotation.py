@@ -993,7 +993,8 @@ def _get_layout_data(
     if inplace:
         utt.freeze(data)
         with _modify(adata):
-            annotations[layout_name] = data
+            with utm.timed_step('.set_annotation'):
+                annotations[layout_name] = data
 
     return data
 
@@ -1027,7 +1028,8 @@ def _get_shaped_data(
 
     if inplace:
         utt.freeze(data)
-        annotations[name] = data
+        with utm.timed_step('.set_annotation'):
+            annotations[name] = data
 
     return data
 

@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from functools import wraps
 from threading import Lock, current_thread
 from threading import local as thread_local
-from time import perf_counter_ns, thread_time_ns
+from time import perf_counter_ns, process_time_ns, thread_time_ns
 from typing import IO, Any, Callable, Dict, Iterator, List, Optional, TypeVar
 
 import numpy as np  # type: ignore
@@ -38,6 +38,7 @@ LOG_STEPS = False
 THREAD_LOCAL = thread_local()
 LOCK = Lock()
 COUNTED_THREADS = 0
+IN_PARALLEL = False
 
 
 def timing_file(file: IO) -> None:
@@ -129,11 +130,19 @@ class Counters:
         self.cpu_ns = cpu_ns  #: CPU time counter.
 
     @staticmethod
-    def now() -> 'Counters':
+    def now(in_parallel: bool) -> 'Counters':
         '''
         Return the current value of the counters.
+
+        If not ``in_parallel``, then count total CPU time. Otherwise, count only the current
+        thread's CPU time.
         '''
-        return Counters(elapsed_ns=perf_counter_ns(), cpu_ns=thread_time_ns())
+        if in_parallel:
+            cpu_ns = thread_time_ns()
+        else:
+            cpu_ns = process_time_ns()
+
+        return Counters(elapsed_ns=perf_counter_ns(), cpu_ns=cpu_ns)
 
     def __add__(self, other: 'Counters') -> 'Counters':
         return Counters(elapsed_ns=self.elapsed_ns + other.elapsed_ns,
@@ -218,13 +227,13 @@ if COLLECT_TIMING:
         global GC_START_POINT
         if phase == 'start':
             assert GC_START_POINT is None
-            GC_START_POINT = Counters.now()
+            GC_START_POINT = Counters.now(True)
             return
 
         assert phase == 'stop'
         assert GC_START_POINT is not None
 
-        gc_total_time = Counters.now() - GC_START_POINT
+        gc_total_time = Counters.now(True) - GC_START_POINT
         GC_START_POINT = None
 
         parent_timing = steps_stack[-1]
@@ -268,7 +277,9 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
         yield None
         return
 
-    start_point = Counters.now()
+    in_parallel = IN_PARALLEL
+
+    start_point = Counters.now(in_parallel)
 
     steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
     if steps_stack is None:
@@ -278,7 +289,7 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
     if isinstance(name, StepTiming):
         parent_timing = name
         if parent_timing.thread_name == current_thread().name:
-            yield_point = Counters.now()
+            yield_point = Counters.now(in_parallel)
             yield None
             parent_timing.overhead += yield_point - start_point
             return
@@ -298,10 +309,10 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
         if LOG_STEPS:
             sys.stderr.write(step_timing.context + ' BEGIN {\n')
             sys.stderr.flush()
-        yield_point = Counters.now()
+        yield_point = Counters.now(in_parallel)
         yield None
     finally:
-        back_point = Counters.now()
+        back_point = Counters.now(in_parallel)
         total_times = back_point - yield_point
         assert total_times.elapsed_ns >= 0
         assert total_times.cpu_ns >= 0
@@ -331,7 +342,8 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
 
         if parent_timing is not None:
             global OVERHEAD
-            overhead = Counters.now() - back_point + yield_point - start_point
+            overhead = Counters.now(in_parallel) - \
+                back_point + yield_point - start_point
             OVERHEAD += overhead
             parent_timing.overhead += overhead
 
@@ -439,3 +451,21 @@ def current_step() -> Optional[StepTiming]:
     if steps_stack is None or len(steps_stack) == 0:
         return None
     return steps_stack[-1]
+
+
+def is_in_parallel(in_parallel: bool) -> None:
+    '''
+    Normally, assume that we are running a single-threaded application, so we count the total CPU
+    time in case numpy is using inner threads to implement our requests.
+
+    If ``in_parallel`` is set to ``True``, then we know the application is multi-threaded,
+    and we (quite possibly incorrectly) assume that we only need to count the CPU time
+    in the current thread.
+
+    .. todo::
+
+        Is there any way at all to properly count the amount of CPU that numpy uses in inner
+        threads, even in a multi-threaded application?
+    '''
+    global IN_PARALLEL
+    IN_PARALLEL = in_parallel
