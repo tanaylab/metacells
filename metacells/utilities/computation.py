@@ -12,7 +12,7 @@ analysis pipeline.
 
 import re
 from re import Pattern
-from typing import Callable, Collection, Optional, TypeVar, Union
+from typing import Callable, Collection, Optional, TypeVar, Union, overload
 from warnings import warn
 
 import numpy as np  # type: ignore
@@ -48,6 +48,33 @@ __all__ = [
     'sliding_window_function',
     'regex_matches_mask',
 ]
+
+
+@overload
+def to_layout(
+    matrix: utt.CompressedMatrix,
+    layout: str,
+    *,
+    symmetric: bool = False
+) -> utt.CompressedMatrix: ...
+
+
+@overload
+def to_layout(
+    matrix: utt.DenseMatrix,
+    layout: str,
+    *,
+    symmetric: bool = False
+) -> utt.DenseMatrix: ...
+
+
+@overload
+def to_layout(
+    matrix: utt.ImproperMatrix,
+    layout: str,
+    *,
+    symmetric: bool = False
+) -> utt.ProperMatrix: ...
 
 
 @utm.timed_call()

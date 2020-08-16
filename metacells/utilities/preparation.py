@@ -1028,7 +1028,6 @@ def get_obs_obs_correlation(
     @utm.timed_call('.compute')
     def compute() -> utt.Matrix:
         assert of is not None
-        assert per is not None
         matrix = uta.get_proper_matrix(adata, of, layout=matrix_layout)
         return utc.corrcoef(matrix, per=per)
 

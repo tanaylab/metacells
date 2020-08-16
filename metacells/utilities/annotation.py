@@ -115,8 +115,9 @@ caller is responsible to ensure that the names of manually set data are also uni
 '''
 
 from contextlib import contextmanager
-from typing import (Any, Callable, Collection, Dict, Iterable, Iterator, List,
-                    MutableMapping, NamedTuple, Optional, Set, Tuple, Union)
+from typing import (Any, Callable, Dict, Iterable, Iterator, List,
+                    MutableMapping, NamedTuple, Optional, Set, Sized, Tuple,
+                    Union)
 from warnings import warn
 
 import numpy as np  # type: ignore
@@ -253,11 +254,11 @@ def safe_slicing_derived(
 
 
 @utm.timed_call()
-def slice(  # pylint: disable=redefined-builtin
+def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-statements
     adata: AnnData,
     *,
-    obs: Optional[Collection] = None,
-    vars: Optional[Collection] = None,
+    obs: Optional[Union[Sized, utt.Vector]] = None,
+    vars: Optional[Union[Sized, utt.Vector]] = None,
     invalidated_prefix: Optional[str] = None,
 ) -> AnnData:
     '''
@@ -287,19 +288,29 @@ def slice(  # pylint: disable=redefined-builtin
     assert x_name not in adata.layers
     assert has_data(adata, focus)
 
-    if isinstance(obs, np.ndarray) and obs.dtype == 'bool':
-        will_slice_obs = not np.all(obs)
-    else:
+    shaped = utt.Shaped.maybe(obs)
+    if shaped is None:
         if obs is None:
             obs = range(adata.n_obs)
         will_slice_obs = len(obs) != adata.n_obs
-
-    if isinstance(vars, np.ndarray) and vars.dtype == 'bool':
-        will_slice_var = not np.all(vars)
     else:
+        obs = utt.to_dense_vector(shaped)
+        if obs.dtype == 'bool':
+            will_slice_obs = not np.all(obs)
+        else:
+            will_slice_obs = obs.size != adata.n_obs
+
+    shaped = utt.Shaped.maybe(vars)
+    if shaped is None:
         if vars is None:
             vars = range(adata.n_vars)
         will_slice_var = len(vars) != adata.n_vars
+    else:
+        vars = utt.to_dense_vector(shaped)
+        if vars.dtype == 'bool':
+            will_slice_var = not np.all(vars)
+        else:
+            will_slice_var = vars.size != adata.n_vars
 
     if not will_slice_obs and not will_slice_var:
         with utm.timed_step('.copy'):

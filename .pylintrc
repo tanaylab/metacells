@@ -6,6 +6,7 @@ persistent=no
 
 disable=C0330,
         c-extension-no-member,
+        inherit-non-class,
         invalid-unary-operand-type,
         global-statement,
         line-too-long,

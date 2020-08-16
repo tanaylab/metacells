@@ -230,7 +230,7 @@ def _compute_elements_knn_graph(  # pylint: disable=too-many-locals
             ut.safe_slicing_data(name, slicing_mask)
 
     similarity = ut.get_proper_matrix(adata, of)
-    similarity = ut.to_layout(similarity, 'rows_major', symmetric=True)
+    similarity = ut.to_layout(similarity, 'row_major', symmetric=True)
     similarity = ut.DenseMatrix.be(similarity)
 
     with ut.timed_step('.outgoing_ranks'):
@@ -261,7 +261,7 @@ def _compute_elements_knn_graph(  # pylint: disable=too-many-locals
     return pd.DataFrame(ut.to_dense_matrix(outgoing_weights), index=names, columns=names)
 
 
-def _rank_outgoing(  # pylint: disable=too-many-locals
+def _rank_outgoing(  # pylint: disable=too-many-locals,too-many-statements
     similarity: ut.DenseMatrix,
     k: int,
     balanced_ranks_factor: float
@@ -284,7 +284,7 @@ def _rank_outgoing(  # pylint: disable=too-many-locals
         ut.timed_parameters(results=size, elements=size)
         max_index_of_each = similarity.argmax(axis=1)
 
-    preserved_ranks = np.full(1, 2 * size, dtype='float32')
+    preserved_ranks = np.full(2 * size, 1, dtype='float32')
     preserved_row_indices = np.concatenate([all_indices, max_index_of_each])
     preserved_column_indices = np.concatenate([max_index_of_each, all_indices])
     preserved_matrix = \
@@ -293,42 +293,58 @@ def _rank_outgoing(  # pylint: disable=too-many-locals
                           shape=similarity.shape)
     preserved_matrix.has_canonical_format = True
 
-    indptr = np.zeros(size + 1, dtype='int32')
+    indptr = np.arange(size + 1, dtype='int32')
+    indptr *= degree
     indices = np.zeros(degree * size, dtype='int32')
     ranks = np.zeros(degree * size, dtype='float32')
 
-    def collect_outgoing_ranks(row_indices: range) -> None:
-        for row_index in row_indices:
-            row_similarities = similarity[row_index, :]
-            indptr[row_index] = row_index * degree
-            indptr[row_index + 1] = indptr[row_index] + degree
-            indices_range = range(indptr[row_index], indptr[row_index + 1])
-            if degree < size - 1:
+    if degree < size - 1:
+        def collect_outgoing_ranks(row_indices: range) -> None:
+            for row_index in row_indices:
+                row_similarities = similarity[row_index, :]
+                start = row_index * degree
+                stop = start + degree
+                indices_range = range(start, stop)
                 indices[indices_range] = \
                     np.argpartition(row_similarities, -degree)[-degree:]
                 indices[indices_range].sort()
-            else:
+                ranks[indices_range] = \
+                    stats.rankdata(row_similarities[indices[indices_range]],
+                                   method='ordinal')
+    else:
+        def collect_outgoing_ranks(row_indices: range) -> None:
+            for row_index in row_indices:
+                row_similarities = similarity[row_index, :]
+                start = row_index * degree
+                stop = start + degree
+                indices_range = range(start, stop)
                 indices[indices_range[0:row_index]] = range(0, row_index)
                 indices[indices_range[row_index:]] = range(row_index + 1, size)
-            ranks[indices_range] = \
-                np.ArrayFloat32.be(stats.rankdata(row_similarities[indices[indices_range]],
-                                                  method='ordinal'))
+                ranks[indices_range] = \
+                    stats.rankdata(row_similarities[indices[indices_range]],
+                                   method='ordinal')
 
     with ut.timed_step('.collect'):
         ut.timed_parameters(size=size, keep=degree)
         ut.parallel_for(collect_outgoing_ranks, size)
 
-    outgoing_ranks = sparse.csr_matrix((ranks, indices, indptr),
-                                       shape=similarity.shape, dtype='float32')
+    outgoing_ranks = \
+        sparse.csr_matrix((ranks, indices, indptr), shape=similarity.shape)
     outgoing_ranks.has_sorted_indices = True
     outgoing_ranks.has_canonical_format = True
 
-    with ut.timed_step('preserve'):
+    with ut.timed_step('.preserve'):
         ut.timed_parameters(collected=outgoing_ranks.nnz,
                             preserved=preserved_matrix.nnz)
         outgoing_ranks = outgoing_ranks.maximum(preserved_matrix)
 
+    with ut.timed_step('sort_indices'):
+        ut.timed_parameters(results=size,
+                            elements=outgoing_ranks.nnz / size)
+        outgoing_ranks.sort_indices()
+
     assert sparse.issparse(outgoing_ranks)
+    assert outgoing_ranks.dtype == 'float32'
     assert outgoing_ranks.getformat() == 'csr'
     assert outgoing_ranks.has_sorted_indices
     assert outgoing_ranks.has_canonical_format
@@ -353,7 +369,13 @@ def _balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
         balanced_ranks = \
             ut.CompressedMatrix.be(outgoing_ranks.multiply(transposed_ranks))
 
+    with ut.timed_step('sort_indices'):
+        ut.timed_parameters(results=size,
+                            elements=balanced_ranks.nnz / size)
+    balanced_ranks.sort_indices()
+
     assert sparse.issparse(balanced_ranks)
+    assert balanced_ranks.dtype == 'float32'
     assert balanced_ranks.getformat() == 'csr'
     assert balanced_ranks.has_sorted_indices
     assert balanced_ranks.has_canonical_format
@@ -380,12 +402,13 @@ def _prune_ranks(  # pylint: disable=too-many-locals,too-many-statements
     all_indices = np.arange(size)
     with ut.timed_step('argmax'):
         ut.timed_parameters(results=size, elements=balanced_ranks.nnz / size)
-        max_index_of_each = balanced_ranks.argmax(axis=1)
+        max_index_of_each = ut.to_dense_vector(balanced_ranks.argmax(axis=1))
 
     preserved_row_indices = all_indices
     preserved_column_indices = max_index_of_each
-    preserved_balanced_ranks = balanced_ranks[preserved_row_indices,
-                                              preserved_column_indices]
+    preserved_balanced_ranks = \
+        ut.to_dense_vector(balanced_ranks[preserved_row_indices,
+                                          preserved_column_indices])
     preserved_matrix = \
         sparse.coo_matrix((preserved_balanced_ranks,
                            (preserved_row_indices, preserved_column_indices)),
@@ -411,6 +434,7 @@ def _prune_ranks(  # pylint: disable=too-many-locals,too-many-statements
             ranks_array = ranks_matrix[element_index, :]
 
             element = get_element(element_index)
+            element.sort_indices()
             assert element.has_sorted_indices
 
             element_non_zero_ranks = element.data
@@ -453,6 +477,8 @@ def _prune_ranks(  # pylint: disable=too-many-locals,too-many-statements
         ut.CompressedMatrix.be(ut.to_layout(pruned_ranks,
                                             'column_major', symmetric=True))
 
+    assert sparse.issparse(pruned_ranks)
+    assert pruned_ranks.dtype == 'float32'
     assert pruned_ranks.getformat() == 'csc'
     assert pruned_ranks.has_sorted_indices
     assert pruned_ranks.has_canonical_format
@@ -499,6 +525,8 @@ def _prune_ranks(  # pylint: disable=too-many-locals,too-many-statements
         pruned_ranks = \
             ut.CompressedMatrix.be(pruned_ranks.maximum(preserved_matrix))
 
+    assert sparse.issparse(pruned_ranks)
+    assert pruned_ranks.dtype == 'float32'
     assert pruned_ranks.getformat() == 'csr'
     assert pruned_ranks.has_sorted_indices
     assert pruned_ranks.has_canonical_format
@@ -509,15 +537,19 @@ def _prune_ranks(  # pylint: disable=too-many-locals,too-many-statements
 def _weigh_edges(pruned_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     size = pruned_ranks.shape[0]
 
-    total_ranks_per_row = ut.sum_per(pruned_ranks, per='row')
+    total_ranks_per_row = \
+        ut.to_dense_vector(ut.sum_per(pruned_ranks, per='row'))
+
     with ut.timed_step('.scale'):
         ut.timed_parameters(size=size)
         scale_per_row = \
             np.reciprocal(total_ranks_per_row, out=total_ranks_per_row)
-        edge_weights = \
-            ut.CompressedMatrix.be(pruned_ranks.multiply(scale_per_row[:,
-                                                                       None]))
+        scale_per_row = scale_per_row.astype('float32')
+        edge_weights = pruned_ranks.multiply(scale_per_row[:, None])
+        edge_weights = ut.to_layout(edge_weights, 'row_major')
 
+    assert sparse.issparse(pruned_ranks)
+    assert edge_weights.dtype == 'float32'
     assert edge_weights.getformat() == 'csr'
     assert edge_weights.has_sorted_indices
     assert edge_weights.has_canonical_format

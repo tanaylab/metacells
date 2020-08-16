@@ -47,7 +47,7 @@ To put some order in this chaos, the following concepts are used:
 '''
 
 from abc import abstractmethod
-from typing import Any, Optional, Tuple, Type, TypeVar, Union, overload
+from typing import Any, Optional, Sized, Tuple, Type, TypeVar, Union, overload
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -298,7 +298,7 @@ class NumpyMatrix(NumpyShaped):
         return isinstance(data, np.matrix)
 
 
-class DenseVector(NumpyShaped):
+class DenseVector(NumpyShaped, Sized):
     '''
     A ``mypy`` type for numpy 1-dimensional data.
     '''
@@ -411,6 +411,9 @@ class CompressedMatrix(SparseMatrix):
     @abstractmethod
     def eliminate_zeros(self) -> None: ...
 
+    @abstractmethod
+    def sort_indices(self) -> None: ...
+
     @staticmethod
     def am(data: Any) -> bool:
         return SparseMatrix.am(data) and data.getformat() in ('csr', 'csc')
@@ -437,7 +440,7 @@ class PandasFrame(Shaped):
         return isinstance(data, pd.DataFrame)
 
 
-class PandasSeries(Shaped):
+class PandasSeries(Shaped, Sized):
     '''
     A ``mypy`` type for pandas 1-dimensional data.
     '''
