@@ -24,6 +24,7 @@ __all__ = [
     'context',
     'current_step',
     'StepTiming',
+    'Counters',
 ]
 
 COLLECT_TIMING = False
@@ -237,7 +238,7 @@ if COLLECT_TIMING:
         GC_START_POINT = None
 
         parent_timing = steps_stack[-1]
-        parent_timing.other_thread += gc_total_time
+        parent_timing.total_nested += gc_total_time
 
         gc_parameters = []
         for name, value in info.items():
@@ -273,6 +274,8 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
     If the ``name`` starts with a ``.``, then it is prefixed with the names of the innermost
     surrounding step name (which must exist). This is commonly used to time sub-steps of a function.
     '''
+    global OVERHEAD
+
     if not COLLECT_TIMING:
         yield None
         return
@@ -291,7 +294,9 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
         if parent_timing.thread_name == current_thread().name:
             yield_point = Counters.now(in_parallel)
             yield None
-            parent_timing.overhead += yield_point - start_point
+            overhead = yield_point - start_point
+            OVERHEAD += overhead
+            parent_timing.overhead += overhead
             return
         name = '_'
 
@@ -335,17 +340,18 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
             total_times -= step_timing.total_nested
             assert total_times.elapsed_ns >= 0
             assert total_times.cpu_ns >= 0
-            total_times += step_timing.other_thread
+            if in_parallel:
+                total_times += step_timing.other_thread
 
             _print_timing(step_timing.context, total_times - step_timing.overhead,
                           step_timing.parameters, step_timing.other_thread_mask.sum())
 
+        overhead = Counters.now(in_parallel) - \
+            back_point + yield_point - start_point
         if parent_timing is not None:
-            global OVERHEAD
-            overhead = Counters.now(in_parallel) - \
-                back_point + yield_point - start_point
-            OVERHEAD += overhead
+            overhead.elapsed_ns = 0
             parent_timing.overhead += overhead
+        OVERHEAD += overhead
 
 
 def _print_timing(

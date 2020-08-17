@@ -1,15 +1,13 @@
 /// C++ extensions to support the metacells package.";
 
-#if ASSERT_LEVEL == 0
-#    define FastAssertCompare(...)
-#    define FastAssertCompareWhat(...)
-#    define SlowAssertCompare(...)
-#    define SlowAssertCompareWhat(...)
-
-#else  // ASSERT_LEVEL > 0
+#if ASSERT_LEVEL > 0
 #    undef NDEBUG
 #    include <iostream>
+#elif ASSERT_LEVEL < 0 || ASSERT_LEVEL > 2
+#    error Invalid ASSERT_LEVEL
+#endif
 
+#if ASSERT_LEVEL >= 1
 #    define FastAssertCompare(X, OP, Y)                                                          \
         if (!(double(X) OP double(Y))) {                                                         \
             std::cerr << __FILE__ << ":" << __LINE__ << ": failed assert: " << #X << " -> " << X \
@@ -22,18 +20,17 @@
                       << " -> " << X << " " << #OP << " " << Y << " <- " << #Y << "" << std::endl; \
             assert(false);                                                                         \
         } else
+#else
+#    define FastAssertCompare(...)
+#    define FastAssertCompareWhat(...)
+#endif
 
-#    if ASSERT_LEVEL == 1
-#        define SlowAssertCompare(...)
-#        define SlowAssertCompareWhat(...)
-
-#    elif ASSERT_LEVEL == 2
-#        define SlowAssertCompare(...) FastAssertCompare(__VA_ARGS__)
-#        define SlowAssertCompareWhat(...) FastAssertCompareWhat(__VA_ARGS__)
-
-#    else
-#        error Invalid ASSERT_LEVEL
-#    endif
+#if ASSERT_LEVEL >= 2
+#    define SlowAssertCompare(...) FastAssertCompare(__VA_ARGS__)
+#    define SlowAssertCompareWhat(...) FastAssertCompareWhat(__VA_ARGS__)
+#else
+#    define SlowAssertCompare(...)
+#    define SlowAssertCompareWhat(...)
 #endif
 
 #include "pybind11/numpy.h"
@@ -129,7 +126,7 @@ public:
 
     /// Construct an array slice based on a Python Numpy array.
     ConstArraySlice(const pybind11::array_t<T>& array, const char* const name)
-      : m_data(array.data()), m_size(array.size()), m_name(name) {
+      : ConstArraySlice(array.data(), array.size(), name) {
         FastAssertCompareWhat(array.ndim(), ==, 1, name);
         FastAssertCompareWhat(array.data(1) - array.data(0), ==, 1, name);
     }
@@ -146,7 +143,7 @@ public:
         FastAssertCompareWhat(0, <=, start, m_name);
         FastAssertCompareWhat(start, <=, stop, m_name);
         FastAssertCompareWhat(stop, <=, m_size, m_name);
-        return ArraySlice(m_data + start, stop - start, m_name);
+        return ConstArraySlice(m_data + start, stop - start, m_name);
     }
 
     /// The number of elements in the slice.
@@ -181,8 +178,8 @@ public:
       : m_data(data), m_size(size), m_name(name) {}
 
     /// Construct an array slice based on a Python Numpy array.
-    ArraySlice(pybind11::array_t<T>& array, const char* name)
-      : m_data(array.mutable_data()), m_size(array.size()), m_name(name) {
+    ArraySlice(pybind11::array_t<T>& array, const char* const name)
+      : ArraySlice(array.mutable_data(), array.size(), name) {
         FastAssertCompareWhat(array.ndim(), ==, 1, name);
         FastAssertCompareWhat(array.data(1) - array.data(0), ==, 1, name);
     }
@@ -223,6 +220,217 @@ public:
     operator ConstArraySlice<T>() const { return ConstArraySlice<T>(m_data, m_size, m_name); }
 };
 
+/// An immutable row-major slice of a matrix of type ``T``.
+template<typename T>
+class ConstMatrixSlice {
+private:
+    const T* m_data;          ///< Pointer to the first element.
+    ssize_t m_rows_count;     ///< Number of rows.
+    ssize_t m_columns_count;  ///< Number of columns.
+    ssize_t m_rows_offset;    ///< Offset between start of rows.
+    const char* m_name;       ///< Name for error messages.
+
+public:
+    /// Construct a matrix slice from raw data.
+    ConstMatrixSlice(const T* const data,
+                     const ssize_t rows_count,
+                     const ssize_t columns_count,
+                     const ssize_t rows_offset,
+                     const char* const name)
+      : m_data(data)
+      , m_rows_count(rows_count)
+      , m_columns_count(columns_count)
+      , m_rows_offset(rows_offset)
+      , m_name(name) {}
+
+    /// Construct a matrix slice based on a Python Numpy array.
+    ConstMatrixSlice(const pybind11::array_t<T>& array, const char* const name)
+      : ConstMatrixSlice(array.data(),
+                         array.shape(0),
+                         array.shape(1),
+                         array.data(1, 0) - array.data(0, 0),
+                         name) {
+        FastAssertCompareWhat(array.ndim(), ==, 2, name);
+        FastAssertCompareWhat(array.data(0, 1) - array.data(0, 0), ==, 1, name);
+        FastAssertCompareWhat(m_columns_count, <=, m_rows_offset, name);
+    }
+
+    /// Obtain a specific row of the matrix slice as an array slice.
+    template<typename I>
+    ConstArraySlice<T> get_row(I row_index) const {
+        FastAssertCompareWhat(0, <=, row_index, m_name);
+        FastAssertCompareWhat(row_index, <, m_rows_count, m_name);
+        return ConstArraySlice<T>(m_data + row_index * m_rows_offset, m_columns_count, m_name);
+    }
+
+    /// The number of rows in the matrix slice.
+    ssize_t rows_count() const { return m_rows_count; }
+
+    /// The number of columns in the matrix slice.
+    ssize_t columns_count() const { return m_columns_count; }
+
+    /// Access immutable element by its indices.
+    template<typename I, typename J>
+    const T& operator()(const I row_index, const J column_index) const {
+        SlowAssertCompareWhat(0, <=, row_index, m_name);
+        SlowAssertCompareWhat(row_index, <, m_rows_count, m_name);
+        SlowAssertCompareWhat(0, <=, column_index, m_name);
+        SlowAssertCompareWhat(column_index, <, m_columns_count, m_name);
+        return m_data[row_index * m_rows_offset + column_index];
+    }
+};
+
+/// A mutable row-major slice of a matrix of type ``T``.
+template<typename T>
+class MatrixSlice {
+private:
+    T* m_data;                ///< Pointer to the first element.
+    ssize_t m_rows_count;     ///< Number of rows.
+    ssize_t m_columns_count;  ///< Number of columns.
+    ssize_t m_rows_offset;    ///< Offset between start of rows.
+    const char* m_name;       ///< Name for error messages.
+
+public:
+    /// Construct a matrix slice from raw data.
+    MatrixSlice(T* const data,
+                const ssize_t rows_count,
+                const ssize_t columns_count,
+                const ssize_t rows_offset,
+                const char* const name)
+      : m_data(data)
+      , m_rows_count(rows_count)
+      , m_columns_count(columns_count)
+      , m_rows_offset(rows_offset)
+      , m_name(name) {}
+
+    /// Construct a matrix slice based on a Python Numpy array.
+    MatrixSlice(pybind11::array_t<T>& array, const char* const name)
+      : MatrixSlice(array.mutable_data(),
+                    array.shape(0),
+                    array.shape(1),
+                    array.data(1, 0) - array.data(0, 0),
+                    name) {
+        FastAssertCompareWhat(array.ndim(), ==, 2, name);
+        FastAssertCompareWhat(array.data(0, 1) - array.data(0, 0), ==, 1, name);
+        FastAssertCompareWhat(m_columns_count, <=, m_rows_offset, name);
+    }
+
+    /// Obtain a specific row of the matrix slice as an array slice.
+    template<typename I>
+    ArraySlice<T> get_row(I row_index) const {
+        FastAssertCompareWhat(0, <=, row_index, m_name);
+        FastAssertCompareWhat(row_index, <, m_rows_count, m_name);
+        return ArraySlice<T>(m_data + row_index * m_rows_offset, m_columns_count, m_name);
+    }
+
+    /// The number of rows in the matrix slice.
+    ssize_t rows_count() const { return m_rows_count; }
+
+    /// The number of columns in the matrix slice.
+    ssize_t columns_count() const { return m_columns_count; }
+
+    /// Access mutable element by its indices.
+    template<typename I, typename J>
+    T& operator()(const I row_index, const J column_index) const {
+        SlowAssertCompareWhat(0, <=, row_index, m_name);
+        SlowAssertCompareWhat(row_index, <, m_rows_count, m_name);
+        SlowAssertCompareWhat(0, <=, column_index, m_name);
+        SlowAssertCompareWhat(column_index, <, m_columns_count, m_name);
+        return m_data[row_index * m_rows_offset + column_index];
+    }
+
+    /// Implicit conversion to an immutable slice.
+    operator ConstMatrixSlice<T>() const {
+        return ConstMatrixSlice<T>(m_data, m_rows_count, m_columns_count, m_rows_offset, m_name);
+    }
+};
+
+/// An immutable CSR sparse matrix.
+template<typename P, typename I, typename D>
+class ConstCsrMatrix {
+private:
+    ConstArraySlice<P> m_indptr;   ///< First and last indices positions per row.
+    ConstArraySlice<I> m_indices;  ///< Column indices.
+    ConstArraySlice<D> m_data;     ///< Non-zero data.
+    ssize_t m_rows_count;          ///< Number of rows.
+    ssize_t m_columns_count;       ///< Number of columns.
+    const char* m_name;            ///< Name for error messages.
+
+public:
+    /// Construct a matrix slice based on a Python Numpy array.
+    ConstCsrMatrix(ConstArraySlice<P>&& indptr,
+                   ConstArraySlice<I>&& indices,
+                   ConstArraySlice<D>&& data,
+                   const I columns_count,
+                   const char* const name)
+      : m_indptr(indptr)
+      , m_indices(indices)
+      , m_data(data)
+      , m_rows_count(indptr.size() - 1)
+      , m_columns_count(columns_count)
+      , m_name(name) {
+        FastAssertCompareWhat(m_indptr[m_rows_count], ==, indices.size(), m_name);
+        FastAssertCompareWhat(m_indptr[m_rows_count], ==, data.size(), m_name);
+    }
+
+    template<typename J>
+    ConstArraySlice<I> get_row_indices(const J row_index) const {
+        auto start_position = m_indptr[row_index];
+        auto stop_position = m_indptr[row_index + 1];
+        return m_indices.slice(start_position, stop_position);
+    }
+
+    template<typename J>
+    ConstArraySlice<D> get_row_data(const J row_index) const {
+        auto start_position = m_indptr[row_index];
+        auto stop_position = m_indptr[row_index + 1];
+        return m_data.slice(start_position, stop_position);
+    }
+};
+
+/// A mutable CSR sparse matrix.
+template<typename P, typename I, typename D>
+class CsrMatrix {
+private:
+    ArraySlice<P> m_indptr;   ///< First and last indices positions per row.
+    ArraySlice<I> m_indices;  ///< Column indices.
+    ArraySlice<D> m_data;     ///< Non-zero data.
+    ssize_t m_rows_count;     ///< Number of rows.
+    ssize_t m_columns_count;  ///< Number of columns.
+    const char* m_name;       ///< Name for error messages.
+
+public:
+    /// Construct a matrix slice based on a Python Numpy array.
+    CsrMatrix(pybind11::array_t<P>& indptr_array,
+              pybind11::array_t<I>& indices_array,
+              pybind11::array_t<D>& data_array,
+              const I columns_count,
+              const char* const name)
+      : m_indptr(indptr_array)
+      , m_indices(indices_array)
+      , m_data(data_array)
+      , m_rows_count(indptr_array.size() - 1)
+      , m_columns_count(columns_count)
+      , m_name(name) {
+        FastAssertCompareWhat(m_indptr[m_rows_count], ==, indices_array.size(), m_name);
+        FastAssertCompareWhat(m_indptr[m_rows_count], ==, data_array.size(), m_name);
+    }
+
+    template<typename J>
+    ArraySlice<I> get_row_indices(const J row_index) {
+        auto start_position = m_indptr[row_index];
+        auto stop_position = m_indptr[row_index + 1];
+        return m_indices.slice(start_position, stop_position);
+    }
+
+    template<typename J>
+    ArraySlice<D> get_row_data(const J row_index) {
+        auto start_position = m_indptr[row_index];
+        auto stop_position = m_indptr[row_index + 1];
+        return m_data.slice(start_position, stop_position);
+    }
+};
+
 template<typename T>
 static T
 ceil_power_of_two(T size) {
@@ -252,9 +460,9 @@ initialize_tree(ConstArraySlice<D> input, ArraySlice<T> tree) {
         tree = slices.second;
 
         input_size /= 2;
-        for (auto index : Range<int>(input_size)) {
-            auto left = input[index * 2];
-            auto right = input[index * 2 + 1];
+        for (const auto index : Range<int>(input_size)) {
+            const auto left = input[index * 2];
+            const auto right = input[index * 2 + 1];
             tree[index] = left + right;
 
             SlowAssertCompare(left, >=, 0);
@@ -341,7 +549,7 @@ downsample(const pybind11::array_t<D>& input_array,
 
     std::fill(output.begin(), output.end(), 0);
 
-    for (auto _ : Range<int>(samples)) {
+    for (const auto _ : Range<int>(samples)) {
         fake_use(_);
         ++output[random_sample(tree, random() % int64_t(total))];
     }
@@ -378,7 +586,7 @@ collect_compressed(int start_input_band_index,
     FastAssertCompare(output_indices.size(), ==, input_indices.size());
     FastAssertCompare(output_indptr[output_indptr.size() - 1], <=, output_data.size());
 
-    for (int input_band_index : Range<int>(start_input_band_index, stop_input_band_index)) {
+    for (const int input_band_index : Range<int>(start_input_band_index, stop_input_band_index)) {
         auto start_input_element_offset = input_indptr[input_band_index];
         auto stop_input_element_offset = input_indptr[input_band_index + 1];
 
@@ -406,6 +614,164 @@ collect_compressed(int start_input_band_index,
         }
     }
 }
+
+/// See the Python `metacell.tools.knn_graph._rank_outgoing` function.
+static void
+collect_outgoing(const int degree,
+                 const pybind11::array_t<float32_t>& input_similarity_matrix,
+                 pybind11::array_t<int32_t>& output_indices_array,
+                 pybind11::array_t<float32_t>& output_ranks_array) {
+    WithoutGil without_gil{};
+
+    ConstMatrixSlice<float32_t> similarity_matrix(input_similarity_matrix, "similarity_matrix");
+    FastAssertCompareWhat(similarity_matrix.rows_count(),
+                          ==,
+                          similarity_matrix.columns_count(),
+                          "similarity_matrix");
+    const auto size = similarity_matrix.rows_count();
+
+    ArraySlice<int32_t> output_indices(output_indices_array, "output_indices");
+    ArraySlice<float32_t> output_ranks(output_ranks_array, "output_ranks");
+    std::vector<int32_t> tmp_indices(size - 1);
+
+    FastAssertCompare(0, <, degree);
+    FastAssertCompare(degree, <, size);
+
+    FastAssertCompare(output_indices.size(), ==, degree * size);
+    FastAssertCompare(output_ranks.size(), ==, degree * size);
+
+    for (const auto row_index : Range<int>(size)) {
+        const auto row_similarities = similarity_matrix.get_row(row_index);
+
+        const int start_position = row_index * degree;
+        const int stop_position = start_position + degree;
+
+        auto row_indices = output_indices.slice(start_position, stop_position);
+        auto row_ranks = output_ranks.slice(start_position, stop_position);
+
+        if (degree < size - 1) {
+            std::iota(tmp_indices.begin(), tmp_indices.begin() + row_index, 0);
+            std::iota(tmp_indices.begin() + row_index,
+                      tmp_indices.begin() + size - 1,
+                      row_index + 1);
+
+            std::nth_element(tmp_indices.begin(),
+                             tmp_indices.begin() + degree,
+                             tmp_indices.end(),
+                             [&](const int32_t left_column_index,
+                                 const int32_t right_column_index) {
+                                 float32_t left_similarity = row_similarities[left_column_index];
+                                 float32_t right_similarity = row_similarities[right_column_index];
+                                 return left_similarity > right_similarity;
+                             });
+
+            std::copy(tmp_indices.begin(), tmp_indices.begin() + degree, row_indices.begin());
+            std::sort(row_indices.begin(), row_indices.end());
+
+        } else {
+            std::iota(row_indices.begin(), row_indices.begin() + row_index, 0);
+            std::iota(row_indices.begin() + row_index, row_indices.begin() + degree, row_index + 1);
+        }
+
+        std::iota(tmp_indices.begin(), tmp_indices.begin() + degree, 0);
+        std::sort(tmp_indices.begin(),
+                  tmp_indices.begin() + degree,
+                  [&](const int left_position, const int right_position) {
+                      float32_t left_similarity = row_similarities[row_indices[left_position]];
+                      float32_t right_similarity = row_similarities[row_indices[right_position]];
+                      return left_similarity < right_similarity;
+                  });
+#ifdef __INTEL_COMPILER
+#    pragma simd
+#endif
+        for (const auto location : Range<int>(degree)) {
+            int position = tmp_indices[location];
+            row_ranks[position] = location + 1;
+        }
+    }
+}
+
+/// See the Python `metacell.tools.knn_graph._prune_ranks` function.
+static void
+collect_pruned(int pruned_degree,
+               const pybind11::array_t<int32_t>& input_pruned_ranks_indptr,
+               const pybind11::array_t<int32_t>& input_pruned_ranks_indices,
+               const pybind11::array_t<float32_t>& input_pruned_ranks_data,
+               pybind11::array_t<int32_t>& output_pruned_indptr_array,
+               pybind11::array_t<int32_t>& output_pruned_indices_array,
+               pybind11::array_t<float32_t>& output_pruned_ranks_array) {
+    ssize_t size = input_pruned_ranks_indptr.size() - 1;
+    ConstCsrMatrix<int32_t, int32_t, float32_t> input_pruned_ranks(
+        ConstArraySlice<int32_t>(input_pruned_ranks_indptr, "pruned_ranks_indptr"),
+        ConstArraySlice<int32_t>(input_pruned_ranks_indices, "input_pruned_ranks_indices"),
+        ConstArraySlice<float32_t>(input_pruned_ranks_data, "input_pruned_ranks_data"),
+        size,
+        "pruned_ranks");
+
+    ArraySlice<int32_t> output_pruned_indptr(output_pruned_indptr_array, "output_pruned_indptr");
+    ArraySlice<int32_t> output_pruned_indices(output_pruned_indices_array, "output_pruned_indices");
+    ArraySlice<float32_t> output_pruned_ranks(output_pruned_ranks_array, "output_pruned_ranks");
+
+    FastAssertCompare(output_pruned_indptr.size(), ==, size + 1);
+    FastAssertCompare(output_pruned_indices.size(), >=, size * pruned_degree);
+    FastAssertCompare(output_pruned_ranks.size(), >=, size * pruned_degree);
+
+    std::vector<int32_t> tmp_indices(size);
+
+    int start_position = output_pruned_indptr[0] = 0;
+    for (const auto row_index : Range<int>(size)) {
+        FastAssertCompare(start_position, ==, output_pruned_indptr[row_index]);
+
+        auto input_indices = input_pruned_ranks.get_row_indices(row_index);
+        auto input_ranks = input_pruned_ranks.get_row_data(row_index);
+        FastAssertCompare(input_indices.size(), ==, input_ranks.size());
+
+        auto output_indices =
+            output_pruned_indices.slice(start_position, start_position + pruned_degree);
+        auto output_ranks =
+            output_pruned_ranks.slice(start_position, start_position + pruned_degree);
+
+        if (input_ranks.size() <= pruned_degree) {
+            start_position += input_ranks.size();
+            output_pruned_indptr[row_index + 1] = start_position;
+
+            std::copy(input_indices.begin(), input_indices.end(), output_indices.begin());
+            std::copy(input_ranks.begin(), input_ranks.end(), output_ranks.begin());
+
+        } else {
+            start_position += pruned_degree;
+            output_pruned_indptr[row_index + 1] = start_position;
+
+            std::iota(tmp_indices.begin(), tmp_indices.begin() + input_ranks.size(), 0);
+
+            std::nth_element(tmp_indices.begin(),
+                             tmp_indices.begin() + pruned_degree,
+                             tmp_indices.begin() + input_ranks.size(),
+                             [&](const int32_t left_column_index,
+                                 const int32_t right_column_index) {
+                                 float32_t left_similarity = input_ranks[left_column_index];
+                                 float32_t right_similarity = input_ranks[right_column_index];
+                                 return left_similarity > right_similarity;
+                             });
+
+            std::sort(tmp_indices.begin(), tmp_indices.begin() + pruned_degree);
+
+#ifdef __INTEL_COMPILER
+#    pragma simd
+#endif
+            for (const auto location : Range<int>(pruned_degree)) {
+                int position = tmp_indices[location];
+                output_indices[location] = input_indices[position];
+                output_ranks[location] = input_ranks[position];
+            }
+        }
+    }
+}
+
+#define REGISTER_COLLECT_OUTGOING_RANKS(D, T, O)     \
+    module.def("collect_outgoing_" #D "_" #T "_" #O, \
+               &metacells::downsample<D, T, O>,      \
+               "Downsample array of sample counts.")
 
 }  // namespace metacells
 
@@ -713,4 +1079,10 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_COLLECT_COMPRESSED(uint64_t, uint32_t, uint64_t);
     REGISTER_COLLECT_COMPRESSED(uint64_t, uint64_t, uint32_t);
     REGISTER_COLLECT_COMPRESSED(uint64_t, uint64_t, uint64_t);
+
+    module.def("collect_outgoing",
+               &metacells::collect_outgoing,
+               "Collect the topmost outgoing edges.");
+
+    module.def("collect_pruned", &metacells::collect_pruned, "Collect the topmost pruned edges.");
 }

@@ -175,7 +175,7 @@ def relayout_compressed(matrix: utt.CompressedMatrix) -> utt.CompressedMatrix:
                   compressed.data, compressed.indices, compressed.indptr,
                   output_data, output_indices, output_indptr[1:])
 
-    with utm.timed_step('.collect_compressed'):
+    with utm.timed_step('extensions.collect_compressed'):
         utm.timed_parameters(results=output_bands_count,
                              elements=matrix_bands_count)
         parallel_for(collect_compressed, matrix_bands_count)
@@ -547,7 +547,6 @@ def downsample_vector(
     similarity to other observations. Downsampling avoids this effect.
     '''
     proper = utt.to_proper_vector(vector)
-    utm.timed_parameters(elements=proper.size, samples=samples)
     return _downsample_array(proper, samples, tmp, output, random_seed)
 
 
@@ -570,10 +569,13 @@ def _downsample_array(
     else:
         assert output.shape == array.shape
 
-    extension_name = \
-        'downsample_%s_t_%s_t_%s_t' % (array.dtype, tmp.dtype, output.dtype)
-    extension = getattr(xt, extension_name)
-    extension(array, tmp, output, samples, random_seed)
+    with utm.timed_step('extensions.downsample'):
+        utm.timed_parameters(elements=array.size, samples=samples)
+        extension_name = \
+            'downsample_%s_t_%s_t_%s_t' \
+            % (array.dtype, tmp.dtype, output.dtype)
+        extension = getattr(xt, extension_name)
+        extension(array, tmp, output, samples, random_seed)
 
 
 def downsample_tmp_size(size: int) -> int:
@@ -756,6 +758,7 @@ ROLLING_FUNCTIONS = {
 
 
 @utd.expand_doc(functions=', '.join(['``%s``' % function for function in ROLLING_FUNCTIONS]))
+@utm.timed_call()
 def sliding_window_function(  # pylint: disable=too-many-locals
     vector: utt.Vector,
     *,
@@ -783,6 +786,10 @@ def sliding_window_function(  # pylint: disable=too-many-locals
 
     if window_size % 2 == 0:
         window_size += 1
+
+    utm.timed_parameters(function=function,
+                         size=array.size,
+                         window=window_size)
 
     half_window_size = (window_size - 1) // 2
 
