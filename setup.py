@@ -11,16 +11,19 @@ SETUP_REQUIRES = [
     'setuptools_scm',
 ]
 
+# TODO: Repeated in setup.cfg
+
 INSTALL_REQUIRES = [
     'anndata',
     'importlib-metadata',
+    'leidenalg',
     'numpy',
     'pandas',
+    'python-igraph',
     'readerwriterlock',
     'threadpoolctl',
 ]
 
-# TODO: Repeated in setup.cfg
 TESTS_REQUIRE = [
     'pytest',
     'pyyaml',

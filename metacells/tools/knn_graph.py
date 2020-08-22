@@ -20,7 +20,7 @@ __all__ = [
 
 @ut.timed_call()
 @ut.expand_doc()
-def compute_obs_obs_knn_graph(  # pylint: disable=too-many-locals
+def compute_obs_obs_knn_graph(
     adata: AnnData,
     of: Optional[str] = None,
     *,
@@ -109,7 +109,7 @@ def compute_obs_obs_knn_graph(  # pylint: disable=too-many-locals
 
 @ut.timed_call()
 @ut.expand_doc()
-def compute_var_var_knn_graph(  # pylint: disable=too-many-locals
+def compute_var_var_knn_graph(
     adata: AnnData,
     of: Optional[str] = None,
     *,
@@ -239,13 +239,13 @@ def _compute_elements_knn_graph(  # pylint: disable=too-many-locals
 
     with ut.timed_step('.balance_ranks'):
         balanced_ranks = _balance_ranks(outgoing_ranks)
-        store_matrix(outgoing_ranks, 'balanced_ranks', intermediate)
+        store_matrix(balanced_ranks, 'balanced_ranks', intermediate)
 
     with ut.timed_step('.prune_ranks'):
         pruned_ranks = _prune_ranks(balanced_ranks, k,
                                     incoming_degree_factor,
                                     outgoing_degree_factor)
-        store_matrix(outgoing_ranks, 'pruned_ranks', intermediate)
+        store_matrix(pruned_ranks, 'pruned_ranks', intermediate)
 
     with ut.timed_step('.weigh_edges'):
         outgoing_weights = _weigh_edges(pruned_ranks)
@@ -315,11 +315,8 @@ def _rank_outgoing(  # pylint: disable=too-many-locals,too-many-statements
                             preserved=preserved_matrix.nnz)
         outgoing_ranks = outgoing_ranks.maximum(preserved_matrix)
 
-    with ut.timed_step('sort_indices'):
-        ut.timed_parameters(results=size,
-                            elements=outgoing_ranks.nnz / size)
-        outgoing_ranks.sort_indices()
-
+    ut.sort_compressed(outgoing_ranks)
+    _assert_sparse(outgoing_ranks, 'csr')
     return outgoing_ranks
 
 
@@ -336,11 +333,7 @@ def _balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
         balanced_ranks = \
             ut.CompressedMatrix.be(outgoing_ranks.multiply(transposed_ranks))
 
-    with ut.timed_step('sort_indices'):
-        ut.timed_parameters(results=size,
-                            elements=balanced_ranks.nnz / size)
-        balanced_ranks.sort_indices()
-
+    ut.sort_compressed(balanced_ranks)
     _assert_sparse(balanced_ranks, 'csr')
     return balanced_ranks
 
@@ -432,10 +425,7 @@ def _prune_ranks(  # pylint: disable=too-many-locals,too-many-statements
         pruned_ranks = \
             ut.CompressedMatrix.be(pruned_ranks.maximum(preserved_matrix))
 
-    with ut.timed_step('sort_indices'):
-        ut.timed_parameters(results=size,
-                            elements=pruned_ranks.nnz / size)
-        pruned_ranks.sort_indices()
+    ut.sort_compressed(pruned_ranks)
 
     _assert_sparse(pruned_ranks, 'csr')
     return pruned_ranks

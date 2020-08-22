@@ -47,7 +47,8 @@ To put some order in this chaos, the following concepts are used:
 '''
 
 from abc import abstractmethod
-from typing import Any, Optional, Sized, Tuple, Type, TypeVar, Union, overload
+from typing import (Any, Iterable, Optional, Sized, Tuple, Type, TypeVar,
+                    Union, overload)
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -281,6 +282,9 @@ class NumpyShaped(Shaped):
     @abstractmethod
     def __invert__(self: S) -> S: ...
 
+    @abstractmethod
+    def astype(self: S, typ: str) -> S: ...
+
     @staticmethod
     def am(data: Any) -> bool:
         return isinstance(data, (np.ndarray, np.matrix))
@@ -298,7 +302,7 @@ class NumpyMatrix(NumpyShaped):
         return isinstance(data, np.matrix)
 
 
-class DenseVector(NumpyShaped, Sized):
+class DenseVector(NumpyShaped, Iterable, Sized):
     '''
     A ``mypy`` type for numpy 1-dimensional data.
     '''
@@ -306,15 +310,18 @@ class DenseVector(NumpyShaped, Sized):
     shape: Tuple[int]
     strides: Tuple[int]
 
-    @staticmethod
-    def am(data: Any) -> bool:
-        return isinstance(data, np.ndarray) and data.ndim == 1
-
     @abstractmethod
     def sum(self) -> Union[float, int]: ...
 
     @abstractmethod
     def argmax(self) -> int: ...
+
+    @abstractmethod
+    def nonzero(self) -> Tuple['DenseVector']: ...
+
+    @staticmethod
+    def am(data: Any) -> bool:
+        return isinstance(data, np.ndarray) and data.ndim == 1
 
 
 class DenseMatrix(NumpyShaped):
@@ -332,6 +339,9 @@ class DenseMatrix(NumpyShaped):
 
     @abstractmethod
     def argmax(self, *, axis: int) -> DenseVector: ...
+
+    @abstractmethod
+    def nonzero(self) -> Tuple[DenseVector, DenseVector]: ...
 
     @staticmethod
     def am(data: Any) -> bool:
@@ -389,6 +399,9 @@ class SparseMatrix(Shaped):
 
     @abstractmethod
     def tocsc(self) -> 'CompressedMatrix': ...
+
+    @abstractmethod
+    def nonzero(self) -> Tuple[DenseVector, DenseVector]: ...
 
     @staticmethod
     def am(data: Any) -> bool:

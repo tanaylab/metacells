@@ -16,6 +16,8 @@ disable=C0330,
         too-few-public-methods,
         too-many-arguments,
         too-many-lines,
+        unsubscriptable-object,
+        unsupported-assignment-operation,
         wrong-import-order,
 
 [STRING]

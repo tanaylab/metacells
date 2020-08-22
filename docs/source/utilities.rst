@@ -15,6 +15,12 @@ Preparation
 .. automodule:: metacells.utilities.preparation
     :members:
 
+Partition
+---------
+
+.. automodule:: metacells.utilities.partition
+    :members:
+
 Computation
 -----------
 

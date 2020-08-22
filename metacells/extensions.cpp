@@ -615,6 +615,66 @@ collect_compressed(int start_input_band_index,
     }
 }
 
+/// See the Python `metacell.utilities.computation._relayout_compressed` function.
+template<typename D, typename I, typename P>
+static void
+sort_compressed(int start_band_index,
+                int stop_band_index,
+                pybind11::array_t<D>& data_array,
+                pybind11::array_t<I>& indices_array,
+                pybind11::array_t<P>& indptr_array) {
+    WithoutGil without_gil{};
+
+    ArraySlice<D> data{ data_array, "data_array" };
+    ArraySlice<I> indices{ indices_array, "indices_array" };
+    ConstArraySlice<P> indptr{ indptr_array, "indptr_array" };
+
+    FastAssertCompare(0, <=, start_band_index);
+    FastAssertCompare(start_band_index, <, stop_band_index);
+    FastAssertCompare(stop_band_index, <, indptr.size());
+    FastAssertCompare(data.size(), ==, indptr[indptr.size() - 1]);
+    FastAssertCompare(indices.size(), ==, data.size());
+
+    std::vector<int32_t> tmp_positions;
+    std::vector<I> tmp_indices;
+    std::vector<D> tmp_data;
+
+    for (const int band_index : Range<int>(start_band_index, stop_band_index)) {
+        auto start_element_offset = indptr[band_index];
+        auto stop_element_offset = indptr[band_index + 1];
+        if (stop_element_offset == start_element_offset) {
+            continue;
+        }
+
+        auto band_indices = indices.slice(start_element_offset, stop_element_offset);
+        auto band_data = data.slice(start_element_offset, stop_element_offset);
+
+        tmp_positions.resize(stop_element_offset - start_element_offset);
+        std::iota(tmp_positions.begin(), tmp_positions.end(), 0);
+        std::sort(tmp_positions.begin(),
+                  tmp_positions.end(),
+                  [&](const int left_position, const int right_position) {
+                      auto left_index = band_indices[left_position];
+                      auto right_index = band_indices[right_position];
+                      return left_index < right_index;
+                  });
+
+        tmp_indices.resize(tmp_positions.size());
+        tmp_data.resize(tmp_positions.size());
+#ifdef __INTEL_COMPILER
+#    pragma simd
+#endif
+        for (const int location : Range<int>(tmp_positions.size())) {
+            int32_t position = tmp_positions[location];
+            tmp_indices[location] = band_indices[position];
+            tmp_data[location] = band_data[position];
+        }
+
+        std::copy(tmp_indices.begin(), tmp_indices.end(), band_indices.begin());
+        std::copy(tmp_data.begin(), tmp_data.end(), band_data.begin());
+    }
+}
+
 /// See the Python `metacell.tools.knn_graph._rank_outgoing` function.
 static void
 collect_outgoing(const int degree,
@@ -632,7 +692,7 @@ collect_outgoing(const int degree,
 
     ArraySlice<int32_t> output_indices(output_indices_array, "output_indices");
     ArraySlice<float32_t> output_ranks(output_ranks_array, "output_ranks");
-    std::vector<int32_t> tmp_indices(size - 1);
+    std::vector<int32_t> tmp_positions(size - 1);
 
     FastAssertCompare(0, <, degree);
     FastAssertCompare(degree, <, size);
@@ -650,14 +710,14 @@ collect_outgoing(const int degree,
         auto row_ranks = output_ranks.slice(start_position, stop_position);
 
         if (degree < size - 1) {
-            std::iota(tmp_indices.begin(), tmp_indices.begin() + row_index, 0);
-            std::iota(tmp_indices.begin() + row_index,
-                      tmp_indices.begin() + size - 1,
+            std::iota(tmp_positions.begin(), tmp_positions.begin() + row_index, 0);
+            std::iota(tmp_positions.begin() + row_index,
+                      tmp_positions.begin() + size - 1,
                       row_index + 1);
 
-            std::nth_element(tmp_indices.begin(),
-                             tmp_indices.begin() + degree,
-                             tmp_indices.end(),
+            std::nth_element(tmp_positions.begin(),
+                             tmp_positions.begin() + degree,
+                             tmp_positions.end(),
                              [&](const int32_t left_column_index,
                                  const int32_t right_column_index) {
                                  float32_t left_similarity = row_similarities[left_column_index];
@@ -665,7 +725,7 @@ collect_outgoing(const int degree,
                                  return left_similarity > right_similarity;
                              });
 
-            std::copy(tmp_indices.begin(), tmp_indices.begin() + degree, row_indices.begin());
+            std::copy(tmp_positions.begin(), tmp_positions.begin() + degree, row_indices.begin());
             std::sort(row_indices.begin(), row_indices.end());
 
         } else {
@@ -673,9 +733,9 @@ collect_outgoing(const int degree,
             std::iota(row_indices.begin() + row_index, row_indices.begin() + degree, row_index + 1);
         }
 
-        std::iota(tmp_indices.begin(), tmp_indices.begin() + degree, 0);
-        std::sort(tmp_indices.begin(),
-                  tmp_indices.begin() + degree,
+        std::iota(tmp_positions.begin(), tmp_positions.begin() + degree, 0);
+        std::sort(tmp_positions.begin(),
+                  tmp_positions.begin() + degree,
                   [&](const int left_position, const int right_position) {
                       float32_t left_similarity = row_similarities[row_indices[left_position]];
                       float32_t right_similarity = row_similarities[row_indices[right_position]];
@@ -685,7 +745,7 @@ collect_outgoing(const int degree,
 #    pragma simd
 #endif
         for (const auto location : Range<int>(degree)) {
-            int position = tmp_indices[location];
+            int position = tmp_positions[location];
             row_ranks[position] = location + 1;
         }
     }
@@ -743,7 +803,6 @@ collect_pruned(int pruned_degree,
             output_pruned_indptr[row_index + 1] = start_position;
 
             std::iota(tmp_indices.begin(), tmp_indices.begin() + input_ranks.size(), 0);
-
             std::nth_element(tmp_indices.begin(),
                              tmp_indices.begin() + pruned_degree,
                              tmp_indices.begin() + input_ranks.size(),
@@ -1002,83 +1061,86 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_DOWNSAMPLE(uint64_t, uint64_t, uint32_t);
     REGISTER_DOWNSAMPLE(uint64_t, uint64_t, uint64_t);
 
-#define REGISTER_COLLECT_COMPRESSED(D, I, P)            \
-    module.def("collect_compressed_" #D "_" #I "_" #P,  \
-               &metacells::collect_compressed<D, I, P>, \
-               "Collect compressed data for relayout.")
+#define REGISTER_COMPRESSED(D, I, P)                     \
+    module.def("collect_compressed_" #D "_" #I "_" #P,   \
+               &metacells::collect_compressed<D, I, P>,  \
+               "Collect compressed data for relayout."); \
+    module.def("sort_compressed_" #D "_" #I "_" #P,      \
+               &metacells::sort_compressed<D, I, P>,     \
+               "Sort compressed data.")
 
-    REGISTER_COLLECT_COMPRESSED(float32_t, int32_t, int32_t);
-    REGISTER_COLLECT_COMPRESSED(float32_t, int32_t, int64_t);
-    REGISTER_COLLECT_COMPRESSED(float32_t, int32_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(float32_t, int32_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(float32_t, int64_t, int32_t);
-    REGISTER_COLLECT_COMPRESSED(float32_t, int64_t, int64_t);
-    REGISTER_COLLECT_COMPRESSED(float32_t, int64_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(float32_t, int64_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(float32_t, uint32_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(float32_t, uint32_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(float32_t, uint64_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(float32_t, uint64_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(float64_t, int32_t, int32_t);
-    REGISTER_COLLECT_COMPRESSED(float64_t, int32_t, int64_t);
-    REGISTER_COLLECT_COMPRESSED(float64_t, int32_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(float64_t, int32_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(float64_t, int64_t, int32_t);
-    REGISTER_COLLECT_COMPRESSED(float64_t, int64_t, int64_t);
-    REGISTER_COLLECT_COMPRESSED(float64_t, int64_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(float64_t, int64_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(float64_t, uint32_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(float64_t, uint32_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(float64_t, uint64_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(float64_t, uint64_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(int32_t, int32_t, int32_t);
-    REGISTER_COLLECT_COMPRESSED(int32_t, int32_t, int64_t);
-    REGISTER_COLLECT_COMPRESSED(int32_t, int32_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(int32_t, int32_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(int32_t, int64_t, int32_t);
-    REGISTER_COLLECT_COMPRESSED(int32_t, int64_t, int64_t);
-    REGISTER_COLLECT_COMPRESSED(int32_t, int64_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(int32_t, int64_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(int32_t, uint32_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(int32_t, uint32_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(int32_t, uint64_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(int32_t, uint64_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(int64_t, int32_t, int32_t);
-    REGISTER_COLLECT_COMPRESSED(int64_t, int32_t, int64_t);
-    REGISTER_COLLECT_COMPRESSED(int64_t, int32_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(int64_t, int32_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(int64_t, int64_t, int32_t);
-    REGISTER_COLLECT_COMPRESSED(int64_t, int64_t, int64_t);
-    REGISTER_COLLECT_COMPRESSED(int64_t, int64_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(int64_t, int64_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(int64_t, uint32_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(int64_t, uint32_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(int64_t, uint64_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(int64_t, uint64_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(uint32_t, int32_t, int32_t);
-    REGISTER_COLLECT_COMPRESSED(uint32_t, int32_t, int64_t);
-    REGISTER_COLLECT_COMPRESSED(uint32_t, int32_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(uint32_t, int32_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(uint32_t, int64_t, int32_t);
-    REGISTER_COLLECT_COMPRESSED(uint32_t, int64_t, int64_t);
-    REGISTER_COLLECT_COMPRESSED(uint32_t, int64_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(uint32_t, int64_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(uint32_t, uint32_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(uint32_t, uint32_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(uint32_t, uint64_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(uint32_t, uint64_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(uint64_t, int32_t, int32_t);
-    REGISTER_COLLECT_COMPRESSED(uint64_t, int32_t, int64_t);
-    REGISTER_COLLECT_COMPRESSED(uint64_t, int32_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(uint64_t, int32_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(uint64_t, int64_t, int32_t);
-    REGISTER_COLLECT_COMPRESSED(uint64_t, int64_t, int64_t);
-    REGISTER_COLLECT_COMPRESSED(uint64_t, int64_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(uint64_t, int64_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(uint64_t, uint32_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(uint64_t, uint32_t, uint64_t);
-    REGISTER_COLLECT_COMPRESSED(uint64_t, uint64_t, uint32_t);
-    REGISTER_COLLECT_COMPRESSED(uint64_t, uint64_t, uint64_t);
+    REGISTER_COMPRESSED(float32_t, int32_t, int32_t);
+    REGISTER_COMPRESSED(float32_t, int32_t, int64_t);
+    REGISTER_COMPRESSED(float32_t, int32_t, uint32_t);
+    REGISTER_COMPRESSED(float32_t, int32_t, uint64_t);
+    REGISTER_COMPRESSED(float32_t, int64_t, int32_t);
+    REGISTER_COMPRESSED(float32_t, int64_t, int64_t);
+    REGISTER_COMPRESSED(float32_t, int64_t, uint32_t);
+    REGISTER_COMPRESSED(float32_t, int64_t, uint64_t);
+    REGISTER_COMPRESSED(float32_t, uint32_t, uint32_t);
+    REGISTER_COMPRESSED(float32_t, uint32_t, uint64_t);
+    REGISTER_COMPRESSED(float32_t, uint64_t, uint32_t);
+    REGISTER_COMPRESSED(float32_t, uint64_t, uint64_t);
+    REGISTER_COMPRESSED(float64_t, int32_t, int32_t);
+    REGISTER_COMPRESSED(float64_t, int32_t, int64_t);
+    REGISTER_COMPRESSED(float64_t, int32_t, uint32_t);
+    REGISTER_COMPRESSED(float64_t, int32_t, uint64_t);
+    REGISTER_COMPRESSED(float64_t, int64_t, int32_t);
+    REGISTER_COMPRESSED(float64_t, int64_t, int64_t);
+    REGISTER_COMPRESSED(float64_t, int64_t, uint32_t);
+    REGISTER_COMPRESSED(float64_t, int64_t, uint64_t);
+    REGISTER_COMPRESSED(float64_t, uint32_t, uint32_t);
+    REGISTER_COMPRESSED(float64_t, uint32_t, uint64_t);
+    REGISTER_COMPRESSED(float64_t, uint64_t, uint32_t);
+    REGISTER_COMPRESSED(float64_t, uint64_t, uint64_t);
+    REGISTER_COMPRESSED(int32_t, int32_t, int32_t);
+    REGISTER_COMPRESSED(int32_t, int32_t, int64_t);
+    REGISTER_COMPRESSED(int32_t, int32_t, uint32_t);
+    REGISTER_COMPRESSED(int32_t, int32_t, uint64_t);
+    REGISTER_COMPRESSED(int32_t, int64_t, int32_t);
+    REGISTER_COMPRESSED(int32_t, int64_t, int64_t);
+    REGISTER_COMPRESSED(int32_t, int64_t, uint32_t);
+    REGISTER_COMPRESSED(int32_t, int64_t, uint64_t);
+    REGISTER_COMPRESSED(int32_t, uint32_t, uint32_t);
+    REGISTER_COMPRESSED(int32_t, uint32_t, uint64_t);
+    REGISTER_COMPRESSED(int32_t, uint64_t, uint32_t);
+    REGISTER_COMPRESSED(int32_t, uint64_t, uint64_t);
+    REGISTER_COMPRESSED(int64_t, int32_t, int32_t);
+    REGISTER_COMPRESSED(int64_t, int32_t, int64_t);
+    REGISTER_COMPRESSED(int64_t, int32_t, uint32_t);
+    REGISTER_COMPRESSED(int64_t, int32_t, uint64_t);
+    REGISTER_COMPRESSED(int64_t, int64_t, int32_t);
+    REGISTER_COMPRESSED(int64_t, int64_t, int64_t);
+    REGISTER_COMPRESSED(int64_t, int64_t, uint32_t);
+    REGISTER_COMPRESSED(int64_t, int64_t, uint64_t);
+    REGISTER_COMPRESSED(int64_t, uint32_t, uint32_t);
+    REGISTER_COMPRESSED(int64_t, uint32_t, uint64_t);
+    REGISTER_COMPRESSED(int64_t, uint64_t, uint32_t);
+    REGISTER_COMPRESSED(int64_t, uint64_t, uint64_t);
+    REGISTER_COMPRESSED(uint32_t, int32_t, int32_t);
+    REGISTER_COMPRESSED(uint32_t, int32_t, int64_t);
+    REGISTER_COMPRESSED(uint32_t, int32_t, uint32_t);
+    REGISTER_COMPRESSED(uint32_t, int32_t, uint64_t);
+    REGISTER_COMPRESSED(uint32_t, int64_t, int32_t);
+    REGISTER_COMPRESSED(uint32_t, int64_t, int64_t);
+    REGISTER_COMPRESSED(uint32_t, int64_t, uint32_t);
+    REGISTER_COMPRESSED(uint32_t, int64_t, uint64_t);
+    REGISTER_COMPRESSED(uint32_t, uint32_t, uint32_t);
+    REGISTER_COMPRESSED(uint32_t, uint32_t, uint64_t);
+    REGISTER_COMPRESSED(uint32_t, uint64_t, uint32_t);
+    REGISTER_COMPRESSED(uint32_t, uint64_t, uint64_t);
+    REGISTER_COMPRESSED(uint64_t, int32_t, int32_t);
+    REGISTER_COMPRESSED(uint64_t, int32_t, int64_t);
+    REGISTER_COMPRESSED(uint64_t, int32_t, uint32_t);
+    REGISTER_COMPRESSED(uint64_t, int32_t, uint64_t);
+    REGISTER_COMPRESSED(uint64_t, int64_t, int32_t);
+    REGISTER_COMPRESSED(uint64_t, int64_t, int64_t);
+    REGISTER_COMPRESSED(uint64_t, int64_t, uint32_t);
+    REGISTER_COMPRESSED(uint64_t, int64_t, uint64_t);
+    REGISTER_COMPRESSED(uint64_t, uint32_t, uint32_t);
+    REGISTER_COMPRESSED(uint64_t, uint32_t, uint64_t);
+    REGISTER_COMPRESSED(uint64_t, uint64_t, uint32_t);
+    REGISTER_COMPRESSED(uint64_t, uint64_t, uint64_t);
 
     module.def("collect_outgoing",
                &metacells::collect_outgoing,

@@ -28,6 +28,7 @@ from metacells.utilities.threading import SharedStorage, parallel_for
 __all__ = [
     'to_layout',
     'relayout_compressed',
+    'sort_compressed',
 
     'corrcoef',
 
@@ -162,8 +163,7 @@ def relayout_compressed(matrix: utt.CompressedMatrix) -> utt.CompressedMatrix:
         utm.timed_parameters(elements=nnz_elements_of_output_bands.size - 1)
         np.cumsum(nnz_elements_of_output_bands[:-1], out=output_indptr[2:])
 
-    output_indices = np.empty(compressed.indices.size,
-                              dtype=compressed.indices.dtype)
+    output_indices = np.empty(compressed.nnz, dtype=compressed.indices.dtype)
     output_data = np.empty(compressed.nnz, dtype=compressed.data.dtype)
 
     extension_name = 'collect_compressed_%s_t_%s_t_%s_t' \
@@ -185,9 +185,38 @@ def relayout_compressed(matrix: utt.CompressedMatrix) -> utt.CompressedMatrix:
     constructor = (sp.csr_matrix, sp.csc_matrix)[1 - axis]
     compressed = constructor((output_data, output_indices,
                               output_indptr), shape=compressed.shape)
-    compressed.has_sorted_indices = True
+
     compressed.has_canonical_format = True
+    sort_compressed(compressed, force=True)
+
     return compressed
+
+
+def sort_compressed(matrix: utt.CompressedMatrix, force: bool = False) -> None:
+    '''
+    Efficient parallel sort of indices in a CSR/CSC ``matrix``.
+
+    This will skip sorting a matrix that is marked as sorted, unless ``force`` is specified.
+    '''
+    assert matrix.getformat() in ('csr', 'csc')
+    if matrix.has_sorted_indices and not force:
+        return
+
+    with utm.timed_step('sort_compressed'):
+        matrix_bands_count = matrix.indptr.size - 1
+        utm.timed_parameters(results=matrix_bands_count,
+                             elements=matrix.nnz / matrix_bands_count)
+
+        extension_name = 'sort_compressed_%s_t_%s_t_%s_t' \
+            % (matrix.data.dtype, matrix.indices.dtype, matrix.indptr.dtype)
+        extension = getattr(xt, extension_name)
+
+        def sort_compressed_bands(matrix_band_indices: range) -> None:
+            extension(matrix_band_indices.start, matrix_band_indices.stop,
+                      matrix.data, matrix.indices, matrix.indptr)
+
+        parallel_for(sort_compressed_bands, matrix_bands_count)
+        matrix.has_sorted_indices = True
 
 
 @utm.timed_call()
