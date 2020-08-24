@@ -221,10 +221,14 @@ def get_derived(
     slicing_mask: uta.SlicingMask = uta.ALWAYS_SAFE,
     inplace: bool = True,
     infocus: bool = False,
+    of_layout: Optional[str] = None,
     layout: Optional[str] = None,
 ) -> NamedShaped:
     '''
     Return some data which is a derivative ``of`` some data (by default, the focus).
+
+    If the data is 2-dimensional and ``of_layout`` (default: {of_layout}) is specified,
+    fetches that data in this layout for efficient processing.
 
     The ``derive`` function is invoked as ``reducer(data)``. It is expected to take an array or
     matrix, and return data of the same shape.
@@ -254,7 +258,8 @@ def get_derived(
     @utm.timed_call('.' + to)
     def compute() -> utt.Shaped:
         assert of is not None
-        return derive(uta.get_proper(adata, of, layout=layout))  # type: ignore
+        return derive(uta.get_proper(adata,  # type: ignore
+                                     of, layout=of_layout))
 
     return _derive_data(NamedShaped, adata, of=of, per_to=per_of, to=to,
                         slicing_mask=slicing_mask, compute=compute,
@@ -271,6 +276,7 @@ def get_derived_matrix(
     slicing_mask: uta.SlicingMask = uta.ALWAYS_SAFE,
     inplace: bool = True,
     infocus: bool = False,
+    of_layout: Optional[str] = None,
     layout: Optional[str] = None,
 ) -> NamedMatrix:
     '''
@@ -280,7 +286,7 @@ def get_derived_matrix(
     return NamedMatrix.be(get_derived(adata, derive, of, to=to,
                                       slicing_mask=slicing_mask,
                                       inplace=inplace, infocus=infocus,
-                                      layout=layout))
+                                      of_layout=of_layout, layout=layout))
 
 
 @utm.timed_call()
@@ -433,7 +439,7 @@ def get_downsample_of_var_per_obs(
                                      eliminate_zeros=True,
                                      random_seed=random_seed)
 
-    return get_derived_matrix(adata, derive, of,
+    return get_derived_matrix(adata, derive, of, of_layout='row_major',
                               to='downsample_%s_var_per_obs' % samples,
                               slicing_mask=uta.SAFE_WHEN_SLICING_OBS,
                               inplace=inplace, infocus=infocus, layout=layout)
@@ -483,7 +489,7 @@ def get_downsample_of_obs_per_var(
                                      eliminate_zeros=True,
                                      random_seed=random_seed)
 
-    return get_derived_matrix(adata, derive, of,
+    return get_derived_matrix(adata, derive, of, of_layout='column_major',
                               to='downsample_%s_obs_per_var' % samples,
                               slicing_mask=uta.SAFE_WHEN_SLICING_VAR,
                               inplace=inplace, infocus=infocus, layout=layout)

@@ -115,39 +115,6 @@ def test_relayout_matrix() -> None:
     assert np.all(metacells_csr_matrix.toarray() == scipy_csr_matrix.toarray())
 
 
-def test_downsample_tmp_size() -> None:
-    assert ut.downsample_tmp_size(0) == 0
-    assert ut.downsample_tmp_size(1) == 0
-    assert ut.downsample_tmp_size(2) == 3
-    assert ut.downsample_tmp_size(3) == 7
-    assert ut.downsample_tmp_size(4) == 7
-    assert ut.downsample_tmp_size(5) == 15
-    assert ut.downsample_tmp_size(6) == 15
-    assert ut.downsample_tmp_size(7) == 15
-    assert ut.downsample_tmp_size(8) == 15
-    assert ut.downsample_tmp_size(9) == 31
-
-
-def test_downsample_vector_with_tmp() -> None:
-    size = 10
-    total = (size * (size - 1)) // 2
-    samples = 20
-    random_seed = 123456
-
-    safe = np.arange(size)
-    data = np.arange(size)
-    tmp = np.empty(ut.downsample_tmp_size(size))
-    output = np.empty(size)
-
-    ut.downsample_vector(data, samples, random_seed=random_seed,
-                         tmp=tmp, output=output)
-    assert tmp[-1] == total - samples
-
-    assert np.all(data == safe)
-    assert np.all(output <= data)
-    assert np.sum(output) == samples
-
-
 def test_downsample_vector_inplace() -> None:
     size = 10
     samples = 20

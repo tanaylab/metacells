@@ -23,7 +23,7 @@ import metacells.extensions as xt  # type: ignore
 import metacells.utilities.documentation as utd
 import metacells.utilities.timing as utm
 import metacells.utilities.typing as utt
-from metacells.utilities.threading import SharedStorage, parallel_for
+from metacells.utilities.threading import parallel_for
 
 __all__ = [
     'to_layout',
@@ -44,7 +44,6 @@ __all__ = [
 
     'downsample_matrix',
     'downsample_vector',
-    'downsample_tmp_size',
 
     'sliding_window_function',
     'regex_matches_mask',
@@ -265,6 +264,7 @@ def corrcoef(
     return np.corrcoef(dense, rowvar=per == 'row')
 
 
+@utm.timed_call()
 @utd.expand_doc()
 def log_data(
     shaped: utt.Shaped,
@@ -382,6 +382,8 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
     else:
         output = np.empty(matrix.shape, dtype=matrix.dtype, order='F')
 
+    assert output.shape == matrix.shape
+
     if per == 'row':
         sample_input_vector = matrix[0, :]
         sample_output_vector = output[0, :]
@@ -392,72 +394,45 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
     input_is_contiguous = \
         sample_input_vector.flags.c_contiguous and sample_input_vector.flags.f_contiguous
     if not input_is_contiguous:
-        downsampling_dense_input_matrix_of_inefficient_format = \
-            'downsampling per-%s ' \
-            'of a matrix input matrix with inefficient strides: %s' \
-            % (per, matrix.strides)
-        warn(downsampling_dense_input_matrix_of_inefficient_format)
+        raise \
+            NotImplementedError('downsampling per-%s '
+                                'of a matrix input matrix '
+                                'with inefficient strides: %s'
+                                % (per, matrix.strides))
 
     output_is_contiguous = \
         sample_output_vector.flags.c_contiguous and sample_output_vector.flags.f_contiguous
     if not inplace and not output_is_contiguous:
-        downsampling_dense_output_matrix_of_inefficient_format = \
-            'downsampling per-%s ' \
-            'of a matrix output matrix with inefficient strides: %s' \
-            % (per, output.strides)
-        warn(downsampling_dense_output_matrix_of_inefficient_format)
+        raise NotImplementedError('downsampling per-%s '
+                                  'of a matrix output matrix '
+                                  'with inefficient strides: %s'
+                                  % (per, output.strides))
 
-    shared_storage = SharedStorage()
+    if per == 'column':
+        matrix = np.transpose(matrix)
+        output = np.transpose(output)
 
     axis = utt.PER_OF_AXIS.index(per)
     results_count = matrix.shape[axis]
     elements_count = matrix.shape[1 - axis]
-    tmp_size = downsample_tmp_size(elements_count)
 
-    def downsample_dense_vectors(indices: range) -> None:
-        for index in indices:
-            if per == 'row':
-                input_vector = matrix[index, :]
-            else:
-                input_vector = matrix[:, index]
-            input_array = utt.to_contiguous(input_vector)
+    extension_name = \
+        'downsample_matrix_%s_t_%s_t' % (matrix.dtype, output.dtype)
+    extension = getattr(xt, extension_name)
 
-            if not output_is_contiguous:
-                output_vector = \
-                    shared_storage.get_private('output',
-                                               make=lambda: np.empty(elements_count,
-                                                                     dtype=output.dtype))
-            elif per == 'row':
-                output_vector = output[index, :]
-            else:
-                output_vector = output[:, index]
-            output_array = utt.to_dense_vector(output_vector, copy=None)
+    def downsample_dense_slice(indices: range) -> None:
+        extension(indices.start, indices.stop, matrix,
+                  output, samples, random_seed)
 
-            tmp = shared_storage.get_private('tmp',
-                                             make=lambda: np.empty(tmp_size,
-                                                                   dtype=matrix.dtype))
-
-            if random_seed != 0:
-                index_seed = random_seed + index
-            else:
-                index_seed = 0
-
-            _downsample_array(input_array, samples, tmp,
-                              output_array, index_seed)
-
-            if output_is_contiguous:
-                continue
-
-            if per == 'row':
-                output[index, :] = output_array
-            else:
-                output[:, index] = output_array
-
-    with utm.timed_step('.dense'):
+    with utm.timed_step('extensions.downsample_dense_matrix'):
         utm.timed_parameters(results=results_count,
                              elements=elements_count, samples=samples)
-        parallel_for(downsample_dense_vectors, results_count)
+        parallel_for(downsample_dense_slice, results_count)
 
+    if per == 'column':
+        output = np.transpose(output)
+
+    assert output.shape == matrix.shape
     return output
 
 
@@ -486,53 +461,38 @@ def _downsample_compressed_matrix(  # pylint: disable=too-many-locals
         constructor = (sp.csr_matrix, sp.csc_matrix)[axis]
         output_data = np.empty(matrix.data.shape, dtype=matrix.data.dtype)
         output = constructor((output_data, matrix.indices, matrix.indptr))
+        output.has_sorted_indices = matrix.has_sorted_indices
+        output.has_canonical_format = matrix.has_canonical_format
 
-    shared_storage = SharedStorage()
-    max_tmp_size = downsample_tmp_size(elements_count)
+    extension_name = 'downsample_compressed_%s_t_%s_t_%s_t' \
+        % (matrix.data.dtype, matrix.indptr.dtype, output.data.dtype)
+    extension = getattr(xt, extension_name)
 
-    def downsample_sparse_vectors(indices: range) -> None:
-        for index in indices:
-            start_index = matrix.indptr[index]
-            stop_index = matrix.indptr[index + 1]
+    def downsample_sparse_slice(indices: range) -> None:
+        extension(indices.start, indices.stop,
+                  matrix.data, matrix.indptr, output.data,
+                  samples, random_seed)
 
-            input_vector = matrix.data[start_index:stop_index]
-            output_vector = output.data[start_index:stop_index]
-
-            tmp = \
-                shared_storage.get_private('tmp',
-                                           make=lambda: np.empty(max_tmp_size,
-                                                                 dtype=output.dtype))
-
-            if random_seed != 0:
-                index_seed = random_seed + index
-            else:
-                index_seed = 0
-
-            _downsample_array(input_vector, samples, tmp,
-                              output_vector, index_seed)
-
-    with utm.timed_step('.sparse'):
+    with utm.timed_step('extensions.downsample_sparse_matrix'):
         utm.timed_parameters(results=results_count,
                              elements=elements_count, samples=samples)
-        parallel_for(downsample_sparse_vectors, results_count)
+        parallel_for(downsample_sparse_slice, results_count)
 
-    output.has_sorted_indices = True
+    output.has_canonical_format = False
     if eliminate_zeros:
-        with utm.timed_step('.eliminate_zeros'):
-            utt.unfreeze(output)
+        utt.unfreeze(output)
+        with utm.timed_step('eliminate_zeros'):
             output.eliminate_zeros()
-            output.has_canonical_format = True
 
     return output
 
 
-@utm.timed_call()
-@utd.expand_doc(data_types=','.join(['``%s``' % data_type for data_type in utt.CPP_DATA_TYPES]))
+@ utm.timed_call()
+@ utd.expand_doc(data_types=','.join(['``%s``' % data_type for data_type in utt.CPP_DATA_TYPES]))
 def downsample_vector(
     vector: utt.Vector,
     samples: int,
     *,
-    tmp: Optional[np.ndarray] = None,
     output: Optional[np.ndarray] = None,
     random_seed: int = 0
 ) -> None:
@@ -544,8 +504,6 @@ def downsample_vector(
     * A numpy ``array`` containing non-negative integer sample counts.
 
     * A desired total number of ``samples``.
-
-    * An optional ``tmp`` storage numpy array to minimize allocations for multiple invocations.
 
     * An optional numpy array ``output`` to hold the results (otherwise, the input is overwritten).
 
@@ -575,46 +533,22 @@ def downsample_vector(
     observations with a higher sample count, which will result in an inflated estimation of their
     similarity to other observations. Downsampling avoids this effect.
     '''
-    proper = utt.to_proper_vector(vector)
-    return _downsample_array(proper, samples, tmp, output, random_seed)
-
-
-def _downsample_array(
-    array: utt.DenseVector,
-    samples: int,
-    tmp: Optional[np.ndarray] = None,
-    output: Optional[np.ndarray] = None,
-    random_seed: int = 0
-) -> None:
-    assert array.ndim == 1
-
-    if tmp is None:
-        tmp = np.empty(downsample_tmp_size(array.size), dtype='int32')
-    else:
-        assert tmp.size >= downsample_tmp_size(array.size)
+    array = utt.to_proper_vector(vector)
 
     if output is None:
         output = array
     else:
         assert output.shape == array.shape
 
-    with utm.timed_step('extensions.downsample'):
+    extension_name = 'downsample_array_%s_t_%s_t' % (array.dtype, output.dtype)
+    extension = getattr(xt, extension_name)
+
+    with utm.timed_step('extensions.downsample_array'):
         utm.timed_parameters(elements=array.size, samples=samples)
-        extension_name = \
-            'downsample_%s_t_%s_t_%s_t' \
-            % (array.dtype, tmp.dtype, output.dtype)
-        extension = getattr(xt, extension_name)
-        extension(array, tmp, output, samples, random_seed)
+        extension(array, output, samples, random_seed)
 
 
-def downsample_tmp_size(size: int) -> int:
-    '''
-    Return the size of the temporary array needed to ``downsample`` an array of the specified size.
-    '''
-    return xt.downsample_tmp_size(size)
-
-
-@utm.timed_call()
+@ utm.timed_call()
 def max_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
     '''
     Compute the maximal value ``per`` (``row`` or ``column``) of some ``matrix``.
@@ -629,7 +563,7 @@ def max_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
     return _reduce_matrix(dense, per, lambda dense: np.amax(dense, axis=1 - axis))
 
 
-@utm.timed_call()
+@ utm.timed_call()
 def min_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
     '''
     Compute the minimal value ``per`` (``row`` or ``column``) of some ``matrix``.
@@ -644,7 +578,7 @@ def min_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
     return _reduce_matrix(dense, per, lambda dense: np.amin(dense, axis=1 - axis))
 
 
-@utm.timed_call()
+@ utm.timed_call()
 def nnz_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
     '''
     Compute the number of non-zero values ``per`` (``row`` or ``column``) of some ``matrix``.
@@ -659,7 +593,7 @@ def nnz_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
     return _reduce_matrix(dense, per, lambda dense: np.count_nonzero(dense, axis=1 - axis))
 
 
-@utm.timed_call()
+@ utm.timed_call()
 def sum_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
     '''
     Compute the total of the values ``per`` (``row`` or ``column``) of some ``matrix``.
@@ -674,7 +608,7 @@ def sum_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
     return _reduce_matrix(dense, per, lambda dense: np.sum(dense, axis=1 - axis))
 
 
-@utm.timed_call()
+@ utm.timed_call()
 def sum_squared_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
     '''
     Compute the total of the squared values ``per`` (``row`` or ``column``) of some ``matrix``.
@@ -715,8 +649,8 @@ def _reduce_matrix(
         timed_step = '.sparse'
         elements_count: float = matrix.shape[axis]
     else:
-        _, dense, compressed = \
-            utt.to_proper_matrices(matrix, layout=utt.LAYOUT_OF_AXIS[axis])
+        _, dense, compressed = utt.to_proper_matrices(matrix,
+                                                      layout=utt.LAYOUT_OF_AXIS[axis])
 
         if dense is not None:
             elements_count = dense.shape[axis]
@@ -726,8 +660,7 @@ def _reduce_matrix(
                 timed_step = '.dense-efficient'
             else:
                 timed_step = '.dense-inefficient'
-                reducing_dense_matrix_of_inefficient_format = \
-                    'reducing axis: %s ' \
+                reducing_dense_matrix_of_inefficient_format = 'reducing axis: %s ' \
                     'of a dense matrix with layout: %s ' \
                     'instead of the efficient layout: %s' \
                     % (axis,
@@ -745,8 +678,7 @@ def _reduce_matrix(
                 timed_step = '.compressed-efficient'
             else:
                 timed_step = '.compressed-inefficient'
-                reducing_sparse_matrix_of_inefficient_format = \
-                    'reducing axis: %s ' \
+                reducing_sparse_matrix_of_inefficient_format = 'reducing axis: %s ' \
                     'of a sparse matrix in the format: %s ' \
                     'instead of the efficient format: %s' \
                     % (axis, compressed.getformat(), axis_format)
@@ -757,7 +689,7 @@ def _reduce_matrix(
         return reducer(matrix)
 
 
-@utm.timed_call()
+@ utm.timed_call()
 def bincount_vector(
     vector: utt.Vector,
     *,
@@ -786,8 +718,8 @@ ROLLING_FUNCTIONS = {
 }
 
 
-@utd.expand_doc(functions=', '.join(['``%s``' % function for function in ROLLING_FUNCTIONS]))
-@utm.timed_call()
+@ utd.expand_doc(functions=', '.join(['``%s``' % function for function in ROLLING_FUNCTIONS]))
+@ utm.timed_call()
 def sliding_window_function(  # pylint: disable=too-many-locals
     vector: utt.Vector,
     *,
