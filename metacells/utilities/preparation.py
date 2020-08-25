@@ -530,7 +530,7 @@ def get_per_obs(
     Returns the result and its name.
     '''
     per_of, of = _per_of(adata, of, ['vo', 'oo'])
-    to = '%s|%s_per_obs' % (of, to or reducer.__qualname__)
+    to = '%s|%s_per_obs' % (of, to or reducer.__qualname__.replace('_per', ''))
 
     @utm.timed_call('.' + to)
     def compute() -> utt.Vector:
@@ -568,7 +568,7 @@ def get_per_var(
     Returns the result and its name.
     '''
     per_of, of = _per_of(adata, of, ['vo', 'oo'])
-    to = '%s|%s_per_var' % (of, to or reducer.__qualname__)
+    to = '%s|%s_per_var' % (of, to or reducer.__qualname__.replace('_per', ''))
 
     @utm.timed_call('.' + to)
     def compute() -> utt.Vector:

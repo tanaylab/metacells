@@ -46,7 +46,8 @@ __all__ = [
     'downsample_vector',
 
     'sliding_window_function',
-    'regex_matches_mask',
+    'patterns_matches',
+    'compress_indices',
 ]
 
 
@@ -482,7 +483,9 @@ def _downsample_compressed_matrix(  # pylint: disable=too-many-locals
     if eliminate_zeros:
         utt.unfreeze(output)
         with utm.timed_step('eliminate_zeros'):
+            utm.timed_parameters(before=output.nnz)
             output.eliminate_zeros()
+            utm.timed_parameters(after=output.nnz)
 
     return output
 
@@ -784,15 +787,43 @@ def sliding_window_function(  # pylint: disable=too-many-locals
     return reordered
 
 
-def regex_matches_mask(
-    pattern: Union[str, Pattern],
-    strings: Collection[str]
+@utm.timed_call()
+def patterns_matches(
+    patterns: Union[str, Pattern, Collection[Union[str, Pattern]]],
+    strings: Collection[str],
+    invert: bool = False,
 ) -> utt.DenseVector:
     '''
     Given a collection of ``strings``, return a numpy boolean mask specifying which of them match
-    the given regular expression ``pattern``.
+    the given regular expression ``patterns``.
+
+    If ``invert`` (default: {invert}), invert the mask.
     '''
-    if isinstance(pattern, str):
-        pattern = re.compile(pattern)
-    assert isinstance(pattern, Pattern)
-    return np.array([bool(pattern.match(string)) for string in strings], dtype='bool')
+    if isinstance(patterns, (str, Pattern)):
+        patterns = [patterns]
+
+    utm.timed_parameters(patterns=len(patterns), strings=len(strings))
+
+    pattern: Pattern = \
+        re.compile('|'.join([alternative if isinstance(alternative, str)
+                             else alternative.pattern
+                             for alternative in patterns]))
+
+    mask = np.array([bool(pattern.match(string)) for string in strings])
+
+    if invert:
+        mask = ~mask
+
+    return mask
+
+
+@utm.timed_call()
+def compress_indices(indices: utt.Vector) -> utt.DenseVector:
+    '''
+    Given a vector of ``indices`` per element, return a vector where the indices are consecutive.
+
+    If the indices contain ``-1``, then it is preserved as ``-1`` in the result.
+    '''
+    unique, consecutive = np.unique(indices, return_inverse=True)
+    consecutive += min(unique[0], 0)
+    return consecutive

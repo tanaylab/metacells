@@ -12,13 +12,13 @@ Filtering
 .. automodule:: metacells.tools.named_genes
     :members:
 
-.. automodule:: metacells.tools.high_normalized_variance_genes
-    :members:
-
 .. automodule:: metacells.tools.noisy_lonely_genes
     :members:
 
 .. automodule:: metacells.tools.rare_gene_modules
+    :members:
+
+.. automodule:: metacells.tools.high_normalized_variance_genes
     :members:
 
 Building a Graph
@@ -28,4 +28,16 @@ Building a Graph
     :members:
 
 .. automodule:: metacells.tools.knn_graph
+    :members:
+
+Computing Metacells
+-------------------
+
+.. automodule:: metacells.tools.candidate_metacells
+    :members:
+
+.. automodule:: metacells.tools.outlier_cells
+    :members:
+
+.. automodule:: metacells.tools.finalize_metacells
     :members:

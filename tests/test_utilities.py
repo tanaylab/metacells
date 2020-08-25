@@ -2,7 +2,7 @@
 Test the utility functions.
 '''
 
-from typing import Any
+from typing import Any, List
 
 import numpy as np  # type: ignore
 from anndata import AnnData
@@ -371,8 +371,30 @@ def _test_annotations(full_matrix: ut.Matrix) -> None:
     assert np.allclose(dense, np.array([[0/3, 1/5, 2/7], [3/3, 4/5, 5/7]]))
 
 
-def test_regex_matches_mask() -> None:
+def test_patterns_matches() -> None:
     strings = ['foo', 'bar', 'baz']
-    actual = ut.regex_matches_mask('ba?', strings)
+    actual = ut.patterns_matches('ba?', strings)
     expected = np.array([False, True, True])
     assert np.allclose(actual, expected)
+
+
+def test_bin_pack() -> None:
+    size_of_elements = np.arange(10) * 8 + 1
+    bin_of_elements = ut.bin_pack(size_of_elements, 106)
+    bins_count = np.max(bin_of_elements) + 1
+    size_of_bins: List[int] = []
+    elements_of_bins: List[List[int]] = []
+    for bin_index in range(bins_count):
+        elements_of_bin = np.where(bin_of_elements == bin_index)[0]
+        size_of_bin = np.sum(size_of_elements[elements_of_bin])
+        assert size_of_bin <= 106
+        size_of_bins.append(size_of_bin)
+        elements_of_bins.append(list(elements_of_bin))
+
+    assert size_of_bins == [98, 98, 98, 76]
+    assert elements_of_bins == [[3, 9], [4, 8], [5, 7], [0, 1, 2, 6]]
+
+
+def test_compress_indices() -> None:
+    assert list(ut.compress_indices(np.array([0, 3, 2]))) == [0, 2, 1]
+    assert list(ut.compress_indices(np.array([0, -1, 2]))) == [0, -1, 1]

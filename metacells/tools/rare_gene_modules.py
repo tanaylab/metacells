@@ -39,7 +39,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     intermediate: bool = True,
 ) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame, np.ndarray]]:
     '''
-    Detect rare genes modules.
+    Detect rare genes modules based ``of`` some data (by default, the focus).
 
     Rare gene modules include genes which are weakly and rarely expressed, yet are highly correlated
     with each other, allowing for robust detection. Global analysis algorithms (such as metacells)
@@ -54,8 +54,8 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
     observations are cells and the variables are genes.
 
-    If not ``intermediate`` (default: {intermediate}), this discards all the intermediate data used
-    (e.g. sums). Otherwise, such data is kept for future reuse.
+    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
+    for future reuse. Otherwise, discard it.
 
     **Returns**
 

@@ -20,6 +20,7 @@ __all__ = [
     'compute_communities',
     'leiden_surprise',
     'leiden_bounded_surprise',
+    'bin_pack',
 ]
 
 try:
@@ -145,13 +146,21 @@ def compute_communities(  # pylint: disable=too-many-locals,too-many-statements,
     4. If both ``target_comm_size`` and ``maximal_merge_factor`` (default: {minimal_merge_factor})
        are specified, condense each community whose size is at most ``target_comm_size
        * maximal_merge_factor`` into a single node (using the mean of the edge weights),
-       and re-run the partition method on the resuling graph to merge these communities into large
+       and re-run the partition method on the resulting graph to merge these communities into large
        ones.
 
     5. Repeat the above steps until no further progress can be made.
 
-    This doesn't guarantee that all communities would be in the size range we want, but comes as
-    close as possible to it given the choice of partition method.
+    6. If a minimal community size was specified, arbitrarily combine the remaining smaller
+       communities into groups no larger than the target community size.
+
+    .. note::
+
+        This doesn't guarantee that all communities would be in the size range we want, but comes as
+        close as possible to it given the choice of partition method. Also, since we force merging
+        of communities beyond what the partition method would have done on its own, not all the
+        communities would have the same quality. Any too-low-quality groupings are expected to be
+        corrected by removing outliers and/or by dissolving too-small communities.
 
     .. note::
 
@@ -203,7 +212,7 @@ def compute_communities(  # pylint: disable=too-many-locals,too-many-statements,
         too_small = 0
         too_large = 0
 
-        def _append_communities(count: int) -> None:
+        def append_communities(count: int) -> None:
             nonlocal communities_count, too_small, too_large
 
             for index in range(count):
@@ -243,7 +252,7 @@ def compute_communities(  # pylint: disable=too-many-locals,too-many-statements,
             assert too_small >= 0
             assert too_large >= 0
 
-        _append_communities(np.max(membership) + 1)
+        append_communities(np.max(membership) + 1)
 
         @utm.timed_call('.split')
         def split_large_communities() -> bool:
@@ -281,7 +290,7 @@ def compute_communities(  # pylint: disable=too-many-locals,too-many-statements,
 
                 split_nodes_membership += communities_count
                 membership[split_community.mask] = split_nodes_membership
-                _append_communities(split_communities_count)
+                append_communities(split_communities_count)
 
             return did_split
 
@@ -343,7 +352,7 @@ def compute_communities(  # pylint: disable=too-many-locals,too-many-statements,
 
             merged_communities_count = \
                 np.max(merged_communities_membership) + 1
-            _append_communities(merged_communities_count)
+            append_communities(merged_communities_count)
 
             return too_small < before_too_small
 
@@ -364,8 +373,29 @@ def compute_communities(  # pylint: disable=too-many-locals,too-many-statements,
                         if not merge_small_communities():
                             break
 
-        _, membership = np.unique(membership, return_inverse=True)
-        return utt.to_dense_vector(membership)
+        if doing_merges:
+            with utm.timed_step('.pack'):
+                list_of_small_community_sizes: List[int] = []
+                list_of_small_community_indices: List[int] = []
+                for community in communities:
+                    if community.too_small == 0:
+                        continue
+                    list_of_small_community_sizes.append(community.size)
+                    list_of_small_community_indices.append(community.index)
+
+                if len(list_of_small_community_sizes) > 0:
+                    assert target_comm_size is not None
+                    small_community_sizes = \
+                        np.array(list_of_small_community_sizes)
+                    small_community_bins = \
+                        bin_pack(small_community_sizes, target_comm_size)
+                    for community_index, community_bin \
+                            in zip(list_of_small_community_indices, small_community_bins):
+                        new_community_index = communities_count + community_bin + 1
+                        membership[membership ==
+                                   community_index] = new_community_index
+
+        return utc.compress_indices(membership)
 
 
 def leiden_surprise(
@@ -418,14 +448,10 @@ def leiden_bounded_surprise(
 
     partition = la.find_partition(graph, la.SurpriseVertexPartition, **kwargs)
     membership = np.array(partition.membership)
-    _, membership = np.unique(membership, return_inverse=True)
-    return utt.to_dense_vector(membership)
+    return utc.compress_indices(membership)
 
 
 def _build_igraph(edge_weights: utt.Matrix) -> Tuple[ig.Graph, utt.DenseVector]:
-    '''
-    Build a directed ``igraph`` from a matrix of non-negative ``edge_weights``.
-    '''
     edge_weights = utt.to_proper_matrix(edge_weights)
     assert edge_weights.shape[0] == edge_weights.shape[1]
     size = edge_weights.shape[0]
@@ -440,3 +466,58 @@ def _build_igraph(edge_weights: utt.Matrix) -> Tuple[ig.Graph, utt.DenseVector]:
     graph.es['weight'] = weights_array
 
     return graph, weights_array
+
+
+@utm.timed_call()
+def bin_pack(element_sizes: utt.Vector, max_bin_size: float) -> utt.DenseVector:
+    '''
+    Given a vector of ``element_sizes`` and the ``max_bin_size``, return a vector containing the bin
+    number for each element.
+    '''
+    size_of_bins: List[float] = []
+    element_sizes = utt.to_dense_vector(element_sizes)
+    descending_size_indices = np.argsort(element_sizes)[::-1]
+    bin_of_elements = np.empty(element_sizes.size, dtype='int')
+
+    for element_index in descending_size_indices:
+        element_size = element_sizes[element_index]
+
+        assigned = False
+        for bin_index in range(len(size_of_bins)):  # pylint: disable=consider-using-enumerate
+            if size_of_bins[bin_index] + element_size <= max_bin_size:
+                bin_of_elements[element_index] = bin_index
+                size_of_bins[bin_index] += element_size
+                assigned = True
+                break
+
+        if not assigned:
+            bin_of_elements[element_index] = len(size_of_bins)
+            size_of_bins.append(element_size)
+
+    did_improve = True
+    while did_improve:
+        did_improve = False
+        for element_index in descending_size_indices:
+            element_size = element_sizes[element_index]
+            current_bin_index = bin_of_elements[element_index]
+
+            current_bin_space = max_bin_size - size_of_bins[current_bin_index]
+            remove_loss = \
+                (element_size + current_bin_space) ** 2 - current_bin_space ** 2
+
+            for bin_index in range(len(size_of_bins)):  # pylint: disable=consider-using-enumerate
+                if bin_index == current_bin_index:
+                    continue
+                bin_space = max_bin_size - size_of_bins[bin_index]
+                if bin_space < element_size:
+                    continue
+                insert_gain = bin_space ** 2 - (bin_space - element_size) ** 2
+                if insert_gain > remove_loss:
+                    size_of_bins[current_bin_index] -= element_size
+                    current_bin_index = bin_of_elements[element_index] = bin_index
+                    size_of_bins[bin_index] += element_size
+                    remove_loss = insert_gain
+                    did_improve = True
+
+    utm.timed_parameters(elements=element_sizes.size, bins=len(size_of_bins))
+    return bin_of_elements

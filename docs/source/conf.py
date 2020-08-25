@@ -48,6 +48,8 @@ nitpick_ignore = [
     ('py:class', 'utt.DenseMatrix'),
     ('py:class', 'utt.ImproperMatrix'),
     ('py:class', 'utt.ProperMatrix'),
+    ('py:class', 'ProperMatrix'),
+    ('py:class', 'ImproperMatrix'),
 ]
 
 # Add any paths that contain templates here, relative to this directory.

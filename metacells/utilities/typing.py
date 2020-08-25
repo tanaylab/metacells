@@ -100,6 +100,8 @@ __all__ = [
     'LAYOUT_OF_AXIS',
     'PER_OF_AXIS',
 
+    'matrix_layout',
+
     'is_layout',
     'is_row_major',
     'is_column_major',

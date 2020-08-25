@@ -296,8 +296,10 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     else:
         obs = utt.to_dense_vector(shaped)
         if obs.dtype == 'bool':
+            assert np.any(obs)
             will_slice_obs = not np.all(obs)
         else:
+            assert obs.size > 0
             will_slice_obs = obs.size != adata.n_obs
 
     shaped = utt.Shaped.maybe(vars)
@@ -308,8 +310,10 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     else:
         vars = utt.to_dense_vector(shaped)
         if vars.dtype == 'bool':
+            assert np.any(vars)
             will_slice_var = not np.all(vars)
         else:
+            assert vars.size > 0
             will_slice_var = vars.size != adata.n_vars
 
     if not will_slice_obs and not will_slice_var:
@@ -330,7 +334,7 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     assert did_slice_var == will_slice_var
 
     if invalidated_prefix is not None:
-        _prefix_data(saved_data, bdata, did_slice_obs, did_slice_var,
+        _prefix_data(bdata, did_slice_obs, did_slice_var,
                      invalidated_prefix)
 
     _restore_data(saved_data, adata)
@@ -381,7 +385,6 @@ def _save_per_data(  # pylint: disable=too-many-locals
     invalidated_prefix: Optional[str],
 ) -> None:
     delete_names: Set[str] = set()
-    prefixed_data: Dict[str, Any] = {}
 
     if per != 'vo':
         def patch(name: str) -> None:  # pylint: disable=unused-argument
@@ -428,9 +431,6 @@ def _save_per_data(  # pylint: disable=too-many-locals
 
         assert action == 'prefix'
         assert invalidated_prefix is not None
-        prefixed_name = invalidated_prefix + name
-        prefixed_data[prefixed_name] = data
-        delete_names.add(name)
         continue
 
     for name in delete_names:
@@ -449,31 +449,29 @@ def _restore_data(saved_data: Dict[Tuple[str, str], Any], adata: AnnData) -> Non
 
 
 def _prefix_data(
-    saved_data: Dict[Tuple[str, str], Any],
     bdata: AnnData,
     did_slice_obs: bool,
     did_slice_var: bool,
     invalidated_prefix: str,
 ) -> None:
-    for per, annotations in (('vo', bdata.layers),
-                             ('o', bdata.obs),
-                             ('v', bdata.var),
-                             ('oo', bdata.obsp),
-                             ('vv', bdata.varp),
-                             ('m', bdata.uns)):
-        _prefix_per_data(saved_data, per, annotations,
+    for annotations in (bdata.layers,
+                        bdata.obs,
+                        bdata.var,
+                        bdata.obsp,
+                        bdata.varp,
+                        bdata.uns):
+        _prefix_per_data(annotations,
                          did_slice_obs, did_slice_var, invalidated_prefix)
 
 
 def _prefix_per_data(
-    saved_data: Dict[Tuple[str, str], Any],
-    per: str,
     annotations: MutableMapping[str, Any],
     did_slice_obs: bool,
     did_slice_var: bool,
     invalidated_prefix: str,
 ) -> None:
     delete_names: List[str] = []
+    prefixed_data: Dict[str, Any] = {}
 
     for name, data in _items(annotations):
         action = _slice_action(name, did_slice_obs, did_slice_var, True)
@@ -485,7 +483,7 @@ def _prefix_per_data(
         prefixed_name = invalidated_prefix + name
         assert prefixed_name != name
 
-        saved_data[(per, prefixed_name)] = data
+        prefixed_data[prefixed_name] = data
         delete_names.append(name)
 
         with LOCK.gen_wlock():
@@ -493,6 +491,9 @@ def _prefix_per_data(
 
     for name in delete_names:
         del annotations[name]
+
+    for name, data in prefixed_data.items():
+        annotations[name] = data
 
 
 def _items(annotations: Annotations) -> Iterable[Tuple[str, Any]]:
@@ -1115,9 +1116,8 @@ def focus_on(
     If the original focus data is deleted inside the ``with`` statement, then when it is done, the
     focus will revert to whatever is in ``X``.
 
-    If not ``intermediate`` (default: {intermediate}), this discards all the intermediate
-    ``inplace`` data (e.g. sums) which was set within the ``with`` statement block. Otherwise, such
-    data is kept for future reuse.
+    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
+    for future reuse. Otherwise, discard it.
 
     For example, in order to temporarily focus on the log of some linear measurements,
     write:
@@ -1162,9 +1162,8 @@ def intermediate_step(
     Execute some code in a ``with`` statements and restore the focus at the end, if it was modified
     by the wrapped code.
 
-    If not ``intermediate`` (default: {intermediate}), this discards all the intermediate
-    ``inplace`` data (e.g. sums) which was set within the ``with`` statement block. Otherwise, such
-    data is kept for future reuse.
+    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
+    for future reuse. Otherwise, discard it.
 
     .. note::
 

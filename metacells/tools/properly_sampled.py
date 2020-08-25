@@ -49,8 +49,8 @@ def find_properly_sampled_cells(
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas series (indexed by the observation names).
 
-    If not ``intermediate`` (default: {intermediate}), this discards all the intermediate data used
-    (e.g. sums). Otherwise, such data is kept for future reuse.
+    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
+    for future reuse. Otherwise, discard it.
 
     **Computation Parameters**
 
@@ -122,8 +122,8 @@ def find_properly_sampled_genes(
     If ``inplace`` (default: {inplace}), this is written to the data and the function returns
     ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
 
-    If not ``intermediate`` (default: {intermediate}), this discards all the intermediate data used
-    (e.g. sums). Otherwise, such data is kept for future reuse.
+    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
+    for future reuse. Otherwise, discard it.
 
     **Computation Parameters**
 
