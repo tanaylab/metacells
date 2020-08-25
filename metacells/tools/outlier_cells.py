@@ -2,6 +2,7 @@
 Find cells which are outliers in the metacells they are belong to.
 '''
 
+import logging
 from typing import List, Optional, Union
 
 import numpy as np  # type: ignore
@@ -15,6 +16,9 @@ import metacells.utilities as ut
 __all__ = [
     'find_outlier_cells',
 ]
+
+
+LOG = logging.getLogger(__name__)
 
 
 @ut.timed_call()
@@ -88,6 +92,8 @@ def find_outlier_cells(  # pylint: disable=too-many-locals,too-many-statements
     assert 0 < maximal_genes_fraction < 1
     assert 0 < maximal_cells_fraction < 1
 
+    LOG.debug('find_outlier_cells...')
+
     with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major',
                      intermediate=intermediate) as data:
         cells_count, genes_count = data.shape
@@ -104,6 +110,8 @@ def find_outlier_cells(  # pylint: disable=too-many-locals,too-many-statements
         assert totals_of_cells.size == cells_count
 
         communities_count = np.max(community_of_cells) + 1
+
+        LOG.debug('  minimal_gene_fold_factor: %s', minimal_gene_fold_factor)
 
         with ut.timed_step('.fold_factors'):
             with ut.timed_step('.collect'):
@@ -179,7 +187,9 @@ def find_outlier_cells(  # pylint: disable=too-many-locals,too-many-statements
             mask_of_outlier_genes = \
                 maximal_fold_factors_of_genes >= minimal_gene_fold_factor
             outlier_genes_fraction = \
-                np.sum(mask_of_outlier_genes) / mask_of_outlier_genes.size
+                np.sum(mask_of_outlier_genes) / genes_count
+
+            LOG.debug('  outlier_genes_fraction: %s', outlier_genes_fraction)
 
             if maximal_genes_fraction is not None \
                     and outlier_genes_fraction > maximal_genes_fraction:
@@ -187,6 +197,11 @@ def find_outlier_cells(  # pylint: disable=too-many-locals,too-many-statements
                     np.quantile(maximal_fold_factors_of_genes,
                                 1 - maximal_genes_fraction)
                 assert quantile_gene_fold_factor is not None
+
+                LOG.debug('  maximal_genes_fraction: %s',
+                          maximal_genes_fraction)
+                LOG.debug('  quantile_gene_fold_factor: %s',
+                          quantile_gene_fold_factor)
 
                 if quantile_gene_fold_factor > minimal_gene_fold_factor:
                     minimal_gene_fold_factor = quantile_gene_fold_factor
@@ -201,6 +216,8 @@ def find_outlier_cells(  # pylint: disable=too-many-locals,too-many-statements
 
             outlier_gene_indices = np.where(mask_of_outlier_genes)[0]
             outlier_genes_count = outlier_gene_indices.size
+            LOG.debug('  outlier_genes_fraction: %s',
+                      outlier_genes_count / genes_count)
 
         with ut.timed_step('.fold_ranks'):
             assert fold_factors.getformat() == 'csc'
@@ -235,15 +252,29 @@ def find_outlier_cells(  # pylint: disable=too-many-locals,too-many-statements
             outliers_cells_count = sum(mask_of_outlier_cells)
             outlier_cells_fraction = outliers_cells_count / cells_count
 
+            LOG.debug('  outlier_cells_fraction: %s', outlier_cells_fraction)
+
             if maximal_cells_fraction is not None \
                     and outlier_cells_fraction > maximal_cells_fraction:
+                LOG.debug('  maximal_cells_fraction: %s',
+                          maximal_cells_fraction)
                 quantile_cells_fold_rank = \
                     np.quantile(minimal_fold_ranks_of_cells,
                                 maximal_cells_fraction)
                 assert quantile_cells_fold_rank is not None
 
+                LOG.debug('  quantile_cells_fold_rank: %s',
+                          quantile_cells_fold_rank)
+
                 if quantile_cells_fold_rank < cells_count:
                     mask_of_outlier_cells = minimal_fold_ranks_of_cells < quantile_cells_fold_rank
+
+                if LOG.isEnabledFor(logging.DEBUG):
+                    LOG.debug('  maximal_cells_fraction: %s',
+                              np.sum(mask_of_outlier_cells) / cells_count)
+
+    if LOG.isEnabledFor(logging.INFO):
+        LOG.info('find_outlier_cells: %s', np.sum(mask_of_outlier_cells))
 
     if inplace:
         adata.obs['outlier_cells'] = mask_of_outlier_cells

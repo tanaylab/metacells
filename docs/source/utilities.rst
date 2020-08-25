@@ -45,6 +45,12 @@ Timing
 .. automodule:: metacells.utilities.timing
     :members:
 
+Logging
+-------
+
+.. automodule:: metacells.utilities.logging
+    :members:
+
 Documentation
 -------------
 

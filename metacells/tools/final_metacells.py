@@ -2,6 +2,7 @@
 Finalize the grouping of cells to metacells.
 '''
 
+import logging
 from typing import Optional, Union
 
 import numpy as np  # type: ignore
@@ -13,6 +14,9 @@ import metacells.utilities as ut
 __all__ = [
     'finalize_metacells',
 ]
+
+
+LOG = logging.getLogger(__name__)
 
 
 @ut.expand_doc()
@@ -79,6 +83,7 @@ def finalize_metacells(  # pylint: disable=too-many-locals,too-many-branches,too
 
     4 . Any remaining metacell is dissolved into outlier cells.
     '''
+    LOG.debug('finalize_metacells...')
     with ut.focus_on(ut.get_vo_data, adata, of,
                      layout='row_major', intermediate=intermediate) as data:
         genes_count = data.shape[1]
@@ -94,24 +99,32 @@ def finalize_metacells(  # pylint: disable=too-many-locals,too-many-branches,too
             metacells_of_cells[outliers] = -1
         metacells_of_cells = ut.compress_indices(metacells_of_cells)
 
-        metacells_count = np.max(metacells_of_cells) + 1
+        candidate_metacells_count = np.max(metacells_of_cells) + 1
+        LOG.info('  candidate_metacells: %s', candidate_metacells_count)
 
-        if target_metacell_size is not None:
+        if target_metacell_size is not None:  # pylint: disable=too-many-nested-blocks
+            LOG.debug('  target_metacell_size: %s', target_metacell_size)
             fraction_of_genes = ut.get_fraction_per_var(adata).proper
 
             if minimal_robust_size_factor is None:
                 minimal_robust_size = None
             else:
-                minimal_robust_size = target_metacell_size * minimal_robust_size_factor
+                minimal_robust_size = \
+                    target_metacell_size * minimal_robust_size_factor
+                LOG.info('  minimal_robust_size: %s', minimal_robust_size)
 
             if minimal_convincing_size_factor is None:
                 minimal_convincing_size = None
             else:
                 minimal_convincing_size = \
                     target_metacell_size * minimal_convincing_size_factor
+                LOG.info('  minimal_convincing_size: %s',
+                         minimal_convincing_size)
+                LOG.info('  minimal_convincing_gene_fold_factor: %s',
+                         minimal_convincing_gene_fold_factor)
 
             if minimal_robust_size is not None and minimal_convincing_size is not None:
-                for metacell_index in range(metacells_count):
+                for metacell_index in range(candidate_metacells_count):
                     metacell_cell_indices = \
                         np.where(metacells_of_cells == metacell_index)[0]
                     if cell_sizes is None:
@@ -125,16 +138,23 @@ def finalize_metacells(  # pylint: disable=too-many-locals,too-many-branches,too
 
                     if minimal_robust_size is not None \
                             and metacell_total_size >= minimal_robust_size:
+                        LOG.debug('  - metacell: %s size: %s is: robust',
+                                  metacell_index, metacell_total_size)
                         continue
 
                     if minimal_convincing_size is None:
+                        LOG.debug('  - metacell: %s size: %s is: accepted',
+                                  metacell_index, metacell_total_size)
                         continue
 
                     if metacell_total_size < minimal_convincing_size:
+                        LOG.debug('  - metacell: %s size: %s is: unconvincing',
+                                  metacell_index, metacell_total_size)
                         keep_metacell = False
                     else:
                         metacell_data = data[metacell_cell_indices, :]
-                        metacell_data_of_genes = metacell_data.sum(axis=0)
+                        metacell_data_of_genes = \
+                            ut.to_dense_vector(metacell_data.sum(axis=0))
                         assert metacell_data_of_genes.size == genes_count
                         metacell_total = np.sum(metacell_data_of_genes)
                         metacell_expected_of_genes = fraction_of_genes * metacell_total
@@ -143,14 +163,33 @@ def finalize_metacells(  # pylint: disable=too-many-locals,too-many-branches,too
                         metacell_data_of_genes /= metacell_expected_of_genes
                         np.log2(metacell_data_of_genes,
                                 out=metacell_data_of_genes)
-                        keep_metacell = \
-                            np.any(metacell_data_of_genes
-                                   >= minimal_convincing_gene_fold_factor)
+                        convincing_genes_mask = \
+                            metacell_data_of_genes >= minimal_convincing_gene_fold_factor
+                        keep_metacell = np.any(convincing_genes_mask)
+
+                        if LOG.isEnabledFor(logging.DEBUG):
+                            convincing_gene_indices = \
+                                np.where(convincing_genes_mask)[0]
+                            if keep_metacell:
+                                LOG.debug('  - metacell: %s size: %s is: convincing because %s',
+                                          metacell_index, metacell_total_size,
+                                          ', '.join(['%s: %s' % (name, fold_factor)
+                                                     for name, fold_factor
+                                                     in zip(adata.var_names[convincing_gene_indices],
+                                                            metacell_data_of_genes[convincing_gene_indices])]))
+                            else:
+                                LOG.debug('  - metacell_index: %s size: %s is: not convincing',
+                                          metacell_index, metacell_total_size)
 
                     if not keep_metacell:
                         metacells_of_cells[metacell_cell_indices] = -1
 
             metacells_of_cells = ut.compress_indices(metacells_of_cells)
+
+    if LOG.isEnabledFor(logging.INFO):
+        metacells_count = np.max(metacells_of_cells) + 1
+        LOG.info('finalize_metacells: %s / %s',
+                 metacells_count, candidate_metacells_count)
 
     if inplace:
         adata.obs['metacell'] = metacells_of_cells

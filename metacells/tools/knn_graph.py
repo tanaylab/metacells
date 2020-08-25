@@ -2,6 +2,7 @@
 Compute a K-Nearest-Neighbors graph based on similarity data.
 '''
 
+import logging
 from typing import Optional
 
 import numpy as np  # type: ignore
@@ -16,6 +17,9 @@ __all__ = [
     'compute_obs_obs_knn_graph',
     'compute_var_var_knn_graph',
 ]
+
+
+LOG = logging.getLogger(__name__)
 
 
 @ut.timed_call()
@@ -213,6 +217,8 @@ def _compute_elements_knn_graph(  # pylint: disable=too-many-locals
     assert incoming_degree_factor > 0.0
     assert outgoing_degree_factor > 0.0
 
+    LOG.debug('compute_%s_%s_knn_graph...', elements, elements)
+
     if of is None:
         of = elements + '_similarity'
 
@@ -224,6 +230,8 @@ def _compute_elements_knn_graph(  # pylint: disable=too-many-locals
         slicing_mask = ut.SAFE_WHEN_SLICING_VAR
 
     def store_matrix(matrix: ut.CompressedMatrix, name: str, when: bool) -> None:
+        LOG.debug('  %s: %s / %s',
+                  name, matrix.nnz, matrix.shape[0] * matrix.shape[1])
         if when:
             name = elements + '_' + name
             annotations[name] = matrix
@@ -250,6 +258,10 @@ def _compute_elements_knn_graph(  # pylint: disable=too-many-locals
     with ut.timed_step('.weigh_edges'):
         outgoing_weights = _weigh_edges(pruned_ranks)
         store_matrix(outgoing_weights, 'outgoing_weights', inplace)
+
+    LOG.info('compute_%s_%s_knn_graph: %s / %s',
+             elements, elements, outgoing_weights.nnz,
+             outgoing_weights.shape[0] * outgoing_weights.shape[1])
 
     if inplace:
         return None

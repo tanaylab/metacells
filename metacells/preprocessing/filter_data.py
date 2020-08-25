@@ -2,6 +2,7 @@
 Filter the data for computing metacells.
 '''
 
+import logging
 from typing import List, Optional
 
 import numpy as np  # type: ignore
@@ -12,6 +13,9 @@ import metacells.utilities as ut
 __all__ = [
     'filter_data',
 ]
+
+
+LOG = logging.getLogger(__name__)
 
 
 @ut.timed_call()
@@ -63,10 +67,14 @@ def filter_data(  # pylint: disable=too-many-locals,too-many-statements,too-many
     if track_base_indices is not None:
         ut.track_base_indices(adata, name=track_base_indices)
 
+    LOG.debug('filter_data name: %s', name)
+
     cells_mask = np.full(adata.n_obs, True, dtype='bool')
     genes_mask = np.full(adata.n_obs, True, dtype='bool')
 
     for mask_name in masks:
+        log_mask_name = mask_name
+
         if mask_name[0] == '~':
             invert = True
             mask_name = mask_name[1]
@@ -89,6 +97,9 @@ def filter_data(  # pylint: disable=too-many-locals,too-many-statements,too-many
         if invert:
             mask = ~mask
 
+        if LOG.isEnabledFor(logging.DEBUG):
+            LOG.debug('  mask: %s => %s', log_mask_name, np.sum(mask))
+
         if per == 'o':
             cells_mask = cells_mask & mask
         elif per == 'v':
@@ -97,6 +108,14 @@ def filter_data(  # pylint: disable=too-many-locals,too-many-statements,too-many
             raise ValueError('the data: %s '
                              'is not per-observation or per-variable'
                              % mask_name)
+
+    if LOG.isEnabledFor(logging.INFO):
+        if name is None:
+            LOG.info('filter_data cells: %s genes: %s',
+                     np.sum(cells_mask), np.sum(genes_mask))
+        else:
+            LOG.info('filter_data name: %s cells: %s genes: %s',
+                     name, np.sum(cells_mask), np.sum(genes_mask))
 
     if name is not None:
         cells_name = name + '_cells'

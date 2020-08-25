@@ -2,6 +2,7 @@
 Mask genes by their name.
 '''
 
+import logging
 from re import Pattern
 from typing import Collection, Optional, Union
 
@@ -14,6 +15,9 @@ import metacells.utilities as ut
 __all__ = [
     'find_named_genes',
 ]
+
+
+LOG = logging.getLogger(__name__)
 
 
 @ut.timed_call()
@@ -39,6 +43,8 @@ def find_named_genes(
 
     Otherwise, it returns it as a pandas series (indexed by the variable, that is gene, names).
     '''
+    LOG.debug('find_named_genes...')
+
     assert names is not None or patterns is not None
 
     if names is None:
@@ -62,6 +68,10 @@ def find_named_genes(
 
     if invert:
         genes_mask = ~genes_mask
+
+    if LOG.isEnabledFor(logging.INFO):
+        LOG.info('find_named_genes: %s / %s',
+                 np.sum(genes_mask), genes_mask.size)
 
     if name is None:
         return pd.Series(genes_mask, index=adata.var_names)

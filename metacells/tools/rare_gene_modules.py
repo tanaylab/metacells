@@ -2,6 +2,7 @@
 Detect rare genes modules.
 '''
 
+import logging
 from typing import List, Optional, Tuple
 
 import numpy as np  # type: ignore
@@ -19,6 +20,9 @@ __all__ = [
 ]
 
 
+LOG = logging.getLogger(__name__)
+
+
 @ut.timed_call()
 @ut.expand_doc()
 def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-statements,too-many-branches
@@ -34,7 +38,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     cluster_method_of_genes: str = 'ward',
     minimal_size_of_modules: int = 4,
     minimal_correlation_of_modules: float = 0.1,
-    minimal_umis_of_module_of_cells: int = 6,
+    minimal_umis_of_modules: int = 6,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame, np.ndarray]]:
@@ -104,13 +108,14 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
        gene-gene cross-correlation of at least ``minimal_correlation_of_modules`` (default:
        {minimal_correlation_of_modules}).
 
-    5. Associate cells with a gene module if they contain at least
-       ``minimal_umis_of_module_of_cells`` (default: {minimal_umis_of_module_of_cells}) UMIs from
-       the module. In the very rare case a cell contains at least the minimal number of UMIs for
-       multiple gene modules, associate it with the gene module which is most enriched (relative to
-       the least enriched cell associated with the gene module). Gene modules with no associated
-       cells are discarded.
+    5. Associate cells with a gene module if they contain at least ``minimal_umis_of_modules``
+       (default: {minimal_umis_of_modules}) UMIs from the module. In the very rare case a cell
+       contains at least the minimal number of UMIs for multiple gene modules, associate it with the
+       gene module which is most enriched (relative to the least enriched cell associated with the
+       gene module). Gene modules with no associated cells are discarded.
     '''
+
+    LOG.debug('find_rare_genes_modules...')
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         cells_count = adata.n_obs
@@ -127,6 +132,14 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         def results() -> Optional[Tuple[pd.DataFrame, pd.DataFrame, np.ndarray]]:
             array_of_names_of_genes_of_modules = \
                 np.array(list_of_names_of_genes_of_modules, dtype='object')
+
+            if LOG.isEnabledFor(logging.INFO):
+                LOG.info('find_rare_genes_modules: %s genes: %s / %s cells: %s / %s',
+                         np.max(rare_module_of_cells) + 1,
+                         np.sum(rare_module_of_genes >= 0),
+                         rare_module_of_genes.size,
+                         np.sum(rare_module_of_cells >= 0),
+                         rare_module_of_cells.size)
 
             if inplace:
                 adata.obs['cells_rare_gene_module'] = rare_module_of_cells
@@ -149,9 +162,13 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
         with ut.timed_step('.pick_candidate_genes'):
             nnz_cells_fraction_of_genes = nnz_cells_of_genes / cells_count
 
+            LOG.debug('  maximal_fraction_of_cells_of_genes: %s',
+                      maximal_fraction_of_cells_of_genes)
             nnz_cells_fraction_mask_of_genes = \
                 nnz_cells_fraction_of_genes <= maximal_fraction_of_cells_of_genes
 
+            LOG.debug('  minimal_max_umis_of_genes: %s',
+                      minimal_max_umis_of_genes)
             max_umis_mask_of_genes = max_umis_of_genes >= minimal_max_umis_of_genes
 
             candidates_mask_of_genes = \
@@ -160,12 +177,18 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
             candidate_genes_indices = np.where(candidates_mask_of_genes)[0]
 
             candidate_genes_count = candidate_genes_indices.size
+            LOG.debug('  candidate_genes_count: %s', candidate_genes_count)
             if candidate_genes_count < minimal_size_of_modules:
                 return results()
 
             candidate_data = ut.slice(adata, vars=candidate_genes_indices)
 
         with ut.timed_step('.similarity'):
+            if log_similarity:
+                LOG.debug('  log_similarity base: %s normalization: %s',
+                          log_similarity_base or 'e',
+                          log_similarity_normalization)
+            LOG.debug('  repeated_similarity: %s', repeated_similarity)
             similarity = \
                 compute_var_var_similarity(candidate_data,
                                            repeated=repeated_similarity,
@@ -183,6 +206,8 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
                     size=similarities_between_candidate_genes.shape[0])
                 distances = scd.pdist(similarities_between_candidate_genes)
             with ut.timed_step('linkage'):
+                LOG.debug('  cluster_method_of_genes: %s',
+                          cluster_method_of_genes)
                 ut.timed_parameters(size=distances.shape[0],
                                     method=cluster_method_of_genes)
                 linkage = \
@@ -193,6 +218,8 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
             combined_candidate_indices = \
                 {index: [index] for index in range(candidate_genes_count)}
 
+            LOG.debug('  minimal_correlation_of_modules: %s',
+                      minimal_correlation_of_modules)
             for link_index, link_data in enumerate(linkage):
                 link_index += candidate_genes_count
 
@@ -228,6 +255,8 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
             candidate_umis = \
                 ut.get_vo_data(candidate_data, of, layout='column_major')
 
+            LOG.debug('  minimal_size_of_modules: %s', minimal_size_of_modules)
+            LOG.debug('  minimal_umis_of_modules: %s', minimal_umis_of_modules)
             for link_index, module_candidate_indices in combined_candidate_indices.items():
                 if len(module_candidate_indices) < minimal_size_of_modules:
                     continue
@@ -238,7 +267,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
                 assert total_umis_of_module_of_cells.size == cells_count
 
                 minimal_total_umis_of_module_mask_of_cells = \
-                    total_umis_of_module_of_cells >= minimal_umis_of_module_of_cells
+                    total_umis_of_module_of_cells >= minimal_umis_of_modules
                 strong_cell_indices = \
                     np.where(minimal_total_umis_of_module_mask_of_cells)[0]
                 if strong_cell_indices.size == 0:
@@ -294,6 +323,9 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
                     np.array(adata.var_names[module_gene_indices])
                 list_of_names_of_genes_of_modules.append(  #
                     names_of_genes_of_module)
+
+                LOG.debug('  module: %s genes: %s',
+                          module_index, ', '.join(names_of_genes_of_module))
 
             assert len(list_of_names_of_genes_of_modules) > 0
 

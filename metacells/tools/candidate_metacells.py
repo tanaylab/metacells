@@ -2,8 +2,10 @@
 Assign cells to (raw, candidate) metacells.
 '''
 
+import logging
 from typing import Optional, Union
 
+import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from anndata import AnnData
 
@@ -12,6 +14,9 @@ import metacells.utilities as ut
 __all__ = [
     'compute_candidate_metacells',
 ]
+
+
+LOG = logging.getLogger(__name__)
 
 
 @ut.timed_call()
@@ -70,6 +75,8 @@ def compute_candidate_metacells(
        ``maximal_merge_factor`` of {maximal_merge_factor}, to ensure the candidate metacells fall
        within an acceptable range of sizes.
     '''
+    LOG.debug('compute_candidate_metacells...')
+
     with ut.intermediate_step(adata, intermediate=intermediate):
         edge_weights = ut.get_oo_data(adata, of or 'obs_outgoing_weights')
         if not isinstance(cell_sizes, str):
@@ -90,5 +97,9 @@ def compute_candidate_metacells(
         adata.obs['candidate_metacell'] = community_of_cells
         ut.safe_slicing_data('candidate_metacell', ut.NEVER_SAFE)
         return None
+
+    if LOG.isEnabledFor(logging.INFO):
+        LOG.info('compute_candidate_metacells: %s',
+                 np.max(community_of_cells) + 1)
 
     return pd.Series(community_of_cells, index=adata.obs_names)

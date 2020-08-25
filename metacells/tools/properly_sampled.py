@@ -2,6 +2,7 @@
 Detect properly-sampled cells and genes.
 '''
 
+import logging
 from typing import Optional
 
 import numpy as np  # type: ignore
@@ -14,6 +15,9 @@ __all__ = [
     'find_properly_sampled_cells',
     'find_properly_sampled_genes',
 ]
+
+
+LOG = logging.getLogger(__name__)
 
 
 @ut.timed_call()
@@ -62,19 +66,29 @@ def find_properly_sampled_cells(
        ``maximal_total_umis_of_cells`` (default: {maximal_total_umis_of_cells}), unless it is
        ``None``
     '''
+    LOG.debug('find_properly_sampled_cells...')
+
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         total_umis_of_cells = ut.get_per_obs(adata, ut.sum_per).proper
         cells_mask = np.full(adata.n_obs, True, dtype='bool')
 
         if minimal_total_umis_of_cells is not None:
+            LOG.debug('  minimal_total_umis_of_cells: %s',
+                      minimal_total_umis_of_cells)
             cells_mask = \
                 cells_mask & (total_umis_of_cells >=
                               minimal_total_umis_of_cells)
 
         if maximal_total_umis_of_cells is not None:
+            LOG.debug('  maximal_total_umis_of_cells: %s',
+                      maximal_total_umis_of_cells)
             cells_mask = \
                 cells_mask & (total_umis_of_cells <=
                               maximal_total_umis_of_cells)
+
+    if LOG.isEnabledFor(logging.INFO):
+        LOG.info('find_properly_sampled_cells: %s / %s',
+                 np.sum(cells_mask), cells_mask.size)
 
     if inplace:
         adata.var['properly_sampled_cells'] = cells_mask
@@ -130,9 +144,17 @@ def find_properly_sampled_genes(
     1. Exclude all genes whose total number of umis is less than the
        ``minimal_total_umis_of_genes`` (default: {minimal_total_umis_of_genes}).
     '''
+    LOG.debug('find_properly_sampled_genes...')
+
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         total_umis_of_genes = ut.get_per_var(adata, ut.sum_per).proper
+        LOG.debug('  minimal_total_umis_of_genes: %s',
+                  minimal_total_umis_of_genes)
         genes_mask = total_umis_of_genes >= minimal_total_umis_of_genes
+
+    if LOG.isEnabledFor(logging.INFO):
+        LOG.info('find_properly_sampled_genes: %s / %s',
+                 np.sum(genes_mask), genes_mask.size)
 
     if inplace:
         adata.var['properly_sampled_genes'] = genes_mask

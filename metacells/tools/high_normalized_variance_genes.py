@@ -3,8 +3,10 @@ Find genes which have high normalized variance (high variance/mean compared to o
 similar level of expression).
 '''
 
+import logging
 from typing import Optional
 
+import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from anndata import AnnData
 
@@ -13,6 +15,9 @@ import metacells.utilities as ut
 __all__ = [
     'find_high_normalized_variance_genes',
 ]
+
+
+LOG = logging.getLogger(__name__)
 
 
 @ut.timed_call()
@@ -61,11 +66,16 @@ def find_high_normalized_variance_genes(
     2. Select the genes whose normalized variance is at least
        ``minimal_normalized_variance_of_genes`` (default: {minimal_normalized_variance_of_genes}).
     '''
+    LOG.debug('find_high_normalized_variance_genes...')
+
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         normalized_variance_of_genes = \
             ut.get_normalized_variance_per_var(adata).proper
         genes_mask = \
             normalized_variance_of_genes >= minimal_normalized_variance_of_genes
+
+    LOG.info('find_high_normalized_variance_genes: %s / %s',
+             np.sum(genes_mask), genes_mask.size)
 
     if inplace:
         adata.var['high_normalized_variance_genes'] = genes_mask

@@ -2,6 +2,7 @@
 Compute cells cross-similarity based on some gene mask(s).
 '''
 
+import logging
 from typing import Optional
 
 import pandas as pd  # type: ignore
@@ -13,6 +14,9 @@ __all__ = [
     'compute_obs_obs_similarity',
     'compute_var_var_similarity',
 ]
+
+
+LOG = logging.getLogger(__name__)
 
 
 @ut.timed_call()
@@ -133,11 +137,16 @@ def _compute_elements_similarity(
 ) -> Optional[ut.PandasFrame]:
     assert elements in ('obs', 'var')
 
+    LOG.debug('compute_%s_%s_similarity...', elements, elements)
+
     with ut.intermediate_step(adata, intermediate=intermediate):
         if log:
+            LOG.debug('  log base: %s normalization: %s',
+                      log_base or 'e', log_normalization)
             of = ut.get_log_matrix(adata, of, base=log_base,
                                    normalization=log_normalization).name
 
+        LOG.debug('  repeated: %s', repeated)
         if elements == 'obs':
             similarity = ut.get_obs_obs_correlation(adata, of,
                                                     inplace=inplace or repeated)
@@ -151,6 +160,8 @@ def _compute_elements_similarity(
             if repeated:
                 similarity = ut.get_var_var_correlation(adata, similarity.name,
                                                         inplace=inplace)
+
+    LOG.info('compute_%s_%s_similarity', elements, elements)
 
     if inplace:
         to = elements + '_similarity'
