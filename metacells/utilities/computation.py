@@ -126,7 +126,7 @@ def to_layout(  # pylint: disable=too-many-return-statements
 
     if dense is not None:
         order = utt.DENSE_FAST_FLAG[layout][0]
-        with utm.timed_step('ravel'):
+        with utm.timed_step('numpy.ravel'):
             utm.timed_parameters(rows=dense.shape[0], columns=dense.shape[1])
             result = np.reshape(np.ravel(dense, order=order),
                                 dense.shape, order=order)
@@ -161,7 +161,7 @@ def relayout_compressed(matrix: utt.CompressedMatrix) -> utt.CompressedMatrix:
     output_indptr = np.empty(output_bands_count + 1,
                              dtype=compressed.indptr.dtype)
     output_indptr[0:2] = 0
-    with utm.timed_step('cumsum'):
+    with utm.timed_step('numpy.cumsum'):
         utm.timed_parameters(elements=nnz_elements_of_output_bands.size - 1)
         np.cumsum(nnz_elements_of_output_bands[:-1], out=output_indptr[2:])
 
@@ -204,7 +204,7 @@ def sort_compressed(matrix: utt.CompressedMatrix, force: bool = False) -> None:
     if matrix.has_sorted_indices and not force:
         return
 
-    with utm.timed_step('sort_compressed'):
+    with utm.timed_step('extensions.sort_compressed'):
         matrix_bands_count = matrix.indptr.size - 1
         utm.timed_parameters(results=matrix_bands_count,
                              elements=matrix.nnz / matrix_bands_count)
@@ -485,7 +485,7 @@ def _downsample_compressed_matrix(
     output.has_canonical_format = False
     if eliminate_zeros:
         utt.unfreeze(output)
-        with utm.timed_step('eliminate_zeros'):
+        with utm.timed_step('sparse.eliminate_zeros'):
             utm.timed_parameters(before=output.nnz)
             output.eliminate_zeros()
             utm.timed_parameters(after=output.nnz)

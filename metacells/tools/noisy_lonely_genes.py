@@ -92,6 +92,7 @@ def find_noisy_lonely_genes(
     '''
     LOG.debug('find_noisy_lonely_genes...')
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
+        LOG.debug('  of: %s', ut.get_focus_name(adata))
         fraction_of_genes = ut.get_fraction_per_var(adata).proper
         relative_variance_of_genes = \
             ut.get_relative_variance_per_var(adata).proper

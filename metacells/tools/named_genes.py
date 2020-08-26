@@ -27,7 +27,7 @@ def find_named_genes(
     names: Optional[Collection[str]] = None,
     patterns: Optional[Collection[Union[str, Pattern]]] = None,
     *,
-    name: Optional[str] = None,
+    to: Optional[str] = None,
     invert: bool = False,
 ) -> Optional[ut.PandasSeries]:
     '''
@@ -36,14 +36,16 @@ def find_named_genes(
     This creates a mask of all the genes whose name appears in ``names`` or matches any of the
     ``patterns``. If ``invert`` (default: {invert}), invert the resulting mask.
 
-    If ``name`` (default: {name}) is specified, this is stored as a per-variable (gene) annotation
-    with that name, and returns ``None``. This is useful to fill gene masks such as
-    ``excluded_genes`` (genes which should be excluded from the rest of the processing) and
-    ``forbidden_genes`` (genes which must not be chosen as feature genes).
+    If ``to`` (default: {to}) is specified, this is stored as a per-variable (gene) annotation with
+    that name, and returns ``None``. This is useful to fill gene masks such as ``excluded_genes``
+    (genes which should be excluded from the rest of the processing) and ``forbidden_genes`` (genes
+    which must not be chosen as feature genes).
 
     Otherwise, it returns it as a pandas series (indexed by the variable, that is gene, names).
     '''
     LOG.debug('find_named_genes...')
+    if to is not None:
+        LOG.debug('  to: %s', to)
 
     assert names is not None or patterns is not None
 
@@ -73,8 +75,8 @@ def find_named_genes(
         LOG.info('find_named_genes: %s / %s',
                  np.sum(genes_mask), genes_mask.size)
 
-    if name is None:
+    if to is None:
         return pd.Series(genes_mask, index=adata.var_names)
 
-    ut.set_v_data(adata, name, genes_mask, ut.ALWAYS_SAFE)
+    ut.set_v_data(adata, to, genes_mask, ut.ALWAYS_SAFE)
     return None

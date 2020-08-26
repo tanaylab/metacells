@@ -219,8 +219,8 @@ def _compute_elements_knn_graph(
 
     LOG.debug('compute_%s_%s_knn_graph...', elements, elements)
 
-    if of is None:
-        of = elements + '_similarity'
+    of = of or elements + '_similarity'
+    LOG.debug('  of: %s', of)
 
     if elements == 'obs':
         set_data = ut.set_oo_data
@@ -240,23 +240,19 @@ def _compute_elements_knn_graph(
     similarity = ut.to_layout(similarity, 'row_major', symmetric=True)
     similarity = ut.DenseMatrix.be(similarity)
 
-    with ut.timed_step('.outgoing_ranks'):
-        outgoing_ranks = _rank_outgoing(similarity, k, balanced_ranks_factor)
-        store_matrix(outgoing_ranks, 'outgoing_ranks', intermediate)
+    outgoing_ranks = _rank_outgoing(similarity, k, balanced_ranks_factor)
+    store_matrix(outgoing_ranks, 'outgoing_ranks', intermediate)
 
-    with ut.timed_step('.balance_ranks'):
-        balanced_ranks = _balance_ranks(outgoing_ranks)
-        store_matrix(balanced_ranks, 'balanced_ranks', intermediate)
+    balanced_ranks = _balance_ranks(outgoing_ranks)
+    store_matrix(balanced_ranks, 'balanced_ranks', intermediate)
 
-    with ut.timed_step('.prune_ranks'):
-        pruned_ranks = _prune_ranks(balanced_ranks, k,
-                                    incoming_degree_factor,
-                                    outgoing_degree_factor)
-        store_matrix(pruned_ranks, 'pruned_ranks', intermediate)
+    pruned_ranks = _prune_ranks(balanced_ranks, k,
+                                incoming_degree_factor,
+                                outgoing_degree_factor)
+    store_matrix(pruned_ranks, 'pruned_ranks', intermediate)
 
-    with ut.timed_step('.weigh_edges'):
-        outgoing_weights = _weigh_edges(pruned_ranks)
-        store_matrix(outgoing_weights, 'outgoing_weights', inplace)
+    outgoing_weights = _weigh_edges(pruned_ranks)
+    store_matrix(outgoing_weights, 'outgoing_weights', inplace)
 
     LOG.info('compute_%s_%s_knn_graph: %s / %s',
              elements, elements, outgoing_weights.nnz,
@@ -272,6 +268,7 @@ def _compute_elements_knn_graph(
     return pd.DataFrame(ut.to_dense_matrix(outgoing_weights), index=names, columns=names)
 
 
+@ut.timed_call('.rank_outgoing')
 def _rank_outgoing(
     similarity: ut.DenseMatrix,
     k: int,
@@ -284,14 +281,14 @@ def _rank_outgoing(
     degree = int(round(k * balanced_ranks_factor))
     degree = min(degree, size - 1)
 
-    with ut.timed_step('amin'):
+    with ut.timed_step('numpy.amin'):
         ut.timed_parameters(size=size * size)
         min_similarity = np.amin(similarity)
 
     np.fill_diagonal(similarity, min_similarity - 1)
 
     all_indices = np.arange(size)
-    with ut.timed_step('argmax'):
+    with ut.timed_step('numpy.argmax'):
         ut.timed_parameters(results=size, elements=size)
         max_index_of_each = similarity.argmax(axis=1)
 
@@ -331,6 +328,7 @@ def _rank_outgoing(
     return outgoing_ranks
 
 
+@ut.timed_call('.balance_ranks')
 def _balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     size = outgoing_ranks.shape[0]
 
@@ -349,6 +347,7 @@ def _balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     return balanced_ranks
 
 
+@ut.timed_call('.prune_ranks')
 def _prune_ranks(
     balanced_ranks: ut.CompressedMatrix,
     k: int,
@@ -366,7 +365,7 @@ def _prune_ranks(
     maximal_degree = max(incoming_degree, outgoing_degree)
 
     all_indices = np.arange(size)
-    with ut.timed_step('argmax'):
+    with ut.timed_step('numpy.argmax'):
         ut.timed_parameters(results=size, elements=balanced_ranks.nnz / size)
         max_index_of_each = ut.to_dense_vector(balanced_ranks.argmax(axis=1))
 
@@ -430,11 +429,11 @@ def _prune_ranks(
     pruned_ranks.has_canonical_format = True
     _assert_sparse(pruned_ranks, 'csr')
 
-    with ut.timed_step('preserve'):
+    with ut.timed_step('sparse.maximum'):
         ut.timed_parameters(collected=pruned_ranks.nnz,
                             preserved=preserved_matrix.nnz)
-        pruned_ranks = \
-            ut.CompressedMatrix.be(pruned_ranks.maximum(preserved_matrix))
+        pruned_ranks = pruned_ranks.maximum(preserved_matrix)
+    pruned_ranks = ut.CompressedMatrix.be(pruned_ranks)
 
     ut.sort_compressed(pruned_ranks)
 
@@ -442,19 +441,19 @@ def _prune_ranks(
     return pruned_ranks
 
 
+@ut.timed_call('.weigh_edges')
 def _weigh_edges(pruned_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     size = pruned_ranks.shape[0]
 
     total_ranks_per_row = \
         ut.to_dense_vector(ut.sum_per(pruned_ranks, per='row'))
 
-    with ut.timed_step('.scale'):
-        ut.timed_parameters(size=size)
-        scale_per_row = \
-            np.reciprocal(total_ranks_per_row, out=total_ranks_per_row)
-        scale_per_row = scale_per_row.astype('float32')
-        edge_weights = pruned_ranks.multiply(scale_per_row[:, None])
-        edge_weights = ut.to_layout(edge_weights, 'row_major')
+    ut.timed_parameters(size=size)
+    scale_per_row = \
+        np.reciprocal(total_ranks_per_row, out=total_ranks_per_row)
+    scale_per_row = scale_per_row.astype('float32')
+    edge_weights = pruned_ranks.multiply(scale_per_row[:, None])
+    edge_weights = ut.to_layout(edge_weights, 'row_major')
 
     assert sparse.issparse(pruned_ranks)
     assert edge_weights.dtype == 'float32'

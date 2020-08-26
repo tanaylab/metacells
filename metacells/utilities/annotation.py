@@ -325,14 +325,14 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
             will_slice_var = vars.size != adata.n_vars
 
     if not will_slice_obs and not will_slice_var:
-        with utm.timed_step('.copy'):
+        with utm.timed_step('adata.copy'):
             return adata.copy()
 
     saved_data = \
         _save_data(adata, will_slice_obs,
                    will_slice_var, invalidated_prefix)
 
-    with utm.timed_step('.builtin'):
+    with utm.timed_step('adata.slice'):
         bdata = adata[obs, vars].copy()
 
     did_slice_obs = bdata.n_obs != adata.n_obs
@@ -416,8 +416,7 @@ def _save_per_data(
 
             base_name = name[:-len(by_suffix)]
             if base_name == get_x_name(adata):
-                with utm.timed_step('.swap_x'):
-                    adata.X = data
+                adata.X = data
             else:
                 base_data = adata.layers[base_name]
                 saved_data[('vo:', base_name)] = base_data
@@ -507,14 +506,6 @@ def _items(annotations: Annotations) -> Iterable[Tuple[str, Any]]:
     if isinstance(annotations, pd.DataFrame):
         return annotations.iteritems()
     return annotations.items()
-
-
-def _get(annotations: Annotations, name: str) -> Any:
-    if isinstance(annotations, pd.DataFrame):
-        if name not in annotations.columns:
-            return None
-        return annotations[name]
-    return annotations.get(name)
 
 
 def _slice_action(
@@ -816,7 +807,7 @@ def get_o_data(
 
         The caller is responsible for specifying the slicing behavior of the data.
     '''
-    return _get_shaped_data(adata, adata.obs, shape=(adata.n_obs,),
+    return _get_shaped_data(adata, 'o', adata.obs, shape=(adata.n_obs,),
                             per_text='per-observation', name=name,
                             compute=compute, inplace=inplace)
 
@@ -841,7 +832,7 @@ def get_v_data(
 
         The caller is responsible for specifying the slicing behavior of the data.
     '''
-    return _get_shaped_data(adata, adata.var, shape=(adata.n_vars,),
+    return _get_shaped_data(adata, 'v', adata.var, shape=(adata.n_vars,),
                             per_text='per-variable', name=name,
                             compute=compute, inplace=inplace)
 
@@ -876,7 +867,7 @@ def get_oo_data(
 
         * The caller is responsible for specifying the slicing behavior of the data.
     '''
-    return _get_layout_data(adata, adata.obsp,
+    return _get_layout_data(adata, 'oo', adata.obsp,
                             shape=(adata.n_obs, adata.n_obs),
                             per_text='pre-observation-per-observation',
                             name=name, compute=compute,
@@ -913,7 +904,7 @@ def get_vv_data(
 
         * The caller is responsible for specifying the slicing behavior of the data.
     '''
-    return _get_layout_data(adata, adata.varp,
+    return _get_layout_data(adata, 'vv', adata.varp,
                             shape=(adata.n_vars, adata.n_vars),
                             per_text='pre-variable-per-variable',
                             name=name, compute=compute,
@@ -962,7 +953,7 @@ def get_vo_data(
     if name is None:
         name = get_focus_name(adata)
 
-    data = _get_layout_data(adata, adata.layers,
+    data = _get_layout_data(adata, 'vo', adata.layers,
                             shape=(adata.n_obs, adata.n_vars),
                             per_text='pre-variable-per-observation',
                             name=name, compute=compute,
@@ -976,6 +967,7 @@ def get_vo_data(
 
 def _get_layout_data(
     adata: AnnData,
+    per: str,
     annotations: Annotations,
     *,
     shape: Tuple[int, ...],
@@ -988,7 +980,7 @@ def _get_layout_data(
     assert '__' not in name
 
     def get_base_data() -> Any:
-        return _get_shaped_data(adata, annotations, shape=shape,
+        return _get_shaped_data(adata, per, annotations, shape=shape,
                                 per_text=per_text, name=name,
                                 compute=compute, inplace=inplace)
 
@@ -1009,14 +1001,14 @@ def _get_layout_data(
     data = utc.to_layout(data, layout=layout)
     if inplace:
         utt.freeze(data)
-        with utm.timed_step('.set_annotation'):
-            annotations[layout_name] = data
+        annotations[layout_name] = data
 
     return data
 
 
 def _get_shaped_data(
     adata: AnnData,
+    per: str,
     annotations: Annotations,
     *,
     shape: Tuple[int, ...],
@@ -1027,9 +1019,8 @@ def _get_shaped_data(
 ) -> Any:
     assert '__' not in name
 
-    if id(annotations) == id(adata.layers) and name == get_x_name(adata):
-        with utm.timed_step('.get_x'):
-            return adata.X
+    if per == 'vo' and name == get_x_name(adata):
+        return adata.X
 
     if (isinstance(annotations, pd.DataFrame) and name in annotations.columns) \
             or name in annotations:
@@ -1044,8 +1035,7 @@ def _get_shaped_data(
 
     if inplace:
         utt.freeze(data)
-        with utm.timed_step('.set_annotation'):
-            annotations[name] = data
+        annotations[name] = data
 
     return data
 
@@ -1323,6 +1313,10 @@ def set_vo_data(
 
     Optionally specify the ``slicing_mask`` for this data.
     '''
-    adata.layers[name] = data
+    if name == get_x_name(adata):
+        adata.X = data
+    else:
+        adata.layers[name] = data
+
     if slicing_mask is not None:
         safe_slicing_data(name, slicing_mask)

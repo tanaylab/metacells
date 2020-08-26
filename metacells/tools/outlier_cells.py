@@ -96,6 +96,7 @@ def find_outlier_cells(
 
     with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major',
                      intermediate=intermediate) as data:
+        LOG.debug('  of: %s', ut.get_focus_name(adata))
         cells_count, genes_count = data.shape
 
         if isinstance(communities, str):
@@ -266,7 +267,7 @@ def _filter_genes(
 
             fold_factors[fold_factors  # type: ignore
                          < minimal_gene_fold_factor] = 0
-            with ut.timed_step('eliminate_zeros'):
+            with ut.timed_step('sparse.eliminate_zeros'):
                 ut.timed_parameters(before=fold_factors.nnz)
                 fold_factors.eliminate_zeros()
                 ut.timed_parameters(after=fold_factors.nnz)

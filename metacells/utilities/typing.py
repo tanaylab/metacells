@@ -553,12 +553,12 @@ def to_proper(
         compressed = CompressedMatrix.maybe(sparse)
         if compressed is None:
             if layout == 'row_major':
-                with utm.timed_step('tocsr'):
+                with utm.timed_step('sparse.tocsr'):
                     compressed = sparse.tocsr()
                     utm.timed_parameters(results=compressed.shape[0],
                                          elements=compressed.nnz / compressed.shape[0])
             else:
-                with utm.timed_step('tocsc'):
+                with utm.timed_step('sparse.tocsc'):
                     compressed = sparse.tocsc()
                     utm.timed_parameters(results=compressed.shape[1],
                                          elements=compressed.nnz / compressed.shape[1])
@@ -704,7 +704,7 @@ def to_dense(
     sparse = SparseMatrix.maybe(shaped)
     if sparse is not None:
         assert copy is not None
-        with utm.timed_step('toarray'):
+        with utm.timed_step('sparse.toarray'):
             if sparse.ndim == 2:
                 utm.timed_parameters(results=sparse.shape[0],
                                      elements=sparse.shape[1])

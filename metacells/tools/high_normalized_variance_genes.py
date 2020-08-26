@@ -69,6 +69,7 @@ def find_high_normalized_variance_genes(
     LOG.debug('find_high_normalized_variance_genes...')
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
+        LOG.debug('  of: %s', ut.get_focus_name(adata))
         normalized_variance_of_genes = \
             ut.get_normalized_variance_per_var(adata).proper
         genes_mask = \

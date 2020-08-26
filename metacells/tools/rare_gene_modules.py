@@ -27,13 +27,11 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def find_rare_genes_modules(
     adata: AnnData,
-    of: Optional[str] = None,
     *,
+    of: Optional[str] = None,
     maximal_fraction_of_cells_of_genes: float = 1e-3,
     minimal_max_umis_of_genes: int = 6,
-    log_similarity: bool = False,
-    log_similarity_base: Optional[float] = None,
-    log_similarity_normalization: float = -1,
+    similarity_of: Optional[str] = None,
     repeated_similarity: bool = True,
     cluster_method_of_genes: str = 'ward',
     minimal_size_of_modules: int = 4,
@@ -95,10 +93,10 @@ def find_rare_genes_modules(
        (default: {minimal_max_umis_of_genes}).
 
     2. Compute the similarity between the genes using
-       :py:func:`metacells.tools.similarity.compute_var_var_similarity`. Pass it ``log_similarity``
-       (default: {log_similarity}), ``log_similarity_base`` (default: {log_similarity_base}), and
-       ``log_similarity_normalization`` (default: {log_similarity_normalization}) as well as
-       ``repeated_similarity`` (default: {repeated_similarity}).
+       :py:func:`metacells.tools.similarity.compute_var_var_similarity`. Pass it
+       ``repeated_similarity`` (default: {repeated_similarity}). If ``similarity_of`` is specified
+       (default: {similarity_of}), use this data for computing the similarity (e.g., to correlate
+       the log values).
 
     3. Create a hierarchical clustering of the candidate genes using the ``cluster_method_of_genes``
        (default: {cluster_method_of_genes}).
@@ -126,8 +124,8 @@ def find_rare_genes_modules(
         list_of_names_of_genes_of_modules: List[ut.DenseVector] = []
 
         candidates = \
-            _pick_candidates(adata,
-                             maximal_fraction_of_cells_of_genes,
+            _pick_candidates(adata=adata, of=of,
+                             maximal_fraction_of_cells_of_genes=maximal_fraction_of_cells_of_genes,
                              minimal_max_umis_of_genes=minimal_max_umis_of_genes,
                              minimal_size_of_modules=minimal_size_of_modules)
         if candidates is None:
@@ -140,10 +138,8 @@ def find_rare_genes_modules(
 
         similarities_between_candidate_genes = \
             _genes_similarity(candidate_data=candidate_data,
-                              log_similarity=log_similarity,
-                              log_similarity_base=log_similarity_base,
-                              log_similarity_normalization=log_similarity_normalization,
-                              repeated_similarity=repeated_similarity)
+                              of=similarity_of or of,
+                              repeated=repeated_similarity)
 
         linkage = _cluster_genes(similarities_between_candidate_genes,
                                  cluster_method_of_genes)
@@ -186,7 +182,9 @@ def find_rare_genes_modules(
 
 @ut.timed_call('.pick_candidates')
 def _pick_candidates(
+    *,
     adata: AnnData,
+    of: Optional[str],
     maximal_fraction_of_cells_of_genes: float,
     minimal_max_umis_of_genes: int,
     minimal_size_of_modules: int,
@@ -215,44 +213,40 @@ def _pick_candidates(
     if candidate_genes_count < minimal_size_of_modules:
         return None
 
-    return ut.slice(adata, vars=candidate_genes_indices), candidate_genes_indices
+    candidate_data = ut.slice(adata, vars=candidate_genes_indices)
+    ut.get_vo_data(candidate_data, of or ut.get_focus_name(adata))
+    return candidate_data, candidate_genes_indices
 
 
 @ut.timed_call('.genes_similarity')
 def _genes_similarity(
     *,
     candidate_data: AnnData,
-    log_similarity: bool,
-    log_similarity_base: Optional[float],
-    log_similarity_normalization: float,
-    repeated_similarity: bool,
+    of: Optional[str],
+    repeated: bool,
 ) -> ut.DenseMatrix:
-    if log_similarity:
-        LOG.debug('  log_similarity base: %s normalization: %s',
-                  log_similarity_base or 'e',
-                  log_similarity_normalization)
-    LOG.debug('  repeated_similarity: %s', repeated_similarity)
+    LOG.debug('  similarity of candidate: %s',
+              of or ut.get_focus_name(candidate_data))
+    LOG.debug('  repeated_similarity: %s', repeated)
     similarity = \
         compute_var_var_similarity(candidate_data,
-                                   repeated=repeated_similarity,
-                                   log=log_similarity,
-                                   log_base=log_similarity_base,
-                                   log_normalization=log_similarity_normalization,
+                                   of=of,
+                                   repeated=repeated,
                                    inplace=False)
     assert similarity is not None
     return ut.to_dense_matrix(similarity)
 
 
-@ut.timed_step('.cluster_genes')
+@ut.timed_call('.cluster_genes')
 def _cluster_genes(
     similarities_between_candidate_genes: ut.DenseMatrix,
     cluster_method_of_genes: str,
 ) -> List[Tuple[int, int]]:
-    with ut.timed_step('pdist'):
+    with ut.timed_step('scipy.pdist'):
         ut.timed_parameters(size=similarities_between_candidate_genes.shape[0])
         distances = scd.pdist(similarities_between_candidate_genes)
 
-    with ut.timed_step('linkage'):
+    with ut.timed_step('scipy.linkage'):
         LOG.debug('  cluster_method_of_genes: %s',
                   cluster_method_of_genes)
         ut.timed_parameters(size=distances.shape[0],
@@ -379,7 +373,7 @@ def _identify_cells(
     return gene_indices_of_modules
 
 
-@ut.timed_step('.compress_results')
+@ut.timed_call('.compress_results')
 def _compress_results(
     *,
     adata: AnnData,

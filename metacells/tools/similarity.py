@@ -25,9 +25,6 @@ def compute_obs_obs_similarity(
     adata: AnnData,
     of: Optional[str] = None,
     *,
-    log: bool = False,
-    log_base: Optional[float] = None,
-    log_normalization: float = -1,
     repeated: bool = True,
     inplace: bool = True,
     intermediate: bool = True,
@@ -55,10 +52,7 @@ def compute_obs_obs_similarity(
 
     **Computation Parameters**
 
-    1. Compute the cross-correlation between all the cells. If ``log`` (default: {log}), correlate
-       the logarithm of the values using ``log_base`` (default: {log_base}) and
-       ``log_normalization`` (default: {log_normalization}). See
-       :py:func:`metacells.utilities.computation.log_data` for details.
+    1. Compute the cross-correlation between all the cells.
 
     2. If ``repeated`` (default: {repeated}), compute the cross-correlation of the correlations.
        That is, for two observations (cells) to be similar, they would need to be similar to the
@@ -66,8 +60,6 @@ def compute_obs_obs_similarity(
        of the data.
     '''
     return _compute_elements_similarity(adata, 'obs', of, repeated=repeated,
-                                        log=log, log_base=log_base,
-                                        log_normalization=log_normalization,
                                         inplace=inplace, intermediate=intermediate)
 
 
@@ -77,9 +69,6 @@ def compute_var_var_similarity(
     adata: AnnData,
     of: Optional[str] = None,
     *,
-    log: bool = False,
-    log_base: Optional[float] = None,
-    log_normalization: float = -1,
     repeated: bool = True,
     inplace: bool = True,
     intermediate: bool = True,
@@ -107,10 +96,7 @@ def compute_var_var_similarity(
 
     **Computation Parameters**
 
-    1. Compute the cross-correlation between all the genes. If ``log`` (default: {log}), correlate
-       the logarithm of the values using ``log_base`` (default: {log_base}) and
-       ``log_normalization`` (default: {log_normalization}). See
-       :py:func:`metacells.utilities.computation.log_data` for details.
+    1. Compute the cross-correlation between all the genes.
 
     2. If ``repeated`` (default: {repeated}), compute the cross-correlation of the correlations.
        That is, for two variables (genes) to be similar, they would need to be similar to the rest
@@ -118,8 +104,6 @@ def compute_var_var_similarity(
        data.
     '''
     return _compute_elements_similarity(adata, 'var', of, repeated=repeated,
-                                        log=log, log_base=log_base,
-                                        log_normalization=log_normalization,
                                         inplace=inplace, intermediate=intermediate)
 
 
@@ -128,9 +112,6 @@ def _compute_elements_similarity(
     elements: str,
     of: Optional[str] = None,
     *,
-    log: bool = False,
-    log_base: Optional[float] = None,
-    log_normalization: float = -1,
     repeated: bool = True,
     inplace: bool = True,
     intermediate: bool = True,
@@ -139,13 +120,10 @@ def _compute_elements_similarity(
 
     LOG.debug('compute_%s_%s_similarity...', elements, elements)
 
-    with ut.intermediate_step(adata, intermediate=intermediate):
-        if log:
-            LOG.debug('  log base: %s normalization: %s',
-                      log_base or 'e', log_normalization)
-            of = ut.get_log_matrix(adata, of, base=log_base,
-                                   normalization=log_normalization).name
+    of = of or ut.get_focus_name(adata)
+    LOG.debug('  of: %s', of)
 
+    with ut.intermediate_step(adata, intermediate=intermediate):
         LOG.debug('  repeated: %s', repeated)
         if elements == 'obs':
             similarity = ut.get_obs_obs_correlation(adata, of,

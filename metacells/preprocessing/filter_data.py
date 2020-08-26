@@ -24,8 +24,9 @@ def filter_data(  # pylint: disable=too-many-branches
     adata: AnnData,
     masks: List[str],
     *,
-    track_base_indices: Optional[str] = 'base_index',
-    name: Optional[str] = 'included',
+    to: Optional[str] = 'included',
+    invalidated_prefix: Optional[str] = None,
+    track_base_indices: Optional[str] = None,
 ) -> Optional[AnnData]:
     '''
     Extract a subset of the data for further processing.
@@ -46,14 +47,14 @@ def filter_data(  # pylint: disable=too-many-branches
 
     An annotated data containing a subset of the cells and genes.
 
-    If ``name`` (default: {name}) is not ``None``, store the mask in ``<name>_cells`` and
-    ``<name>_genes`` annotations of the full data.
+    If ``to`` (default: {to}) is specified, store the mask in ``<to>_cells`` and ``<to>_genes``
+    annotations of the full data.
 
     If no cells and/or no genes were selected by the filter, return ``None``.
 
     **Computation Parameters**
 
-    1. If ``track_base_indices`` (default: ``{track_base_indices}``) is not ``None``, then invoke
+    1. If ``track_base_indices`` (default: ``{track_base_indices}``) is specified, then invoke
        :py:func:`metacells.utilities.preparation.track_base_indices` to allow for mapping the
        returned sliced data back to the full original data.
 
@@ -62,22 +63,26 @@ def filter_data(  # pylint: disable=too-many-branches
        (cells or genes) mask with the result.
 
     4. If the final cells or genes mask is empty, return None. Otherwise, return a slice of the full
-       data containing just the cells and genes specified by the final masks.
+       data containing just the cells and genes specified by the final masks. If
+       ``invalidated_prefix`` is specified (default: {invalidated_prefix}), then invalidated data
+       will not be removed; instead it will be renamed with the addition of the provided prefix.
     '''
     if track_base_indices is not None:
         ut.track_base_indices(adata, name=track_base_indices)
 
-    LOG.debug('filter_data name: %s', name)
+    LOG.debug('filter_data...')
+    if to is not None:
+        LOG.debug('  to: %s', to)
 
     cells_mask = np.full(adata.n_obs, True, dtype='bool')
-    genes_mask = np.full(adata.n_obs, True, dtype='bool')
+    genes_mask = np.full(adata.n_vars, True, dtype='bool')
 
     for mask_name in masks:
         log_mask_name = mask_name
 
         if mask_name[0] == '~':
             invert = True
-            mask_name = mask_name[1]
+            mask_name = mask_name[1:]
         else:
             invert = False
 
@@ -110,18 +115,17 @@ def filter_data(  # pylint: disable=too-many-branches
                              % mask_name)
 
     if LOG.isEnabledFor(logging.INFO):
-        if name is None:
-            LOG.info('filter_data cells: %s genes: %s',
-                     np.sum(cells_mask), np.sum(genes_mask))
-        else:
-            LOG.info('filter_data name: %s cells: %s genes: %s',
-                     name, np.sum(cells_mask), np.sum(genes_mask))
+        LOG.info('filter_data cells: %s / %s',
+                 np.sum(cells_mask), cells_mask.size)
+        LOG.info('filter_data genes: %s / %s',
+                 np.sum(genes_mask), genes_mask.size)
 
-    if name is not None:
-        ut.set_v_data(adata, name + '_cells', cells_mask, ut.NEVER_SAFE)
-        ut.set_v_data(adata, name + '_genes', genes_mask, ut.NEVER_SAFE)
+    if to is not None:
+        ut.set_o_data(adata, to + '_cells', cells_mask, ut.NEVER_SAFE)
+        ut.set_v_data(adata, to + '_genes', genes_mask, ut.NEVER_SAFE)
 
     if not np.any(cells_mask) or not np.any(genes_mask):
         return None
 
-    return ut.slice(adata, obs=cells_mask, vars=genes_mask)
+    return ut.slice(adata, obs=cells_mask, vars=genes_mask,
+                    invalidated_prefix=invalidated_prefix)

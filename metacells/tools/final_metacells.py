@@ -84,8 +84,10 @@ def finalize_metacells(  # pylint: disable=too-many-branches
     4 . Any remaining metacell is dissolved into outlier cells.
     '''
     LOG.debug('finalize_metacells...')
+
     with ut.focus_on(ut.get_vo_data, adata, of,
                      layout='row_major', intermediate=intermediate) as data:
+        LOG.debug('  of: %s', ut.get_focus_name(adata))
         if isinstance(communities, str):
             communities = ut.get_o_data(adata, communities)
 

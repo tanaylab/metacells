@@ -110,8 +110,11 @@ def compute_candidate_metacells(
     '''
     LOG.debug('compute_candidate_metacells...')
 
+    of = of or 'obs_outgoing_weights'
+    LOG.debug('  of: %s', of)
+
     with ut.intermediate_step(adata, intermediate=intermediate):
-        edge_weights = ut.get_oo_data(adata, of or 'obs_outgoing_weights')
+        edge_weights = ut.get_oo_data(adata, of)
         if not isinstance(cell_sizes, str):
             node_sizes = cell_sizes
         else:
@@ -143,13 +146,12 @@ def compute_candidate_metacells(
         assert max_metacell_size is not None
         assert min_metacell_size <= max_metacell_size
 
-    with ut.timed_step('.partition'):
-        community_of_cells = partition_method(edge_weights=edge_weights,
-                                              node_sizes=node_sizes,
-                                              target_comm_size=target_metacell_size,
-                                              max_comm_size=max_metacell_size,
-                                              min_comm_size=min_metacell_size,
-                                              random_seed=random_seed)
+    community_of_cells = partition_method(edge_weights=edge_weights,
+                                          node_sizes=node_sizes,
+                                          target_comm_size=target_metacell_size,
+                                          max_comm_size=max_metacell_size,
+                                          min_comm_size=min_metacell_size,
+                                          random_seed=random_seed)
     if LOG.isEnabledFor(logging.DEBUG):
         LOG.debug('  communities: %s', np.max(community_of_cells) + 1)
 
