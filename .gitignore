@@ -12,6 +12,7 @@ junk*
 metacells/*.so
 metacells/version.py
 .nfs*
+*.npy
 __pycache__
 .*.swo
 .*.swp

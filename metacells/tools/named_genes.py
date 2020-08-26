@@ -76,6 +76,5 @@ def find_named_genes(
     if name is None:
         return pd.Series(genes_mask, index=adata.var_names)
 
-    adata.var[name] = genes_mask
-    ut.safe_slicing_data(name, ut.ALWAYS_SAFE)
+    ut.set_v_data(adata, name, genes_mask, ut.ALWAYS_SAFE)
     return None

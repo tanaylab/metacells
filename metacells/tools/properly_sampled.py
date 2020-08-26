@@ -91,9 +91,8 @@ def find_properly_sampled_cells(
                  np.sum(cells_mask), cells_mask.size)
 
     if inplace:
-        adata.var['properly_sampled_cells'] = cells_mask
-        ut.safe_slicing_data('properly_sampled_cells',
-                             ut.SAFE_WHEN_SLICING_OBS)
+        ut.set_v_data(adata, 'properly_sampled_cells',
+                      cells_mask, ut.SAFE_WHEN_SLICING_OBS)
         return None
 
     return pd.Series(cells_mask, index=adata.obs_names)
@@ -157,9 +156,8 @@ def find_properly_sampled_genes(
                  np.sum(genes_mask), genes_mask.size)
 
     if inplace:
-        adata.var['properly_sampled_genes'] = genes_mask
-        ut.safe_slicing_data('properly_sampled_genes',
-                             ut.SAFE_WHEN_SLICING_OBS)
+        ut.set_v_data(adata, 'properly_sampled_genes',
+                      genes_mask, ut.SAFE_WHEN_SLICING_OBS)
         return None
 
     return pd.Series(genes_mask, index=adata.obs_names)

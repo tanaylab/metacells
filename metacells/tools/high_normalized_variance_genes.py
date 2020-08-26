@@ -78,9 +78,8 @@ def find_high_normalized_variance_genes(
              np.sum(genes_mask), genes_mask.size)
 
     if inplace:
-        adata.var['high_normalized_variance_genes'] = genes_mask
-        ut.safe_slicing_data('high_normalized_variance_genes',
-                             ut.SAFE_WHEN_SLICING_VAR)
+        ut.set_v_data(adata, 'high_normalized_variance_genes',
+                      genes_mask, ut.NEVER_SAFE)
         return None
 
     return pd.Series(genes_mask, index=adata.var_names)

@@ -114,6 +114,7 @@ In general the auto-generated names are tediously long and detailed (e.g.,
 caller is responsible to ensure that the names of manually set data are also unique.
 '''
 
+import logging
 from contextlib import contextmanager
 from typing import (Any, Callable, Dict, Iterable, Iterator, List,
                     MutableMapping, NamedTuple, Optional, Set, Sized, Tuple,
@@ -162,9 +163,16 @@ __all__ = [
     'get_focus_name',
     'get_x_name',
 
+    'set_m_data',
+    'set_o_data',
+    'set_v_data',
+    'set_oo_data',
+    'set_vv_data',
+    'set_vo_data',
 ]
 
 
+LOG = logging.getLogger(__name__)
 LOCK = rwlock.RWLockRead()
 
 
@@ -318,14 +326,14 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
 
     if not will_slice_obs and not will_slice_var:
         with utm.timed_step('.copy'):
-            return adata[:, :]
+            return adata.copy()
 
     saved_data = \
         _save_data(adata, will_slice_obs,
                    will_slice_var, invalidated_prefix)
 
     with utm.timed_step('.builtin'):
-        bdata = adata[obs, vars]
+        bdata = adata[obs, vars].copy()
 
     did_slice_obs = bdata.n_obs != adata.n_obs
     did_slice_var = bdata.n_vars != adata.n_vars
@@ -375,7 +383,7 @@ def _save_data(
     return saved_data
 
 
-def _save_per_data(  # pylint: disable=too-many-locals
+def _save_per_data(
     saved_data: Dict[Tuple[str, str], Any],
     adata: AnnData,
     per: str,
@@ -409,8 +417,7 @@ def _save_per_data(  # pylint: disable=too-many-locals
             base_name = name[:-len(by_suffix)]
             if base_name == get_x_name(adata):
                 with utm.timed_step('.swap_x'):
-                    with _modify(adata):
-                        adata.X = data
+                    adata.X = data
             else:
                 base_data = adata.layers[base_name]
                 saved_data[('vo:', base_name)] = base_data
@@ -784,8 +791,7 @@ def get_m_data(
     assert data is not None
 
     if inplace:
-        with _modify(adata):
-            adata.uns[name] = data
+        adata.uns[name] = data
 
     return data
 
@@ -963,8 +969,7 @@ def get_vo_data(
                             inplace=inplace or infocus, layout=layout)
 
     if infocus:
-        with _modify(adata):
-            adata.uns['__focus__'] = name
+        adata.uns['__focus__'] = name
 
     return data
 
@@ -1004,9 +1009,8 @@ def _get_layout_data(
     data = utc.to_layout(data, layout=layout)
     if inplace:
         utt.freeze(data)
-        with _modify(adata):
-            with utm.timed_step('.set_annotation'):
-                annotations[layout_name] = data
+        with utm.timed_step('.set_annotation'):
+            annotations[layout_name] = data
 
     return data
 
@@ -1080,8 +1084,7 @@ def del_vo_data(
     assert name != x_name
 
     if name == get_focus_name(adata):
-        with _modify(adata):
-            adata.uns['__focus__'] = x_name
+        adata.uns['__focus__'] = x_name
 
     if layout is not None:
         layout_name = '%s:__%s__' % (name, layout)
@@ -1180,23 +1183,22 @@ def intermediate_step(
         yield
 
     finally:
-        with _modify(adata):
-            if not intermediate:
-                new_data = _all_data(adata)
-                for name in new_data:
-                    if name in old_data:
+        if not intermediate:
+            new_data = _all_data(adata)
+            for name in new_data:
+                if name in old_data:
+                    continue
+                if name.endswith(':__row_major__') \
+                        or name.endswith(':__column_major__'):
+                    base_name = ':'.join(name.split(':')[:-1])
+                    if base_name in old_data:
                         continue
-                    if name.endswith(':__row_major__') \
-                            or name.endswith(':__column_major__'):
-                        base_name = ':'.join(name.split(':')[:-1])
-                        if base_name in old_data:
-                            continue
-                    del_vo_data(adata, name)
+                del_vo_data(adata, name)
 
-            if has_data(adata, old_focus):
-                adata.uns['__focus__'] = old_focus
-            else:
-                adata.uns['__focus__'] = get_x_name(adata)
+        if has_data(adata, old_focus):
+            adata.uns['__focus__'] = old_focus
+        else:
+            adata.uns['__focus__'] = get_x_name(adata)
 
 
 def _all_data(adata: AnnData) -> Set[str]:
@@ -1224,10 +1226,103 @@ def get_x_name(adata: AnnData) -> str:
     return adata.uns['__x__']
 
 
-@contextmanager
-def _modify(adata: AnnData) -> Iterator[None]:
-    if adata.is_view:
-        with utm.timed_step('unview'):
-            yield
-    else:
-        yield
+@utm.timed_call()
+def set_m_data(
+    adata: AnnData,
+    name: str,
+    data: Any,
+    slicing_mask: Optional[SlicingMask] = None,
+) -> Any:
+    '''
+    Set unstructured meta-data.
+
+    Optionally specify the ``slicing_mask`` for this data.
+    '''
+    adata.uns[name] = data
+    if slicing_mask is not None:
+        safe_slicing_data(name, slicing_mask)
+
+
+@utm.timed_call()
+def set_o_data(
+    adata: AnnData,
+    name: str,
+    data: utt.Vector,
+    slicing_mask: Optional[SlicingMask] = None,
+) -> Any:
+    '''
+    Set per-observation (cell) meta-data.
+
+    Optionally specify the ``slicing_mask`` for this data.
+    '''
+    adata.obs[name] = data
+    if slicing_mask is not None:
+        safe_slicing_data(name, slicing_mask)
+
+
+@utm.timed_call()
+def set_v_data(
+    adata: AnnData,
+    name: str,
+    data: utt.Vector,
+    slicing_mask: Optional[SlicingMask] = None,
+) -> Any:
+    '''
+    Set per-variable (gene) meta-data.
+
+    Optionally specify the ``slicing_mask`` for this data.
+    '''
+    adata.var[name] = data
+    if slicing_mask is not None:
+        safe_slicing_data(name, slicing_mask)
+
+
+@utm.timed_call()
+def set_oo_data(
+    adata: AnnData,
+    name: str,
+    data: utt.Matrix,
+    slicing_mask: Optional[SlicingMask] = None,
+) -> Any:
+    '''
+    Set per-observation-per-observation (cell) meta-data.
+
+    Optionally specify the ``slicing_mask`` for this data.
+    '''
+    adata.obsp[name] = data
+    if slicing_mask is not None:
+        safe_slicing_data(name, slicing_mask)
+
+
+@utm.timed_call()
+def set_vv_data(
+    adata: AnnData,
+    name: str,
+    data: utt.Matrix,
+    slicing_mask: Optional[SlicingMask] = None,
+) -> Any:
+    '''
+    Set per-variable-per-variable (gene) meta-data.
+
+    Optionally specify the ``slicing_mask`` for this data.
+    '''
+    adata.varp[name] = data
+    if slicing_mask is not None:
+        safe_slicing_data(name, slicing_mask)
+
+
+@utm.timed_call()
+def set_vo_data(
+    adata: AnnData,
+    name: str,
+    data: utt.Matrix,
+    slicing_mask: Optional[SlicingMask] = None,
+) -> Any:
+    '''
+    Set per-variable-per-observation (per-gene-per-cell) meta-data.
+
+    Optionally specify the ``slicing_mask`` for this data.
+    '''
+    adata.layers[name] = data
+    if slicing_mask is not None:
+        safe_slicing_data(name, slicing_mask)

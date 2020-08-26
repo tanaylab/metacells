@@ -20,7 +20,7 @@ LOG = logging.getLogger(__name__)
 
 @ut.timed_call()
 @ut.expand_doc()
-def filter_data(  # pylint: disable=too-many-locals,too-many-statements,too-many-branches,dangerous-default-value
+def filter_data(  # pylint: disable=too-many-branches
     adata: AnnData,
     masks: List[str],
     *,
@@ -118,12 +118,8 @@ def filter_data(  # pylint: disable=too-many-locals,too-many-statements,too-many
                      name, np.sum(cells_mask), np.sum(genes_mask))
 
     if name is not None:
-        cells_name = name + '_cells'
-        genes_name = name + '_genes'
-        adata.obs[cells_name] = cells_mask
-        adata.var[genes_name] = genes_mask
-        ut.safe_slicing_data(cells_name, ut.NEVER_SAFE)
-        ut.safe_slicing_data(genes_name, ut.NEVER_SAFE)
+        ut.set_v_data(adata, name + '_cells', cells_mask, ut.NEVER_SAFE)
+        ut.set_v_data(adata, name + '_genes', genes_mask, ut.NEVER_SAFE)
 
     if not np.any(cells_mask) or not np.any(genes_mask):
         return None

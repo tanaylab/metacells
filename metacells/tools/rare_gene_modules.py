@@ -3,7 +3,7 @@ Detect rare genes modules.
 '''
 
 import logging
-from typing import List, Optional, Tuple
+from typing import Iterable, List, Optional, Tuple
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -25,7 +25,7 @@ LOG = logging.getLogger(__name__)
 
 @ut.timed_call()
 @ut.expand_doc()
-def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-statements,too-many-branches
+def find_rare_genes_modules(
     adata: AnnData,
     of: Optional[str] = None,
     *,
@@ -41,7 +41,7 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
     minimal_umis_of_modules: int = 6,
     inplace: bool = True,
     intermediate: bool = True,
-) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame, np.ndarray]]:
+) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame, ut.DenseVector]]:
     '''
     Detect rare genes modules based ``of`` some data (by default, the focus).
 
@@ -123,210 +123,332 @@ def find_rare_genes_modules(  # pylint: disable=too-many-locals,too-many-stateme
 
         rare_module_of_cells = np.full(cells_count, -1)
         rare_module_of_genes = np.full(genes_count, -1)
-        list_of_names_of_genes_of_modules: List[np.ndarray] = []
+        list_of_names_of_genes_of_modules: List[ut.DenseVector] = []
 
-        total_umis_of_cells = ut.get_per_obs(adata, ut.sum_per).proper
-        max_umis_of_genes = ut.get_per_var(adata, ut.max_per).proper
-        nnz_cells_of_genes = ut.get_per_var(adata, ut.nnz_per).proper
+        candidates = \
+            _pick_candidates(adata,
+                             maximal_fraction_of_cells_of_genes,
+                             minimal_max_umis_of_genes=minimal_max_umis_of_genes,
+                             minimal_size_of_modules=minimal_size_of_modules)
+        if candidates is None:
+            return _results(adata=adata,
+                            rare_module_of_cells=rare_module_of_cells,
+                            rare_module_of_genes=rare_module_of_genes,
+                            list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules,
+                            inplace=inplace)
+        candidate_data, candidate_genes_indices = candidates
 
-        def results() -> Optional[Tuple[pd.DataFrame, pd.DataFrame, np.ndarray]]:
-            array_of_names_of_genes_of_modules = \
-                np.array(list_of_names_of_genes_of_modules, dtype='object')
+        similarities_between_candidate_genes = \
+            _genes_similarity(candidate_data=candidate_data,
+                              log_similarity=log_similarity,
+                              log_similarity_base=log_similarity_base,
+                              log_similarity_normalization=log_similarity_normalization,
+                              repeated_similarity=repeated_similarity)
 
-            if LOG.isEnabledFor(logging.INFO):
-                LOG.info('find_rare_genes_modules: %s genes: %s / %s cells: %s / %s',
-                         np.max(rare_module_of_cells) + 1,
-                         np.sum(rare_module_of_genes >= 0),
-                         rare_module_of_genes.size,
-                         np.sum(rare_module_of_cells >= 0),
-                         rare_module_of_cells.size)
+        linkage = _cluster_genes(similarities_between_candidate_genes,
+                                 cluster_method_of_genes)
 
-            if inplace:
-                adata.obs['cells_rare_gene_module'] = rare_module_of_cells
-                adata.obs['rare_cells'] = rare_module_of_cells >= 0
-                adata.var['genes_rare_gene_module'] = rare_module_of_genes
-                adata.var['rare_genes'] = rare_module_of_genes >= 0
-                adata.uns['rare_gene_modules'] = array_of_names_of_genes_of_modules
-                return None
+        combined_candidate_indices = \
+            _identify_genes(candidate_genes_indices=candidate_genes_indices,
+                            similarities_between_candidate_genes=similarities_between_candidate_genes,
+                            linkage=linkage,
+                            minimal_correlation_of_modules=minimal_correlation_of_modules)
 
-            obs_metrics = pd.DataFrame(index=adata.obs_names)
-            var_metrics = pd.DataFrame(index=adata.var_names)
+        gene_indices_of_modules = \
+            _identify_cells(adata=adata,
+                            of=of,
+                            candidate_data=candidate_data,
+                            candidate_genes_indices=candidate_genes_indices,
+                            combined_candidate_indices=combined_candidate_indices,
+                            rare_module_of_genes=rare_module_of_genes,
+                            rare_module_of_cells=rare_module_of_cells,
+                            minimal_size_of_modules=minimal_size_of_modules,
+                            minimal_umis_of_modules=minimal_umis_of_modules)
+        if len(gene_indices_of_modules) == 0:
+            return _results(adata=adata,
+                            rare_module_of_cells=rare_module_of_cells,
+                            rare_module_of_genes=rare_module_of_genes,
+                            list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules,
+                            inplace=inplace)
 
-            obs_metrics['cells_rare_gene_module'] = rare_module_of_cells
-            obs_metrics['rare_cells'] = rare_module_of_cells >= 0
-            var_metrics['genes_rare_gene_module'] = rare_module_of_genes
-            var_metrics['rare_genes'] = rare_module_of_genes >= 0
+        _compress_results(adata=adata,
+                          gene_indices_of_modules=gene_indices_of_modules,
+                          rare_module_of_genes=rare_module_of_genes,
+                          rare_module_of_cells=rare_module_of_genes,
+                          list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules)
 
-            return obs_metrics, var_metrics, array_of_names_of_genes_of_modules
+        return _results(adata=adata,
+                        rare_module_of_cells=rare_module_of_cells,
+                        rare_module_of_genes=rare_module_of_genes,
+                        list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules,
+                        inplace=inplace)
 
-        with ut.timed_step('.pick_candidate_genes'):
-            nnz_cells_fraction_of_genes = nnz_cells_of_genes / cells_count
 
-            LOG.debug('  maximal_fraction_of_cells_of_genes: %s',
-                      maximal_fraction_of_cells_of_genes)
-            nnz_cells_fraction_mask_of_genes = \
-                nnz_cells_fraction_of_genes <= maximal_fraction_of_cells_of_genes
+@ut.timed_call('.pick_candidates')
+def _pick_candidates(
+    adata: AnnData,
+    maximal_fraction_of_cells_of_genes: float,
+    minimal_max_umis_of_genes: int,
+    minimal_size_of_modules: int,
+) -> Optional[Tuple[AnnData, ut.DenseVector]]:
+    cells_count = adata.n_obs
 
-            LOG.debug('  minimal_max_umis_of_genes: %s',
-                      minimal_max_umis_of_genes)
-            max_umis_mask_of_genes = max_umis_of_genes >= minimal_max_umis_of_genes
+    LOG.debug('  maximal_fraction_of_cells_of_genes: %s',
+              maximal_fraction_of_cells_of_genes)
+    nnz_cells_of_genes = ut.get_per_var(adata, ut.nnz_per).proper
+    nnz_cells_fraction_of_genes = nnz_cells_of_genes / cells_count
+    nnz_cells_fraction_mask_of_genes = \
+        nnz_cells_fraction_of_genes <= maximal_fraction_of_cells_of_genes
 
-            candidates_mask_of_genes = \
-                max_umis_mask_of_genes & nnz_cells_fraction_mask_of_genes
+    LOG.debug('  minimal_max_umis_of_genes: %s',
+              minimal_max_umis_of_genes)
+    max_umis_of_genes = ut.get_per_var(adata, ut.max_per).proper
+    max_umis_mask_of_genes = max_umis_of_genes >= minimal_max_umis_of_genes
 
-            candidate_genes_indices = np.where(candidates_mask_of_genes)[0]
+    candidates_mask_of_genes = \
+        max_umis_mask_of_genes & nnz_cells_fraction_mask_of_genes
 
-            candidate_genes_count = candidate_genes_indices.size
-            LOG.debug('  candidate_genes_count: %s', candidate_genes_count)
-            if candidate_genes_count < minimal_size_of_modules:
-                return results()
+    candidate_genes_indices = np.where(candidates_mask_of_genes)[0]
 
-            candidate_data = ut.slice(adata, vars=candidate_genes_indices)
+    candidate_genes_count = candidate_genes_indices.size
+    LOG.debug('  candidate_genes_count: %s', candidate_genes_count)
+    if candidate_genes_count < minimal_size_of_modules:
+        return None
 
-        with ut.timed_step('.similarity'):
-            if log_similarity:
-                LOG.debug('  log_similarity base: %s normalization: %s',
-                          log_similarity_base or 'e',
-                          log_similarity_normalization)
-            LOG.debug('  repeated_similarity: %s', repeated_similarity)
-            similarity = \
-                compute_var_var_similarity(candidate_data,
-                                           repeated=repeated_similarity,
-                                           log=log_similarity,
-                                           log_base=log_similarity_base,
-                                           log_normalization=log_similarity_normalization,
-                                           inplace=False)
-            assert similarity is not None
-            similarities_between_candidate_genes = \
-                ut.to_proper_matrix(similarity)
+    return ut.slice(adata, vars=candidate_genes_indices), candidate_genes_indices
 
-        with ut.timed_step('.cluster'):
-            with ut.timed_step('pdist'):
-                ut.timed_parameters(  #
-                    size=similarities_between_candidate_genes.shape[0])
-                distances = scd.pdist(similarities_between_candidate_genes)
-            with ut.timed_step('linkage'):
-                LOG.debug('  cluster_method_of_genes: %s',
-                          cluster_method_of_genes)
-                ut.timed_parameters(size=distances.shape[0],
-                                    method=cluster_method_of_genes)
-                linkage = \
-                    sch.linkage(distances, method=cluster_method_of_genes)
 
-        with ut.timed_step('.identify_genes'):
-            np.fill_diagonal(similarities_between_candidate_genes, None)
-            combined_candidate_indices = \
-                {index: [index] for index in range(candidate_genes_count)}
+@ut.timed_call('.genes_similarity')
+def _genes_similarity(
+    *,
+    candidate_data: AnnData,
+    log_similarity: bool,
+    log_similarity_base: Optional[float],
+    log_similarity_normalization: float,
+    repeated_similarity: bool,
+) -> ut.DenseMatrix:
+    if log_similarity:
+        LOG.debug('  log_similarity base: %s normalization: %s',
+                  log_similarity_base or 'e',
+                  log_similarity_normalization)
+    LOG.debug('  repeated_similarity: %s', repeated_similarity)
+    similarity = \
+        compute_var_var_similarity(candidate_data,
+                                   repeated=repeated_similarity,
+                                   log=log_similarity,
+                                   log_base=log_similarity_base,
+                                   log_normalization=log_similarity_normalization,
+                                   inplace=False)
+    assert similarity is not None
+    return ut.to_dense_matrix(similarity)
 
-            LOG.debug('  minimal_correlation_of_modules: %s',
-                      minimal_correlation_of_modules)
-            for link_index, link_data in enumerate(linkage):
-                link_index += candidate_genes_count
 
-                left_index = int(link_data[0])
-                right_index = int(link_data[1])
+@ut.timed_step('.cluster_genes')
+def _cluster_genes(
+    similarities_between_candidate_genes: ut.DenseMatrix,
+    cluster_method_of_genes: str,
+) -> List[Tuple[int, int]]:
+    with ut.timed_step('pdist'):
+        ut.timed_parameters(size=similarities_between_candidate_genes.shape[0])
+        distances = scd.pdist(similarities_between_candidate_genes)
 
-                left_combined_candidates = \
-                    combined_candidate_indices.get(left_index)
-                right_combined_candidates = \
-                    combined_candidate_indices.get(right_index)
-                if not left_combined_candidates or not right_combined_candidates:
-                    continue
+    with ut.timed_step('linkage'):
+        LOG.debug('  cluster_method_of_genes: %s',
+                  cluster_method_of_genes)
+        ut.timed_parameters(size=distances.shape[0],
+                            method=cluster_method_of_genes)
+        linkage = sch.linkage(distances, method=cluster_method_of_genes)
 
-                link_combined_candidates = \
-                    sorted(left_combined_candidates
-                           + right_combined_candidates)
-                assert link_combined_candidates
-                link_similarities = \
-                    similarities_between_candidate_genes[link_combined_candidates,  #
-                                                         :][:,  #
-                                                            link_combined_candidates]
-                average_link_similarity = np.nanmean(link_similarities)
-                if average_link_similarity < minimal_correlation_of_modules:
-                    continue
+    return linkage
 
-                combined_candidate_indices[link_index] = link_combined_candidates
-                del combined_candidate_indices[left_index]
-                del combined_candidate_indices[right_index]
 
-        with ut.timed_step('.identify_cells'):
-            maximal_strength_of_cells = np.zeros(cells_count)
-            gene_indices_of_modules: List[np.ndarray] = []
-            candidate_umis = \
-                ut.get_vo_data(candidate_data, of, layout='column_major')
+@ut.timed_call('.identify_genes')
+def _identify_genes(
+    *,
+    candidate_genes_indices: ut.DenseVector,
+    similarities_between_candidate_genes: ut.DenseMatrix,
+    minimal_correlation_of_modules: float,
+    linkage: List[Tuple[int, int]],
+) -> Iterable[List[int]]:
+    candidate_genes_count = candidate_genes_indices.size
+    np.fill_diagonal(similarities_between_candidate_genes, None)
+    combined_candidate_indices = \
+        {index: [index] for index in range(candidate_genes_count)}
 
-            LOG.debug('  minimal_size_of_modules: %s', minimal_size_of_modules)
-            LOG.debug('  minimal_umis_of_modules: %s', minimal_umis_of_modules)
-            for link_index, module_candidate_indices in combined_candidate_indices.items():
-                if len(module_candidate_indices) < minimal_size_of_modules:
-                    continue
+    LOG.debug('  minimal_correlation_of_modules: %s',
+              minimal_correlation_of_modules)
+    for link_index, link_data in enumerate(linkage):
+        link_index += candidate_genes_count
 
-                total_umis_of_module_of_cells = \
-                    ut.to_dense_vector(candidate_umis[:,
-                                                      module_candidate_indices].sum(axis=1))
-                assert total_umis_of_module_of_cells.size == cells_count
+        left_index = int(link_data[0])
+        right_index = int(link_data[1])
 
-                minimal_total_umis_of_module_mask_of_cells = \
-                    total_umis_of_module_of_cells >= minimal_umis_of_modules
-                strong_cell_indices = \
-                    np.where(minimal_total_umis_of_module_mask_of_cells)[0]
-                if strong_cell_indices.size == 0:
-                    continue
+        left_combined_candidates = \
+            combined_candidate_indices.get(left_index)
+        right_combined_candidates = \
+            combined_candidate_indices.get(right_index)
+        if not left_combined_candidates or not right_combined_candidates:
+            continue
 
-                total_umis_of_module_of_strong_cells = \
-                    total_umis_of_module_of_cells[strong_cell_indices]
-                total_umis_of_strong_cells = total_umis_of_cells[strong_cell_indices]
-                fraction_of_module_of_strong_cells = \
-                    total_umis_of_module_of_strong_cells / total_umis_of_strong_cells
+        link_combined_candidates = \
+            sorted(left_combined_candidates + right_combined_candidates)
+        assert link_combined_candidates
+        link_similarities = \
+            similarities_between_candidate_genes[link_combined_candidates,  #
+                                                 :][:,
+                                                    link_combined_candidates]
+        average_link_similarity = np.nanmean(link_similarities)
+        if average_link_similarity < minimal_correlation_of_modules:
+            continue
 
-                minimal_strong_fraction = fraction_of_module_of_strong_cells.min()
-                assert minimal_strong_fraction > 0
-                module_strength_of_strong_cells = \
-                    fraction_of_module_of_strong_cells / minimal_strong_fraction
+        combined_candidate_indices[link_index] = link_combined_candidates
+        del combined_candidate_indices[left_index]
+        del combined_candidate_indices[right_index]
 
-                maximal_strength_of_strong_cells = \
-                    maximal_strength_of_cells[strong_cell_indices]
-                stronger_cells_mask = module_strength_of_strong_cells \
-                    > maximal_strength_of_strong_cells
+    return combined_candidate_indices.values()
 
-                stronger_cell_indices = strong_cell_indices[stronger_cells_mask]
-                if stronger_cell_indices.size == 0:
-                    continue
 
-                maximal_strength_of_cells[stronger_cell_indices] = \
-                    maximal_strength_of_strong_cells[stronger_cells_mask]
-                module_index = len(gene_indices_of_modules)
-                module_gene_indices = \
-                    candidate_genes_indices[module_candidate_indices]
-                gene_indices_of_modules.append(module_gene_indices)
-                rare_module_of_genes[module_gene_indices] = module_index
-                rare_module_of_cells[strong_cell_indices] = module_index
+@ut.timed_call('.identify_cells')
+def _identify_cells(
+    *,
+    adata: AnnData,
+    of: Optional[str],
+    candidate_data: AnnData,
+    candidate_genes_indices: ut.DenseVector,
+    combined_candidate_indices: Iterable[List[int]],
+    rare_module_of_genes: ut.DenseVector,
+    rare_module_of_cells: ut.DenseVector,
+    minimal_size_of_modules: int,
+    minimal_umis_of_modules: int,
+) -> List[ut.DenseVector]:
+    cells_count = adata.n_obs
+    maximal_strength_of_cells = np.zeros(cells_count)
+    gene_indices_of_modules: List[ut.DenseVector] = []
+    candidate_umis = \
+        ut.get_vo_data(candidate_data, of, layout='column_major')
 
-            if len(gene_indices_of_modules) == 0:
-                return results()
+    LOG.debug('  minimal_size_of_modules: %s', minimal_size_of_modules)
+    LOG.debug('  minimal_umis_of_modules: %s', minimal_umis_of_modules)
+    total_umis_of_cells = ut.get_per_obs(adata, ut.sum_per).proper
 
-        with ut.timed_step('.results'):
-            for raw_module_index, module_gene_indices \
-                    in enumerate(gene_indices_of_modules):
-                module_cell_indices = \
-                    np.where(rare_module_of_cells == raw_module_index)[0]
-                if module_cell_indices.size == 0:
-                    continue
+    for module_candidate_indices in combined_candidate_indices:
+        if len(module_candidate_indices) < minimal_size_of_modules:
+            continue
 
-                module_index = len(list_of_names_of_genes_of_modules)
+        total_umis_of_module_of_cells = \
+            ut.to_dense_vector(candidate_umis[:,
+                                              module_candidate_indices].sum(axis=1))
+        assert total_umis_of_module_of_cells.size == cells_count
 
-                if raw_module_index != module_index:
-                    rare_module_of_cells[module_cell_indices] = module_index
-                    rare_module_of_genes[module_gene_indices] = module_index
+        minimal_total_umis_of_module_mask_of_cells = \
+            total_umis_of_module_of_cells >= minimal_umis_of_modules
+        strong_cell_indices = \
+            np.where(minimal_total_umis_of_module_mask_of_cells)[0]
+        if strong_cell_indices.size == 0:
+            continue
 
-                names_of_genes_of_module = \
-                    np.array(adata.var_names[module_gene_indices])
-                list_of_names_of_genes_of_modules.append(  #
-                    names_of_genes_of_module)
+        total_umis_of_module_of_strong_cells = \
+            total_umis_of_module_of_cells[strong_cell_indices]
+        total_umis_of_strong_cells = total_umis_of_cells[strong_cell_indices]
+        fraction_of_module_of_strong_cells = \
+            total_umis_of_module_of_strong_cells / total_umis_of_strong_cells
 
-                LOG.debug('  module: %s genes: %s',
-                          module_index, ', '.join(names_of_genes_of_module))
+        minimal_strong_fraction = fraction_of_module_of_strong_cells.min()
+        assert minimal_strong_fraction > 0
+        module_strength_of_strong_cells = \
+            fraction_of_module_of_strong_cells / minimal_strong_fraction
 
-            assert len(list_of_names_of_genes_of_modules) > 0
+        maximal_strength_of_strong_cells = \
+            maximal_strength_of_cells[strong_cell_indices]
+        stronger_cells_mask = module_strength_of_strong_cells \
+            > maximal_strength_of_strong_cells
 
-            return results()
+        stronger_cell_indices = strong_cell_indices[stronger_cells_mask]
+        if stronger_cell_indices.size == 0:
+            continue
+
+        maximal_strength_of_cells[stronger_cell_indices] = \
+            maximal_strength_of_strong_cells[stronger_cells_mask]
+        module_index = len(gene_indices_of_modules)
+        module_gene_indices = \
+            candidate_genes_indices[module_candidate_indices]
+        gene_indices_of_modules.append(module_gene_indices)
+        rare_module_of_genes[module_gene_indices] = module_index
+        rare_module_of_cells[strong_cell_indices] = module_index
+
+    return gene_indices_of_modules
+
+
+@ut.timed_step('.compress_results')
+def _compress_results(
+    *,
+    adata: AnnData,
+    gene_indices_of_modules: List[ut.DenseVector],
+    rare_module_of_genes: ut.DenseVector,
+    rare_module_of_cells: ut.DenseVector,
+    list_of_names_of_genes_of_modules: List[ut.DenseVector],
+) -> None:
+    for raw_module_index, module_gene_indices \
+            in enumerate(gene_indices_of_modules):
+        module_cell_indices = \
+            np.where(rare_module_of_cells == raw_module_index)[0]
+        if module_cell_indices.size == 0:
+            continue
+
+        module_index = len(list_of_names_of_genes_of_modules)
+
+        if raw_module_index != module_index:
+            rare_module_of_cells[module_cell_indices] = module_index
+            rare_module_of_genes[module_gene_indices] = module_index
+
+        names_of_genes_of_module = \
+            np.array(adata.var_names[module_gene_indices])
+        list_of_names_of_genes_of_modules.append(names_of_genes_of_module)
+
+    assert len(list_of_names_of_genes_of_modules) > 0
+
+    if LOG.isEnabledFor(logging.DEBUG):
+        for module_index, names_of_genes_of_module \
+                in enumerate(list_of_names_of_genes_of_modules):
+            LOG.debug('  module: %s / %s genes: %s',
+                      module_index,
+                      len(list_of_names_of_genes_of_modules),
+                      ', '.join(names_of_genes_of_module))
+
+
+def _results(
+    *,
+    adata: AnnData,
+    rare_module_of_cells: ut.DenseVector,
+    rare_module_of_genes: ut.DenseVector,
+    list_of_names_of_genes_of_modules: List[ut.DenseVector],
+    inplace: bool
+) -> Optional[Tuple[pd.DataFrame, pd.DataFrame, ut.DenseVector]]:
+    array_of_names_of_genes_of_modules = \
+        np.array(list_of_names_of_genes_of_modules, dtype='object')
+
+    if LOG.isEnabledFor(logging.INFO):
+        LOG.info('find_rare_genes_modules: %s genes: %s / %s cells: %s / %s',
+                 np.max(rare_module_of_cells) + 1,
+                 np.sum(rare_module_of_genes >= 0),
+                 rare_module_of_genes.size,
+                 np.sum(rare_module_of_cells >= 0),
+                 rare_module_of_cells.size)
+
+    if inplace:
+        adata.obs['cells_rare_gene_module'] = rare_module_of_cells
+        adata.obs['rare_cells'] = rare_module_of_cells >= 0
+        adata.var['genes_rare_gene_module'] = rare_module_of_genes
+        adata.var['rare_genes'] = rare_module_of_genes >= 0
+        adata.uns['rare_gene_modules'] = array_of_names_of_genes_of_modules
+        return None
+
+    obs_metrics = pd.DataFrame(index=adata.obs_names)
+    var_metrics = pd.DataFrame(index=adata.var_names)
+
+    obs_metrics['cells_rare_gene_module'] = rare_module_of_cells
+    obs_metrics['rare_cells'] = rare_module_of_cells >= 0
+    var_metrics['genes_rare_gene_module'] = rare_module_of_genes
+    var_metrics['rare_genes'] = rare_module_of_genes >= 0
+
+    return obs_metrics, var_metrics, array_of_names_of_genes_of_modules

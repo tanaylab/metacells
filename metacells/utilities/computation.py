@@ -12,7 +12,8 @@ analysis pipeline.
 
 import re
 from re import Pattern
-from typing import Callable, Collection, Optional, TypeVar, Union, overload
+from typing import (Callable, Collection, List, Optional, TypeVar, Union,
+                    overload)
 from warnings import warn
 
 import numpy as np  # type: ignore
@@ -48,6 +49,7 @@ __all__ = [
     'sliding_window_function',
     'patterns_matches',
     'compress_indices',
+    'bin_pack',
 ]
 
 
@@ -369,7 +371,7 @@ def downsample_matrix(
                                          eliminate_zeros, inplace, random_seed)
 
 
-def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statements
+def _downsample_dense_matrix(
     matrix: utt.DenseMatrix,
     per: str,
     samples: int,
@@ -437,7 +439,7 @@ def _downsample_dense_matrix(  # pylint: disable=too-many-locals,too-many-statem
     return output
 
 
-def _downsample_compressed_matrix(  # pylint: disable=too-many-locals
+def _downsample_compressed_matrix(
     matrix: utt.CompressedMatrix,
     per: str,
     samples: int,
@@ -461,7 +463,8 @@ def _downsample_compressed_matrix(  # pylint: disable=too-many-locals
     else:
         constructor = (sp.csr_matrix, sp.csc_matrix)[axis]
         output_data = np.empty(matrix.data.shape, dtype=matrix.data.dtype)
-        output = constructor((output_data, matrix.indices, matrix.indptr))
+        output = constructor((output_data, matrix.indices,
+                              matrix.indptr), shape=matrix.shape)
         output.has_sorted_indices = matrix.has_sorted_indices
         output.has_canonical_format = matrix.has_canonical_format
 
@@ -723,7 +726,7 @@ ROLLING_FUNCTIONS = {
 
 @ utd.expand_doc(functions=', '.join(['``%s``' % function for function in ROLLING_FUNCTIONS]))
 @ utm.timed_call()
-def sliding_window_function(  # pylint: disable=too-many-locals
+def sliding_window_function(
     vector: utt.Vector,
     *,
     function: str,
@@ -827,3 +830,61 @@ def compress_indices(indices: utt.Vector) -> utt.DenseVector:
     unique, consecutive = np.unique(indices, return_inverse=True)
     consecutive += min(unique[0], 0)
     return consecutive
+
+
+@utm.timed_call()
+def bin_pack(element_sizes: utt.Vector, max_bin_size: float) -> utt.DenseVector:
+    '''
+    Given a vector of ``element_sizes`` return a vector containing the bin number for each element,
+    such that the total size of each bin is up to and as close to the the ``max_bin_size``.
+
+    This uses the first-fit decreasing algorithm for finding an initial solution and then moves
+    elements around to minimize the l2 norm of the wasted space in each bin.
+    '''
+    size_of_bins: List[float] = []
+    element_sizes = utt.to_dense_vector(element_sizes)
+    descending_size_indices = np.argsort(element_sizes)[::-1]
+    bin_of_elements = np.empty(element_sizes.size, dtype='int')
+
+    for element_index in descending_size_indices:
+        element_size = element_sizes[element_index]
+
+        assigned = False
+        for bin_index in range(len(size_of_bins)):  # pylint: disable=consider-using-enumerate
+            if size_of_bins[bin_index] + element_size <= max_bin_size:
+                bin_of_elements[element_index] = bin_index
+                size_of_bins[bin_index] += element_size
+                assigned = True
+                break
+
+        if not assigned:
+            bin_of_elements[element_index] = len(size_of_bins)
+            size_of_bins.append(element_size)
+
+    did_improve = True
+    while did_improve:
+        did_improve = False
+        for element_index in descending_size_indices:
+            element_size = element_sizes[element_index]
+            current_bin_index = bin_of_elements[element_index]
+
+            current_bin_space = max_bin_size - size_of_bins[current_bin_index]
+            remove_loss = \
+                (element_size + current_bin_space) ** 2 - current_bin_space ** 2
+
+            for bin_index in range(len(size_of_bins)):  # pylint: disable=consider-using-enumerate
+                if bin_index == current_bin_index:
+                    continue
+                bin_space = max_bin_size - size_of_bins[bin_index]
+                if bin_space < element_size:
+                    continue
+                insert_gain = bin_space ** 2 - (bin_space - element_size) ** 2
+                if insert_gain > remove_loss:
+                    size_of_bins[current_bin_index] -= element_size
+                    current_bin_index = bin_of_elements[element_index] = bin_index
+                    size_of_bins[bin_index] += element_size
+                    remove_loss = insert_gain
+                    did_improve = True
+
+    utm.timed_parameters(elements=element_sizes.size, bins=len(size_of_bins))
+    return bin_of_elements

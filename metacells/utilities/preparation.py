@@ -106,14 +106,10 @@ def track_base_indices(adata: AnnData, *, name: str = 'base_index') -> None:
     :py:func:`metacells.utilities.annotation.slice` of the data to easily refer back to the original
     full data.
     '''
-    obs_name = 'obs_' + name
-    var_name = 'var_' + name
-
-    adata.obs[obs_name] = np.arange(adata.n_obs)
-    adata.var[var_name] = np.arange(adata.n_vars)
-
-    uta.safe_slicing_data(obs_name, uta.ALWAYS_SAFE)
-    uta.safe_slicing_data(var_name, uta.ALWAYS_SAFE)
+    uta.set_o_data(adata, 'obs_' + name,
+                   np.arange(adata.n_obs), uta.ALWAYS_SAFE)
+    uta.set_v_data(adata, 'obs_' + name,
+                   np.arange(adata.n_vars), uta.ALWAYS_SAFE)
 
 
 class NamedShaped(NamedTuple):

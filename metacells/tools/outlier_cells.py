@@ -3,7 +3,7 @@ Find cells which are outliers in the metacells they are belong to.
 '''
 
 import logging
-from typing import List, Optional, Union
+from typing import List, Optional, Tuple, Union
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -23,7 +23,7 @@ LOG = logging.getLogger(__name__)
 
 @ut.timed_call()
 @ut.expand_doc()
-def find_outlier_cells(  # pylint: disable=too-many-locals,too-many-statements
+def find_outlier_cells(
     adata: AnnData,
     *,
     of: Optional[str] = None,
@@ -109,176 +109,243 @@ def find_outlier_cells(  # pylint: disable=too-many-locals,too-many-statements
         totals_of_cells = ut.get_per_obs(adata, ut.sum_per).proper
         assert totals_of_cells.size == cells_count
 
-        communities_count = np.max(community_of_cells) + 1
-
         LOG.debug('  minimal_gene_fold_factor: %s', minimal_gene_fold_factor)
 
-        with ut.timed_step('.fold_factors'):
-            with ut.timed_step('.collect'):
-                list_of_fold_factors: List[ut.CompressedMatrix] = []
-                list_of_cell_index_of_rows: List[ut.DenseVector] = []
+        list_of_fold_factors, list_of_cell_index_of_rows = \
+            _collect_fold_factors(data=data,
+                                  community_of_cells=community_of_cells,
+                                  totals_of_cells=totals_of_cells,
+                                  minimal_gene_fold_factor=minimal_gene_fold_factor)
 
-                ut.timed_parameters(communities=communities_count,
-                                    cells=cells_count, genes=genes_count)
-                remaining_cells_count = cells_count
-
-                for community_index in range(communities_count):
-                    community_cell_indices = \
-                        np.where(community_of_cells == community_index)[0]
-
-                    community_cells_count = community_cell_indices.size
-                    assert community_cells_count > 0
-
-                    list_of_cell_index_of_rows.append(community_cell_indices)
-                    remaining_cells_count -= community_cells_count
-
-                    totals_of_community_cells = totals_of_cells[community_cell_indices]
-
-                    data_of_community = \
-                        ut.to_dense_matrix(data[community_cell_indices, :],
-                                           copy=True)
-
-                    totals_of_community_genes = data_of_community.sum(axis=0)
-                    assert totals_of_community_genes.size == genes_count
-
-                    fractions_of_community_genes = \
-                        totals_of_community_genes / \
-                        np.sum(totals_of_community_genes)
-
-                    expected_data_of_community = \
-                        np.outer(totals_of_community_cells,
-                                 fractions_of_community_genes)
-                    assert expected_data_of_community.shape == data_of_community.shape
-
-                    expected_data_of_community += 1
-                    data_of_community += 1
-                    data_of_community /= expected_data_of_community
-                    np.log2(data_of_community, out=data_of_community)
-                    data_of_community[data_of_community
-                                      < minimal_gene_fold_factor] = 0
-
-                    list_of_fold_factors.append(  #
-                        sparse.csr_matrix(data_of_community))
-
-                assert remaining_cells_count == 0
-
-            with ut.timed_step('.construct'):
-                cell_index_of_rows = np.concatenate(list_of_cell_index_of_rows)
-                cell_row_of_indices = np.empty_like(cell_index_of_rows)
-                cell_row_of_indices[cell_index_of_rows] = \
-                    np.arange(cells_count)
-
-                fold_factors = \
-                    sparse.vstack(list_of_fold_factors, format='csr')
-                fold_factors = fold_factors[cell_row_of_indices, :]
-                fold_factors = ut.to_layout(fold_factors, 'column_major')
+        fold_factors = _construct_fold_factors(cells_count,
+                                               list_of_fold_factors,
+                                               list_of_cell_index_of_rows)
 
         if intermediate:
-            adata.layers['fold_factors'] = fold_factors
-            ut.safe_slicing_data('fold_factors', ut.NEVER_SAFE)
+            ut.set_vo_data(adata, 'fold_factors', fold_factors, ut.NEVER_SAFE)
 
-        with ut.timed_step('.filter_genes'):
-            ut.timed_parameters(cells=cells_count, genes=genes_count,
-                                fold_factors=fold_factors.nnz)
-            maximal_fold_factors_of_genes = \
-                ut.to_dense_vector(fold_factors.max(axis=0))
-            assert maximal_fold_factors_of_genes.size == genes_count
+        outlier_gene_indices = \
+            _filter_genes(cells_count=cells_count,
+                          genes_count=genes_count,
+                          fold_factors=fold_factors,
+                          minimal_gene_fold_factor=minimal_gene_fold_factor,
+                          maximal_genes_fraction=maximal_genes_fraction)
 
-            mask_of_outlier_genes = \
-                maximal_fold_factors_of_genes >= minimal_gene_fold_factor
-            outlier_genes_fraction = \
-                np.sum(mask_of_outlier_genes) / genes_count
+        outlier_genes_fold_ranks = \
+            _fold_ranks(cells_count=cells_count,
+                        fold_factors=fold_factors,
+                        outlier_gene_indices=outlier_gene_indices)
 
-            LOG.debug('  outlier_genes_fraction: %s', outlier_genes_fraction)
-
-            if maximal_genes_fraction is not None \
-                    and outlier_genes_fraction > maximal_genes_fraction:
-                quantile_gene_fold_factor = \
-                    np.quantile(maximal_fold_factors_of_genes,
-                                1 - maximal_genes_fraction)
-                assert quantile_gene_fold_factor is not None
-
-                LOG.debug('  maximal_genes_fraction: %s',
-                          maximal_genes_fraction)
-                LOG.debug('  quantile_gene_fold_factor: %s',
-                          quantile_gene_fold_factor)
-
-                if quantile_gene_fold_factor > minimal_gene_fold_factor:
-                    minimal_gene_fold_factor = quantile_gene_fold_factor
-                    mask_of_outlier_genes = \
-                        maximal_fold_factors_of_genes >= minimal_gene_fold_factor
-
-                    fold_factors[fold_factors < minimal_gene_fold_factor] = 0
-                    with ut.timed_step('eliminate_zeros'):
-                        ut.timed_parameters(before=fold_factors.nnz)
-                        fold_factors.eliminate_zeros()
-                        ut.timed_parameters(after=fold_factors.nnz)
-
-            outlier_gene_indices = np.where(mask_of_outlier_genes)[0]
-            outlier_genes_count = outlier_gene_indices.size
-            LOG.debug('  outlier_genes_fraction: %s',
-                      outlier_genes_count / genes_count)
-
-        with ut.timed_step('.fold_ranks'):
-            assert fold_factors.getformat() == 'csc'
-            ut.timed_parameters(cells=cells_count,
-                                outlier_genes=outlier_genes_count)
-
-            outlier_genes_fold_ranks = \
-                np.full((cells_count, outlier_genes_count),
-                        cells_count, order='F')
-            assert ut.matrix_layout(outlier_genes_fold_ranks) == 'column_major'
-
-            for outlier_gene_index, gene_index in enumerate(outlier_gene_indices):
-                gene_start_offset = fold_factors.indptr[gene_index]
-                gene_stop_offset = fold_factors.indptr[gene_index + 1]
-
-                gene_fold_factors = fold_factors.data[gene_start_offset:gene_stop_offset]
-                gene_suspect_cell_indices = fold_factors.indices[gene_start_offset:gene_stop_offset]
-
-                gene_fold_ranks = \
-                    stats.rankdata(gene_fold_factors, method='min')
-                gene_fold_ranks *= -1
-                gene_fold_ranks += gene_fold_ranks.size + 1
-
-                outlier_genes_fold_ranks[gene_suspect_cell_indices,
-                                         outlier_gene_index] = gene_fold_ranks
-
-        with ut.timed_step('.filter_cells'):
-            minimal_fold_ranks_of_cells = outlier_genes_fold_ranks.min(axis=1)
-            assert minimal_fold_ranks_of_cells.size == cells_count
-
-            mask_of_outlier_cells = minimal_fold_ranks_of_cells < cells_count
-            outliers_cells_count = sum(mask_of_outlier_cells)
-            outlier_cells_fraction = outliers_cells_count / cells_count
-
-            LOG.debug('  outlier_cells_fraction: %s', outlier_cells_fraction)
-
-            if maximal_cells_fraction is not None \
-                    and outlier_cells_fraction > maximal_cells_fraction:
-                LOG.debug('  maximal_cells_fraction: %s',
-                          maximal_cells_fraction)
-                quantile_cells_fold_rank = \
-                    np.quantile(minimal_fold_ranks_of_cells,
-                                maximal_cells_fraction)
-                assert quantile_cells_fold_rank is not None
-
-                LOG.debug('  quantile_cells_fold_rank: %s',
-                          quantile_cells_fold_rank)
-
-                if quantile_cells_fold_rank < cells_count:
-                    mask_of_outlier_cells = minimal_fold_ranks_of_cells < quantile_cells_fold_rank
-
-                if LOG.isEnabledFor(logging.DEBUG):
-                    LOG.debug('  maximal_cells_fraction: %s',
-                              np.sum(mask_of_outlier_cells) / cells_count)
+        mask_of_outlier_cells = \
+            _filter_cells(cells_count=cells_count,
+                          outlier_genes_fold_ranks=outlier_genes_fold_ranks,
+                          maximal_cells_fraction=maximal_cells_fraction)
 
     if LOG.isEnabledFor(logging.INFO):
         LOG.info('find_outlier_cells: %s', np.sum(mask_of_outlier_cells))
 
     if inplace:
-        adata.obs['outlier_cells'] = mask_of_outlier_cells
-        ut.safe_slicing_data('outlier_cells', ut.NEVER_SAFE)
+        ut.set_o_data(adata, 'outlier_cells',
+                      mask_of_outlier_cells, ut.NEVER_SAFE)
         return None
 
     return pd.Series(mask_of_outlier_cells, index=adata.obs_names)
+
+
+@ut.timed_call('.collect_fold_factors')
+def _collect_fold_factors(
+    *,
+    data: ut.ProperMatrix,
+    community_of_cells: ut.DenseVector,
+    totals_of_cells: ut.DenseVector,
+    minimal_gene_fold_factor: float,
+) -> Tuple[List[ut.CompressedMatrix], List[ut.DenseVector]]:
+    list_of_fold_factors: List[ut.CompressedMatrix] = []
+    list_of_cell_index_of_rows: List[ut.DenseVector] = []
+
+    cells_count, genes_count = data.shape
+    communities_count = np.max(community_of_cells) + 1
+
+    ut.timed_parameters(communities=communities_count,
+                        cells=cells_count, genes=genes_count)
+    remaining_cells_count = cells_count
+
+    for community_index in range(communities_count):
+        community_cell_indices = \
+            np.where(community_of_cells == community_index)[0]
+
+        community_cells_count = community_cell_indices.size
+        assert community_cells_count > 0
+
+        list_of_cell_index_of_rows.append(community_cell_indices)
+        remaining_cells_count -= community_cells_count
+
+        totals_of_community_cells = totals_of_cells[community_cell_indices]
+
+        data_of_community = \
+            ut.to_dense_matrix(data[community_cell_indices, :], copy=True)
+
+        totals_of_community_genes = data_of_community.sum(axis=0)
+        assert totals_of_community_genes.size == genes_count
+
+        fractions_of_community_genes = \
+            totals_of_community_genes / np.sum(totals_of_community_genes)
+
+        expected_data_of_community = \
+            np.outer(totals_of_community_cells, fractions_of_community_genes)
+        assert expected_data_of_community.shape == data_of_community.shape
+
+        expected_data_of_community += 1
+        data_of_community += 1
+        data_of_community /= expected_data_of_community
+        np.log2(data_of_community, out=data_of_community)
+        data_of_community[data_of_community
+                          < minimal_gene_fold_factor] = 0
+
+        list_of_fold_factors.append(sparse.csr_matrix(data_of_community))
+
+    assert remaining_cells_count == 0
+    return list_of_fold_factors, list_of_cell_index_of_rows
+
+
+@ut.timed_call('.construct_fold_factors')
+def _construct_fold_factors(
+    cells_count: int,
+    list_of_fold_factors: List[ut.CompressedMatrix],
+    list_of_cell_index_of_rows: List[ut.DenseVector],
+) -> ut.CompressedMatrix:
+    cell_index_of_rows = np.concatenate(list_of_cell_index_of_rows)
+    cell_row_of_indices = np.empty_like(cell_index_of_rows)
+    cell_row_of_indices[cell_index_of_rows] = np.arange(cells_count)
+
+    fold_factors = \
+        sparse.vstack(list_of_fold_factors, format='csr')
+    fold_factors = fold_factors[cell_row_of_indices, :]
+    fold_factors = ut.to_layout(fold_factors, 'column_major')
+
+    return fold_factors
+
+
+@ut.timed_call('.filter_genes')
+def _filter_genes(
+    *,
+    cells_count: int,
+    genes_count: int,
+    fold_factors: ut.CompressedMatrix,
+    minimal_gene_fold_factor: float,
+    maximal_genes_fraction: Optional[float] = None,
+) -> ut.DenseVector:
+    ut.timed_parameters(cells=cells_count, genes=genes_count,
+                        fold_factors=fold_factors.nnz)
+    maximal_fold_factors_of_genes = \
+        ut.to_dense_vector(fold_factors.max(axis=0))
+    assert maximal_fold_factors_of_genes.size == genes_count
+
+    mask_of_outlier_genes = \
+        maximal_fold_factors_of_genes >= minimal_gene_fold_factor
+    outlier_genes_fraction = np.sum(mask_of_outlier_genes) / genes_count
+
+    LOG.debug('  outlier_genes_fraction: %s', outlier_genes_fraction)
+
+    if maximal_genes_fraction is not None \
+            and outlier_genes_fraction > maximal_genes_fraction:
+        quantile_gene_fold_factor = \
+            np.quantile(maximal_fold_factors_of_genes,
+                        1 - maximal_genes_fraction)
+        assert quantile_gene_fold_factor is not None
+
+        LOG.debug('  maximal_genes_fraction: %s',
+                  maximal_genes_fraction)
+        LOG.debug('  quantile_gene_fold_factor: %s',
+                  quantile_gene_fold_factor)
+
+        if quantile_gene_fold_factor > minimal_gene_fold_factor:
+            minimal_gene_fold_factor = quantile_gene_fold_factor
+            mask_of_outlier_genes = \
+                maximal_fold_factors_of_genes >= minimal_gene_fold_factor
+
+            fold_factors[fold_factors  # type: ignore
+                         < minimal_gene_fold_factor] = 0
+            with ut.timed_step('eliminate_zeros'):
+                ut.timed_parameters(before=fold_factors.nnz)
+                fold_factors.eliminate_zeros()
+                ut.timed_parameters(after=fold_factors.nnz)
+
+    outlier_gene_indices = np.where(mask_of_outlier_genes)[0]
+    LOG.debug('  outlier_genes_fraction: %s',
+              outlier_gene_indices.size / genes_count)
+
+    return outlier_gene_indices
+
+
+@ut.timed_call('.fold_ranks')
+def _fold_ranks(
+    *,
+    cells_count: int,
+    fold_factors: ut.CompressedMatrix,
+    outlier_gene_indices: ut.DenseVector,
+) -> ut.DenseMatrix:
+    assert fold_factors.getformat() == 'csc'
+
+    outlier_genes_count = outlier_gene_indices.size
+
+    ut.timed_parameters(cells=cells_count, outlier_genes=outlier_genes_count)
+
+    outlier_genes_fold_ranks = \
+        np.full((cells_count, outlier_genes_count), cells_count, order='F')
+    assert ut.matrix_layout(outlier_genes_fold_ranks) == 'column_major'
+
+    for outlier_gene_index, gene_index in enumerate(outlier_gene_indices):
+        gene_start_offset = fold_factors.indptr[gene_index]
+        gene_stop_offset = fold_factors.indptr[gene_index + 1]
+
+        gene_fold_factors = fold_factors.data[gene_start_offset:gene_stop_offset]
+        gene_suspect_cell_indices = fold_factors.indices[gene_start_offset:gene_stop_offset]
+
+        gene_fold_ranks = \
+            stats.rankdata(gene_fold_factors, method='min')
+        gene_fold_ranks *= -1
+        gene_fold_ranks += gene_fold_ranks.size + 1
+
+        outlier_genes_fold_ranks[gene_suspect_cell_indices,
+                                 outlier_gene_index] = gene_fold_ranks
+
+    return outlier_genes_fold_ranks
+
+
+@ut.timed_call('.filter_cells')
+def _filter_cells(
+    *,
+    cells_count: int,
+    outlier_genes_fold_ranks: ut.DenseMatrix,
+    maximal_cells_fraction: Optional[float],
+) -> ut.DenseVector:
+    minimal_fold_ranks_of_cells = np.min(outlier_genes_fold_ranks, axis=1)
+    assert minimal_fold_ranks_of_cells.size == cells_count
+
+    mask_of_outlier_cells = minimal_fold_ranks_of_cells < cells_count
+    outliers_cells_count = sum(mask_of_outlier_cells)
+    outlier_cells_fraction = outliers_cells_count / cells_count
+
+    LOG.debug('  outlier_cells_fraction: %s', outlier_cells_fraction)
+
+    if maximal_cells_fraction is not None \
+            and outlier_cells_fraction > maximal_cells_fraction:
+        LOG.debug('  maximal_cells_fraction: %s',
+                  maximal_cells_fraction)
+        quantile_cells_fold_rank = \
+            np.quantile(minimal_fold_ranks_of_cells,
+                        maximal_cells_fraction)
+        assert quantile_cells_fold_rank is not None
+
+        LOG.debug('  quantile_cells_fold_rank: %s',
+                  quantile_cells_fold_rank)
+
+        if quantile_cells_fold_rank < cells_count:
+            mask_of_outlier_cells = minimal_fold_ranks_of_cells < quantile_cells_fold_rank
+
+        if LOG.isEnabledFor(logging.DEBUG):
+            LOG.debug('  maximal_cells_fraction: %s',
+                      np.sum(mask_of_outlier_cells) / cells_count)
+
+    return mask_of_outlier_cells

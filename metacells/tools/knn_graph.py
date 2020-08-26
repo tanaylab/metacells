@@ -200,7 +200,7 @@ def compute_var_var_knn_graph(
                                        inplace=inplace, intermediate=intermediate)
 
 
-def _compute_elements_knn_graph(  # pylint: disable=too-many-locals
+def _compute_elements_knn_graph(
     adata: AnnData,
     elements: str,
     of: Optional[str] = None,
@@ -223,10 +223,10 @@ def _compute_elements_knn_graph(  # pylint: disable=too-many-locals
         of = elements + '_similarity'
 
     if elements == 'obs':
-        annotations = adata.obsp
+        set_data = ut.set_oo_data
         slicing_mask = ut.SAFE_WHEN_SLICING_OBS
     else:
-        annotations = adata.varp
+        set_data = ut.set_vv_data
         slicing_mask = ut.SAFE_WHEN_SLICING_VAR
 
     def store_matrix(matrix: ut.CompressedMatrix, name: str, when: bool) -> None:
@@ -234,8 +234,7 @@ def _compute_elements_knn_graph(  # pylint: disable=too-many-locals
                   name, matrix.nnz, matrix.shape[0] * matrix.shape[1])
         if when:
             name = elements + '_' + name
-            annotations[name] = matrix
-            ut.safe_slicing_data(name, slicing_mask)
+            set_data(adata, name, matrix, slicing_mask)
 
     similarity = ut.get_proper_matrix(adata, of)
     similarity = ut.to_layout(similarity, 'row_major', symmetric=True)
@@ -273,7 +272,7 @@ def _compute_elements_knn_graph(  # pylint: disable=too-many-locals
     return pd.DataFrame(ut.to_dense_matrix(outgoing_weights), index=names, columns=names)
 
 
-def _rank_outgoing(  # pylint: disable=too-many-locals,too-many-statements
+def _rank_outgoing(
     similarity: ut.DenseMatrix,
     k: int,
     balanced_ranks_factor: float
@@ -350,7 +349,7 @@ def _balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     return balanced_ranks
 
 
-def _prune_ranks(  # pylint: disable=too-many-locals,too-many-statements
+def _prune_ranks(
     balanced_ranks: ut.CompressedMatrix,
     k: int,
     incoming_degree_factor: float,

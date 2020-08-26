@@ -166,11 +166,11 @@ def _compute_elements_similarity(
     if inplace:
         to = elements + '_similarity'
         if elements == 'obs':
-            adata.obsp[to] = similarity.matrix
-            ut.safe_slicing_data(to, ut.SAFE_WHEN_SLICING_OBS)
+            ut.set_oo_data(adata, to,
+                           similarity.matrix, ut.SAFE_WHEN_SLICING_OBS)
         else:
-            adata.varp[to] = similarity.matrix
-            ut.safe_slicing_data(to, ut.SAFE_WHEN_SLICING_VAR)
+            ut.set_vv_data(adata, to,
+                           similarity.matrix, ut.SAFE_WHEN_SLICING_VAR)
         return None
 
     if elements == 'obs':

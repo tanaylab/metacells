@@ -21,7 +21,7 @@ LOG = logging.getLogger(__name__)
 
 @ut.timed_call()
 @ut.expand_doc()
-def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
+def find_noisy_lonely_genes(
     adata: AnnData,
     of: Optional[str] = None,
     *,
@@ -124,8 +124,8 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-locals
         LOG.info('find_noisy_lonely_genes: %s', np.sum(lonely_mask))
 
     if inplace:
-        adata.var['noisy_lonely_genes'] = noisy_lonely_mask
-        ut.safe_slicing_data('noisy_lonely_genes', ut.SAFE_WHEN_SLICING_VAR)
+        ut.set_v_data(adata, 'noisy_lonely_genes',
+                      noisy_lonely_mask, ut.SAFE_WHEN_SLICING_VAR)
         return None
 
     return pd.Series(noisy_lonely_mask, index=adata.var_names)
