@@ -6,7 +6,6 @@ similar level of expression).
 import logging
 from typing import Optional
 
-import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from anndata import AnnData
 
@@ -42,8 +41,8 @@ def find_high_normalized_variance_genes(
 
     **Input**
 
-    A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes.
+    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
+    are cells and the variables are genes.
 
     **Returns**
 
@@ -66,21 +65,20 @@ def find_high_normalized_variance_genes(
     2. Select the genes whose normalized variance is at least
        ``minimal_normalized_variance_of_genes`` (default: {minimal_normalized_variance_of_genes}).
     '''
-    LOG.debug('find_high_normalized_variance_genes...')
+    of, level = \
+        ut.log_operation(LOG, adata, 'find_high_normalized_variance_genes', of)
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        LOG.debug('  of: %s', ut.get_focus_name(adata))
         normalized_variance_of_genes = \
             ut.get_normalized_variance_per_var(adata).proper
         genes_mask = \
             normalized_variance_of_genes >= minimal_normalized_variance_of_genes
 
-    LOG.info('find_high_normalized_variance_genes: %s / %s',
-             np.sum(genes_mask), genes_mask.size)
-
     if inplace:
         ut.set_v_data(adata, 'high_normalized_variance_genes',
                       genes_mask, ut.NEVER_SAFE)
         return None
+
+    ut.log_mask(LOG, level, 'high_normalized_variance_genes', genes_mask)
 
     return pd.Series(genes_mask, index=adata.var_names)

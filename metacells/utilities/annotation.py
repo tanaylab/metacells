@@ -57,9 +57,8 @@ are three sources of (implementation) code complexity here:
     layers are secondary at best.
 
     The managed ``AnnData`` therefore keeps a second special metadata property ``__x__`` which must
-    be initialized using :py:func:`metacells.utilities.preparation.prepare`, and pretends that the
-    value of ``X`` is just another layer. This gives rise to some edge cases (e.g., one can't delete
-    the ``X`` layer).
+    :py:func:`metacells.utilities.annotation.setup`, and pretends that the value of ``X`` is just
+    another layer. This gives rise to some edge cases (e.g., one can't delete the ``X`` layer).
 
 2.  Layout-optimized data.
 
@@ -102,6 +101,7 @@ The managed ``AnnData`` provides standard functions that compute and cache new d
 data, using arbitrary compute functions (e.g., :py:func:`get_data`, :py:func:`get_vo_data`). See the
 :py:mod:`metacells.utilities.preparation` module for these functions.
 
+
 Data Names
 ----------
 
@@ -123,16 +123,20 @@ from warnings import warn
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
-import scipy.sparse as sparse  # type: ignore
 from anndata import AnnData
 from readerwriterlock import rwlock
 
 import metacells.utilities.computation as utc
 import metacells.utilities.documentation as utd
+import metacells.utilities.logging as utl
 import metacells.utilities.timing as utm
 import metacells.utilities.typing as utt
 
 __all__ = [
+    'setup',
+
+    'slice',
+
     'SlicingMask',
     'ALWAYS_SAFE',
     'NEVER_SAFE',
@@ -140,8 +144,6 @@ __all__ = [
     'SAFE_WHEN_SLICING_VAR',
     'safe_slicing_data',
     'safe_slicing_derived',
-
-    'slice',
 
     'get_data',
     'get_proper',
@@ -160,6 +162,7 @@ __all__ = [
     'del_vo_data',
     'focus_on',
     'intermediate_step',
+    'get_name',
     'get_focus_name',
     'get_x_name',
 
@@ -177,6 +180,61 @@ LOCK = rwlock.RWLockRead()
 
 
 Annotations = Union[MutableMapping[Any, Any], pd.DataFrame]
+
+
+def setup(
+    adata: AnnData,
+    *,
+    x_name: str,
+    name: Optional[str] = None,
+    tmp: bool = False
+) -> None:
+    '''
+    Set up the annotated ``adata`` for use by the ``metacells`` package.
+
+    This needs the ``x_name`` of the data contained in ``adata.X``, which also becomes the focus
+    data.
+
+    The optional ``name``, if specified, is attached to log messages about setting annotation data.
+
+    If ``tmp`` is set, logging of modifications to the result will use the ``DEBUG`` logging level.
+    By default, logging of modifications is done using the ``INFO`` logging level.
+
+    This should be called after populating the ``X`` data for the first time (e.g., by importing the
+    data). All the rest of the code in the package assumes this was done.
+
+    .. note::
+
+        This assumes it is safe to arbitrarily slice all the currently existing data.
+
+    .. note::
+
+        When using the layer utilities, do not directly read or write the value of ``X``. Instead
+        use :py:func:`metacells.utilities.annotation.get_vo_data`.
+    '''
+    X = adata.X
+    assert X is not None
+    assert utt.Shaped.be(X).ndim == 2
+    assert '__x__' not in adata.uns_keys()
+
+    safe_slicing_data(x_name, ALWAYS_SAFE)
+    if tmp:
+        adata.uns['__tmp__'] = True
+    if name is not None:
+        adata.uns['__name__'] = name
+        LOG.log(utl.log_level(adata), 'created %s shape %s', name, adata.shape)
+    adata.uns['__x__'] = x_name
+    adata.uns['__focus__'] = x_name
+    _log_set_data(adata, 'm', '__focus__', x_name, force=True)
+
+    for annotations in (adata.layers,
+                        adata.obs,
+                        adata.var,
+                        adata.obsp,
+                        adata.varp,
+                        adata.uns):
+        for data_name, _ in _items(annotations):
+            safe_slicing_data(data_name, ALWAYS_SAFE)
 
 
 class SlicingMask(NamedTuple):
@@ -215,8 +273,6 @@ SAFE_WHEN_SLICING_OBS = SlicingMask(per_obs=True, per_var=False)
 
 SAFE_SLICING: Dict[str, SlicingMask] = {}
 
-DIMENSIONAL_DATA_TYPES = (np.ndarray, sparse.spmatrix, pd.Series, pd.DataFrame)
-
 
 def safe_slicing_data(name: str, slicing_mask: SlicingMask) -> None:
     '''
@@ -233,6 +289,8 @@ def safe_slicing_data(name: str, slicing_mask: SlicingMask) -> None:
 def _known_safe_slicing() -> None:
     safe_slicing_data('__x__', ALWAYS_SAFE)
     safe_slicing_data('__focus__', ALWAYS_SAFE)
+    safe_slicing_data('__tmp__', NEVER_SAFE)
+    safe_slicing_data('__name__', NEVER_SAFE)
 
 
 _known_safe_slicing()
@@ -267,6 +325,8 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     *,
     obs: Optional[Union[Sized, utt.Vector]] = None,
     vars: Optional[Union[Sized, utt.Vector]] = None,
+    name: Optional[str] = None,
+    tmp: bool = False,
     invalidated_prefix: Optional[str] = None,
 ) -> AnnData:
     '''
@@ -283,6 +343,12 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
 
     If ``invalidated_prefix`` is specified, then invalidated data will not be removed; instead it
     will be renamed with the addition of the provided prefix.
+
+    If ``name`` is specified, this will be the logging name of the new data. Otherwise, it will be
+    unnamed.
+
+    If ``tmp`` is set, logging of modifications to the result will use the ``DEBUG`` logging level.
+    By default, logging of modifications is done using the ``INFO`` logging level.
 
     .. note::
 
@@ -352,11 +418,19 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     assert x_name not in adata.layers
     assert has_data(adata, focus)
 
+    if tmp:
+        bdata.uns['__tmp__'] = True
+    if name is not None:
+        bdata.uns['__name__'] = name
+        LOG.log(utl.log_level(bdata), 'sliced %s shape %s', name, bdata.shape)
+
     assert get_x_name(bdata) == x_name
     if focus == x_name or focus in bdata.layers:
         assert get_focus_name(bdata) == focus
     else:
         focus = bdata.uns['__focus__'] = x_name
+    _log_set_data(bdata, 'm', '__focus__', focus, force=True)
+
     assert x_name not in bdata.layers
     assert has_data(bdata, focus)
 
@@ -782,6 +856,7 @@ def get_m_data(
     assert data is not None
 
     if inplace:
+        _log_set_data(adata, 'm', name, data)
         adata.uns[name] = data
 
     return data
@@ -960,6 +1035,7 @@ def get_vo_data(
                             inplace=inplace or infocus, layout=layout)
 
     if infocus:
+        _log_set_data(adata, 'm', '__focus__', name)
         adata.uns['__focus__'] = name
 
     return data
@@ -1001,6 +1077,7 @@ def _get_layout_data(
     data = utc.to_layout(data, layout=layout)
     if inplace:
         utt.freeze(data)
+        _log_set_data(adata, 'vo', name, layout)
         annotations[layout_name] = data
 
     return data
@@ -1035,6 +1112,7 @@ def _get_shaped_data(
 
     if inplace:
         utt.freeze(data)
+        _log_set_data(adata, per, name, data)
         annotations[name] = data
 
     return data
@@ -1074,6 +1152,7 @@ def del_vo_data(
     assert name != x_name
 
     if name == get_focus_name(adata):
+        _log_set_data(adata, 'm', '__focus__', x_name)
         adata.uns['__focus__'] = x_name
 
     if layout is not None:
@@ -1165,6 +1244,8 @@ def intermediate_step(
         to whatever is in ``X``.
     '''
     if not intermediate:
+        old_tmp = '__tmp__' in adata.uns
+        adata.uns['__tmp__'] = True
         old_data = _all_data(adata)
 
     old_focus = get_focus_name(adata)
@@ -1174,6 +1255,8 @@ def intermediate_step(
 
     finally:
         if not intermediate:
+            if not old_tmp:
+                del adata.uns['__tmp__']
             new_data = _all_data(adata)
             for name in new_data:
                 if name in old_data:
@@ -1188,7 +1271,9 @@ def intermediate_step(
         if has_data(adata, old_focus):
             adata.uns['__focus__'] = old_focus
         else:
-            adata.uns['__focus__'] = get_x_name(adata)
+            x_name = get_x_name(adata)
+            _log_set_data(adata, 'm', '__focus__', x_name)
+            adata.uns['__focus__'] = x_name
 
 
 def _all_data(adata: AnnData) -> Set[str]:
@@ -1200,6 +1285,15 @@ def _all_data(adata: AnnData) -> Set[str]:
             names.add(name)
 
     return names
+
+
+def get_name(adata: AnnData, default: Optional[str] = None) -> Optional[str]:
+    '''
+    Return the name of the data (for log messages), if any.
+
+    If no name was set, returns the ``default``.
+    '''
+    return adata.uns.get('__name__', default)
 
 
 def get_focus_name(adata: AnnData) -> str:
@@ -1222,12 +1316,16 @@ def set_m_data(
     name: str,
     data: Any,
     slicing_mask: Optional[SlicingMask] = None,
+    log_value: Optional[Callable[[], str]] = None,
 ) -> Any:
     '''
     Set unstructured meta-data.
 
     Optionally specify the ``slicing_mask`` for this data.
+
+    If ``log_value`` is specified, its results is used when logging the operation.
     '''
+    _log_set_data(adata, 'm', name, data, log_value=log_value)
     adata.uns[name] = data
     if slicing_mask is not None:
         safe_slicing_data(name, slicing_mask)
@@ -1239,12 +1337,16 @@ def set_o_data(
     name: str,
     data: utt.Vector,
     slicing_mask: Optional[SlicingMask] = None,
+    log_value: Optional[Callable[[], str]] = None,
 ) -> Any:
     '''
     Set per-observation (cell) meta-data.
 
     Optionally specify the ``slicing_mask`` for this data.
+
+    If ``log_value`` is specified, its results is used when logging the operation.
     '''
+    _log_set_data(adata, 'o', name, data, log_value=log_value)
     adata.obs[name] = data
     if slicing_mask is not None:
         safe_slicing_data(name, slicing_mask)
@@ -1256,12 +1358,16 @@ def set_v_data(
     name: str,
     data: utt.Vector,
     slicing_mask: Optional[SlicingMask] = None,
+    log_value: Optional[Callable[[], str]] = None
 ) -> Any:
     '''
     Set per-variable (gene) meta-data.
 
     Optionally specify the ``slicing_mask`` for this data.
+
+    If ``log_value`` is specified, its results is used when logging the operation.
     '''
+    _log_set_data(adata, 'v', name, data, log_value=log_value)
     adata.var[name] = data
     if slicing_mask is not None:
         safe_slicing_data(name, slicing_mask)
@@ -1273,12 +1379,16 @@ def set_oo_data(
     name: str,
     data: utt.Matrix,
     slicing_mask: Optional[SlicingMask] = None,
+    log_value: Optional[Callable[[], str]] = None
 ) -> Any:
     '''
     Set per-observation-per-observation (cell) meta-data.
 
     Optionally specify the ``slicing_mask`` for this data.
+
+    If ``log_value`` is specified, its results is used when logging the operation.
     '''
+    _log_set_data(adata, 'oo', name, data, log_value=log_value)
     adata.obsp[name] = data
     if slicing_mask is not None:
         safe_slicing_data(name, slicing_mask)
@@ -1290,12 +1400,16 @@ def set_vv_data(
     name: str,
     data: utt.Matrix,
     slicing_mask: Optional[SlicingMask] = None,
+    log_value: Optional[Callable[[], str]] = None
 ) -> Any:
     '''
     Set per-variable-per-variable (gene) meta-data.
 
     Optionally specify the ``slicing_mask`` for this data.
+
+    If ``log_value`` is specified, its results is used when logging the operation.
     '''
+    _log_set_data(adata, 'vv', name, data, log_value=log_value)
     adata.varp[name] = data
     if slicing_mask is not None:
         safe_slicing_data(name, slicing_mask)
@@ -1307,6 +1421,7 @@ def set_vo_data(
     name: str,
     data: utt.Matrix,
     slicing_mask: Optional[SlicingMask] = None,
+    log_value: Optional[Callable[[], str]] = None
 ) -> Any:
     '''
     Set per-variable-per-observation (per-gene-per-cell) meta-data.
@@ -1315,8 +1430,102 @@ def set_vo_data(
     '''
     if name == get_x_name(adata):
         adata.X = data
+        _log_set_data(adata, 'x', name, data, log_value=log_value)
     else:
+        _log_set_data(adata, 'vo', name, data, log_value=log_value)
         adata.layers[name] = data
 
     if slicing_mask is not None:
         safe_slicing_data(name, slicing_mask)
+
+
+MEMBER_OF_PER = \
+    dict(m='uns', o='obs', v='var', oo='obsp', vv='varp', vo='layers', x='X')
+
+
+def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branches,too-many-statements
+    adata: AnnData,
+    per: str,
+    name: str,
+    value: Any = None,
+    force: bool = False,
+    log_value: Optional[Callable[[], str]] = None,
+) -> None:
+    if '|' in name:
+        level = logging.DEBUG
+    else:
+        level = utl.log_level(adata)
+
+    if not LOG.isEnabledFor(level):
+        return
+
+    texts: List[str] = []
+
+    try:
+        data_name = get_name(adata)
+
+        if name == '__focus__':
+            if not force and value == adata.uns['__focus__']:
+                return
+            texts.append('focusing ')
+            if data_name is not None:
+                texts.append(data_name)
+            texts.append(' on ')
+            assert isinstance(value, str)
+            texts.append(value)
+            return
+
+        texts.append('  setting ')
+        if data_name is not None:
+            texts.append(data_name)
+            texts.append('.')
+        texts.append(MEMBER_OF_PER[per])
+        texts.append('.')
+        texts.append(name)
+
+        if log_value is not None:
+            value = log_value()
+
+        if value is None:
+            return
+
+        if per == 'vo' and isinstance(value, str):
+            level = logging.DEBUG
+            texts[0] = '  caching '
+            texts.append(' ')
+            texts.append(value)
+            texts.append(' layout')
+            return
+
+        if len(per) > 1:
+            return
+
+        if isinstance(value, str):
+            texts.append(' to ')
+            texts.append(value)
+            return
+
+        if isinstance(value, (pd.Series, np.ndarray)) and value.dtype == 'bool':
+            texts.append(' to a ')
+            texts.append(utl.mask_description(value))
+            return
+
+        if per == 'm':
+            try:
+                if value.ndim == 2:
+                    texts.append(' to a matrix of type ')
+                    texts.append(str(value.dtype))
+                    texts.append(' shape ')
+                    texts.append(str(value.shape))
+                elif value.ndim == 1:
+                    texts.append(' to a vector of type ')
+                    texts.append(str(value.dtype))
+                    texts.append(' size ')
+                    texts.append(str(value.size))
+            except:  # pylint: disable=bare-except
+                pass
+
+    finally:
+        text = ''.join(texts)
+        if text != '':
+            LOG.log(level, text)

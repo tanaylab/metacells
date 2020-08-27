@@ -149,7 +149,7 @@ def test_downsample_matrix() -> None:
                            dtype='int32', random_state=123456, data_rvs=rvs)
     assert matrix.nnz == matrix.shape[0] * matrix.shape[1] * 0.01
     old_row_sums = ut.sum_per(matrix, per='row')
-    min_sum = old_row_sums.min()
+    min_sum = np.min(old_row_sums)
     result = ut.downsample_matrix(matrix, per='row', samples=int(min_sum))
     assert result.shape == matrix.shape
     new_row_sums = ut.sum_per(result, per='row')
@@ -228,7 +228,7 @@ def test_freeze_sparse() -> None:
 def test_mean() -> None:
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
-    ut.prepare(adata, 'test')
+    ut.setup(adata, x_name='test')
 
     metacells_mean_per_row = ut.get_mean_per_obs(adata).proper
     numpy_mean_per_row = matrix.mean(axis=1)
@@ -242,7 +242,7 @@ def test_mean() -> None:
 def test_variance() -> None:
     matrix = np.random.rand(100, 200)
     adata = AnnData(matrix)
-    ut.prepare(adata, 'test')
+    ut.setup(adata, x_name='test')
 
     metacells_variance_per_row = ut.get_variance_per_obs(adata).proper
     numpy_variance_per_row = matrix.var(axis=1)
@@ -260,7 +260,7 @@ def test_focus_on() -> None:
                            dtype='int32', random_state=123456, data_rvs=rvs)
     adata = AnnData(matrix)
 
-    ut.prepare(adata, 'test')
+    ut.setup(adata, x_name='test')
     assert ut.get_focus_name(adata) == 'test'
 
     with ut.focus_on(ut.get_log, adata, normalization=1) as log_data:
@@ -316,7 +316,7 @@ def test_sparse_annotations() -> None:
 
 def _test_annotations(full_matrix: ut.Matrix) -> None:
     adata = AnnData(full_matrix)
-    ut.prepare(adata, 'test')
+    ut.setup(adata, x_name='test')
 
     assert np.allclose(ut.get_per_obs(adata, ut.nnz_per).proper,
                        np.array([2, 3]))

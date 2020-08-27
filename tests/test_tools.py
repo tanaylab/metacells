@@ -29,7 +29,7 @@ def _load(path: str) -> Tuple[AnnData, Dict[str, Any]]:
         adata = sc.read(path)
 
     mc.ut.canonize(adata.X)
-    mc.ut.prepare(adata, 'UMIs')
+    mc.ut.setup(adata, x_name='UMIs')
 
     LOADED[path] = (adata, expected)
     return adata, expected

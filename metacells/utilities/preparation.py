@@ -15,10 +15,8 @@ import metacells.utilities.computation as utc
 import metacells.utilities.documentation as utd
 import metacells.utilities.timing as utm
 import metacells.utilities.typing as utt
-from metacells.utilities.annotation import _items
 
 __all__ = [
-    'prepare',
     'track_base_indices',
 
     'NamedShaped',
@@ -58,44 +56,6 @@ __all__ = [
     'get_obs_obs_correlation',
     'get_var_var_correlation',
 ]
-
-
-def prepare(adata: AnnData, name: str) -> None:
-    '''
-    Prepare the annotated ``adata`` for use by the ``metacells`` package.
-
-    This needs the ``name`` of the data contained in ``adata.X``, which also becomes
-    the focus data.
-
-    This should be called after populating the ``X`` data for the first time (e.g., by importing the
-    data). All the rest of the code in the package assumes this was done.
-
-    .. note::
-
-        This assumes it is safe to arbitrarily slice all the currently existing data.
-
-    .. note::
-
-        When using the layer utilities, do not directly read or write the value of ``X``. Instead
-        use :py:func:`metacells.utilities.annotation.get_vo_data`.
-    '''
-    X = adata.X
-    assert X is not None
-    assert utt.Shaped.be(X).ndim == 2
-    assert '__x__' not in adata.uns_keys()
-
-    uta.safe_slicing_data(name, uta.ALWAYS_SAFE)
-    adata.uns['__x__'] = name
-    adata.uns['__focus__'] = name
-
-    for annotations in (adata.layers,
-                        adata.obs,
-                        adata.var,
-                        adata.obsp,
-                        adata.varp,
-                        adata.uns):
-        for data_name, _ in _items(annotations):
-            uta.safe_slicing_data(data_name, uta.ALWAYS_SAFE)
 
 
 @utd.expand_doc()
@@ -495,7 +455,7 @@ try:
     from mypy_extensions import NamedArg
 
     #: A function that reduces an axis of a matrix to a single value.
-    Reducer = Callable[[utt.Matrix, NamedArg(str, 'per')], utt.Matrix]
+    Reducer = Callable[[utt.Matrix, NamedArg(str, 'per')], utt.Vector]
 except ModuleNotFoundError:
     __all__.remove('Reducer')
 

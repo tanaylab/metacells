@@ -2,7 +2,6 @@
 Graph partition methods for computing metacells.
 '''
 
-import logging
 from typing import Callable, Optional, Tuple
 
 import igraph as ig  # type: ignore
@@ -19,8 +18,6 @@ __all__ = [
     'leiden_bounded_surprise',
 ]
 
-
-LOG = logging.getLogger(__name__)
 
 try:
     from mypy_extensions import DefaultNamedArg, NamedArg

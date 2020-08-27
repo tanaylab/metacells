@@ -499,7 +499,7 @@ def downsample_vector(
     vector: utt.Vector,
     samples: int,
     *,
-    output: Optional[np.ndarray] = None,
+    output: Optional[utt.DenseVector] = None,
     random_seed: int = 0
 ) -> None:
     '''
@@ -555,7 +555,7 @@ def downsample_vector(
 
 
 @ utm.timed_call()
-def max_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
+def max_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     '''
     Compute the maximal value ``per`` (``row`` or ``column``) of some ``matrix``.
     '''
@@ -570,7 +570,7 @@ def max_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
 
 
 @ utm.timed_call()
-def min_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
+def min_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     '''
     Compute the minimal value ``per`` (``row`` or ``column``) of some ``matrix``.
     '''
@@ -585,7 +585,7 @@ def min_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
 
 
 @ utm.timed_call()
-def nnz_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
+def nnz_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     '''
     Compute the number of non-zero values ``per`` (``row`` or ``column``) of some ``matrix``.
     '''
@@ -600,7 +600,7 @@ def nnz_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
 
 
 @ utm.timed_call()
-def sum_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
+def sum_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     '''
     Compute the total of the values ``per`` (``row`` or ``column``) of some ``matrix``.
     '''
@@ -615,7 +615,7 @@ def sum_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
 
 
 @ utm.timed_call()
-def sum_squared_per(matrix: utt.Matrix, *, per: str) -> np.ndarray:
+def sum_squared_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     '''
     Compute the total of the squared values ``per`` (``row`` or ``column``) of some ``matrix``.
 
@@ -700,7 +700,7 @@ def bincount_vector(
     vector: utt.Vector,
     *,
     minlength: int = 0,
-) -> np.ndarray:
+) -> utt.DenseVector:
     '''
     Drop-in replacement for ``np.bincount``, which is timed and also works on pandas data.
 
@@ -731,7 +731,7 @@ def sliding_window_function(
     *,
     function: str,
     window_size: int,
-    order_by: Optional[np.ndarray] = None,
+    order_by: Optional[utt.DenseVector] = None,
 ) -> utt.DenseVector:
     """
     Return an array of the same size as the input ``array``, where each entry is the result of

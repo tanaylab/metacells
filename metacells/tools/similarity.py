@@ -35,8 +35,8 @@ def compute_obs_obs_similarity(
 
     **Input**
 
-    A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes.
+    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
+    are cells and the variables are genes.
 
     **Returns**
 
@@ -79,8 +79,8 @@ def compute_var_var_similarity(
 
     **Input**
 
-    A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes.
+    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
+    are cells and the variables are genes.
 
     **Returns**
 
@@ -118,13 +118,12 @@ def _compute_elements_similarity(
 ) -> Optional[ut.PandasFrame]:
     assert elements in ('obs', 'var')
 
-    LOG.debug('compute_%s_%s_similarity...', elements, elements)
-
-    of = of or ut.get_focus_name(adata)
-    LOG.debug('  of: %s', of)
+    of, level = \
+        ut.log_operation(LOG, adata,
+                         'compute_%s_%s_similarity' % (elements, elements),
+                         of, elements + '_similarity')
 
     with ut.intermediate_step(adata, intermediate=intermediate):
-        LOG.debug('  repeated: %s', repeated)
         if elements == 'obs':
             similarity = ut.get_obs_obs_correlation(adata, of,
                                                     inplace=inplace or repeated)
@@ -139,7 +138,7 @@ def _compute_elements_similarity(
                 similarity = ut.get_var_var_correlation(adata, similarity.name,
                                                         inplace=inplace)
 
-    LOG.info('compute_%s_%s_similarity', elements, elements)
+    LOG.log(level, '  repeated: %s', repeated)
 
     if inplace:
         to = elements + '_similarity'

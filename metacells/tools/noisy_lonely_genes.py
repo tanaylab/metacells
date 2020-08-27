@@ -57,8 +57,8 @@ def find_noisy_lonely_genes(
 
     **Input**
 
-    A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes.
+    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
+    are cells and the variables are genes.
 
     **Returns**
 
@@ -90,18 +90,19 @@ def find_noisy_lonely_genes(
         Should we correlate the normalized (fraction) and/or log of the data for
         :py:func:`find_noisy_lonely_genes`?
     '''
-    LOG.debug('find_noisy_lonely_genes...')
+    of, level = ut.log_operation(LOG, adata, 'find_noisy_lonely_genes', of)
+
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        LOG.debug('  of: %s', ut.get_focus_name(adata))
         fraction_of_genes = ut.get_fraction_per_var(adata).proper
         relative_variance_of_genes = \
             ut.get_relative_variance_per_var(adata).proper
 
-        LOG.debug('  minimal_fraction_of_genes: %s', minimal_fraction_of_genes)
-        LOG.debug('  minimal_relative_variance_of_genes: %s',
-                  minimal_relative_variance_of_genes)
-        LOG.debug('  maximal_correlation_of_genes: %s',
-                  maximal_correlation_of_genes)
+        LOG.log(level, '  minimal_fraction_of_genes: %s',
+                ut.fraction_description(minimal_fraction_of_genes))
+        LOG.log(level, '  minimal_relative_variance_of_genes: %s',
+                minimal_relative_variance_of_genes)
+        LOG.log(level, '  maximal_correlation_of_genes: %s',
+                maximal_correlation_of_genes)
 
         fraction_mask = fraction_of_genes >= minimal_fraction_of_genes
         variance_mask = relative_variance_of_genes >= minimal_relative_variance_of_genes
@@ -121,12 +122,11 @@ def find_noisy_lonely_genes(
         noisy_lonely_mask = noisy_mask
         noisy_lonely_mask[noisy_mask] = lonely_mask
 
-    if LOG.isEnabledFor(logging.INFO):
-        LOG.info('find_noisy_lonely_genes: %s', np.sum(lonely_mask))
-
     if inplace:
         ut.set_v_data(adata, 'noisy_lonely_genes',
                       noisy_lonely_mask, ut.SAFE_WHEN_SLICING_VAR)
         return None
+
+    ut.log_mask(LOG, level, 'noisy_lonely_genes', lonely_mask)
 
     return pd.Series(noisy_lonely_mask, index=adata.var_names)

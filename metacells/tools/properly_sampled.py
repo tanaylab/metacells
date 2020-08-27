@@ -41,8 +41,8 @@ def find_properly_sampled_cells(
 
     **Input**
 
-    A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes.
+    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
+    are cells and the variables are genes.
 
     **Returns**
 
@@ -64,33 +64,30 @@ def find_properly_sampled_cells(
     2. Exclude all cells whose total data is more than the ``maximal_total_of_cells`` (default:
        {maximal_total_of_cells}), unless it is ``None``
     '''
-    LOG.debug('find_properly_sampled_cells...')
+    of, level = ut.log_operation(LOG, adata, 'find_properly_sampled_cells', of)
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        LOG.debug('  of: %s', ut.get_focus_name(adata))
         total_of_cells = ut.get_per_obs(adata, ut.sum_per).proper
         cells_mask = np.full(adata.n_obs, True, dtype='bool')
 
         if minimal_total_of_cells is not None:
-            LOG.debug('  minimal_total_of_cells: %s',
-                      minimal_total_of_cells)
+            LOG.log(level, '  minimal_total_of_cells: %s',
+                    minimal_total_of_cells)
             cells_mask = \
                 cells_mask & (total_of_cells >= minimal_total_of_cells)
 
         if maximal_total_of_cells is not None:
-            LOG.debug('  maximal_total_of_cells: %s',
-                      maximal_total_of_cells)
+            LOG.log(level, '  maximal_total_of_cells: %s',
+                    maximal_total_of_cells)
             cells_mask = \
                 cells_mask & (total_of_cells <= maximal_total_of_cells)
-
-    if LOG.isEnabledFor(logging.INFO):
-        LOG.info('find_properly_sampled_cells: %s / %s',
-                 np.sum(cells_mask), cells_mask.size)
 
     if inplace:
         ut.set_o_data(adata, 'properly_sampled_cells',
                       cells_mask, ut.SAFE_WHEN_SLICING_OBS)
         return None
+
+    ut.log_mask(LOG, level, 'properly_sampled_cells', cells_mask)
 
     return pd.Series(cells_mask, index=adata.obs_names)
 
@@ -120,8 +117,8 @@ def find_properly_sampled_genes(
 
     **Input**
 
-    A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes.
+    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
+    are cells and the variables are genes.
 
     **Returns**
 
@@ -140,22 +137,19 @@ def find_properly_sampled_genes(
     1. Exclude all genes whose total data is less than the ``minimal_total_of_genes`` (default:
        {minimal_total_of_genes}).
     '''
-    LOG.debug('find_properly_sampled_genes...')
+    of, level = ut.log_operation(LOG, adata, 'find_properly_sampled_genes', of)
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        LOG.debug('  of: %s', ut.get_focus_name(adata))
         total_of_genes = ut.get_per_var(adata, ut.sum_per).proper
-        LOG.debug('  minimal_total_of_genes: %s',
-                  minimal_total_of_genes)
+        LOG.log(level, '  minimal_total_of_genes: %s',
+                minimal_total_of_genes)
         genes_mask = total_of_genes >= minimal_total_of_genes
-
-    if LOG.isEnabledFor(logging.INFO):
-        LOG.info('find_properly_sampled_genes: %s / %s',
-                 np.sum(genes_mask), genes_mask.size)
 
     if inplace:
         ut.set_v_data(adata, 'properly_sampled_genes',
                       genes_mask, ut.SAFE_WHEN_SLICING_OBS)
         return None
+
+    ut.log_mask(LOG, level, 'properly_sampled_genes', genes_mask)
 
     return pd.Series(genes_mask, index=adata.obs_names)

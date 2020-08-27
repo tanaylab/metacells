@@ -45,8 +45,8 @@ def compute_candidate_metacells(
 
     **Input**
 
-    A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes.
+    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
+    are cells and the variables are genes.
 
     **Returns**
 
@@ -108,10 +108,8 @@ def compute_candidate_metacells(
         or eliminate the need for the split and merge steps. However, most partition algorithms do
         not naturally allow for this level of control over the resulting communities.
     '''
-    LOG.debug('compute_candidate_metacells...')
-
-    of = of or 'obs_outgoing_weights'
-    LOG.debug('  of: %s', of)
+    of, level = ut.log_operation(LOG, adata, 'compute_candidate_metacells',
+                                 of, 'obs_outgoing_weights')
 
     with ut.intermediate_step(adata, intermediate=intermediate):
         edge_weights = ut.get_oo_data(adata, of)
@@ -172,14 +170,15 @@ def compute_candidate_metacells(
 
         community_of_cells = ut.compress_indices(improver.membership)
 
-    if LOG.isEnabledFor(logging.INFO):
-        LOG.info('compute_candidate_metacells: %s',
-                 np.max(community_of_cells) + 1)
-
     if inplace:
         ut.set_o_data(adata, 'candidate_metacell',
-                      community_of_cells, ut.NEVER_SAFE)
+                      community_of_cells, ut.NEVER_SAFE,
+                      lambda: str(np.max(community_of_cells) + 1) + ' metacells')
         return None
+
+    if LOG.isEnabledFor(level):
+        LOG.log(level, '  candidate_metacells: %s',
+                np.max(community_of_cells) + 1)
 
     return pd.Series(community_of_cells, index=adata.obs_names)
 

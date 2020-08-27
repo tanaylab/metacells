@@ -44,8 +44,8 @@ def compute_obs_obs_knn_graph(
 
     **Input**
 
-    A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes.
+    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
+    are cells and the variables are genes.
 
     **Returns**
 
@@ -133,8 +133,8 @@ def compute_var_var_knn_graph(
 
     **Input**
 
-    A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes.
+    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
+    are cells and the variables are genes.
 
     **Returns**
 
@@ -217,10 +217,10 @@ def _compute_elements_knn_graph(
     assert incoming_degree_factor > 0.0
     assert outgoing_degree_factor > 0.0
 
-    LOG.debug('compute_%s_%s_knn_graph...', elements, elements)
-
-    of = of or elements + '_similarity'
-    LOG.debug('  of: %s', of)
+    of, level = \
+        ut.log_operation(LOG, adata,
+                         'compute_%s_%s_knn_graph' % (elements, elements),
+                         of, elements + '_similarity')
 
     if elements == 'obs':
         set_data = ut.set_oo_data
@@ -229,12 +229,18 @@ def _compute_elements_knn_graph(
         set_data = ut.set_vv_data
         slicing_mask = ut.SAFE_WHEN_SLICING_VAR
 
-    def store_matrix(matrix: ut.CompressedMatrix, name: str, when: bool) -> None:
-        LOG.debug('  %s: %s / %s',
-                  name, matrix.nnz, matrix.shape[0] * matrix.shape[1])
+    def store_matrix(matrix: ut.CompressedMatrix, name: str, when: bool,
+                     store_log_level: int = logging.DEBUG) -> None:
         if when:
             name = elements + '_' + name
-            set_data(adata, name, matrix, slicing_mask)
+            set_data(adata, name, matrix, slicing_mask,
+                     log_value=lambda:
+                     ut.ratio_description(matrix.nnz,
+                                          matrix.shape[0] * matrix.shape[1]))
+        else:
+            LOG.log(store_log_level, ' %s_%s: %s', elements, name,
+                    ut.ratio_description(matrix.nnz,
+                                         matrix.shape[0] * matrix.shape[1]))
 
     similarity = ut.get_proper_matrix(adata, of)
     similarity = ut.to_layout(similarity, 'row_major', symmetric=True)
@@ -252,11 +258,7 @@ def _compute_elements_knn_graph(
     store_matrix(pruned_ranks, 'pruned_ranks', intermediate)
 
     outgoing_weights = _weigh_edges(pruned_ranks)
-    store_matrix(outgoing_weights, 'outgoing_weights', inplace)
-
-    LOG.info('compute_%s_%s_knn_graph: %s / %s',
-             elements, elements, outgoing_weights.nnz,
-             outgoing_weights.shape[0] * outgoing_weights.shape[1])
+    store_matrix(outgoing_weights, 'outgoing_weights', inplace, level)
 
     if inplace:
         return None
@@ -268,7 +270,7 @@ def _compute_elements_knn_graph(
     return pd.DataFrame(ut.to_dense_matrix(outgoing_weights), index=names, columns=names)
 
 
-@ut.timed_call('.rank_outgoing')
+@ ut.timed_call('.rank_outgoing')
 def _rank_outgoing(
     similarity: ut.DenseMatrix,
     k: int,
@@ -295,10 +297,9 @@ def _rank_outgoing(
     preserved_ranks = np.full(2 * size, 1, dtype='float32')
     preserved_row_indices = np.concatenate([all_indices, max_index_of_each])
     preserved_column_indices = np.concatenate([max_index_of_each, all_indices])
-    preserved_matrix = \
-        sparse.coo_matrix((preserved_ranks,
-                           (preserved_row_indices, preserved_column_indices)),
-                          shape=similarity.shape)
+    preserved_matrix = sparse.coo_matrix((preserved_ranks,
+                                          (preserved_row_indices, preserved_column_indices)),
+                                         shape=similarity.shape)
     preserved_matrix.has_canonical_format = True
 
     indptr = np.arange(size + 1, dtype='int32')
@@ -328,7 +329,7 @@ def _rank_outgoing(
     return outgoing_ranks
 
 
-@ut.timed_call('.balance_ranks')
+@ ut.timed_call('.balance_ranks')
 def _balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     size = outgoing_ranks.shape[0]
 
@@ -347,7 +348,7 @@ def _balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     return balanced_ranks
 
 
-@ut.timed_call('.prune_ranks')
+@ ut.timed_call('.prune_ranks')
 def _prune_ranks(
     balanced_ranks: ut.CompressedMatrix,
     k: int,

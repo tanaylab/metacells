@@ -43,9 +43,7 @@ def find_named_genes(
 
     Otherwise, it returns it as a pandas series (indexed by the variable, that is gene, names).
     '''
-    LOG.debug('find_named_genes...')
-    if to is not None:
-        LOG.debug('  to: %s', to)
+    _, level = ut.log_operation(LOG, adata, 'find_named_genes')
 
     assert names is not None or patterns is not None
 
@@ -71,12 +69,10 @@ def find_named_genes(
     if invert:
         genes_mask = ~genes_mask
 
-    if LOG.isEnabledFor(logging.INFO):
-        LOG.info('find_named_genes: %s / %s',
-                 np.sum(genes_mask), genes_mask.size)
+    if to is not None:
+        ut.set_v_data(adata, to, genes_mask, ut.ALWAYS_SAFE)
+        return None
 
-    if to is None:
-        return pd.Series(genes_mask, index=adata.var_names)
+    ut.log_mask(LOG, level, 'named_genes', genes_mask)
 
-    ut.set_v_data(adata, to, genes_mask, ut.ALWAYS_SAFE)
-    return None
+    return pd.Series(genes_mask, index=adata.var_names)
