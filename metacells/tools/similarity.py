@@ -1,5 +1,6 @@
 '''
-Compute cells cross-similarity based on some gene mask(s).
+Compute Cross-Similarity
+------------------------
 '''
 
 import logging

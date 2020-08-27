@@ -1,5 +1,6 @@
 '''
-Finalize the grouping of cells to metacells.
+Finalize Grouping of Cells to Metacells
+---------------------------------------
 '''
 
 import logging

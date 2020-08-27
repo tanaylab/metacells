@@ -1,5 +1,6 @@
 '''
-Find cells which are outliers in the metacells they are belong to.
+Find Outlier Cells
+------------------
 '''
 
 import logging

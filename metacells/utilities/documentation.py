@@ -1,5 +1,5 @@
 '''
-Utilities for documentation generation.
+Support documentation generation.
 '''
 
 from inspect import Parameter, signature

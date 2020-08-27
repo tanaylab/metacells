@@ -1,5 +1,6 @@
 '''
-Filter the data for computing metacells.
+Filter Data
+-----------
 '''
 
 import logging
@@ -31,7 +32,7 @@ def filter_data(  # pylint: disable=too-many-branches
     track_base_indices: Optional[str] = None,
 ) -> Optional[AnnData]:
     '''
-    Extract a subset of the data for further processing.
+    Filter (slice) the data based on previously-computed masks.
 
     For example, it is useful to discard cell-cycle genes, cells which have too few UMIs for
     meaningful analysis, etc. In general, the "best" filter depends on the data set.

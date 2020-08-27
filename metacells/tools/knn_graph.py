@@ -1,5 +1,6 @@
 '''
-Compute a K-Nearest-Neighbors graph based on similarity data.
+Compute a K-Nearest-Neighbors Graph
+-----------------------------------
 '''
 
 import logging

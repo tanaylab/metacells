@@ -1,5 +1,5 @@
 '''
-Utilities for timing operations.
+Measure used elapsed and CPU times.
 '''
 
 import atexit

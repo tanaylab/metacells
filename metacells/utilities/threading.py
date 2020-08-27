@@ -1,12 +1,10 @@
 '''
-Utilities for efficient multi-threaded code.
+Efficient multi-threaded code.
 
-.. todo::
+.. note::
 
-    While multi-threading does seem to work reasonably well (given the limitations of the GIL), it
-    seems that direct C++ re-implementations of common builtin operations (such as ``bincount``) are
-    not as efficient as the builtin implementations, so the gains from a parallel version are
-    negated. This requires further investigation.
+    The GIL makes it ineffective to use multi-threading for anything other than a simple function
+    invoking a C/C++ extension (or numpy function).
 '''
 import os
 import sys

@@ -1,5 +1,6 @@
 '''
-Mask genes by their name.
+Mask Genes by their Name
+------------------------
 '''
 
 import logging

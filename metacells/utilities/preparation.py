@@ -1,5 +1,5 @@
 '''
-Utilities for preparing commonly used data in ``AnnData``.
+Preparing commonly used annotated data.
 
 The functions here use the facilities of :py:mod:`metacells.utilities.annotation` to wrap the
 functions of :py:mod:`metacells.utilities.computation` in an easily accessible way.

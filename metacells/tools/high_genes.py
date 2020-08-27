@@ -1,5 +1,6 @@
 '''
-Find genes which have high expression.
+Find High Expression/Variance Genes
+-----------------------------------
 '''
 
 import logging
@@ -69,6 +70,8 @@ def find_high_fraction_genes(
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         fraction_of_genes = \
             ut.get_fraction_per_var(adata).proper
+        LOG.log(level, '  minimal_fraction_of_genes: %s',
+                minimal_fraction_of_genes)
         genes_mask = \
             fraction_of_genes >= minimal_fraction_of_genes
 
@@ -134,6 +137,8 @@ def find_high_normalized_variance_genes(
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         normalized_variance_of_genes = \
             ut.get_normalized_variance_per_var(adata).proper
+        LOG.log(level, '  minimal_normalized_variance_of_genes: %s',
+                minimal_normalized_variance_of_genes)
         genes_mask = \
             normalized_variance_of_genes >= minimal_normalized_variance_of_genes
 
@@ -153,7 +158,7 @@ def find_high_relative_variance_genes(
     adata: AnnData,
     *,
     of: Optional[str] = None,
-    minimal_relative_variance_of_genes: float = 2.5,
+    minimal_relative_variance_of_genes: float = 0.1,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -201,6 +206,8 @@ def find_high_relative_variance_genes(
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         relative_variance_of_genes = \
             ut.get_relative_variance_per_var(adata).proper
+        LOG.log(level, '  minimal_relative_variance_of_genes: %s',
+                minimal_relative_variance_of_genes)
         genes_mask = \
             relative_variance_of_genes >= minimal_relative_variance_of_genes
 

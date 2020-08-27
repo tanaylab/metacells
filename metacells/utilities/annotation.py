@@ -1,6 +1,4 @@
 '''
-Utilities for dealing with ``AnnData``.
-
 This tries to deal safely with slicing data layers, observation, variable and unstructured
 annotations, as well as two-dimensional variable and observation annotations.
 

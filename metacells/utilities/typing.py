@@ -1,5 +1,5 @@
 '''
-Utilities for dealing with shaped data types.
+Deal with shaped data types.
 
 The code has to deal with many different alternative data types for what is essentially two basic
 data types: 2D matrices and 1D vectors.

@@ -1,5 +1,6 @@
 '''
-Detect rare genes modules.
+Detect Rare Genes Modules
+-------------------------
 '''
 
 import logging

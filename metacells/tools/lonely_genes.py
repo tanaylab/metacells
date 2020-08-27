@@ -1,5 +1,6 @@
 '''
-Detect genes which are not correlated to any other gene.
+Detect "Lonely" Genes
+---------------------
 '''
 
 import logging

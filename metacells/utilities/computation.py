@@ -1,9 +1,8 @@
 '''
-Utilities for performing efficient uniform computations.
-
-Most of the functions defined here are thin wrappers around builtin numpy functions. However, they
-are provided with a uniform interface that works for both sparse and dense data. This allows safely
-passing them to functions such as :py:func:`metacells.utilities.preparation.get_per_obs` etc.
+Most of the functions defined here are thin wrappers around builtin numpy or scipy functions.
+However, they are provided with a uniform interface that works for both sparse and dense data. This
+allows safely passing them to functions such as
+:py:func:`metacells.utilities.preparation.get_per_obs` etc.
 
 All the functions here (optionally) collect timing information using
 :py:mod:`metacells.utilities.timing`, to make it easier to locate the performance bottleneck of the
