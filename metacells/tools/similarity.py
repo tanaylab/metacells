@@ -120,8 +120,7 @@ def _compute_elements_similarity(
 
     of, level = \
         ut.log_operation(LOG, adata,
-                         'compute_%s_%s_similarity' % (elements, elements),
-                         of, elements + '_similarity')
+                         'compute_%s_%s_similarity' % (elements, elements), of)
 
     with ut.intermediate_step(adata, intermediate=intermediate):
         if elements == 'obs':

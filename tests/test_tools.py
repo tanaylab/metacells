@@ -5,6 +5,7 @@ Test the preprocessing functions.
 from glob import glob
 from typing import Any, Dict, Tuple
 
+import numpy as np  # type: ignore
 import pytest  # type: ignore
 import scanpy as sc  # type: ignore
 import yaml
@@ -55,13 +56,23 @@ def test_find_noisy_lonely_genes(path: str) -> None:
     adata, expected = _load(path)
 
     adata = adata[range(20000), :].copy()
+    mc.tl.find_high_fraction_genes(adata)
+    mc.tl.find_high_normalized_variance_genes(adata)
 
-    mc.tl.find_noisy_lonely_genes(adata)
+    bdata = mc.pp.filter_data(adata, ['high_fraction_genes',
+                                      'high_normalized_variance_genes'],
+                              track_base_indices='base_index')
+    assert bdata is not None
 
-    actual_noisy_lonely_gene_indices = \
-        mc.ut.get_v_data(adata, 'noisy_lonely_genes')
-    actual_noisy_lonely_genes = \
-        sorted(adata.var_names[actual_noisy_lonely_gene_indices])
-    expected_noisy_lonely_genes = expected['noisy_lonely_genes']
+    mc.tl.compute_var_var_similarity(bdata, repeated=False)
+    mc.tl.find_lonely_genes(bdata)
 
-    assert actual_noisy_lonely_genes == expected_noisy_lonely_genes
+    actual_noisy_lonely_genes_mask = np.full(adata.n_vars, False)
+    actual_noisy_lonely_genes_mask[mc.ut.get_v_data(bdata, 'var_base_index')] = \
+        mc.ut.get_v_data(bdata, 'lonely_genes')
+
+    actual_noisy_lonely_gene_names = \
+        sorted(adata.var_names[actual_noisy_lonely_genes_mask])
+    expected_noisy_lonely_gene_names = expected['noisy_lonely_genes']
+
+    assert actual_noisy_lonely_gene_names == expected_noisy_lonely_gene_names

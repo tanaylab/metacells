@@ -50,8 +50,8 @@ __all__ = [
     'get_variance_per_obs',
     'get_variance_per_var',
 
-    'get_relative_variance_per_var',
     'get_normalized_variance_per_var',
+    'get_relative_variance_per_var',
 
     'get_obs_obs_correlation',
     'get_var_var_correlation',
@@ -68,7 +68,7 @@ def track_base_indices(adata: AnnData, *, name: str = 'base_index') -> None:
     '''
     uta.set_o_data(adata, 'obs_' + name,
                    np.arange(adata.n_obs), uta.ALWAYS_SAFE)
-    uta.set_v_data(adata, 'obs_' + name,
+    uta.set_v_data(adata, 'var_' + name,
                    np.arange(adata.n_vars), uta.ALWAYS_SAFE)
 
 
@@ -864,7 +864,7 @@ def get_variance_per_var(
 
 @utm.timed_call()
 @utd.expand_doc()
-def get_relative_variance_per_var(
+def get_normalized_variance_per_var(
     adata: AnnData,
     of: Optional[str] = None,
     *,
@@ -874,7 +874,7 @@ def get_relative_variance_per_var(
     Return the log_2(variance/mean) of the values per-variable (gene) ``of`` some
     per-variable-per-observation data (by default, the focus).
 
-    Use the ``<of>|relative_variance_per_var`` per-variable (cell) data if it exists. Otherwise,
+    Use the ``<of>|normalized_variance_per_var`` per-variable (cell) data if it exists. Otherwise,
     compute it, and if ``inplace`` (default: {inplace}), store it for future reuse.
 
     If ``inplace`` (default: {inplace}), also store the intermediate per-variable ``<of>|variance``,
@@ -882,7 +882,7 @@ def get_relative_variance_per_var(
     reuse.
     '''
     per_of, of = _per_of(adata, of, ['vo', 'vv'])
-    to = of + '|relative_variance_per_var'
+    to = of + '|normalized_variance_per_var'
 
     @utm.timed_call('.compute')
     def compute() -> utt.Vector:
@@ -905,7 +905,7 @@ def get_relative_variance_per_var(
 
 @utm.timed_call()
 @utd.expand_doc()
-def get_normalized_variance_per_var(
+def get_relative_variance_per_var(
     adata: AnnData,
     of: Optional[str] = None,
     *,
@@ -913,37 +913,37 @@ def get_normalized_variance_per_var(
     inplace: bool = True,
 ) -> NamedVector:
     '''
-    Return the (relative_variance - median-relative-variance-of-similar) of the values per-variable
-    (gene) ``of`` some per-variable-per-observation data (by default, the focus).
+    Return the (normalized_variance - median_normalized_variance_of_similar) of the values
+    per-variable (gene) ``of`` some per-variable-per-observation data (by default, the focus).
 
-    The median-relative-variance-of-similar is the median relative variance of the ``window_size``
-    (default: {window_size}) variables (genes) with the most similar mean to the one being
-    normalized. In general, the relative variance tends to (but doesn't always) go up for
-    higher-mean variables. By normalizing by the median relative variance of variables of a similar
-    mean, we factor out this dependency on the mean to decide which variables (genes) carry more
-    meaningful information (and are more suitable to be picked as "feature genes").
+    The median-normalized-variance-of-similar is the median normalized variance of the
+    ``window_size`` (default: {window_size}) variables (genes) with the most similar mean. In
+    general, the normalized variance may be larger due to random noise alone. By subtracting the
+    median normalized variance of variables of a similar mean, we factor out this dependency on the
+    mean to decide which variables (genes) carry more meaningful information (and are more suitable
+    to be picked as "feature genes").
 
-    Use the ``<of>|normalized_variance_by_<window_size>_per_var`` per-variable (gene) data if it
+    Use the ``<of>|relative_variance_by_<window_size>_per_var`` per-variable (gene) data if it
     exists. Otherwise, compute it, and if ``inplace`` (default: {inplace}), store it for future
     reuse.
 
     If ``inplace`` (default: {inplace}), also store the intermediate per-variable
-    ``<of>|relative_variance_per_var``, ``<of>|variance_per_var``, ``<of>|mean_per_var``,
+    ``<of>|normalized_variance_per_var``, ``<of>|variance_per_var``, ``<of>|mean_per_var``,
     ``<of>|sum_per_var`` and the ``<of>|sum_squared_per_var`` data for future reuse.
     '''
     per_of, of = _per_of(adata, of, ['vo', 'vv'])
-    to = '%s|normalized_variance_by_%s_per_var' % (of, window_size)
+    to = '%s|relative_variance_by_%s_per_var' % (of, window_size)
 
     @utm.timed_call('.compute')
     def compute() -> utt.Vector:
-        relative_variance_per_var = \
-            get_relative_variance_per_var(adata, of, inplace=inplace).proper
+        normalized_variance_per_var = \
+            get_normalized_variance_per_var(adata, of, inplace=inplace).proper
         mean_per_var = get_mean_per_var(adata, of, inplace=inplace).proper
-        median_variance_per_var = utc.sliding_window_function(relative_variance_per_var,
+        median_variance_per_var = utc.sliding_window_function(normalized_variance_per_var,
                                                               function='median',
                                                               window_size=window_size,
                                                               order_by=mean_per_var)
-        return relative_variance_per_var - median_variance_per_var
+        return normalized_variance_per_var - median_variance_per_var
 
     return _derive_1d_data(adata, per_of=per_of, of=of, per_to='v', to=to,
                            compute=compute, inplace=inplace)
