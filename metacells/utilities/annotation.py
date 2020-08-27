@@ -326,6 +326,7 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     name: Optional[str] = None,
     tmp: bool = False,
     invalidated_prefix: Optional[str] = None,
+    invalidated_suffix: Optional[str] = None,
 ) -> AnnData:
     '''
     Return new annotated data which includes a subset of the full ``adata``.
@@ -339,8 +340,9 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     data will be removed from the result unless it was explicitly marked as preserved using
     :py:func:`safe_slicing_data` or :py:func:`safe_slicing_derived`.
 
-    If ``invalidated_prefix`` is specified, then invalidated data will not be removed; instead it
-    will be renamed with the addition of the provided prefix.
+    If ``invalidated_prefix`` and/or ``invalidated_suffix`` are specified, then invalidated data
+    will not be removed; instead it will be renamed with the addition of the provided prefix and/or
+    suffix.
 
     If ``name`` is specified, this will be the logging name of the new data. Otherwise, it will be
     unnamed.
@@ -350,11 +352,11 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
 
     .. note::
 
-        Setting the prefix to the empty string would simply preserve all the invalidated data. As
-        this is unsafe, it will trigger a run-time exception. If you wish to perform such an unsafe
-        slicing operation, invoke the built-in ``adata[..., ...]``.
+        Setting the prefix and suffix to the empty string would simply preserve all the invalidated
+        data. As this is unsafe, it will trigger a run-time exception. If you wish to perform such
+        an unsafe slicing operation, invoke the built-in ``adata[..., ...]``.
     '''
-    assert invalidated_prefix != ''
+    assert invalidated_prefix != '' or invalidated_suffix != ''
     x_name = get_x_name(adata)
     focus = get_focus_name(adata)
     assert x_name not in adata.layers
@@ -393,8 +395,8 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
             return adata.copy()
 
     saved_data = \
-        _save_data(adata, will_slice_obs,
-                   will_slice_var, invalidated_prefix)
+        _save_data(adata, will_slice_obs, will_slice_var,
+                   invalidated_prefix, invalidated_suffix)
 
     with utm.timed_step('adata.slice'):
         bdata = adata[obs, vars].copy()
@@ -405,9 +407,9 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     assert did_slice_obs == will_slice_obs
     assert did_slice_var == will_slice_var
 
-    if invalidated_prefix is not None:
-        _prefix_data(bdata, did_slice_obs, did_slice_var,
-                     invalidated_prefix)
+    if invalidated_prefix is not None or invalidated_suffix is not None:
+        _fix_data(bdata, did_slice_obs, did_slice_var,
+                  invalidated_prefix, invalidated_suffix)
 
     _restore_data(saved_data, adata)
 
@@ -440,6 +442,7 @@ def _save_data(
     will_slice_obs: bool,
     will_slice_var: bool,
     invalidated_prefix: Optional[str],
+    invalidated_suffix: Optional[str],
 ) -> Dict[Tuple[str, str], Any]:
     saved_data: Dict[Tuple[str, str], Any] = {}
 
@@ -450,7 +453,8 @@ def _save_data(
                              ('vv', adata.varp),
                              ('m', adata.uns)):
         _save_per_data(saved_data, adata, per, annotations,
-                       will_slice_obs, will_slice_var, invalidated_prefix)
+                       will_slice_obs, will_slice_var,
+                       invalidated_prefix, invalidated_suffix)
 
     return saved_data
 
@@ -463,6 +467,7 @@ def _save_per_data(
     will_slice_obs: bool,
     will_slice_var: bool,
     invalidated_prefix: Optional[str],
+    invalidated_suffix: Optional[str],
 ) -> None:
     delete_names: Set[str] = set()
 
@@ -495,7 +500,8 @@ def _save_per_data(
 
     for name, data in _items(annotations):
         action = _slice_action(name, will_slice_obs, will_slice_var,
-                               invalidated_prefix is not None)
+                               invalidated_prefix is not None
+                               or invalidated_suffix is not None)
 
         if action == 'discard':
             saved_data[(per, name)] = data
@@ -507,8 +513,8 @@ def _save_per_data(
         if action == 'preserve':
             continue
 
-        assert action == 'prefix'
-        assert invalidated_prefix is not None
+        assert action == 'fix'
+        assert invalidated_prefix is not None or invalidated_suffix is not None
         continue
 
     for name in delete_names:
@@ -526,11 +532,12 @@ def _restore_data(saved_data: Dict[Tuple[str, str], Any], adata: AnnData) -> Non
         per_annotations[per][name] = data
 
 
-def _prefix_data(
+def _fix_data(
     bdata: AnnData,
     did_slice_obs: bool,
     did_slice_var: bool,
-    invalidated_prefix: str,
+    invalidated_prefix: Optional[str],
+    invalidated_suffix: Optional[str],
 ) -> None:
     for annotations in (bdata.layers,
                         bdata.obs,
@@ -538,39 +545,52 @@ def _prefix_data(
                         bdata.obsp,
                         bdata.varp,
                         bdata.uns):
-        _prefix_per_data(annotations,
-                         did_slice_obs, did_slice_var, invalidated_prefix)
+        _fix_per_data(annotations, did_slice_obs, did_slice_var,
+                      invalidated_prefix, invalidated_suffix)
 
 
-def _prefix_per_data(
+def _fix_per_data(
     annotations: MutableMapping[str, Any],
     did_slice_obs: bool,
     did_slice_var: bool,
-    invalidated_prefix: str,
+    invalidated_prefix: Optional[str],
+    invalidated_suffix: Optional[str],
 ) -> None:
     delete_names: List[str] = []
-    prefixed_data: Dict[str, Any] = {}
+    fixed_data: Dict[str, Any] = {}
+
+    invalidated_prefix = invalidated_prefix or ''
+    invalidated_suffix = invalidated_suffix or ''
 
     for name, data in _items(annotations):
         action = _slice_action(name, did_slice_obs, did_slice_var, True)
 
         if action == 'preserve':
             continue
-        assert action == 'prefix'
+        assert action == 'fix'
 
-        prefixed_name = invalidated_prefix + name
-        assert prefixed_name != name
+        parts = name.split(':')
+        if parts[-1] not in ('__column_major__', '__row_major__'):
+            final_part = None
+        else:
+            final_part = parts[-1]
+            name = ':'.join(parts[:-1])
 
-        prefixed_data[prefixed_name] = data
+        fixed_name = invalidated_prefix + name + invalidated_suffix
+        if final_part is not None:
+            fixed_name += ':' + final_part
+        assert fixed_name != name
+
+        fixed_data[fixed_name] = data
         delete_names.append(name)
 
         with LOCK.gen_wlock():
-            SAFE_SLICING[prefixed_name] = SAFE_SLICING[name]
+            SAFE_SLICING[fixed_name] = SAFE_SLICING[name]
 
     for name in delete_names:
         del annotations[name]
 
-    for name, data in prefixed_data.items():
+    for name, data in fixed_data.items():
         annotations[name] = data
 
 
@@ -584,7 +604,7 @@ def _slice_action(
     name: str,
     do_slice_obs: bool,
     do_slice_var: bool,
-    will_prefix_invalidated: bool,
+    will_fix_invalidated: bool,
 ) -> str:
     base_name = name
     if '__' in name:
@@ -623,10 +643,10 @@ def _slice_action(
     if slicing_mask.per_obs and slicing_mask.per_var:
         return 'preserve'
 
-    if is_per or not will_prefix_invalidated:
+    if is_per or not will_fix_invalidated:
         return 'discard'
 
-    return 'prefix'
+    return 'fix'
 
 
 @utm.timed_call()

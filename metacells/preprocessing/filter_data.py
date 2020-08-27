@@ -29,6 +29,7 @@ def filter_data(  # pylint: disable=too-many-branches
     name: Optional[str] = None,
     tmp: bool = False,
     invalidated_prefix: Optional[str] = None,
+    invalidated_suffix: Optional[str] = None,
     track_base_indices: Optional[str] = None,
 ) -> Optional[AnnData]:
     '''
@@ -74,8 +75,9 @@ def filter_data(  # pylint: disable=too-many-branches
 
     4. If the final cells or genes mask is empty, return None. Otherwise, return a slice of the full
        data containing just the cells and genes specified by the final masks. If
-       ``invalidated_prefix`` is specified (default: {invalidated_prefix}), then invalidated data
-       will not be removed; instead it will be renamed with the addition of the provided prefix.
+       ``invalidated_prefix`` (default: {invalidated_prefix}) and/or ``invalidated_suffix``
+       (default: {invalidated_suffix}) are specified, then invalidated data will not be removed;
+       instead it will be renamed with the addition of the provided prefix and/or suffix.
     '''
     _, level = ut.log_operation(LOG, adata, 'filter_data')
 
@@ -135,4 +137,5 @@ def filter_data(  # pylint: disable=too-many-branches
 
     return ut.slice(adata, name=name, tmp=tmp,
                     obs=cells_mask, vars=genes_mask,
-                    invalidated_prefix=invalidated_prefix)
+                    invalidated_prefix=invalidated_prefix,
+                    invalidated_suffix=invalidated_suffix)
