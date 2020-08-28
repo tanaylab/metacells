@@ -9,22 +9,16 @@ Annotation
 .. automodule:: metacells.utilities.annotation
     :members:
 
-Preparation
+Computation
 -----------
 
-.. automodule:: metacells.utilities.preparation
+.. automodule:: metacells.utilities.computation
     :members:
 
 Partition
 ---------
 
 .. automodule:: metacells.utilities.partition
-    :members:
-
-Computation
------------
-
-.. automodule:: metacells.utilities.computation
     :members:
 
 Typing

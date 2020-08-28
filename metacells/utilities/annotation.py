@@ -96,9 +96,8 @@ that in principle one never needs to mutate any data. This is (not 100%) enforce
 :py:func:`metacells.utilities.typing.freeze`-ing the data whenever possible.
 
 The managed ``AnnData`` provides standard functions that compute and cache new data from existing
-data, using arbitrary compute functions (e.g., :py:func:`get_data`, :py:func:`get_vo_data`). See the
-:py:mod:`metacells.utilities.preparation` module for these functions.
-
+data, using arbitrary compute functions. See the :py:mod:`metacells.preprocessing.common` module for
+these functions.
 
 Data Names
 ----------

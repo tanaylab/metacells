@@ -10,6 +10,7 @@ import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from anndata import AnnData
 
+import metacells.preprocessing as pp
 import metacells.utilities as ut
 
 __all__ = [
@@ -109,7 +110,7 @@ def finalize_metacells(  # pylint: disable=too-many-branches
         LOG.debug('  candidate_metacells: %s', candidate_metacells_count)
 
         LOG.log(level, '  target_metacell_size: %d', target_metacell_size)
-        fraction_of_genes = ut.get_fraction_per_var(adata).proper
+        fraction_of_genes = pp.get_fraction_per_var(adata).proper
 
         if min_robust_size_factor is None:
             min_robust_size = None

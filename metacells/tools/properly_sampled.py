@@ -10,6 +10,7 @@ import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from anndata import AnnData
 
+import metacells.preprocessing as pp
 import metacells.utilities as ut
 
 __all__ = [
@@ -68,7 +69,7 @@ def find_properly_sampled_cells(
     of, level = ut.log_operation(LOG, adata, 'find_properly_sampled_cells', of)
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        total_of_cells = ut.get_per_obs(adata, ut.sum_per).proper
+        total_of_cells = pp.get_per_obs(adata, ut.sum_per).proper
         cells_mask = np.full(adata.n_obs, True, dtype='bool')
 
         if min_total_of_cells is not None:
@@ -138,7 +139,7 @@ def find_properly_sampled_genes(
     of, level = ut.log_operation(LOG, adata, 'find_properly_sampled_genes', of)
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        total_of_genes = ut.get_per_var(adata, ut.sum_per).proper
+        total_of_genes = pp.get_per_var(adata, ut.sum_per).proper
         LOG.log(level, '  min_total_of_genes: %s', min_total_of_genes)
         genes_mask = total_of_genes >= min_total_of_genes
 

@@ -12,6 +12,7 @@ import scipy.cluster.hierarchy as sch  # type: ignore
 import scipy.spatial.distance as scd  # type: ignore
 from anndata import AnnData
 
+import metacells.preprocessing as pp
 import metacells.utilities as ut
 
 from .similarity import compute_var_var_similarity
@@ -206,13 +207,13 @@ def _pick_candidates(
 
     LOG.log(level, '  max_fraction_of_cells_of_genes: %s',
             ut.fraction_description(max_fraction_of_cells_of_genes))
-    nnz_cells_of_genes = ut.get_per_var(adata, ut.nnz_per).proper
+    nnz_cells_of_genes = pp.get_per_var(adata, ut.nnz_per).proper
     nnz_cells_fraction_of_genes = nnz_cells_of_genes / cells_count
     nnz_cells_fraction_mask_of_genes = \
         nnz_cells_fraction_of_genes <= max_fraction_of_cells_of_genes
 
     LOG.log(level, '  min_max_umis_of_genes: %s', min_max_umis_of_genes)
-    max_umis_of_genes = ut.get_per_var(adata, ut.max_per).proper
+    max_umis_of_genes = pp.get_per_var(adata, ut.max_per).proper
     max_umis_mask_of_genes = max_umis_of_genes >= min_max_umis_of_genes
 
     candidates_mask_of_genes = \
@@ -340,7 +341,7 @@ def _identify_cells(
 
     LOG.log(level, '  min_size_of_modules: %s', min_size_of_modules)
     LOG.log(level, '  min_umis_of_modules: %s', min_umis_of_modules)
-    total_umis_of_cells = ut.get_per_obs(adata, ut.sum_per).proper
+    total_umis_of_cells = pp.get_per_obs(adata, ut.sum_per).proper
 
     for module_candidate_indices in combined_candidate_indices:
         if len(module_candidate_indices) < min_size_of_modules:

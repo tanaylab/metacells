@@ -1,7 +1,8 @@
 '''
-Preparing commonly used annotated data.
+Compute COmmonly Used Data
+--------------------------
 
-The functions here use the facilities of :py:mod:`metacells.utilities.annotation` to wrap the
+Most functions here use the facilities of :py:mod:`metacells.utilities.annotation` to wrap the
 functions of :py:mod:`metacells.utilities.computation` in an easily accessible way.
 '''
 

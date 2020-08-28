@@ -9,6 +9,7 @@ from typing import Optional
 import pandas as pd  # type: ignore
 from anndata import AnnData
 
+import metacells.preprocessing as pp
 import metacells.utilities as ut
 
 __all__ = [
@@ -125,17 +126,17 @@ def _compute_elements_similarity(
 
     with ut.intermediate_step(adata, intermediate=intermediate):
         if elements == 'obs':
-            similarity = ut.get_obs_obs_correlation(adata, of,
+            similarity = pp.get_obs_obs_correlation(adata, of,
                                                     inplace=inplace or repeated)
             if repeated:
-                similarity = ut.get_obs_obs_correlation(adata, similarity.name,
+                similarity = pp.get_obs_obs_correlation(adata, similarity.name,
                                                         inplace=inplace)
 
         else:
-            similarity = ut.get_var_var_correlation(adata, of,
+            similarity = pp.get_var_var_correlation(adata, of,
                                                     inplace=inplace or repeated)
             if repeated:
-                similarity = ut.get_var_var_correlation(adata, similarity.name,
+                similarity = pp.get_var_var_correlation(adata, similarity.name,
                                                         inplace=inplace)
 
     LOG.log(level, '  repeated: %s', repeated)

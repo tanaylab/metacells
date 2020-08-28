@@ -12,6 +12,7 @@ import scipy.sparse as sparse  # type: ignore
 import scipy.stats as stats  # type: ignore
 from anndata import AnnData
 
+import metacells.preprocessing as pp
 import metacells.utilities as ut
 
 __all__ = [
@@ -107,7 +108,7 @@ def find_outlier_cells(
         community_of_cells = ut.to_dense_vector(community_of_cells)
         assert community_of_cells.size == cells_count
 
-        totals_of_cells = ut.get_per_obs(adata, ut.sum_per).proper
+        totals_of_cells = pp.get_per_obs(adata, ut.sum_per).proper
         assert totals_of_cells.size == cells_count
 
         LOG.log(level, '  min_gene_fold_factor: %s', min_gene_fold_factor)
