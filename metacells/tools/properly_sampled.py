@@ -27,8 +27,8 @@ def find_properly_sampled_cells(
     adata: AnnData,
     of: Optional[str] = None,
     *,
-    minimal_total_of_cells: Optional[int] = 800,
-    maximal_total_of_cells: Optional[int] = None,
+    min_total_of_cells: Optional[int] = 800,
+    max_total_of_cells: Optional[int] = None,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -59,11 +59,11 @@ def find_properly_sampled_cells(
 
     **Computation Parameters**
 
-    1. Exclude all cells whose total data is less than the ``minimal_total_of_cells`` (default:
-       {minimal_total_of_cells}), unless it is ``None``
+    1. Exclude all cells whose total data is less than the ``min_total_of_cells`` (default:
+       {min_total_of_cells}), unless it is ``None``
 
-    2. Exclude all cells whose total data is more than the ``maximal_total_of_cells`` (default:
-       {maximal_total_of_cells}), unless it is ``None``
+    2. Exclude all cells whose total data is more than the ``max_total_of_cells`` (default:
+       {max_total_of_cells}), unless it is ``None``
     '''
     of, level = ut.log_operation(LOG, adata, 'find_properly_sampled_cells', of)
 
@@ -71,17 +71,15 @@ def find_properly_sampled_cells(
         total_of_cells = ut.get_per_obs(adata, ut.sum_per).proper
         cells_mask = np.full(adata.n_obs, True, dtype='bool')
 
-        if minimal_total_of_cells is not None:
-            LOG.log(level, '  minimal_total_of_cells: %s',
-                    minimal_total_of_cells)
-            cells_mask = \
-                cells_mask & (total_of_cells >= minimal_total_of_cells)
+        if min_total_of_cells is not None:
+            LOG.log(level, '  min_total_of_cells: %s', min_total_of_cells)
+            cells_mask = cells_mask & (total_of_cells >= min_total_of_cells)
 
-        if maximal_total_of_cells is not None:
-            LOG.log(level, '  maximal_total_of_cells: %s',
-                    maximal_total_of_cells)
+        if max_total_of_cells is not None:
+            LOG.log(level, '  max_total_of_cells: %s',
+                    max_total_of_cells)
             cells_mask = \
-                cells_mask & (total_of_cells <= maximal_total_of_cells)
+                cells_mask & (total_of_cells <= max_total_of_cells)
 
     if inplace:
         ut.set_o_data(adata, 'properly_sampled_cells',
@@ -99,7 +97,7 @@ def find_properly_sampled_genes(
     adata: AnnData,
     of: Optional[str] = None,
     *,
-    minimal_total_of_genes: int = 1,
+    min_total_of_genes: int = 1,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -113,8 +111,7 @@ def find_properly_sampled_genes(
 
     .. todo::
 
-        Provide additional optional criteria for "properly sampled genes", such as a minimal value
-        for their maximal fraction and/or number of UMIs?
+        Provide additional optional criteria for "properly sampled genes"?
 
     **Input**
 
@@ -135,16 +132,15 @@ def find_properly_sampled_genes(
 
     **Computation Parameters**
 
-    1. Exclude all genes whose total data is less than the ``minimal_total_of_genes`` (default:
-       {minimal_total_of_genes}).
+    1. Exclude all genes whose total data is less than the ``min_total_of_genes`` (default:
+       {min_total_of_genes}).
     '''
     of, level = ut.log_operation(LOG, adata, 'find_properly_sampled_genes', of)
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         total_of_genes = ut.get_per_var(adata, ut.sum_per).proper
-        LOG.log(level, '  minimal_total_of_genes: %s',
-                minimal_total_of_genes)
-        genes_mask = total_of_genes >= minimal_total_of_genes
+        LOG.log(level, '  min_total_of_genes: %s', min_total_of_genes)
+        genes_mask = total_of_genes >= min_total_of_genes
 
     if inplace:
         ut.set_v_data(adata, 'properly_sampled_genes',

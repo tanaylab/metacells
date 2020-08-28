@@ -30,14 +30,14 @@ def find_rare_genes_modules(
     adata: AnnData,
     *,
     of: Optional[str] = None,
-    maximal_fraction_of_cells_of_genes: float = 1e-3,
-    minimal_max_umis_of_genes: int = 6,
+    max_fraction_of_cells_of_genes: float = 1e-3,
+    min_max_umis_of_genes: int = 6,
     similarity_of: Optional[str] = None,
     repeated_similarity: bool = True,
     cluster_method_of_genes: str = 'ward',
-    minimal_size_of_modules: int = 4,
-    minimal_correlation_of_modules: float = 0.1,
-    minimal_umis_of_modules: int = 6,
+    min_size_of_modules: int = 4,
+    min_correlation_of_modules: float = 0.1,
+    min_umis_of_modules: int = 6,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame, ut.DenseVector]]:
@@ -89,9 +89,9 @@ def find_rare_genes_modules(
     **Computation Parameters**
 
     1. Pick as candidates all genes that are expressed in more than
-       ``maximal_fraction_of_cells_of_genes`` (default: {maximal_fraction_of_cells_of_genes}), and
-       whose maximal number of UMIs in a cell is at least ``minimal_max_umis_of_genes``
-       (default: {minimal_max_umis_of_genes}).
+       ``max_fraction_of_cells_of_genes`` (default: {max_fraction_of_cells_of_genes}), and whose
+       maximal number of UMIs in a cell is at least ``min_max_umis_of_genes`` (default:
+       {min_max_umis_of_genes}).
 
     2. Compute the similarity between the genes using
        :py:func:`metacells.tools.similarity.compute_var_var_similarity`. Pass it
@@ -103,15 +103,15 @@ def find_rare_genes_modules(
        (default: {cluster_method_of_genes}).
 
     4. Identify gene modules in the hierarchical clustering which contain at least
-       ``minimal_size_of_modules`` genes (default: {minimal_size_of_modules}), with an average
-       gene-gene cross-correlation of at least ``minimal_correlation_of_modules`` (default:
-       {minimal_correlation_of_modules}).
+       ``min_size_of_modules`` genes (default: {min_size_of_modules}), with an average gene-gene
+       cross-correlation of at least ``min_correlation_of_modules`` (default:
+       {min_correlation_of_modules}).
 
-    5. Associate cells with a gene module if they contain at least ``minimal_umis_of_modules``
-       (default: {minimal_umis_of_modules}) UMIs from the module. In the very rare case a cell
-       contains at least the minimal number of UMIs for multiple gene modules, associate it with the
-       gene module which is most enriched (relative to the least enriched cell associated with the
-       gene module). Gene modules with no associated cells are discarded.
+    5. Associate cells with a gene module if they contain at least ``min_umis_of_modules``
+       (default: {min_umis_of_modules}) UMIs from the module. In the very rare case a cell contains
+       at least the min number of UMIs for multiple gene modules, associate it with the gene module
+       which is most enriched (relative to the least enriched cell associated with the gene module).
+       Gene modules with no associated cells are discarded.
     '''
 
     level = ut.log_level(adata)
@@ -129,9 +129,9 @@ def find_rare_genes_modules(
             _pick_candidates(adata=adata,
                              level=level,
                              of=of,
-                             maximal_fraction_of_cells_of_genes=maximal_fraction_of_cells_of_genes,
-                             minimal_max_umis_of_genes=minimal_max_umis_of_genes,
-                             minimal_size_of_modules=minimal_size_of_modules)
+                             max_fraction_of_cells_of_genes=max_fraction_of_cells_of_genes,
+                             min_max_umis_of_genes=min_max_umis_of_genes,
+                             min_size_of_modules=min_size_of_modules)
         if candidates is None:
             return _results(adata=adata,
                             level=level,
@@ -157,7 +157,7 @@ def find_rare_genes_modules(
                             candidate_genes_indices=candidate_genes_indices,
                             similarities_between_candidate_genes=similarities_between_candidate_genes,
                             linkage=linkage,
-                            minimal_correlation_of_modules=minimal_correlation_of_modules)
+                            min_correlation_of_modules=min_correlation_of_modules)
 
         gene_indices_of_modules = \
             _identify_cells(adata=adata,
@@ -168,8 +168,8 @@ def find_rare_genes_modules(
                             combined_candidate_indices=combined_candidate_indices,
                             rare_module_of_genes=rare_module_of_genes,
                             rare_module_of_cells=rare_module_of_cells,
-                            minimal_size_of_modules=minimal_size_of_modules,
-                            minimal_umis_of_modules=minimal_umis_of_modules)
+                            min_size_of_modules=min_size_of_modules,
+                            min_umis_of_modules=min_umis_of_modules)
         if len(gene_indices_of_modules) == 0:
             return _results(adata=adata,
                             level=level,
@@ -198,23 +198,22 @@ def _pick_candidates(
     adata: AnnData,
     level: int,
     of: Optional[str],
-    maximal_fraction_of_cells_of_genes: float,
-    minimal_max_umis_of_genes: int,
-    minimal_size_of_modules: int,
+    max_fraction_of_cells_of_genes: float,
+    min_max_umis_of_genes: int,
+    min_size_of_modules: int,
 ) -> Optional[Tuple[AnnData, ut.DenseVector]]:
     cells_count = adata.n_obs
 
-    LOG.log(level, '  maximal_fraction_of_cells_of_genes: %s',
-            ut.fraction_description(maximal_fraction_of_cells_of_genes))
+    LOG.log(level, '  max_fraction_of_cells_of_genes: %s',
+            ut.fraction_description(max_fraction_of_cells_of_genes))
     nnz_cells_of_genes = ut.get_per_var(adata, ut.nnz_per).proper
     nnz_cells_fraction_of_genes = nnz_cells_of_genes / cells_count
     nnz_cells_fraction_mask_of_genes = \
-        nnz_cells_fraction_of_genes <= maximal_fraction_of_cells_of_genes
+        nnz_cells_fraction_of_genes <= max_fraction_of_cells_of_genes
 
-    LOG.log(level, '  minimal_max_umis_of_genes: %s',
-            minimal_max_umis_of_genes)
+    LOG.log(level, '  min_max_umis_of_genes: %s', min_max_umis_of_genes)
     max_umis_of_genes = ut.get_per_var(adata, ut.max_per).proper
-    max_umis_mask_of_genes = max_umis_of_genes >= minimal_max_umis_of_genes
+    max_umis_mask_of_genes = max_umis_of_genes >= min_max_umis_of_genes
 
     candidates_mask_of_genes = \
         max_umis_mask_of_genes & nnz_cells_fraction_mask_of_genes
@@ -223,7 +222,7 @@ def _pick_candidates(
 
     candidate_genes_count = candidate_genes_indices.size
     LOG.debug('  candidate_genes_count: %s', candidate_genes_count)
-    if candidate_genes_count < minimal_size_of_modules:
+    if candidate_genes_count < min_size_of_modules:
         return None
 
     candidate_data = \
@@ -278,7 +277,7 @@ def _identify_genes(
     level: int,
     candidate_genes_indices: ut.DenseVector,
     similarities_between_candidate_genes: ut.DenseMatrix,
-    minimal_correlation_of_modules: float,
+    min_correlation_of_modules: float,
     linkage: List[Tuple[int, int]],
 ) -> Iterable[List[int]]:
     candidate_genes_count = candidate_genes_indices.size
@@ -286,8 +285,8 @@ def _identify_genes(
     combined_candidate_indices = \
         {index: [index] for index in range(candidate_genes_count)}
 
-    LOG.log(level, '  minimal_correlation_of_modules: %s',
-            minimal_correlation_of_modules)
+    LOG.log(level, '  min_correlation_of_modules: %s',
+            min_correlation_of_modules)
     for link_index, link_data in enumerate(linkage):
         link_index += candidate_genes_count
 
@@ -309,7 +308,7 @@ def _identify_genes(
                                                  :][:,
                                                     link_combined_candidates]
         average_link_similarity = np.nanmean(link_similarities)
-        if average_link_similarity < minimal_correlation_of_modules:
+        if average_link_similarity < min_correlation_of_modules:
             continue
 
         combined_candidate_indices[link_index] = link_combined_candidates
@@ -330,21 +329,21 @@ def _identify_cells(
     combined_candidate_indices: Iterable[List[int]],
     rare_module_of_genes: ut.DenseVector,
     rare_module_of_cells: ut.DenseVector,
-    minimal_size_of_modules: int,
-    minimal_umis_of_modules: int,
+    min_size_of_modules: int,
+    min_umis_of_modules: int,
 ) -> List[ut.DenseVector]:
     cells_count = adata.n_obs
-    maximal_strength_of_cells = np.zeros(cells_count)
+    max_strength_of_cells = np.zeros(cells_count)
     gene_indices_of_modules: List[ut.DenseVector] = []
     candidate_umis = \
         ut.get_vo_data(candidate_data, of, layout='column_major')
 
-    LOG.log(level, '  minimal_size_of_modules: %s', minimal_size_of_modules)
-    LOG.log(level, '  minimal_umis_of_modules: %s', minimal_umis_of_modules)
+    LOG.log(level, '  min_size_of_modules: %s', min_size_of_modules)
+    LOG.log(level, '  min_umis_of_modules: %s', min_umis_of_modules)
     total_umis_of_cells = ut.get_per_obs(adata, ut.sum_per).proper
 
     for module_candidate_indices in combined_candidate_indices:
-        if len(module_candidate_indices) < minimal_size_of_modules:
+        if len(module_candidate_indices) < min_size_of_modules:
             continue
 
         total_umis_of_module_of_cells = \
@@ -352,10 +351,10 @@ def _identify_cells(
                                               module_candidate_indices].sum(axis=1))
         assert total_umis_of_module_of_cells.size == cells_count
 
-        minimal_total_umis_of_module_mask_of_cells = \
-            total_umis_of_module_of_cells >= minimal_umis_of_modules
+        min_total_umis_of_module_mask_of_cells = \
+            total_umis_of_module_of_cells >= min_umis_of_modules
         strong_cell_indices = \
-            np.where(minimal_total_umis_of_module_mask_of_cells)[0]
+            np.where(min_total_umis_of_module_mask_of_cells)[0]
         if strong_cell_indices.size == 0:
             continue
 
@@ -365,22 +364,22 @@ def _identify_cells(
         fraction_of_module_of_strong_cells = \
             total_umis_of_module_of_strong_cells / total_umis_of_strong_cells
 
-        minimal_strong_fraction = fraction_of_module_of_strong_cells.min()
-        assert minimal_strong_fraction > 0
+        min_strong_fraction = fraction_of_module_of_strong_cells.min()
+        assert min_strong_fraction > 0
         module_strength_of_strong_cells = \
-            fraction_of_module_of_strong_cells / minimal_strong_fraction
+            fraction_of_module_of_strong_cells / min_strong_fraction
 
-        maximal_strength_of_strong_cells = \
-            maximal_strength_of_cells[strong_cell_indices]
-        stronger_cells_mask = module_strength_of_strong_cells \
-            > maximal_strength_of_strong_cells
+        max_strength_of_strong_cells = \
+            max_strength_of_cells[strong_cell_indices]
+        stronger_cells_mask = \
+            module_strength_of_strong_cells > max_strength_of_strong_cells
 
         stronger_cell_indices = strong_cell_indices[stronger_cells_mask]
         if stronger_cell_indices.size == 0:
             continue
 
-        maximal_strength_of_cells[stronger_cell_indices] = \
-            maximal_strength_of_strong_cells[stronger_cells_mask]
+        max_strength_of_cells[stronger_cell_indices] = \
+            max_strength_of_strong_cells[stronger_cells_mask]
         module_index = len(gene_indices_of_modules)
         module_gene_indices = \
             candidate_genes_indices[module_candidate_indices]

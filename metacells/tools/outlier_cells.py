@@ -29,9 +29,9 @@ def find_outlier_cells(
     *,
     of: Optional[str] = None,
     communities: Union[str, ut.Vector] = 'candidate_metacell',
-    minimal_gene_fold_factor: float = 3.0,
-    maximal_genes_fraction: float = 0.03,
-    maximal_cells_fraction: float = 0.25,
+    min_gene_fold_factor: float = 3.0,
+    max_genes_fraction: float = 0.03,
+    max_cells_fraction: float = 0.25,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -69,29 +69,29 @@ def find_outlier_cells(
        Compute the fold factor log2((actual UMIs + 1) / (expected UMIs + 1)) for each gene for
        each cell.
 
-    2. Ignore all fold factors less than the ``minimal_gene_fold_factor`` (default:
-       {minimal_gene_fold_factor}). Count the number of genes which have a fold factor above this
-       minimum in at least one cell. If the fraction of such genes is above
-       ``maximal_genes_fraction`` (default: {maximal_genes_fraction}), then raise the minimal gene
-       fold factor such that at most this fraction of genes remain.
+    2. Ignore all fold factors less than the ``min_gene_fold_factor`` (default:
+       {min_gene_fold_factor}). Count the number of genes which have a fold factor above this
+       minimum in at least one cell. If the fraction of such genes is above ``max_genes_fraction``
+       (default: {max_genes_fraction}), then raise the minimal gene fold factor such that at most
+       this fraction of genes remain.
 
-    3. For each remaining gene, rank all the cells where it is expressed above the minimal fold
-       factor. Give an artificial maximal rank to all cells with fold factor 0, that is, below the
+    3. For each remaining gene, rank all the cells where it is expressed above the min fold
+       factor. Give an artificial maximum rank to all cells with fold factor 0, that is, below the
        minimum.
 
     4. For each cell, compute the minimal rank it has in any of these genes. That is, if a cell has
        a rank of 1, it means that it has at least one gene whose expression fold factor is the worst
        (highest) across all cells (and is also above the minimum).
 
-    5. Select as outliers all cells whose minimal rank is below the artificial maximal rank, that
+    5. Select as outliers all cells whose minimal rank is below the artificial maximum rank, that
        is, which contain at least one gene whose expression fold factor is high relative to the rest
-       of the cells. If the fraction of such cells is higher than ``maximal_cells_fraction``
-       (default: {maximal_cells_fraction}), reduce the maximal rank such that at most this fraction
-       of cells are selected as outliers.
+       of the cells. If the fraction of such cells is higher than ``max_cells_fraction`` (default:
+       {max_cells_fraction}), reduce the maximal rank such that at most this fraction of cells are
+       selected as outliers.
     '''
-    assert minimal_gene_fold_factor > 0
-    assert 0 < maximal_genes_fraction < 1
-    assert 0 < maximal_cells_fraction < 1
+    assert min_gene_fold_factor > 0
+    assert 0 < max_genes_fraction < 1
+    assert 0 < max_cells_fraction < 1
 
     of, level = ut.log_operation(LOG, adata, 'find_outlier_cells', of)
 
@@ -110,14 +110,13 @@ def find_outlier_cells(
         totals_of_cells = ut.get_per_obs(adata, ut.sum_per).proper
         assert totals_of_cells.size == cells_count
 
-        LOG.log(level, '  minimal_gene_fold_factor: %s',
-                minimal_gene_fold_factor)
+        LOG.log(level, '  min_gene_fold_factor: %s', min_gene_fold_factor)
 
         list_of_fold_factors, list_of_cell_index_of_rows = \
             _collect_fold_factors(data=data,
                                   community_of_cells=community_of_cells,
                                   totals_of_cells=totals_of_cells,
-                                  minimal_gene_fold_factor=minimal_gene_fold_factor)
+                                  min_gene_fold_factor=min_gene_fold_factor)
 
         fold_factors = _construct_fold_factors(cells_count,
                                                list_of_fold_factors,
@@ -130,8 +129,8 @@ def find_outlier_cells(
             _filter_genes(cells_count=cells_count,
                           genes_count=genes_count,
                           fold_factors=fold_factors,
-                          minimal_gene_fold_factor=minimal_gene_fold_factor,
-                          maximal_genes_fraction=maximal_genes_fraction)
+                          min_gene_fold_factor=min_gene_fold_factor,
+                          max_genes_fraction=max_genes_fraction)
 
         outlier_genes_fold_ranks = \
             _fold_ranks(cells_count=cells_count,
@@ -141,7 +140,7 @@ def find_outlier_cells(
         mask_of_outlier_cells = \
             _filter_cells(cells_count=cells_count,
                           outlier_genes_fold_ranks=outlier_genes_fold_ranks,
-                          maximal_cells_fraction=maximal_cells_fraction)
+                          max_cells_fraction=max_cells_fraction)
 
     if inplace:
         ut.set_o_data(adata, 'outlier_cells',
@@ -159,7 +158,7 @@ def _collect_fold_factors(
     data: ut.ProperMatrix,
     community_of_cells: ut.DenseVector,
     totals_of_cells: ut.DenseVector,
-    minimal_gene_fold_factor: float,
+    min_gene_fold_factor: float,
 ) -> Tuple[List[ut.CompressedMatrix], List[ut.DenseVector]]:
     list_of_fold_factors: List[ut.CompressedMatrix] = []
     list_of_cell_index_of_rows: List[ut.DenseVector] = []
@@ -200,8 +199,7 @@ def _collect_fold_factors(
         data_of_community += 1
         data_of_community /= expected_data_of_community
         np.log2(data_of_community, out=data_of_community)
-        data_of_community[data_of_community
-                          < minimal_gene_fold_factor] = 0
+        data_of_community[data_of_community < min_gene_fold_factor] = 0
 
         list_of_fold_factors.append(sparse.csr_matrix(data_of_community))
 
@@ -233,40 +231,38 @@ def _filter_genes(
     cells_count: int,
     genes_count: int,
     fold_factors: ut.CompressedMatrix,
-    minimal_gene_fold_factor: float,
-    maximal_genes_fraction: Optional[float] = None,
+    min_gene_fold_factor: float,
+    max_genes_fraction: Optional[float] = None,
 ) -> ut.DenseVector:
     ut.timed_parameters(cells=cells_count, genes=genes_count,
                         fold_factors=fold_factors.nnz)
-    maximal_fold_factors_of_genes = \
-        ut.to_dense_vector(fold_factors.max(axis=0))
-    assert maximal_fold_factors_of_genes.size == genes_count
+    max_fold_factors_of_genes = ut.to_dense_vector(fold_factors.max(axis=0))
+    assert max_fold_factors_of_genes.size == genes_count
 
     mask_of_outlier_genes = \
-        maximal_fold_factors_of_genes >= minimal_gene_fold_factor
+        max_fold_factors_of_genes >= min_gene_fold_factor
     outlier_genes_fraction = np.sum(mask_of_outlier_genes) / genes_count
 
     LOG.debug('  outlier_genes_fraction: %s',
               ut.fraction_description(outlier_genes_fraction))
 
-    if maximal_genes_fraction is not None \
-            and outlier_genes_fraction > maximal_genes_fraction:
+    if max_genes_fraction is not None \
+            and outlier_genes_fraction > max_genes_fraction:
         quantile_gene_fold_factor = \
-            np.quantile(maximal_fold_factors_of_genes,
-                        1 - maximal_genes_fraction)
+            np.quantile(max_fold_factors_of_genes, 1 - max_genes_fraction)
         assert quantile_gene_fold_factor is not None
 
-        LOG.debug('  maximal_genes_fraction: %s',
-                  ut.fraction_description(maximal_genes_fraction))
+        LOG.debug('  max_genes_fraction: %s',
+                  ut.fraction_description(max_genes_fraction))
         LOG.debug('  quantile_gene_fold_factor: %s', quantile_gene_fold_factor)
 
-        if quantile_gene_fold_factor > minimal_gene_fold_factor:
-            minimal_gene_fold_factor = quantile_gene_fold_factor
+        if quantile_gene_fold_factor > min_gene_fold_factor:
+            min_gene_fold_factor = quantile_gene_fold_factor
             mask_of_outlier_genes = \
-                maximal_fold_factors_of_genes >= minimal_gene_fold_factor
+                max_fold_factors_of_genes >= min_gene_fold_factor
 
             fold_factors[fold_factors  # type: ignore
-                         < minimal_gene_fold_factor] = 0
+                         < min_gene_fold_factor] = 0
             with ut.timed_step('sparse.eliminate_zeros'):
                 ut.timed_parameters(before=fold_factors.nnz)
                 fold_factors.eliminate_zeros()
@@ -320,32 +316,31 @@ def _filter_cells(
     *,
     cells_count: int,
     outlier_genes_fold_ranks: ut.DenseMatrix,
-    maximal_cells_fraction: Optional[float],
+    max_cells_fraction: Optional[float],
 ) -> ut.DenseVector:
-    minimal_fold_ranks_of_cells = np.min(outlier_genes_fold_ranks, axis=1)
-    assert minimal_fold_ranks_of_cells.size == cells_count
+    min_fold_ranks_of_cells = np.min(outlier_genes_fold_ranks, axis=1)
+    assert min_fold_ranks_of_cells.size == cells_count
 
-    mask_of_outlier_cells = minimal_fold_ranks_of_cells < cells_count
+    mask_of_outlier_cells = min_fold_ranks_of_cells < cells_count
     outliers_cells_count = sum(mask_of_outlier_cells)
     outlier_cells_fraction = outliers_cells_count / cells_count
 
     LOG.debug('  outlier_cells_fraction: %s',
               ut.fraction_description(outlier_cells_fraction))
 
-    if maximal_cells_fraction is not None \
-            and outlier_cells_fraction > maximal_cells_fraction:
-        LOG.debug('  maximal_cells_fraction: %s',
-                  ut.fraction_description(maximal_cells_fraction))
+    if max_cells_fraction is not None \
+            and outlier_cells_fraction > max_cells_fraction:
+        LOG.debug('  max_cells_fraction: %s',
+                  ut.fraction_description(max_cells_fraction))
         quantile_cells_fold_rank = \
-            np.quantile(minimal_fold_ranks_of_cells,
-                        maximal_cells_fraction)
+            np.quantile(min_fold_ranks_of_cells, max_cells_fraction)
         assert quantile_cells_fold_rank is not None
 
-        LOG.debug('  quantile_cells_fold_rank: %s',
-                  quantile_cells_fold_rank)
+        LOG.debug('  quantile_cells_fold_rank: %s', quantile_cells_fold_rank)
 
         if quantile_cells_fold_rank < cells_count:
-            mask_of_outlier_cells = minimal_fold_ranks_of_cells < quantile_cells_fold_rank
+            mask_of_outlier_cells = \
+                min_fold_ranks_of_cells < quantile_cells_fold_rank
 
         if LOG.isEnabledFor(logging.DEBUG):
             LOG.debug('  outlier_cells: %s',

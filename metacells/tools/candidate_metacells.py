@@ -31,8 +31,8 @@ def compute_candidate_metacells(
     partition_method: 'ut.PartitionMethod' = ut.leiden_bounded_surprise,
     target_metacell_size: int,
     cell_sizes: Optional[Union[str, ut.Vector]],
-    minimal_split_factor: Optional[float] = 2.0,
-    maximal_merge_factor: Optional[float] = 0.25,
+    min_split_factor: Optional[float] = 2.0,
+    max_merge_factor: Optional[float] = 0.25,
     random_seed: int = 0,
     inplace: bool = True,
     intermediate: bool = True,
@@ -77,21 +77,21 @@ def compute_candidate_metacells(
        are provided in this module, and you can also provide your own as long as it is compatible
        with the :py:const:`metacells.utilities.partition.PartitionMethod` interface.
 
-    3. If ``minimal_split_factor`` (default: {minimal_split_factor}) is specified, re-run the
-       partition method on each community whose size is at least ``target_metacell_size
-       * minimal_split_factor``, to split it to into smaller communities.
+    3. If ``min_split_factor`` (default: {min_split_factor}) is specified, re-run the partition
+       method on each community whose size is at least ``target_metacell_size
+       * min_split_factor``, to split it to into smaller communities.
 
-    4. If ``maximal_merge_factor`` (default: {maximal_merge_factor}) is specified, condense each
+    4. If ``max_merge_factor`` (default: {max_merge_factor}) is specified, condense each
        community whose size is at most ``target_metacell_size
-       * maximal_merge_factor`` into a single node (using the mean of the edge weights),
+       * max_merge_factor`` into a single node (using the mean of the edge weights),
        and re-run the partition method on the resulting graph (of just these condensed nodes) to
        merge these communities into large ones.
 
     5. Repeat the above steps until no further progress can be made.
 
-    6. If the ``maximal_merge_factor`` was specified, arbitrarily combine the remaining communities
+    6. If the ``max_merge_factor`` was specified, arbitrarily combine the remaining communities
        whose size is at most the ``target_metacell_size
-       * maximal_merge_factor`` into a single community using
+       * max_merge_factor`` into a single community using
        :py:func:`metacells.utilities.computation.bin_pack`.
 
     .. note::
@@ -129,18 +129,18 @@ def compute_candidate_metacells(
     max_metacell_size = None
     min_metacell_size = None
 
-    if minimal_split_factor is not None:
-        assert minimal_split_factor > 0
+    if min_split_factor is not None:
+        assert min_split_factor > 0
         max_metacell_size = \
-            ceil(target_metacell_size * minimal_split_factor) - 1
+            ceil(target_metacell_size * min_split_factor) - 1
 
-    if maximal_merge_factor is not None:
-        assert maximal_merge_factor > 0
+    if max_merge_factor is not None:
+        assert max_merge_factor > 0
         min_metacell_size = \
-            floor(target_metacell_size * maximal_merge_factor) + 1
+            floor(target_metacell_size * max_merge_factor) + 1
 
-    if minimal_split_factor is not None and maximal_merge_factor is not None:
-        assert maximal_merge_factor < minimal_split_factor
+    if min_split_factor is not None and max_merge_factor is not None:
+        assert max_merge_factor < min_split_factor
         assert min_metacell_size is not None
         assert max_metacell_size is not None
         assert min_metacell_size <= max_metacell_size
@@ -202,7 +202,7 @@ class Community:
     #: By how much (if at all) is the community smaller than the minimum allowed.
     too_small: int
 
-    #: By how much (if at all) is the community larger than the maximal allowed.
+    #: By how much (if at all) is the community larger than the maximum allowed.
     too_large: int
 
     #: Whether this community can't be split.

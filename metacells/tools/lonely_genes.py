@@ -26,7 +26,7 @@ def find_lonely_genes(
     adata: AnnData,
     of: Optional[str] = None,
     *,
-    maximal_similarity_of_genes: float = 0.15,
+    max_similarity_of_genes: float = 0.15,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -60,15 +60,15 @@ def find_lonely_genes(
 
     **Computation Parameters**
 
-    1. Find genes which have a correlation of at most ``maximal_similarity_of_genes`` (default:
-       {maximal_similarity_of_genes}) with at least one other gene.
+    1. Find genes which have a correlation of at most ``max_similarity_of_genes`` (default:
+       {max_similarity_of_genes}) with at least one other gene.
     '''
     of, level = ut.log_operation(LOG, adata, 'find_noisy_lonely_genes',
                                  of, 'var_similarity')
 
     with ut.intermediate_step(adata, intermediate=intermediate):
-        LOG.log(level, '  maximal_similarity_of_genes: %s',
-                maximal_similarity_of_genes)
+        LOG.log(level, '  max_similarity_of_genes: %s',
+                max_similarity_of_genes)
 
         similarity = ut.to_dense_matrix(ut.get_vv_data(adata, of), copy=True)
 
@@ -83,7 +83,7 @@ def find_lonely_genes(
             else:
                 similarity_of_genes = np.nanmax(similarity, axis=1)
 
-        mask = similarity_of_genes <= maximal_similarity_of_genes
+        mask = similarity_of_genes <= max_similarity_of_genes
 
     if inplace:
         ut.set_v_data(adata, 'lonely_genes', mask, ut.SAFE_WHEN_SLICING_VAR)

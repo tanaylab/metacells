@@ -766,13 +766,13 @@ def sliding_window_function(
     else:
         reverse_order_indices = order_indices = np.arange(array.size)
 
-    minimal_index = order_indices[0]
-    maximal_index = order_indices[-1]
+    min_index = order_indices[0]
+    max_index = order_indices[-1]
 
     extended_order_indices = np.concatenate([  #
-        np.repeat(minimal_index, half_window_size),
+        np.repeat(min_index, half_window_size),
         order_indices,
-        np.repeat(maximal_index, half_window_size),
+        np.repeat(max_index, half_window_size),
     ])
 
     extended_series = pd.Series(array[extended_order_indices])

@@ -364,7 +364,7 @@ def _prune_ranks(
     outgoing_degree = int(round(k * outgoing_degree_factor))
     outgoing_degree = min(outgoing_degree, size - 1)
 
-    maximal_degree = max(incoming_degree, outgoing_degree)
+    max_degree = max(incoming_degree, outgoing_degree)
 
     all_indices = np.arange(size)
     with ut.timed_step('numpy.argmax'):
@@ -383,8 +383,8 @@ def _prune_ranks(
     preserved_matrix.has_canonical_format = True
 
     indptr_array = np.empty(1 + size, dtype='int32')
-    indices_array = np.empty(size * maximal_degree, dtype='int32')
-    ranks_array = np.empty(size * maximal_degree, dtype='float32')
+    indices_array = np.empty(size * max_degree, dtype='int32')
+    ranks_array = np.empty(size * max_degree, dtype='float32')
 
     pruned_ranks = \
         ut.CompressedMatrix.be(ut.to_layout(balanced_ranks,

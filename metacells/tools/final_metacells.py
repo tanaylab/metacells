@@ -30,9 +30,9 @@ def finalize_metacells(  # pylint: disable=too-many-branches
     outliers: Optional[Union[str, ut.Vector]] = 'outlier_cells',
     target_metacell_size: int,
     cell_sizes: Optional[Union[str, ut.Vector]],
-    minimal_robust_size_factor: Optional[float] = 0.5,
-    minimal_convincing_size_factor: Optional[float] = 0.25,
-    minimal_convincing_gene_fold_factor: float = 3.0,
+    min_robust_size_factor: Optional[float] = 0.5,
+    min_convincing_size_factor: Optional[float] = 0.25,
+    min_convincing_gene_fold_factor: float = 3.0,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -70,17 +70,17 @@ def finalize_metacells(  # pylint: disable=too-many-branches
        cell is given a size of one. These parameters are typically identical to these passed to
        :py:func:`metacells.tools.candidate_metacells.compute_candidate_metacells`.
 
-    3. If ``minimal_robust_size_factor` (default: {minimal_robust_size_factor}) is specified, then
-       any metacell whose total size is at least ``target_metacell_size *
-       minimal_robust_size_factor`` is preserved.
+    3. If ``min_robust_size_factor` (default: {min_robust_size_factor}) is specified, then any
+       metacell whose total size is at least ``target_metacell_size * min_robust_size_factor`` is
+       preserved.
 
-    3. If ``minimal_convincing_size_factor`` (default: {minimal_convincing_size_factor}) is
+    3. If ``min_convincing_size_factor`` (default: {min_convincing_size_factor}) is
        specified, then any remaining metacells whose size is at least ``target_metacell_size *
-       minimal_convincing_size_factor`` are preserved, given they contain at least one gene whose
-       fold factor (log2((actual + 1) / (expected + 1))) is at least
-       ``minimal_convincing_gene_fold_factor`` (default: {minimal_convincing_gene_fold_factor}).
-       That is, we only preserve these smaller metacells if there is at least one gene whose
-       expression is significantly different from the mean of the population.
+       min_convincing_size_factor`` are preserved, given they contain at least one gene whose fold
+       factor (log2((actual + 1) / (expected + 1))) is at least ``min_convincing_gene_fold_factor``
+       (default: {min_convincing_gene_fold_factor}). That is, we only preserve these smaller
+       metacells if there is at least one gene whose expression is significantly different from the
+       mean of the population.
 
     4 . Any remaining metacell is dissolved into outlier cells.
     '''
@@ -111,24 +111,22 @@ def finalize_metacells(  # pylint: disable=too-many-branches
         LOG.log(level, '  target_metacell_size: %d', target_metacell_size)
         fraction_of_genes = ut.get_fraction_per_var(adata).proper
 
-        if minimal_robust_size_factor is None:
-            minimal_robust_size = None
+        if min_robust_size_factor is None:
+            min_robust_size = None
         else:
-            minimal_robust_size = \
-                target_metacell_size * minimal_robust_size_factor
-            LOG.log(level, '  minimal_robust_size: %d', minimal_robust_size)
+            min_robust_size = target_metacell_size * min_robust_size_factor
+            LOG.log(level, '  min_robust_size: %d', min_robust_size)
 
-        if minimal_convincing_size_factor is None:
-            minimal_convincing_size = None
+        if min_convincing_size_factor is None:
+            min_convincing_size = None
         else:
-            minimal_convincing_size = \
-                target_metacell_size * minimal_convincing_size_factor
-            LOG.log(level, '  minimal_convincing_size: %d',
-                    minimal_convincing_size)
-            LOG.log(level, '  minimal_convincing_gene_fold_factor: %s',
-                    minimal_convincing_gene_fold_factor)
+            min_convincing_size = \
+                target_metacell_size * min_convincing_size_factor
+            LOG.log(level, '  min_convincing_size: %d', min_convincing_size)
+            LOG.log(level, '  min_convincing_gene_fold_factor: %s',
+                    min_convincing_gene_fold_factor)
 
-        if minimal_robust_size is not None and minimal_convincing_size is not None:
+        if min_robust_size is not None and min_convincing_size is not None:
             did_dissolve = False
 
             for metacell_index in range(candidate_metacells_count):
@@ -138,9 +136,9 @@ def finalize_metacells(  # pylint: disable=too-many-branches
                                       data=data,
                                       cell_sizes=cell_sizes,
                                       fraction_of_genes=fraction_of_genes,
-                                      minimal_robust_size=minimal_robust_size,
-                                      minimal_convincing_size=minimal_convincing_size,
-                                      minimal_convincing_gene_fold_factor=minimal_convincing_gene_fold_factor,
+                                      min_robust_size=min_robust_size,
+                                      min_convincing_size=min_convincing_size,
+                                      min_convincing_gene_fold_factor=min_convincing_gene_fold_factor,
                                       candidate_metacells_count=candidate_metacells_count,
                                       metacell_cell_indices=metacell_cell_indices):
                     metacells_of_cells[metacell_cell_indices] = -1
@@ -173,9 +171,9 @@ def _keep_metacell(
     data: ut.ProperMatrix,
     cell_sizes: Optional[ut.DenseVector],
     fraction_of_genes: ut.DenseVector,
-    minimal_robust_size: Optional[float],
-    minimal_convincing_size: Optional[float],
-    minimal_convincing_gene_fold_factor: float,
+    min_robust_size: Optional[float],
+    min_convincing_size: Optional[float],
+    min_convincing_gene_fold_factor: float,
     candidate_metacells_count: int,
     metacell_cell_indices: ut.DenseVector,
 ) -> bool:
@@ -186,20 +184,20 @@ def _keep_metacell(
     else:
         metacell_total_size = np.sum(cell_sizes[metacell_cell_indices])
 
-    if minimal_robust_size is not None \
-            and metacell_total_size >= minimal_robust_size:
+    if min_robust_size is not None \
+            and metacell_total_size >= min_robust_size:
         LOG.debug('  - metacell: %s / %s cells: %s size: %d is: robust',
                   metacell_index, candidate_metacells_count,
                   metacell_cell_indices.size, metacell_total_size)
         return True
 
-    if minimal_convincing_size is None:
+    if min_convincing_size is None:
         LOG.debug('  - metacell: %s / %s cells: %s size: %d is: accepted',
                   metacell_index, candidate_metacells_count,
                   metacell_cell_indices.size, metacell_total_size)
         return True
 
-    if metacell_total_size < minimal_convincing_size:
+    if metacell_total_size < min_convincing_size:
         LOG.debug('  - metacell: %s / %s cells: %s size: %d is: unconvincing',
                   metacell_index, candidate_metacells_count,
                   metacell_cell_indices.size, metacell_total_size)
@@ -215,7 +213,7 @@ def _keep_metacell(
     metacell_data_of_genes /= metacell_expected_of_genes
     np.log2(metacell_data_of_genes, out=metacell_data_of_genes)
     convincing_genes_mask = \
-        metacell_data_of_genes >= minimal_convincing_gene_fold_factor
+        metacell_data_of_genes >= min_convincing_gene_fold_factor
     keep_metacell = np.any(convincing_genes_mask)
 
     if LOG.isEnabledFor(logging.DEBUG):
