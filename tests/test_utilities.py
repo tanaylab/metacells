@@ -2,6 +2,8 @@
 Test the utility functions.
 '''
 
+import os
+from glob import glob
 from typing import Any, List
 
 import numpy as np  # type: ignore
@@ -31,61 +33,6 @@ def test_sparse_corrcoef() -> None:
     numpy_correlation = np.corrcoef(matrix.toarray())
     assert numpy_correlation.shape == (100, 100)
     assert np.allclose(sparse_correlation, numpy_correlation)
-
-
-def test_parallel_map() -> None:
-    actual = list(ut.parallel_map(lambda index: index, 10000))
-    expected = list(range(10000))
-    assert actual == expected
-
-
-def test_unbatched_parallel_map() -> None:
-    actual = list(ut.parallel_map(lambda index: index,
-                                  10000, batches_per_thread=None))
-    expected = list(range(10000))
-    assert actual == expected
-
-
-def test_parallel_for() -> None:
-    mask = np.zeros(10000, dtype='bool')
-
-    def invocation(indices: range) -> None:
-        assert not np.any(mask[indices])
-        mask[indices] = True
-
-    ut.parallel_for(invocation, 10000)
-
-    assert np.all(mask)
-
-
-def test_unbatched_parallel_for() -> None:
-    mask = np.zeros(10000, dtype='bool')
-
-    def invocation(index: int) -> None:
-        assert not mask[index]
-        mask[index] = True
-
-    ut.parallel_for(invocation, 10000, batches_per_thread=None)
-
-    assert np.all(mask)
-
-
-def test_parallel_collect() -> None:
-    shared_storage = ut.SharedStorage()
-
-    def compute(indices: range) -> None:
-        tmp = shared_storage.get_private('tmp', make=list)
-        tmp.extend(list(indices))
-
-    def merge(from_thread: str, into_thread: str) -> None:
-        from_tmp = shared_storage.get_private('tmp', thread=from_thread)
-        into_tmp = shared_storage.get_private('tmp', thread=into_thread)
-        into_tmp.extend(from_tmp)
-
-    final_thread = ut.parallel_collect(compute, merge, 10000)
-    final_tmp = shared_storage.get_private('tmp', thread=final_thread)
-    assert len(final_tmp) == 10000
-    assert np.all(np.arange(10000) == sorted(final_tmp))
 
 
 def test_relayout_matrix() -> None:
@@ -265,3 +212,16 @@ def test_bin_pack() -> None:
 def test_compress_indices() -> None:
     assert list(ut.compress_indices(np.array([0, 3, 2]))) == [0, 2, 1]
     assert list(ut.compress_indices(np.array([0, -1, 2]))) == [0, -1, 1]
+
+
+def test_parallel_map() -> None:
+    @ut.timed_call('invocation')
+    def invocation(index: int) -> int:
+        return index
+
+    actual = list(ut.parallel_map(invocation, 100))
+    expected = list(range(100))
+    assert actual == expected
+
+    for path in glob('.coverage.*'):
+        os.remove(path)

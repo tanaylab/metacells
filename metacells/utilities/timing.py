@@ -9,10 +9,8 @@ from contextlib import contextmanager
 from functools import wraps
 from threading import Lock, current_thread
 from threading import local as thread_local
-from time import perf_counter_ns, process_time_ns, thread_time_ns
+from time import perf_counter_ns, process_time_ns
 from typing import IO, Any, Callable, Dict, Iterator, List, Optional, TypeVar
-
-import numpy as np  # type: ignore
 
 __all__ = [
     'timing_file',
@@ -39,7 +37,6 @@ LOG_STEPS = False
 THREAD_LOCAL = thread_local()
 LOCK = Lock()
 COUNTED_THREADS = 0
-IN_PARALLEL = False
 
 
 def timing_file(file: IO) -> None:
@@ -131,19 +128,11 @@ class Counters:
         self.cpu_ns = cpu_ns  #: CPU time counter.
 
     @staticmethod
-    def now(in_parallel: bool) -> 'Counters':
+    def now() -> 'Counters':
         '''
         Return the current value of the counters.
-
-        If not ``in_parallel``, then count total CPU time. Otherwise, count only the current
-        thread's CPU time.
         '''
-        if in_parallel:
-            cpu_ns = thread_time_ns()
-        else:
-            cpu_ns = process_time_ns()
-
-        return Counters(elapsed_ns=perf_counter_ns(), cpu_ns=cpu_ns)
+        return Counters(elapsed_ns=perf_counter_ns(), cpu_ns=process_time_ns())
 
     def __add__(self, other: 'Counters') -> 'Counters':
         return Counters(elapsed_ns=self.elapsed_ns + other.elapsed_ns,
@@ -204,15 +193,8 @@ class StepTiming:  # pylint: disable=too-many-instance-attributes
         #: The amount of CPU used in nested steps in the same thread.
         self.total_nested = Counters()
 
-        #: Amount of resources used in other thread by parallel code.
-        self.other_thread = Counters()
-
         #: Amount of resources used in timing measurement functions
         self.overhead = Counters()
-
-        #: The set of other threads used.
-        self.other_thread_mask = \
-            np.zeros(1 + (os.cpu_count() or 1), dtype='bool')
 
 
 if COLLECT_TIMING:
@@ -228,13 +210,13 @@ if COLLECT_TIMING:
         global GC_START_POINT
         if phase == 'start':
             assert GC_START_POINT is None
-            GC_START_POINT = Counters.now(True)
+            GC_START_POINT = Counters.now()
             return
 
         assert phase == 'stop'
         assert GC_START_POINT is not None
 
-        gc_total_time = Counters.now(True) - GC_START_POINT
+        gc_total_time = Counters.now() - GC_START_POINT
         GC_START_POINT = None
 
         parent_timing = steps_stack[-1]
@@ -280,32 +262,17 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
         yield None
         return
 
-    in_parallel = IN_PARALLEL
-
-    start_point = Counters.now(in_parallel)
+    start_point = Counters.now()
 
     steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
     if steps_stack is None:
         steps_stack = THREAD_LOCAL.steps_stack = []
 
     parent_timing: Optional[StepTiming] = None
-    if isinstance(name, StepTiming):
-        parent_timing = name
-        if parent_timing.thread_name == current_thread().name:
-            yield_point = Counters.now(in_parallel)
-            yield None
-            overhead = yield_point - start_point
-            OVERHEAD += overhead
-            parent_timing.overhead += overhead
-            return
-        name = '_'
-
-    else:
-        if len(steps_stack) > 0:
-            parent_timing = steps_stack[-1]
-        assert name != '_'
-        if name[0] == '.':
-            assert parent_timing is not None
+    if len(steps_stack) > 0:
+        parent_timing = steps_stack[-1]
+    if name[0] == '.':
+        assert parent_timing is not None
 
     step_timing = StepTiming(name, parent_timing)
     steps_stack.append(step_timing)
@@ -314,10 +281,10 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
         if LOG_STEPS:
             sys.stderr.write(step_timing.context + ' BEGIN {\n')
             sys.stderr.flush()
-        yield_point = Counters.now(in_parallel)
+        yield_point = Counters.now()
         yield None
     finally:
-        back_point = Counters.now(in_parallel)
+        back_point = Counters.now()
         total_times = back_point - yield_point
         assert total_times.elapsed_ns >= 0
         assert total_times.cpu_ns >= 0
@@ -327,27 +294,17 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
 
         steps_stack.pop()
 
-        if name == '_':
-            assert parent_timing is not None
-            total_times.elapsed_ns = 0
-            parent_timing.other_thread += total_times
-            parent_timing.other_thread_mask[_thread_index()] = True
+        if parent_timing is not None:
+            parent_timing.total_nested += total_times
 
-        else:
-            if parent_timing is not None:
-                parent_timing.total_nested += total_times
+        total_times -= step_timing.total_nested
+        assert total_times.elapsed_ns >= 0
+        assert total_times.cpu_ns >= 0
 
-            total_times -= step_timing.total_nested
-            assert total_times.elapsed_ns >= 0
-            assert total_times.cpu_ns >= 0
-            if in_parallel:
-                total_times += step_timing.other_thread
+        _print_timing(step_timing.context, total_times - step_timing.overhead,
+                      step_timing.parameters)
 
-            _print_timing(step_timing.context, total_times - step_timing.overhead,
-                          step_timing.parameters, step_timing.other_thread_mask.sum())
-
-        overhead = Counters.now(in_parallel) - \
-            back_point + yield_point - start_point
+        overhead = Counters.now() - back_point + yield_point - start_point
         if parent_timing is not None:
             overhead.elapsed_ns = 0
             parent_timing.overhead += overhead
@@ -358,7 +315,6 @@ def _print_timing(
     invocation_context: str,
     total_times: Counters,
     step_parameters: Optional[List[str]] = None,
-    other_threads_count: int = 0,
 ) -> None:
     gc_enabled = gc.isenabled()
     gc.disable()
@@ -372,9 +328,6 @@ def _print_timing(
         text = [invocation_context,
                 'elapsed_ns', str(total_times.elapsed_ns),
                 'cpu_ns', str(total_times.cpu_ns)]
-        if other_threads_count > 0:
-            text.append('other_threads')
-            text.append(str(other_threads_count))
         if step_parameters:
             text.extend(step_parameters)
         TIMING_FILE.write(','.join(text) + '\n')
@@ -413,15 +366,18 @@ def timed_call(name: Optional[str] = None) -> Callable[[CALLABLE], CALLABLE]:
     :py:func:`metacells.utilities.timing.timed_step` using the ``name`` (by default, the function's
     ``__qualname__``).
     '''
-    if not COLLECT_TIMING:
-        return lambda function: function
-
-    def wrap(function: Callable) -> Callable:
-        @wraps(function)
-        def timed(*args: Any, **kwargs: Any) -> Any:
-            with timed_step(name or function.__qualname__):
-                return function(*args, **kwargs)
-        return timed
+    if COLLECT_TIMING:
+        def wrap(function: Callable) -> Callable:
+            @wraps(function)
+            def timed(*args: Any, **kwargs: Any) -> Any:
+                with timed_step(name or function.__qualname__):
+                    return function(*args, **kwargs)
+            timed.__is_timed__ = True  # type: ignore
+            return timed
+    else:
+        def wrap(function: Callable) -> Callable:
+            function.__is_timed__ = True  # type: ignore
+            return function
 
     return wrap  # type: ignore
 
@@ -434,11 +390,6 @@ def context() -> str:
     .. note::
 
         * The context will be empty unless we are collecting timing.
-
-        * This correctly tracks the context across threads when using
-          :py:func:`metacells.utilities.threading.parallel_map`,
-          :py:func:`metacells.utilities.threading.parallel_for` and
-          :py:func:`metacells.utilities.threading.parallel_collect` functions.
     '''
     steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
     if not steps_stack:
@@ -457,21 +408,3 @@ def current_step() -> Optional[StepTiming]:
     if steps_stack is None or len(steps_stack) == 0:
         return None
     return steps_stack[-1]
-
-
-def is_in_parallel(in_parallel: bool) -> None:
-    '''
-    Normally, assume that we are running a single-threaded application, so we count the total CPU
-    time in case numpy is using inner threads to implement our requests.
-
-    If ``in_parallel`` is set to ``True``, then we know the application is multi-threaded,
-    and we (quite possibly incorrectly) assume that we only need to count the CPU time
-    in the current thread.
-
-    .. todo::
-
-        Is there any way at all to properly count the amount of CPU that numpy uses in inner
-        threads, even in a multi-threaded application?
-    '''
-    global IN_PARALLEL
-    IN_PARALLEL = in_parallel

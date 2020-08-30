@@ -243,9 +243,8 @@ def _compute_elements_knn_graph(
                     ut.ratio_description(matrix.nnz,
                                          matrix.shape[0] * matrix.shape[1]))
 
-    similarity = ut.get_proper_matrix(adata, of)
+    similarity = ut.DenseMatrix.be(ut.get_proper_matrix(adata, of))
     similarity = ut.to_layout(similarity, 'row_major', symmetric=True)
-    similarity = ut.DenseMatrix.be(similarity)
 
     outgoing_ranks = _rank_outgoing(similarity, k, balanced_ranks_factor)
     store_matrix(outgoing_ranks, 'outgoing_ranks', intermediate)

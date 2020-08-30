@@ -23,7 +23,6 @@ import metacells.extensions as xt  # type: ignore
 import metacells.utilities.documentation as utd
 import metacells.utilities.timing as utm
 import metacells.utilities.typing as utt
-from metacells.utilities.threading import parallel_for
 
 __all__ = [
     'to_layout',
@@ -171,15 +170,13 @@ def relayout_compressed(matrix: utt.CompressedMatrix) -> utt.CompressedMatrix:
         % (compressed.data.dtype, compressed.indices.dtype, compressed.indptr.dtype)
     extension = getattr(xt, extension_name)
 
-    def collect_compressed(matrix_band_indices: range) -> None:
-        extension(matrix_band_indices.start, matrix_band_indices.stop,
-                  compressed.data, compressed.indices, compressed.indptr,
-                  output_data, output_indices, output_indptr[1:])
+    assert matrix_bands_count == compressed.indptr.size - 1
 
     with utm.timed_step('extensions.collect_compressed'):
         utm.timed_parameters(results=output_bands_count,
                              elements=matrix_bands_count)
-        parallel_for(collect_compressed, matrix_bands_count)
+        extension(compressed.data, compressed.indices, compressed.indptr,
+                  output_data, output_indices, output_indptr[1:])
 
     assert output_indptr[-1] == compressed.indptr[-1]
 
@@ -203,21 +200,17 @@ def sort_compressed(matrix: utt.CompressedMatrix, force: bool = False) -> None:
     if matrix.has_sorted_indices and not force:
         return
 
+    matrix_bands_count = matrix.indptr.size - 1
+    extension_name = 'sort_compressed_%s_t_%s_t_%s_t' \
+        % (matrix.data.dtype, matrix.indices.dtype, matrix.indptr.dtype)
+    extension = getattr(xt, extension_name)
+
     with utm.timed_step('extensions.sort_compressed'):
-        matrix_bands_count = matrix.indptr.size - 1
         utm.timed_parameters(results=matrix_bands_count,
                              elements=matrix.nnz / matrix_bands_count)
+        extension(matrix.data, matrix.indices, matrix.indptr)
 
-        extension_name = 'sort_compressed_%s_t_%s_t_%s_t' \
-            % (matrix.data.dtype, matrix.indices.dtype, matrix.indptr.dtype)
-        extension = getattr(xt, extension_name)
-
-        def sort_compressed_bands(matrix_band_indices: range) -> None:
-            extension(matrix_band_indices.start, matrix_band_indices.stop,
-                      matrix.data, matrix.indices, matrix.indptr)
-
-        parallel_for(sort_compressed_bands, matrix_bands_count)
-        matrix.has_sorted_indices = True
+    matrix.has_sorted_indices = True
 
 
 @utm.timed_call()
@@ -386,6 +379,10 @@ def _downsample_dense_matrix(
 
     assert output.shape == matrix.shape
 
+    axis = utt.PER_OF_AXIS.index(per)
+    results_count = matrix.shape[axis]
+    elements_count = matrix.shape[1 - axis]
+
     if per == 'row':
         sample_input_vector = matrix[0, :]
         sample_output_vector = output[0, :]
@@ -414,22 +411,16 @@ def _downsample_dense_matrix(
         matrix = np.transpose(matrix)
         output = np.transpose(output)
 
-    axis = utt.PER_OF_AXIS.index(per)
-    results_count = matrix.shape[axis]
-    elements_count = matrix.shape[1 - axis]
+    assert results_count == matrix.shape[0]
+    assert elements_count == matrix.shape[1]
 
     extension_name = \
         'downsample_matrix_%s_t_%s_t' % (matrix.dtype, output.dtype)
     extension = getattr(xt, extension_name)
-
-    def downsample_dense_slice(indices: range) -> None:
-        extension(indices.start, indices.stop, matrix,
-                  output, samples, random_seed)
-
     with utm.timed_step('extensions.downsample_dense_matrix'):
         utm.timed_parameters(results=results_count,
                              elements=elements_count, samples=samples)
-        parallel_for(downsample_dense_slice, results_count)
+        extension(matrix, output, samples, random_seed)
 
     if per == 'column':
         output = np.transpose(output)
@@ -471,15 +462,13 @@ def _downsample_compressed_matrix(
         % (matrix.data.dtype, matrix.indptr.dtype, output.data.dtype)
     extension = getattr(xt, extension_name)
 
-    def downsample_sparse_slice(indices: range) -> None:
-        extension(indices.start, indices.stop,
-                  matrix.data, matrix.indptr, output.data,
-                  samples, random_seed)
+    assert results_count == matrix.indptr.size - 1
 
     with utm.timed_step('extensions.downsample_sparse_matrix'):
         utm.timed_parameters(results=results_count,
                              elements=elements_count, samples=samples)
-        parallel_for(downsample_sparse_slice, results_count)
+        extension(matrix.data, matrix.indptr,
+                  output.data, samples, random_seed)
 
     output.has_canonical_format = False
     if eliminate_zeros:

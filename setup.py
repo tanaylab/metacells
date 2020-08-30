@@ -64,7 +64,8 @@ setup(
             'metacells.extensions',
             include_dirs=['pybind11/include'],
             sources=['metacells/extensions.cpp'],
-            extra_compile_args=['-march=native'],
+            extra_compile_args=['-march=native', '-fopenmp'],
+            extra_link_args=['-lgomp'],
             define_macros=[
                 ('ASSERT_LEVEL', 1),  # 0 for none, 1 for fast, 2 for slow.
             ],

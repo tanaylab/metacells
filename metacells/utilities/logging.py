@@ -21,7 +21,7 @@ import logging
 import sys
 from datetime import datetime
 from logging import Formatter, Logger, StreamHandler, getLogger
-from typing import Any, Optional, Tuple
+from typing import IO, Any, Optional, Tuple
 
 import numpy as np  # type: ignore
 from anndata import AnnData
@@ -60,18 +60,35 @@ class LoggingFormatter(Formatter):
 
 
 @utd.expand_doc()
-def setup_logger(*, level: str = 'WARN', prefix: Optional[str] = None) -> Logger:
+def setup_logger(
+    *,
+    level: int = logging.WARN,
+    to: IO = sys.stderr,
+    time: bool = True,
+    process: bool = True,
+    name: Optional[str] = None
+) -> Logger:
     '''
     Setup logging to stderr at some ``level`` (default: {level}).
 
-    If ``prefix`` (default: {prefix}) is specified, it is added to each logged message.
+    If ``to`` is not specified, the output is sent to ``sys.stderr``.
+
+    If ``time`` (default: {time}), include a millisecond-resolution timestamp for each message.
+
+    If ``name`` (default: {name}) is specified, it is added to each logged message.
+
+    If ``process`` (default: {process}), include the process index (the main process has the index
+    zero).
     '''
-    if prefix is None:
-        log_format = '%(asctime)s - %(threadName)s - %(levelname)s - %(message)s'
-    else:
-        log_format = '%(asctime)s - ' + prefix \
-            + ' - %(threadName)s - %(levelname)s - %(message)s'
-    handler = StreamHandler(sys.stderr)
+    log_format = '%(levelname)s - %(message)s'
+    if process:
+        log_format = '%(threadName)s - ' + log_format
+    if name is not None:
+        log_format = name + ' - ' + log_format
+    if time:
+        log_format = '%(asctime)s - ' + log_format
+
+    handler = StreamHandler(to)
     handler.setFormatter(LoggingFormatter(log_format))
     logger = getLogger('metacells')
     logger.addHandler(handler)

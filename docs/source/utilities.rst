@@ -27,12 +27,6 @@ Typing
 .. automodule:: metacells.utilities.typing
     :members:
 
-Threading
----------
-
-.. automodule:: metacells.utilities.threading
-    :members:
-
 Timing
 ------
 

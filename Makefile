@@ -1,7 +1,7 @@
 .PHONY: all for-commit reformat format isort rst unstaged todo mypy build pylint test tox docs
 .PHONY: dist clean
 
-.PHONY: tags coverage flame sum
+.PHONY: tags flame sum
 
 all: for-commit
 
@@ -37,8 +37,8 @@ pylint: build
 	pylint metacells tests
 
 test: build
-	@rm -f timing.csv
-	pytest -s --cov=metacells tests
+	@rm -rf timing.csv .coverage* coverage
+	pytest -s -vv --cov=metacells tests
 
 tox:
 	tox

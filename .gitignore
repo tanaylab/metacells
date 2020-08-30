@@ -1,7 +1,7 @@
 build
 .clang-formatted
 coverage
-.coverage
+.coverage*
 dist
 docs/build
 docs/source/timing_script.rst
@@ -17,5 +17,5 @@ __pycache__
 .*.swo
 .*.swp
 tags
-timing.csv
+timing.csv*
 .tox

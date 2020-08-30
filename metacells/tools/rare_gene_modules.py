@@ -207,6 +207,7 @@ def _pick_candidates(
 
     LOG.log(level, '  max_fraction_of_cells_of_genes: %s',
             ut.fraction_description(max_fraction_of_cells_of_genes))
+
     nnz_cells_of_genes = pp.get_per_var(adata, ut.nnz_per).proper
     nnz_cells_fraction_of_genes = nnz_cells_of_genes / cells_count
     nnz_cells_fraction_mask_of_genes = \
