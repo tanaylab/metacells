@@ -121,7 +121,6 @@ from warnings import warn
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from anndata import AnnData
-from readerwriterlock import rwlock
 
 import metacells.utilities.computation as utc
 import metacells.utilities.documentation as utd
@@ -139,6 +138,7 @@ __all__ = [
     'NEVER_SAFE',
     'SAFE_WHEN_SLICING_OBS',
     'SAFE_WHEN_SLICING_VAR',
+    'safe_slicing_mask',
     'safe_slicing_data',
     'safe_slicing_derived',
 
@@ -173,7 +173,6 @@ __all__ = [
 
 
 LOG = logging.getLogger(__name__)
-LOCK = rwlock.RWLockRead()
 
 
 Annotations = Union[MutableMapping[Any, Any], pd.DataFrame]
@@ -240,35 +239,54 @@ class SlicingMask(NamedTuple):
     '''
 
     #: Whether the operation is safe when slicing observations (cells).
-    per_obs: bool
+    obs: bool
 
     #: Whether the operation is safe when slicing variables (genes).
-    per_var: bool
+    vars: bool
 
     def __and__(self, other: 'SlicingMask') -> 'SlicingMask':
-        return SlicingMask(per_obs=self.per_obs and other.per_obs,
-                           per_var=self.per_var and other.per_var)
+        return SlicingMask(obs=self.obs and other.obs,
+                           vars=self.vars and other.vars)
 
     def __or__(self, other: 'SlicingMask') -> 'SlicingMask':
-        return SlicingMask(per_obs=self.per_obs or other.per_obs,
-                           per_var=self.per_var or other.per_var)
+        return SlicingMask(obs=self.obs or other.obs,
+                           vars=self.vars or other.vars)
 
 
 #: A mask for operations which are safe regardless of what is sliced.
-ALWAYS_SAFE = SlicingMask(per_obs=True, per_var=True)
+ALWAYS_SAFE = SlicingMask(obs=True, vars=True)
 
 #: A mask for operations which are not safe regardless of what is sliced.
-NEVER_SAFE = SlicingMask(per_obs=False, per_var=False)
+NEVER_SAFE = SlicingMask(obs=False, vars=False)
 
 #: A mask for operations which are only safe when slicing variables (genes),
 #: but not when slicing observations (cells).
-SAFE_WHEN_SLICING_VAR = SlicingMask(per_obs=False, per_var=True)
+SAFE_WHEN_SLICING_VAR = SlicingMask(obs=False, vars=True)
 
 #: A mask for operations which are only safe when slicing observations (cells),
 #: but not when slicing variables (genes).
-SAFE_WHEN_SLICING_OBS = SlicingMask(per_obs=True, per_var=False)
+SAFE_WHEN_SLICING_OBS = SlicingMask(obs=True, vars=False)
 
 SAFE_SLICING: Dict[str, SlicingMask] = {}
+
+
+def safe_slicing_mask(
+    name: str,
+) -> SlicingMask:
+    '''
+    Return a :py:const:`SlicingMask` specifying when it is safe to slice the ``name``-d data.
+    '''
+    slicing_mask = SAFE_SLICING.get(name)
+    if slicing_mask is None:
+        slicing_mask = SAFE_SLICING.get(name)
+        if slicing_mask is None:
+            unknown_sliced_data = \
+                'Slicing an unknown data: %s; ' \
+                'assuming it is not safe to slice' \
+                % name
+            warn(unknown_sliced_data)
+            slicing_mask = SAFE_SLICING[name] = NEVER_SAFE
+    return slicing_mask
 
 
 def safe_slicing_data(name: str, slicing_mask: SlicingMask) -> None:
@@ -279,8 +297,7 @@ def safe_slicing_data(name: str, slicing_mask: SlicingMask) -> None:
 
         This is thread-safe.
     '''
-    with LOCK.gen_wlock():
-        SAFE_SLICING[name] = slicing_mask
+    SAFE_SLICING[name] = slicing_mask
 
 
 def _known_safe_slicing() -> None:
@@ -305,15 +322,13 @@ def safe_slicing_derived(
     If, when slicing, any of the bases data is not preserved, then the derived data would not be
     either. Otherwise, the derived will be preserved based on the flags given here.
     '''
-    with LOCK.gen_rlock():
-        if isinstance(base, str):
-            slicing_mask = slicing_mask & SAFE_SLICING[base]
-        else:
-            for name in base:
-                slicing_mask = slicing_mask & SAFE_SLICING[name]
+    if isinstance(base, str):
+        slicing_mask = slicing_mask & SAFE_SLICING[base]
+    else:
+        for name in base:
+            slicing_mask = slicing_mask & SAFE_SLICING[name]
 
-    with LOCK.gen_wlock():
-        SAFE_SLICING[derived] = slicing_mask
+    SAFE_SLICING[derived] = slicing_mask
 
 
 @utm.timed_call()
@@ -583,8 +598,7 @@ def _fix_per_data(
         fixed_data[fixed_name] = data
         delete_names.append(name)
 
-        with LOCK.gen_wlock():
-            SAFE_SLICING[fixed_name] = SAFE_SLICING[name]
+        SAFE_SLICING[fixed_name] = SAFE_SLICING[name]
 
     for name in delete_names:
         del annotations[name]
@@ -617,29 +631,16 @@ def _slice_action(
         is_per_obs = False
         is_per_var = False
 
-    with LOCK.gen_rlock():
-        slicing_mask = SAFE_SLICING.get(base_name)
-
-    if slicing_mask is None:
-        with LOCK.gen_wlock():
-            slicing_mask = SAFE_SLICING.get(base_name)
-            if slicing_mask is None:
-                unknown_sliced_data = \
-                    'Slicing an unknown data: %s; ' \
-                    'assuming it should not be preserved' \
-                    % base_name
-                warn(unknown_sliced_data)
-                slicing_mask = SAFE_SLICING[base_name] = NEVER_SAFE
-
+    slicing_mask = safe_slicing_mask(base_name)
     if is_per_var:
         slicing_mask = slicing_mask & SAFE_WHEN_SLICING_VAR
     if is_per_obs:
         slicing_mask = slicing_mask & SAFE_WHEN_SLICING_OBS
 
-    slicing_mask = slicing_mask | SlicingMask(per_obs=not do_slice_obs,
-                                              per_var=not do_slice_var)
+    slicing_mask = slicing_mask | SlicingMask(obs=not do_slice_obs,
+                                              vars=not do_slice_var)
 
-    if slicing_mask.per_obs and slicing_mask.per_var:
+    if slicing_mask.obs and slicing_mask.vars:
         return 'preserve'
 
     if is_per or not will_fix_invalidated:
@@ -1276,14 +1277,8 @@ def intermediate_step(
                 del adata.uns['__tmp__']
             new_data = _all_data(adata)
             for name in new_data:
-                if name in old_data:
-                    continue
-                if name.endswith(':__row_major__') \
-                        or name.endswith(':__column_major__'):
-                    base_name = ':'.join(name.split(':')[:-1])
-                    if base_name in old_data:
-                        continue
-                del_vo_data(adata, name)
+                if name not in old_data:
+                    del_vo_data(adata, name)
 
         if has_data(adata, old_focus):
             adata.uns['__focus__'] = old_focus

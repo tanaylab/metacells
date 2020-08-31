@@ -138,6 +138,9 @@ class Shaped:
     @abstractmethod
     def __setitem__(self, key: Any, value: Any) -> Any: ...
 
+    @abstractmethod
+    def transpose(self: S) -> S: ...
+
     @staticmethod
     def am(data: Any) -> bool:
         return isinstance(data, (np.ndarray, pd.DataFrame, pd.Series)) \
@@ -334,9 +337,6 @@ class DenseMatrix(NumpyShaped):
     strides: Tuple[int, int]
 
     @abstractmethod
-    def transpose(self) -> 'DenseMatrix': ...
-
-    @abstractmethod
     def sum(self, *, axis: int) -> DenseVector: ...
 
     @abstractmethod
@@ -365,9 +365,6 @@ class SparseMatrix(Shaped):
 
     @abstractmethod
     def toarray(self) -> DenseMatrix: ...
-
-    @abstractmethod
-    def transpose(self: SP) -> SP: ...
 
     @abstractmethod
     def multiply(self: SP, other: Shaped) -> SP: ...

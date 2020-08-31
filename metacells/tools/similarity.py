@@ -27,7 +27,7 @@ def compute_obs_obs_similarity(
     adata: AnnData,
     of: Optional[str] = None,
     *,
-    repeated: bool = True,
+    repeated: bool = False,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasFrame]:
@@ -71,7 +71,7 @@ def compute_var_var_similarity(
     adata: AnnData,
     of: Optional[str] = None,
     *,
-    repeated: bool = True,
+    repeated: bool = False,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasFrame]:
@@ -112,11 +112,11 @@ def compute_var_var_similarity(
 def _compute_elements_similarity(
     adata: AnnData,
     elements: str,
-    of: Optional[str] = None,
+    of: Optional[str],
     *,
-    repeated: bool = True,
-    inplace: bool = True,
-    intermediate: bool = True,
+    repeated: bool,
+    inplace: bool,
+    intermediate: bool,
 ) -> Optional[ut.PandasFrame]:
     assert elements in ('obs', 'var')
 

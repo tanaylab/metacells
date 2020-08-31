@@ -223,5 +223,28 @@ def test_parallel_map() -> None:
     expected = list(range(100))
     assert actual == expected
 
+    # TODO: Why does pytest coverage error trying to read these files?
     for path in glob('.coverage.*'):
         os.remove(path)
+
+
+def test_sum_groups() -> None:
+    expected = np.array([[5, 7, 2], [10, 8, 13]])
+    groups = np.array([0, 1, 0, 1])
+
+    dense_rows = \
+        np.array([[0, 1, 2], [3, 0, 4], [5, 6, 0], [7, 8, 9]], dtype='float')
+
+    results = ut.sum_groups(dense_rows, groups, per='row')
+    assert np.allclose(results, expected)
+
+    results = ut.sum_groups(dense_rows.transpose(), groups, per='column')
+    assert np.allclose(results, expected.transpose())
+
+    sparse_rows = sparse.csr_matrix(dense_rows)
+
+    results = ut.sum_groups(sparse_rows, groups, per='row')
+    assert np.allclose(results, expected)
+
+    results = ut.sum_groups(sparse_rows.transpose(), groups, per='column')
+    assert np.allclose(results, expected.transpose())

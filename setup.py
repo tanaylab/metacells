@@ -20,7 +20,6 @@ INSTALL_REQUIRES = [
     'numpy',
     'pandas',
     'python-igraph',
-    'readerwriterlock',
     'threadpoolctl',
 ]
 

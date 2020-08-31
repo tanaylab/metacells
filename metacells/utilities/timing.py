@@ -7,7 +7,7 @@ import os
 import sys
 from contextlib import contextmanager
 from functools import wraps
-from threading import Lock, current_thread
+from threading import current_thread
 from threading import local as thread_local
 from time import perf_counter_ns, process_time_ns
 from typing import IO, Any, Callable, Dict, Iterator, List, Optional, TypeVar
@@ -35,7 +35,6 @@ TIMING_FILE: Optional[IO] = None
 LOG_STEPS = False
 
 THREAD_LOCAL = thread_local()
-LOCK = Lock()
 COUNTED_THREADS = 0
 
 
@@ -106,16 +105,6 @@ if not 'sphinx' in sys.argv[0]:
     log_steps({'true': True,
                'false': False}[os.environ.get('METACELLS_LOG_STEPS',
                                               'False').lower()])
-
-
-def _thread_index() -> int:
-    index = getattr(THREAD_LOCAL, 'index', None)
-    if index is None:
-        with LOCK:
-            global COUNTED_THREADS
-            COUNTED_THREADS += 1
-            index = THREAD_LOCAL.index = COUNTED_THREADS
-    return index
 
 
 class Counters:
@@ -318,9 +307,8 @@ def _print_timing(
 ) -> None:
     gc_enabled = gc.isenabled()
     gc.disable()
-    LOCK.acquire()
-    try:
 
+    try:
         global TIMING_FILE
         if TIMING_FILE is None:
             TIMING_FILE = \
@@ -333,7 +321,6 @@ def _print_timing(
         TIMING_FILE.write(','.join(text) + '\n')
 
     finally:
-        LOCK.release()
         if gc_enabled:
             gc.enable()
 

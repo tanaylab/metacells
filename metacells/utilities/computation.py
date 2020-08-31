@@ -48,6 +48,7 @@ __all__ = [
     'patterns_matches',
     'compress_indices',
     'bin_pack',
+    'sum_groups',
 ]
 
 
@@ -876,3 +877,69 @@ def bin_pack(element_sizes: utt.Vector, max_bin_size: float) -> utt.DenseVector:
 
     utm.timed_parameters(elements=element_sizes.size, bins=len(size_of_bins))
     return bin_of_elements
+
+
+@utm.timed_call()
+def sum_groups(
+    matrix: utt.Matrix,
+    groups: utt.Vector,
+    *,
+    per: str
+) -> Optional[utt.Matrix]:
+    '''
+    Given a ``matrix``, and a vector of ``groups`` ``per`` row or column, return a matrix with a row
+    or column per group, containing the sum of the groups rows or columns.
+
+    Negative group indices are ignored and their data is not included in the result. If there are no
+    non-negative group indices, returns ``None``.
+    '''
+
+    assert per in utt.PER_OF_AXIS
+
+    groups = utt.to_dense_vector(groups)
+    groups_count = np.max(groups) + 1
+    if groups_count == 0:
+        return None
+
+    efficient_layout = per + '_major'
+
+    sparse = utt.SparseMatrix.maybe(matrix)
+    if sparse is not None:
+        if utt.matrix_layout(matrix) == efficient_layout:
+            timed_step = '.compressed-efficient'
+        else:
+            timed_step = '.compressed-inefficient'
+            grouping_sparse_matrix_of_inefficient_format = 'grouping %ss ' \
+                'of a sparse matrix in the format: %s ' \
+                'instead of the efficient format: cs%s' \
+                % (per, sparse.getformat(), per[0])
+            warn(grouping_sparse_matrix_of_inefficient_format)
+    else:
+        matrix = utt.to_dense_matrix(matrix)
+        if utt.matrix_layout(matrix) == efficient_layout:
+            timed_step = '.dense-efficient'
+        else:
+            timed_step = '.dense-inefficient'
+            grouping_dense_matrix_of_inefficient_format = 'grouping %ss ' \
+                'of a dense matrix with inefficient strides: %s' \
+                % (per, matrix.strides)
+            warn(grouping_dense_matrix_of_inefficient_format)
+
+    if per == 'column':
+        matrix = matrix.transpose()
+
+    with utm.timed_step(timed_step):
+        utm.timed_parameters(groups=groups_count, entities=matrix.shape[0],
+                             elements=matrix.shape[1])
+        results = np.empty((groups_count, matrix.shape[1]), matrix.dtype)
+
+        for group_index in range(groups_count):
+            group_mask = groups == group_index
+            group_matrix = matrix[group_mask, :]
+            assert group_matrix.shape[0] > 0
+            results[group_index, :] = \
+                utt.to_dense_vector(group_matrix.sum(axis=0))
+
+    if per == 'column':
+        results = results.transpose()
+    return results

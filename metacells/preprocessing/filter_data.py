@@ -9,7 +9,6 @@ from typing import List, Optional
 import numpy as np  # type: ignore
 from anndata import AnnData
 
-import metacells.preprocessing.common as mpc
 import metacells.utilities as ut
 
 __all__ = [
@@ -31,7 +30,6 @@ def filter_data(  # pylint: disable=too-many-branches
     tmp: bool = False,
     invalidated_prefix: Optional[str] = None,
     invalidated_suffix: Optional[str] = None,
-    track_base_indices: Optional[str] = None,
 ) -> Optional[AnnData]:
     '''
     Filter (slice) the data based on previously-computed masks.
@@ -66,24 +64,17 @@ def filter_data(  # pylint: disable=too-many-branches
 
     **Computation Parameters**
 
-    1. If ``track_base_indices`` (default: ``{track_base_indices}``) is specified, then invoke
-       :py:func:`metacells.preprocessing.common.track_base_indices` to allow for mapping the
-       returned sliced data back to the full original data.
-
-    2. For each of the mask in ``masks``, fetch it. Silently ignore missing masks if the name has a
+    1. For each of the mask in ``masks``, fetch it. Silently ignore missing masks if the name has a
        ``?`` suffix. Invert the mask if the name has a ``~`` suffix. Bitwise-AND the appropriate
        (cells or genes) mask with the result.
 
-    4. If the final cells or genes mask is empty, return None. Otherwise, return a slice of the full
+    2. If the final cells or genes mask is empty, return None. Otherwise, return a slice of the full
        data containing just the cells and genes specified by the final masks. If
        ``invalidated_prefix`` (default: {invalidated_prefix}) and/or ``invalidated_suffix``
        (default: {invalidated_suffix}) are specified, then invalidated data will not be removed;
        instead it will be renamed with the addition of the provided prefix and/or suffix.
     '''
     _, level = ut.log_operation(LOG, adata, 'filter_data')
-
-    if track_base_indices is not None:
-        mpc.track_base_indices(adata, name=track_base_indices)
 
     cells_mask = np.full(adata.n_obs, True, dtype='bool')
     genes_mask = np.full(adata.n_vars, True, dtype='bool')

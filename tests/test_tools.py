@@ -59,9 +59,9 @@ def test_find_noisy_lonely_genes(path: str) -> None:
     mc.tl.find_high_fraction_genes(adata)
     mc.tl.find_high_normalized_variance_genes(adata)
 
+    mc.pp.track_base_indices(adata)
     bdata = mc.pp.filter_data(adata, ['high_fraction_genes',
-                                      'high_normalized_variance_genes'],
-                              track_base_indices='base_index')
+                                      'high_normalized_variance_genes'])
     assert bdata is not None
 
     mc.tl.compute_var_var_similarity(bdata, repeated=False)
