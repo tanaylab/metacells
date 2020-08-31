@@ -324,7 +324,7 @@ def _rank_outgoing(
                             preserved=preserved_matrix.nnz)
         outgoing_ranks = outgoing_ranks.maximum(preserved_matrix)
 
-    ut.sort_compressed(outgoing_ranks)
+    ut.sort_compressed_indices(outgoing_ranks)
     _assert_sparse(outgoing_ranks, 'csr')
     return outgoing_ranks
 
@@ -343,7 +343,7 @@ def _balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
         balanced_ranks = \
             ut.CompressedMatrix.be(outgoing_ranks.multiply(transposed_ranks))
 
-    ut.sort_compressed(balanced_ranks)
+    ut.sort_compressed_indices(balanced_ranks)
     _assert_sparse(balanced_ranks, 'csr')
     return balanced_ranks
 
@@ -393,12 +393,12 @@ def _prune_ranks(
     with ut.timed_step('extensions.collect_pruned'):
         ut.timed_parameters(size=size, keep=incoming_degree)
         xt.collect_pruned(incoming_degree,
-                          pruned_ranks.indptr,
-                          pruned_ranks.indices,
                           pruned_ranks.data,
-                          indptr_array,
+                          pruned_ranks.indices,
+                          pruned_ranks.indptr,
+                          ranks_array,
                           indices_array,
-                          ranks_array)
+                          indptr_array)
 
     pruned_ranks = sparse.csc_matrix((ranks_array[:indptr_array[-1]],
                                       indices_array[:indptr_array[-1]],
@@ -415,12 +415,12 @@ def _prune_ranks(
     with ut.timed_step('extensions.collect_pruned'):
         ut.timed_parameters(size=size, keep=outgoing_degree)
         xt.collect_pruned(outgoing_degree,
-                          pruned_ranks.indptr,
-                          pruned_ranks.indices,
                           pruned_ranks.data,
-                          indptr_array,
+                          pruned_ranks.indices,
+                          pruned_ranks.indptr,
+                          ranks_array,
                           indices_array,
-                          ranks_array)
+                          indptr_array)
 
     pruned_ranks = sparse.csr_matrix((ranks_array[:indptr_array[-1]],
                                       indices_array[:indptr_array[-1]],
@@ -436,7 +436,7 @@ def _prune_ranks(
         pruned_ranks = pruned_ranks.maximum(preserved_matrix)
     pruned_ranks = ut.CompressedMatrix.be(pruned_ranks)
 
-    ut.sort_compressed(pruned_ranks)
+    ut.sort_compressed_indices(pruned_ranks)
 
     _assert_sparse(pruned_ranks, 'csr')
     return pruned_ranks

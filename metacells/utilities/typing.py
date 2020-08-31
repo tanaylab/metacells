@@ -594,7 +594,11 @@ def to_proper_matrices(
     :py:func:`to_proper_matrix`, which may be either dense or compressed (sparse).
     '''
     proper = to_proper_matrix(matrix, layout=layout)
-    return (proper, DenseMatrix.maybe(proper), CompressedMatrix.maybe(proper))
+    dense = DenseMatrix.maybe(proper)
+    compressed = CompressedMatrix.maybe(proper)
+    assert (dense is not None) or (compressed is not None)
+    assert (dense is None) != (compressed is None)
+    return (proper, dense, compressed)
 
 
 @utm.timed_call()

@@ -27,7 +27,7 @@ import metacells.utilities.typing as utt
 __all__ = [
     'to_layout',
     'relayout_compressed',
-    'sort_compressed',
+    'sort_compressed_indices',
 
     'corrcoef',
 
@@ -49,6 +49,7 @@ __all__ = [
     'compress_indices',
     'bin_pack',
     'sum_groups',
+    'shuffle_matrix',
 ]
 
 
@@ -186,12 +187,12 @@ def relayout_compressed(matrix: utt.CompressedMatrix) -> utt.CompressedMatrix:
                               output_indptr), shape=compressed.shape)
 
     compressed.has_canonical_format = True
-    sort_compressed(compressed, force=True)
+    sort_compressed_indices(compressed, force=True)
 
     return compressed
 
 
-def sort_compressed(matrix: utt.CompressedMatrix, force: bool = False) -> None:
+def sort_compressed_indices(matrix: utt.CompressedMatrix, force: bool = False) -> None:
     '''
     Efficient parallel sort of indices in a CSR/CSC ``matrix``.
 
@@ -202,14 +203,14 @@ def sort_compressed(matrix: utt.CompressedMatrix, force: bool = False) -> None:
         return
 
     matrix_bands_count = matrix.indptr.size - 1
-    extension_name = 'sort_compressed_%s_t_%s_t_%s_t' \
+    extension_name = 'sort_compressed_indices_%s_t_%s_t_%s_t' \
         % (matrix.data.dtype, matrix.indices.dtype, matrix.indptr.dtype)
     extension = getattr(xt, extension_name)
 
-    with utm.timed_step('extensions.sort_compressed'):
+    with utm.timed_step('extensions.sort_compressed_indices'):
         utm.timed_parameters(results=matrix_bands_count,
                              elements=matrix.nnz / matrix_bands_count)
-        extension(matrix.data, matrix.indices, matrix.indptr)
+        extension(matrix.data, matrix.indices, matrix.indptr, matrix.shape[1])
 
     matrix.has_sorted_indices = True
 
@@ -943,3 +944,45 @@ def sum_groups(
     if per == 'column':
         results = results.transpose()
     return results
+
+
+@utm.timed_call()
+def shuffle_matrix(
+    matrix: utt.Matrix,
+    *,
+    per: str,
+    random_seed: int = 0,
+) -> None:
+    '''
+    Shuffle (in-place) the ``matrix`` data ``per`` column or row.
+
+    The matrix must be in the appropriate layout (row-major for shuffling data in each row,
+    column-major for shuffling data in each column).
+
+    A non-zero ``random_seed`` (default: {random_seed}) can be provided to make the operation
+    replicable.
+    '''
+    assert per in utt.PER_OF_AXIS
+    axis = utt.PER_OF_AXIS.index(per)
+    layout = utt.LAYOUT_OF_AXIS[axis]
+
+    _, dense, compressed = utt.to_proper_matrices(matrix, layout=layout)
+
+    if compressed is not None:
+        assert utt.matrix_layout(compressed) == layout
+        extension_name = 'shuffle_compressed_%s_t_%s_t_%s_t' \
+            % (compressed.data.dtype,
+               compressed.indices.dtype,
+               compressed.indptr.dtype)
+        extension = getattr(xt, extension_name)
+        extension(compressed.data, compressed.indices, compressed.indptr,
+                  compressed.shape[1 - axis], random_seed)
+
+    else:
+        assert dense is not None
+        assert utt.matrix_layout(dense) == layout
+        if per == 'column':
+            dense = dense.transpose()
+        extension_name = 'shuffle_matrix_%s_t' % dense.dtype
+        extension = getattr(xt, extension_name)
+        extension(dense, random_seed)

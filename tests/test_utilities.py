@@ -248,3 +248,22 @@ def test_sum_groups() -> None:
 
     results = ut.sum_groups(sparse_rows.transpose(), groups, per='column')
     assert np.allclose(results, expected.transpose())
+
+
+def test_shuffle_dense_matrix() -> None:
+    dense = \
+        np.array([[0, 1, 2], [3, 0, 4], [5, 6, 0], [7, 8, 9]], dtype='float')
+    ut.shuffle_matrix(dense, per='row', random_seed=123456)
+    expected = \
+        np.array([[2, 0, 1], [3, 4, 0], [6, 5, 0], [9, 8, 7]], dtype='float')
+    assert np.allclose(dense, expected)
+
+
+def test_shuffle_sparse_matrix() -> None:
+    sparse_csr = \
+        sparse.csc_matrix(np.array([[0, 1, 2], [3, 0, 4], [5, 6, 0], [7, 8, 9]],
+                                   dtype='float'))
+    ut.shuffle_matrix(sparse_csr, per='column', random_seed=123456)
+    expected = \
+        np.array([[5, 1, 4], [7, 0, 2], [0, 6, 9], [3, 8, 0]], dtype='float')
+    assert np.allclose(sparse_csr.todense(), expected)

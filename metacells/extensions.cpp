@@ -90,24 +90,20 @@ private:
     const char* m_name;  ///< Name for error messages.
 
 public:
-    /// Construct an array slice from raw data.
     ConstArraySlice(const T* const data, const int size, const char* const name)
       : m_data(data), m_size(size), m_name(name) {}
 
-    /// Construct an array slice based on a Python Numpy array.
     ConstArraySlice(const pybind11::array_t<T>& array, const char* const name)
       : ConstArraySlice(array.data(), array.size(), name) {
         FastAssertCompareWhat(array.ndim(), ==, 1, name);
         FastAssertCompareWhat(array.data(1) - array.data(0), ==, 1, name);
     }
 
-    /// Split into two immutable sub-slices.
     template<typename I>
     std::pair<ConstArraySlice, ConstArraySlice> split(const I size) const {
         return std::make_pair(slice(0, size), slice(size, m_size));
     }
 
-    /// Return an immutable sub-slice.
     template<typename I, typename J>
     ConstArraySlice slice(const I start, const J stop) const {
         FastAssertCompareWhat(0, <=, start, m_name);
@@ -116,10 +112,8 @@ public:
         return ConstArraySlice(m_data + start, stop - start, m_name);
     }
 
-    /// The number of elements in the slice.
     int size() const { return m_size; }
 
-    /// Access immutable element by index.
     template<typename I>
     const T& operator[](const I index) const {
         SlowAssertCompareWhat(0, <=, index, m_name);
@@ -127,10 +121,8 @@ public:
         return m_data[index];
     }
 
-    /// Beginning of immutable data for STD algorithms.
     const T* begin() const { return m_data; }
 
-    /// End of immutable data for STD algorithms.
     const T* end() const { return m_data + m_size; }
 };
 
@@ -143,24 +135,20 @@ private:
     const char* m_name;  ///< Name for error messages.
 
 public:
-    /// Construct an array slice from raw data.
     ArraySlice(T* const data, const int size, const char* const name)
       : m_data(data), m_size(size), m_name(name) {}
 
-    /// Construct an array slice based on a Python Numpy array.
     ArraySlice(pybind11::array_t<T>& array, const char* const name)
       : ArraySlice(array.mutable_data(), array.size(), name) {
         FastAssertCompareWhat(array.ndim(), ==, 1, name);
         FastAssertCompareWhat(array.data(1) - array.data(0), ==, 1, name);
     }
 
-    /// Split into two mutable sub-slices.
     template<typename I>
     std::pair<ArraySlice, ArraySlice> split(const I size) {
         return std::make_pair(slice(0, size), slice(size, m_size));
     }
 
-    /// Return a mutable sub-slice.
     template<typename I, typename J>
     ArraySlice slice(const I start, const J stop) {
         FastAssertCompareWhat(0, <=, start, m_name);
@@ -169,10 +157,8 @@ public:
         return ArraySlice(m_data + start, stop - start, m_name);
     }
 
-    /// The number of elements in the slice.
     int size() const { return m_size; }
 
-    /// Access mutable element by index.
     template<typename I>
     T& operator[](const I index) {
         SlowAssertCompareWhat(0, <=, index, m_name);
@@ -180,13 +166,10 @@ public:
         return m_data[index];
     }
 
-    /// Beginning of mutable data for STD algorithms.
     T* begin() { return m_data; }
 
-    /// End of mutable data for STD algorithms.
     T* end() { return m_data + m_size; }
 
-    /// Implicit conversion to an immutable slice.
     operator ConstArraySlice<T>() const { return ConstArraySlice<T>(m_data, m_size, m_name); }
 };
 
@@ -201,7 +184,6 @@ private:
     const char* m_name;   ///< Name for error messages.
 
 public:
-    /// Construct a matrix slice from raw data.
     ConstMatrixSlice(const T* const data,
                      const int rows_count,
                      const int columns_count,
@@ -213,7 +195,6 @@ public:
       , m_rows_offset(rows_offset)
       , m_name(name) {}
 
-    /// Construct a matrix slice based on a Python Numpy array.
     ConstMatrixSlice(const pybind11::array_t<T>& array, const char* const name)
       : ConstMatrixSlice(array.data(),
                          array.shape(0),
@@ -225,7 +206,6 @@ public:
         FastAssertCompareWhat(m_columns_count, <=, m_rows_offset, name);
     }
 
-    /// Obtain a specific row of the matrix slice as an array slice.
     template<typename I>
     ConstArraySlice<T> get_row(I row_index) const {
         FastAssertCompareWhat(0, <=, row_index, m_name);
@@ -233,21 +213,9 @@ public:
         return ConstArraySlice<T>(m_data + row_index * m_rows_offset, m_columns_count, m_name);
     }
 
-    /// The number of rows in the matrix slice.
     int rows_count() const { return m_rows_count; }
 
-    /// The number of columns in the matrix slice.
     int columns_count() const { return m_columns_count; }
-
-    /// Access immutable element by its indices.
-    template<typename I, typename J>
-    const T& operator()(const I row_index, const J column_index) const {
-        SlowAssertCompareWhat(0, <=, row_index, m_name);
-        SlowAssertCompareWhat(row_index, <, m_rows_count, m_name);
-        SlowAssertCompareWhat(0, <=, column_index, m_name);
-        SlowAssertCompareWhat(column_index, <, m_columns_count, m_name);
-        return m_data[row_index * m_rows_offset + column_index];
-    }
 };
 
 /// A mutable row-major slice of a matrix of type ``T``.
@@ -261,7 +229,6 @@ private:
     const char* m_name;   ///< Name for error messages.
 
 public:
-    /// Construct a matrix slice from raw data.
     MatrixSlice(T* const data,
                 const int rows_count,
                 const int columns_count,
@@ -273,7 +240,6 @@ public:
       , m_rows_offset(rows_offset)
       , m_name(name) {}
 
-    /// Construct a matrix slice based on a Python Numpy array.
     MatrixSlice(pybind11::array_t<T>& array, const char* const name)
       : MatrixSlice(array.mutable_data(),
                     array.shape(0),
@@ -285,7 +251,6 @@ public:
         FastAssertCompareWhat(m_columns_count, <=, m_rows_offset, name);
     }
 
-    /// Obtain a specific row of the matrix slice as an array slice.
     template<typename I>
     ArraySlice<T> get_row(I row_index) const {
         FastAssertCompareWhat(0, <=, row_index, m_name);
@@ -293,110 +258,121 @@ public:
         return ArraySlice<T>(m_data + row_index * m_rows_offset, m_columns_count, m_name);
     }
 
-    /// The number of rows in the matrix slice.
     int rows_count() const { return m_rows_count; }
 
-    /// The number of columns in the matrix slice.
     int columns_count() const { return m_columns_count; }
 
-    /// Access mutable element by its indices.
-    template<typename I, typename J>
-    T& operator()(const I row_index, const J column_index) const {
-        SlowAssertCompareWhat(0, <=, row_index, m_name);
-        SlowAssertCompareWhat(row_index, <, m_rows_count, m_name);
-        SlowAssertCompareWhat(0, <=, column_index, m_name);
-        SlowAssertCompareWhat(column_index, <, m_columns_count, m_name);
-        return m_data[row_index * m_rows_offset + column_index];
-    }
-
-    /// Implicit conversion to an immutable slice.
     operator ConstMatrixSlice<T>() const {
         return ConstMatrixSlice<T>(m_data, m_rows_count, m_columns_count, m_rows_offset, m_name);
     }
 };
 
-/// An immutable CSR sparse matrix.
-template<typename P, typename I, typename D>
-class ConstCsrMatrix {
+/// An immutable CSR/CSC sparse matrix.
+template<typename D, typename I, typename P>
+class ConstCompressedMatrix {
 private:
-    ConstArraySlice<P> m_indptr;   ///< First and last indices positions per row.
-    ConstArraySlice<I> m_indices;  ///< Column indices.
     ConstArraySlice<D> m_data;     ///< Non-zero data.
-    int m_rows_count;              ///< Number of rows.
-    int m_columns_count;           ///< Number of columns.
+    ConstArraySlice<I> m_indices;  ///< Column indices.
+    ConstArraySlice<P> m_indptr;   ///< First and last indices positions per band.
+    int m_bands_count;             ///< Number of bands.
+    int m_elements_count;          ///< Number of elements.
     const char* m_name;            ///< Name for error messages.
 
 public:
-    /// Construct a matrix slice based on a Python Numpy array.
-    ConstCsrMatrix(ConstArraySlice<P>&& indptr,
-                   ConstArraySlice<I>&& indices,
-                   ConstArraySlice<D>&& data,
-                   const I columns_count,
-                   const char* const name)
-      : m_indptr(indptr)
+    ConstCompressedMatrix(ConstArraySlice<D>&& data,
+                          ConstArraySlice<I>&& indices,
+                          ConstArraySlice<P>&& indptr,
+                          const I elements_count,
+                          const char* const name)
+      : m_data(data)
       , m_indices(indices)
-      , m_data(data)
-      , m_rows_count(indptr.size() - 1)
-      , m_columns_count(columns_count)
+      , m_indptr(indptr)
+      , m_bands_count(indptr.size() - 1)
+      , m_elements_count(elements_count)
       , m_name(name) {
-        FastAssertCompareWhat(m_indptr[m_rows_count], ==, indices.size(), m_name);
-        FastAssertCompareWhat(m_indptr[m_rows_count], ==, data.size(), m_name);
+        FastAssertCompareWhat(m_indptr[m_bands_count], ==, indices.size(), m_name);
+        FastAssertCompareWhat(m_indptr[m_bands_count], ==, data.size(), m_name);
     }
 
+    ConstArraySlice<D> data() const { return m_data; }
+
+    ConstArraySlice<I> indices() const { return m_indices; }
+
+    ConstArraySlice<P> indptr() const { return m_indptr; }
+
+    int bands_count() const { return m_bands_count; }
+
+    int elements_count() const { return m_elements_count; }
+
     template<typename J>
-    ConstArraySlice<I> get_row_indices(const J row_index) const {
-        auto start_position = m_indptr[row_index];
-        auto stop_position = m_indptr[row_index + 1];
+    ConstArraySlice<I> get_band_indices(const J band_index) const {
+        auto start_position = m_indptr[band_index];
+        auto stop_position = m_indptr[band_index + 1];
         return m_indices.slice(start_position, stop_position);
     }
 
     template<typename J>
-    ConstArraySlice<D> get_row_data(const J row_index) const {
-        auto start_position = m_indptr[row_index];
-        auto stop_position = m_indptr[row_index + 1];
+    ConstArraySlice<D> get_band_data(const J band_index) const {
+        auto start_position = m_indptr[band_index];
+        auto stop_position = m_indptr[band_index + 1];
         return m_data.slice(start_position, stop_position);
     }
 };
 
-/// A mutable CSR sparse matrix.
-template<typename P, typename I, typename D>
-class CsrMatrix {
+/// A mutable CSR compressed matrix.
+template<typename D, typename I, typename P>
+class CompressedMatrix {
 private:
-    ArraySlice<P> m_indptr;   ///< First and last indices positions per row.
-    ArraySlice<I> m_indices;  ///< Column indices.
     ArraySlice<D> m_data;     ///< Non-zero data.
-    int m_rows_count;         ///< Number of rows.
-    int m_columns_count;      ///< Number of columns.
+    ArraySlice<I> m_indices;  ///< Column indices.
+    ArraySlice<P> m_indptr;   ///< First and last indices positions per band.
+    int m_bands_count;        ///< Number of bands.
+    int m_elements_count;     ///< Number of elements.
     const char* m_name;       ///< Name for error messages.
 
 public:
-    /// Construct a matrix slice based on a Python Numpy array.
-    CsrMatrix(pybind11::array_t<P>& indptr_array,
-              pybind11::array_t<I>& indices_array,
-              pybind11::array_t<D>& data_array,
-              const I columns_count,
-              const char* const name)
-      : m_indptr(indptr_array)
-      , m_indices(indices_array)
-      , m_data(data_array)
-      , m_rows_count(indptr_array.size() - 1)
-      , m_columns_count(columns_count)
+    CompressedMatrix(ArraySlice<D>&& data,
+                     ArraySlice<I>&& indices,
+                     ArraySlice<P>&& indptr,
+                     const I elements_count,
+                     const char* const name)
+      : m_data(data)
+      , m_indices(indices)
+      , m_indptr(indptr)
+      , m_bands_count(indptr.size() - 1)
+      , m_elements_count(elements_count)
       , m_name(name) {
-        FastAssertCompareWhat(m_indptr[m_rows_count], ==, indices_array.size(), m_name);
-        FastAssertCompareWhat(m_indptr[m_rows_count], ==, data_array.size(), m_name);
+        FastAssertCompareWhat(m_indptr[m_bands_count], ==, indices.size(), m_name);
+        FastAssertCompareWhat(m_indptr[m_bands_count], ==, data.size(), m_name);
     }
 
+    int bands_count() const { return m_bands_count; }
+
+    int elements_count() const { return m_elements_count; }
+
+    ConstArraySlice<D> data() const { return m_data; }
+
+    ConstArraySlice<D> indices() const { return m_indices; }
+
+    ConstArraySlice<D> indptr() const { return m_indptr; }
+
+    ArraySlice<D> data() { return m_data; }
+
+    ArraySlice<I> indices() { return m_indices; }
+
+    ArraySlice<P> indptr() { return m_indptr; }
+
     template<typename J>
-    ArraySlice<I> get_row_indices(const J row_index) {
-        auto start_position = m_indptr[row_index];
-        auto stop_position = m_indptr[row_index + 1];
+    ArraySlice<I> get_band_indices(const J band_index) {
+        auto start_position = m_indptr[band_index];
+        auto stop_position = m_indptr[band_index + 1];
         return m_indices.slice(start_position, stop_position);
     }
 
     template<typename J>
-    ArraySlice<D> get_row_data(const J row_index) {
-        auto start_position = m_indptr[row_index];
-        auto stop_position = m_indptr[row_index + 1];
+    ArraySlice<D> get_band_data(const J band_index) {
+        auto start_position = m_indptr[band_index];
+        auto stop_position = m_indptr[band_index + 1];
         return m_data.slice(start_position, stop_position);
     }
 };
@@ -551,7 +527,8 @@ downsample_matrix(const pybind11::array_t<D>& input_matrix,
 
 #pragma omp parallel for
     for (int row_index = 0; row_index < rows_count; ++row_index) {
-        downsample_slice(input.get_row(row_index), output.get_row(row_index), samples, random_seed);
+        int slice_seed = random_seed == 0 ? 0 : random_seed + row_index * 977;
+        downsample_slice(input.get_row(row_index), output.get_row(row_index), samples, slice_seed);
     }
 }
 
@@ -590,7 +567,8 @@ downsample_compressed(const pybind11::array_t<D>& input_data_array,
 
 #pragma omp parallel for
     for (int band_index = 0; band_index < bands_count; ++band_index) {
-        downsample_band(band_index, input_data, input_indptr, output, samples, random_seed);
+        int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 977;
+        downsample_band(band_index, input_data, input_indptr, output, samples, band_seed);
     }
 }
 
@@ -673,20 +651,15 @@ collect_compressed(const pybind11::array_t<D>& input_data_array,
 
 template<typename D, typename I, typename P>
 static void
-sort_band(const int band_index,
-          ArraySlice<D> data,
-          ArraySlice<I> indices,
-          ConstArraySlice<P> indptr) {
-    auto start_element_offset = indptr[band_index];
-    auto stop_element_offset = indptr[band_index + 1];
-    if (stop_element_offset == start_element_offset) {
+sort_band(const int band_index, CompressedMatrix<D, I, P>& matrix) {
+    if (matrix.indptr()[band_index] == matrix.indptr()[band_index + 1]) {
         return;
     }
 
-    auto band_indices = indices.slice(start_element_offset, stop_element_offset);
-    auto band_data = data.slice(start_element_offset, stop_element_offset);
+    auto band_indices = matrix.get_band_indices(band_index);
+    auto band_data = matrix.get_band_data(band_index);
 
-    tmp_positions.resize(stop_element_offset - start_element_offset);
+    tmp_positions.resize(band_indices.size());
     std::iota(tmp_positions.begin(), tmp_positions.end(), 0);
     std::sort(tmp_positions.begin(),
               tmp_positions.end(),
@@ -716,23 +689,23 @@ sort_band(const int band_index,
 /// See the Python `metacell.utilities.computation._relayout_compressed` function.
 template<typename D, typename I, typename P>
 static void
-sort_compressed(pybind11::array_t<D>& data_array,
-                pybind11::array_t<I>& indices_array,
-                pybind11::array_t<P>& indptr_array) {
+sort_compressed_indices(pybind11::array_t<D>& data_array,
+                        pybind11::array_t<I>& indices_array,
+                        pybind11::array_t<P>& indptr_array,
+                        const int elements_count) {
     WithoutGil without_gil{};
 
-    ArraySlice<D> data{ data_array, "data_array" };
-    ArraySlice<I> indices{ indices_array, "indices_array" };
-    ConstArraySlice<P> indptr{ indptr_array, "indptr_array" };
+    CompressedMatrix<D, I, P> matrix(ArraySlice<D>(data_array, "data"),
+                                     ArraySlice<I>(indices_array, "indices"),
+                                     ArraySlice<P>(indptr_array, "indptr"),
+                                     elements_count,
+                                     "compressed");
 
-    FastAssertCompare(data.size(), ==, indptr[indptr.size() - 1]);
-    FastAssertCompare(indices.size(), ==, data.size());
-
-    const int bands_count = indptr.size() - 1;
+    const int bands_count = matrix.bands_count();
 
 #pragma omp parallel for
     for (int band_index = 0; band_index < bands_count; ++band_index) {
-        sort_band(band_index, data, indices, indptr);
+        sort_band(band_index, matrix);
     }
 }
 
@@ -822,20 +795,20 @@ collect_outgoing(const int degree,
 }
 
 static void
-prune_row(const int row_index,
-          const int pruned_degree,
-          ConstCsrMatrix<int32_t, int32_t, float32_t>& input_pruned_ranks,
-          ConstArraySlice<int32_t> output_pruned_indptr,
-          ArraySlice<int32_t> output_pruned_indices,
-          ArraySlice<float32_t> output_pruned_ranks) {
-    const auto start_position = output_pruned_indptr[row_index];
-    const auto stop_position = output_pruned_indptr[row_index + 1];
+prune_band(const int band_index,
+           const int pruned_degree,
+           ConstCompressedMatrix<float32_t, int32_t, int32_t>& input_pruned_ranks,
+           ArraySlice<float32_t> output_pruned_ranks,
+           ArraySlice<int32_t> output_pruned_indices,
+           ConstArraySlice<int32_t> output_pruned_indptr) {
+    const auto start_position = output_pruned_indptr[band_index];
+    const auto stop_position = output_pruned_indptr[band_index + 1];
 
     auto output_indices = output_pruned_indices.slice(start_position, stop_position);
     auto output_ranks = output_pruned_ranks.slice(start_position, stop_position);
 
-    const auto input_indices = input_pruned_ranks.get_row_indices(row_index);
-    const auto input_ranks = input_pruned_ranks.get_row_data(row_index);
+    const auto input_indices = input_pruned_ranks.get_band_indices(band_index);
+    const auto input_ranks = input_pruned_ranks.get_band_data(band_index);
     FastAssertCompare(input_indices.size(), ==, input_ranks.size());
     FastAssertCompare(input_ranks.size(), ==, input_ranks.size());
 
@@ -872,48 +845,109 @@ prune_row(const int row_index,
 /// See the Python `metacell.tools.knn_graph._prune_ranks` function.
 static void
 collect_pruned(const int pruned_degree,
-               const pybind11::array_t<int32_t>& input_pruned_ranks_indptr,
-               const pybind11::array_t<int32_t>& input_pruned_ranks_indices,
                const pybind11::array_t<float32_t>& input_pruned_ranks_data,
-               pybind11::array_t<int32_t>& output_pruned_indptr_array,
+               const pybind11::array_t<int32_t>& input_pruned_ranks_indices,
+               const pybind11::array_t<int32_t>& input_pruned_ranks_indptr,
+               pybind11::array_t<float32_t>& output_pruned_ranks_array,
                pybind11::array_t<int32_t>& output_pruned_indices_array,
-               pybind11::array_t<float32_t>& output_pruned_ranks_array) {
+               pybind11::array_t<int32_t>& output_pruned_indptr_array) {
     int size = input_pruned_ranks_indptr.size() - 1;
-    ConstCsrMatrix<int32_t, int32_t, float32_t> input_pruned_ranks(
-        ConstArraySlice<int32_t>(input_pruned_ranks_indptr, "pruned_ranks_indptr"),
-        ConstArraySlice<int32_t>(input_pruned_ranks_indices, "input_pruned_ranks_indices"),
+    ConstCompressedMatrix<float32_t, int32_t, int32_t> input_pruned_ranks(
         ConstArraySlice<float32_t>(input_pruned_ranks_data, "input_pruned_ranks_data"),
+        ConstArraySlice<int32_t>(input_pruned_ranks_indices, "input_pruned_ranks_indices"),
+        ConstArraySlice<int32_t>(input_pruned_ranks_indptr, "pruned_ranks_indptr"),
         size,
         "pruned_ranks");
 
-    ArraySlice<int32_t> output_pruned_indptr(output_pruned_indptr_array, "output_pruned_indptr");
-    ArraySlice<int32_t> output_pruned_indices(output_pruned_indices_array, "output_pruned_indices");
     ArraySlice<float32_t> output_pruned_ranks(output_pruned_ranks_array, "output_pruned_ranks");
+    ArraySlice<int32_t> output_pruned_indices(output_pruned_indices_array, "output_pruned_indices");
+    ArraySlice<int32_t> output_pruned_indptr(output_pruned_indptr_array, "output_pruned_indptr");
 
-    FastAssertCompare(output_pruned_indptr.size(), ==, size + 1);
-    FastAssertCompare(output_pruned_indices.size(), >=, size * pruned_degree);
     FastAssertCompare(output_pruned_ranks.size(), >=, size * pruned_degree);
+    FastAssertCompare(output_pruned_indices.size(), >=, size * pruned_degree);
+    FastAssertCompare(output_pruned_indptr.size(), ==, size + 1);
 
     int start_position = output_pruned_indptr[0] = 0;
-    for (int row_index = 0; row_index < size; ++row_index) {
-        FastAssertCompare(start_position, ==, output_pruned_indptr[row_index]);
-        auto input_ranks = input_pruned_ranks.get_row_data(row_index);
+    for (int band_index = 0; band_index < size; ++band_index) {
+        FastAssertCompare(start_position, ==, output_pruned_indptr[band_index]);
+        auto input_ranks = input_pruned_ranks.get_band_data(band_index);
         if (input_ranks.size() <= pruned_degree) {
             start_position += input_ranks.size();
         } else {
             start_position += pruned_degree;
         }
-        output_pruned_indptr[row_index + 1] = start_position;
+        output_pruned_indptr[band_index + 1] = start_position;
     }
 
 #pragma omp parallel for
-    for (int row_index = 0; row_index < size; ++row_index) {
-        prune_row(row_index,
-                  pruned_degree,
-                  input_pruned_ranks,
-                  output_pruned_indptr,
-                  output_pruned_indices,
-                  output_pruned_ranks);
+    for (int band_index = 0; band_index < size; ++band_index) {
+        prune_band(band_index,
+                   pruned_degree,
+                   input_pruned_ranks,
+                   output_pruned_ranks,
+                   output_pruned_indices,
+                   output_pruned_indptr);
+    }
+}
+
+template<typename D, typename I, typename P>
+static void
+shuffle_band(const int band_index, CompressedMatrix<D, I, P>& matrix, const int random_seed) {
+    std::minstd_rand random(random_seed);
+    tmp_indices.resize(matrix.elements_count());
+    std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
+    std::random_shuffle(tmp_indices.begin(), tmp_indices.end(), [&](int n) {
+        return random() % n;
+    });
+    auto band_indices = matrix.get_band_indices(band_index);
+    tmp_indices.resize(band_indices.size());
+    std::copy(tmp_indices.begin(), tmp_indices.end(), band_indices.begin());
+    sort_band(band_index, matrix);
+}
+
+/// See the Python `metacell.utilities.computation.shuffle_matrix` function.
+template<typename D, typename I, typename P>
+static void
+shuffle_compressed(pybind11::array_t<D>& data_array,
+                   pybind11::array_t<I>& indices_array,
+                   pybind11::array_t<P>& indptr_array,
+                   const int elements_count,
+                   const int random_seed) {
+    CompressedMatrix<D, I, P> matrix(ArraySlice<D>(data_array, "data"),
+                                     ArraySlice<I>(indices_array, "indices"),
+                                     ArraySlice<P>(indptr_array, "indptr"),
+                                     elements_count,
+                                     "compressed");
+
+    const int bands_count = matrix.bands_count();
+
+#pragma omp parallel for
+    for (int band_index = 0; band_index < bands_count; ++band_index) {
+        int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 977;
+        shuffle_band(band_index, matrix, band_seed);
+    }
+}
+
+template<typename D>
+static void
+shuffle_row(const int row_index, MatrixSlice<D>& matrix, const int random_seed) {
+    std::minstd_rand random(random_seed);
+    auto row = matrix.get_row(row_index);
+    std::random_shuffle(row.begin(), row.end(), [&](int n) { return random() % n; });
+}
+
+/// See the Python `metacell.utilities.computation.shuffle_matrix` function.
+template<typename D>
+static void
+shuffle_matrix(pybind11::array_t<D>& matrix_array, const int random_seed) {
+    MatrixSlice<D> matrix(matrix_array, "matrix");
+
+    const int rows_count = matrix.rows_count();
+
+#pragma omp parallel for
+    for (int row_index = 0; row_index < rows_count; ++row_index) {
+        int row_seed = random_seed == 0 ? 0 : random_seed + row_index * 977;
+        shuffle_row(row_index, matrix, row_seed);
     }
 }
 
@@ -924,10 +958,42 @@ PYBIND11_MODULE(extensions, module) {
 #define REGISTER_D_O(D, O)                          \
     module.def("downsample_array_" #D "_" #O,       \
                &metacells::downsample_array<D, O>,  \
-               "Downsample array.");                \
+               "Downsample array data.");           \
     module.def("downsample_matrix_" #D "_" #O,      \
                &metacells::downsample_matrix<D, O>, \
-               "Downsample matrix.");
+               "Downsample matrix data.");
+
+#define REGISTER_D(D) \
+    module.def("shuffle_matrix_" #D, &metacells::shuffle_matrix<D>, "Shuffle matrix data.");
+
+#define REGISTER_D_P_O(D, P, O)                            \
+    module.def("downsample_compressed_" #D "_" #P "_" #O,  \
+               &metacells::downsample_compressed<D, P, O>, \
+               "Downsample compressed data.");
+
+#define REGISTER_D_I_P(D, I, P)                              \
+    module.def("collect_compressed_" #D "_" #I "_" #P,       \
+               &metacells::collect_compressed<D, I, P>,      \
+               "Collect compressed data for relayout.");     \
+    module.def("sort_compressed_indices_" #D "_" #I "_" #P,  \
+               &metacells::sort_compressed_indices<D, I, P>, \
+               "Sort indices in a compressed matrix.");      \
+    module.def("shuffle_compressed_" #D "_" #I "_" #P,       \
+               &metacells::shuffle_compressed<D, I, P>,      \
+               "Shuffle compressed data.");
+
+    module.def("collect_outgoing",
+               &metacells::collect_outgoing,
+               "Collect the topmost outgoing edges.");
+
+    module.def("collect_pruned", &metacells::collect_pruned, "Collect the topmost pruned edges.");
+
+    REGISTER_D(float32_t)
+    REGISTER_D(float64_t)
+    REGISTER_D(int32_t)
+    REGISTER_D(int64_t)
+    REGISTER_D(uint32_t)
+    REGISTER_D(uint64_t)
 
     REGISTER_D_O(float32_t, float32_t)
     REGISTER_D_O(float32_t, float64_t)
@@ -965,11 +1031,6 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D_O(uint64_t, int64_t)
     REGISTER_D_O(uint64_t, uint32_t)
     REGISTER_D_O(uint64_t, uint64_t)
-
-#define REGISTER_D_P_O(D, P, O)                            \
-    module.def("downsample_compressed_" #D "_" #P "_" #O,  \
-               &metacells::downsample_compressed<D, P, O>, \
-               "Downsample compressed data.");
 
     REGISTER_D_P_O(float32_t, int32_t, float32_t)
     REGISTER_D_P_O(float32_t, int32_t, float64_t)
@@ -1116,14 +1177,6 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D_P_O(uint64_t, uint64_t, uint32_t)
     REGISTER_D_P_O(uint64_t, uint64_t, uint64_t)
 
-#define REGISTER_D_I_P(D, I, P)                          \
-    module.def("collect_compressed_" #D "_" #I "_" #P,   \
-               &metacells::collect_compressed<D, I, P>,  \
-               "Collect compressed data for relayout."); \
-    module.def("sort_compressed_" #D "_" #I "_" #P,      \
-               &metacells::sort_compressed<D, I, P>,     \
-               "Sort compressed data.");
-
     REGISTER_D_I_P(float32_t, int32_t, int32_t)
     REGISTER_D_I_P(float32_t, int32_t, int64_t)
     REGISTER_D_I_P(float32_t, int32_t, uint32_t)
@@ -1196,10 +1249,4 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D_I_P(uint64_t, uint32_t, uint64_t)
     REGISTER_D_I_P(uint64_t, uint64_t, uint32_t)
     REGISTER_D_I_P(uint64_t, uint64_t, uint64_t)
-
-    module.def("collect_outgoing",
-               &metacells::collect_outgoing,
-               "Collect the topmost outgoing edges.");
-
-    module.def("collect_pruned", &metacells::collect_pruned, "Collect the topmost pruned edges.");
 }
