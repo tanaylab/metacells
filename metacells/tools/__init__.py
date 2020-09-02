@@ -11,6 +11,7 @@ All the functions included here are exported under ``metacells.tl``.
 '''
 
 from .candidate_metacells import *
+from .excess_r2 import *
 from .final_metacells import *
 from .high_genes import *
 from .knn_graph import *

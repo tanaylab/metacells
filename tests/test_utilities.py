@@ -255,7 +255,7 @@ def test_shuffle_dense_matrix() -> None:
         np.array([[0, 1, 2], [3, 0, 4], [5, 6, 0], [7, 8, 9]], dtype='float')
     ut.shuffle_matrix(dense, per='row', random_seed=123456)
     expected = \
-        np.array([[2, 0, 1], [3, 4, 0], [6, 5, 0], [9, 8, 7]], dtype='float')
+        np.array([[2, 0, 1], [3, 0, 4], [6, 0, 5], [9, 8, 7]], dtype='float')
     assert np.allclose(dense, expected)
 
 
@@ -265,5 +265,19 @@ def test_shuffle_sparse_matrix() -> None:
                                    dtype='float'))
     ut.shuffle_matrix(sparse_csr, per='column', random_seed=123456)
     expected = \
-        np.array([[5, 1, 4], [7, 0, 2], [0, 6, 9], [3, 8, 0]], dtype='float')
+        np.array([[5, 1, 9], [7, 6, 2], [0, 0, 4], [3, 8, 0]], dtype='float')
     assert np.allclose(sparse_csr.todense(), expected)
+
+
+def test_rank_matrix() -> None:
+    dense = \
+        np.array([[0, 1, 2], [3, 0, 4], [5, 6, 0], [7, 8, 9]], dtype='float')
+
+    result = ut.rank_per(dense, per='row', rank=1)
+    expected = np.array([1, 3, 5, 8])
+    assert np.allclose(result, expected)
+
+    dense = ut.to_layout(dense, layout='column_major')
+    result = ut.rank_per(dense, per='column', rank=1)
+    expected = np.array([3, 1, 2])
+    assert np.allclose(result, expected)

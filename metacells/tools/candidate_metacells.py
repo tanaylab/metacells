@@ -35,7 +35,6 @@ def compute_candidate_metacells(
     max_merge_factor: Optional[float] = 0.25,
     random_seed: int = 0,
     inplace: bool = True,
-    intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
     Assign observations (cells) to (raw, candidate) metacells based ``of`` a weighted directed graph
@@ -58,9 +57,6 @@ def compute_candidate_metacells(
 
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
-
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
 
     **Computation Parameters**
 
@@ -112,18 +108,15 @@ def compute_candidate_metacells(
     of, level = ut.log_operation(LOG, adata, 'compute_candidate_metacells',
                                  of, 'obs_outgoing_weights')
 
-    with ut.intermediate_step(adata, intermediate=intermediate):
-        edge_weights = ut.get_oo_data(adata, of)
-        if not isinstance(cell_sizes, str):
-            node_sizes = cell_sizes
-        else:
-            node_sizes = ut.get_o_data(adata, cell_sizes)
-
+    edge_weights = ut.get_oo_data(adata, of)
     edge_weights = ut.to_layout(edge_weights, 'row_major')
     assert edge_weights.shape[0] == edge_weights.shape[1]
 
+    node_sizes = \
+        ut.get_vector_parameter_data(LOG, level, adata, cell_sizes,
+                                     per='o', name='cell_sizes', default='1')
     if node_sizes is not None:
-        node_sizes = ut.to_dense_vector(node_sizes).astype('int')
+        node_sizes = node_sizes.astype('int')
 
     assert target_metacell_size > 0
     max_metacell_size = None

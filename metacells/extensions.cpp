@@ -527,7 +527,7 @@ downsample_matrix(const pybind11::array_t<D>& input_matrix,
 
 #pragma omp parallel for
     for (int row_index = 0; row_index < rows_count; ++row_index) {
-        int slice_seed = random_seed == 0 ? 0 : random_seed + row_index * 977;
+        int slice_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
         downsample_slice(input.get_row(row_index), output.get_row(row_index), samples, slice_seed);
     }
 }
@@ -567,7 +567,7 @@ downsample_compressed(const pybind11::array_t<D>& input_data_array,
 
 #pragma omp parallel for
     for (int band_index = 0; band_index < bands_count; ++band_index) {
-        int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 977;
+        int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
         downsample_band(band_index, input_data, input_indptr, output, samples, band_seed);
     }
 }
@@ -923,7 +923,7 @@ shuffle_compressed(pybind11::array_t<D>& data_array,
 
 #pragma omp parallel for
     for (int band_index = 0; band_index < bands_count; ++band_index) {
-        int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 977;
+        int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
         shuffle_band(band_index, matrix, band_seed);
     }
 }
@@ -946,8 +946,44 @@ shuffle_matrix(pybind11::array_t<D>& matrix_array, const int random_seed) {
 
 #pragma omp parallel for
     for (int row_index = 0; row_index < rows_count; ++row_index) {
-        int row_seed = random_seed == 0 ? 0 : random_seed + row_index * 977;
+        int row_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
         shuffle_row(row_index, matrix, row_seed);
+    }
+}
+
+template<typename D>
+static D
+rank_row(int row_index, ConstMatrixSlice<D>& input, int rank) {
+    const auto row_input = input.get_row(row_index);
+    tmp_indices.resize(input.columns_count());
+    std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
+    std::nth_element(tmp_indices.begin(),
+                     tmp_indices.begin() + rank,
+                     tmp_indices.end(),
+                     [&](const int32_t left_column_index, const int32_t right_column_index) {
+                         const auto left_value = row_input[left_column_index];
+                         const auto right_value = row_input[right_column_index];
+                         return left_value < right_value;
+                     });
+    return row_input[tmp_indices[rank]];
+}
+
+/// See the Python `metacell.utilities.computation.rank_per` function.
+template<typename D>
+static void
+rank_matrix(const pybind11::array_t<D>& input_matrix,
+            pybind11::array_t<D>& output_array,
+            const int rank) {
+    ConstMatrixSlice<D> input(input_matrix, "input");
+    ArraySlice<D> output(output_array, "array");
+
+    const int rows_count = input.rows_count();
+    FastAssertCompare(rows_count, ==, output_array.size());
+    FastAssertCompare(rank, <, input.columns_count());
+
+#pragma omp parallel for
+    for (int row_index = 0; row_index < rows_count; ++row_index) {
+        output[row_index] = rank_row(row_index, input, rank);
     }
 }
 
@@ -963,8 +999,9 @@ PYBIND11_MODULE(extensions, module) {
                &metacells::downsample_matrix<D, O>, \
                "Downsample matrix data.");
 
-#define REGISTER_D(D) \
-    module.def("shuffle_matrix_" #D, &metacells::shuffle_matrix<D>, "Shuffle matrix data.");
+#define REGISTER_D(D)                                                                        \
+    module.def("shuffle_matrix_" #D, &metacells::shuffle_matrix<D>, "Shuffle matrix data."); \
+    module.def("rank_matrix_" #D, &metacells::rank_matrix<D>, "Rank of matrix data.");
 
 #define REGISTER_D_P_O(D, P, O)                            \
     module.def("downsample_compressed_" #D "_" #P "_" #O,  \

@@ -9,7 +9,7 @@ we want top-level operations, their key parameters, and writing of their results
 be ``INFO`` - and everything else to be ``DEBUG``.
 
 To achieve this, we track for each ``AnnData`` whether it is a temporary object, and use the
-:py:func:`log_level` function below. The code carefully uses this level for the potentially
+:py:func:`get_log_level` function below. The code carefully uses this level for the potentially
 top-level informative messages, and uses ``DEBUG`` for everything else.
 
 We also allow each ``AnnData`` object to have an optional name for logging. Both this name and
@@ -31,7 +31,7 @@ import metacells.utilities.typing as utt
 
 __all__ = [
     'setup_logger',
-    'log_level',
+    'get_log_level',
     'log_operation',
     'log_of',
     'log_mask',
@@ -96,7 +96,7 @@ def setup_logger(
     return logger
 
 
-def log_level(adata: AnnData) -> int:
+def get_log_level(adata: AnnData) -> int:
     '''
     Return the log level for operations on the data.
 
@@ -121,7 +121,7 @@ def log_operation(
 
     Return the explicit ``of`` data name and the log level for the ``adata``.
     '''
-    level = log_level(adata)
+    level = get_log_level(adata)
     name = adata.uns.get('__name__')
     of = of or default or adata.uns['__focus__']
 
@@ -152,7 +152,7 @@ def log_of(
         of = default or adata.uns['__focus__']
         level = logging.DEBUG
     else:
-        level = log_level(adata)
+        level = get_log_level(adata)
 
     logger.log(level, '  %s: %s', name, of)
     return of
@@ -178,7 +178,7 @@ def mask_description(mask: utt.Vector) -> str:
     This returns the number of set entries, the total number of entries, and the percentage.
     '''
     mask = utt.to_dense_vector(mask)
-    return 'mask of ' + ratio_description(np.sum(mask), mask.size)
+    return ratio_description(np.sum(mask), mask.size)
 
 
 def ratio_description(numerator: float, denominator: float) -> str:

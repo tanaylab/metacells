@@ -29,7 +29,7 @@ def find_outlier_cells(
     adata: AnnData,
     *,
     of: Optional[str] = None,
-    communities: Union[str, ut.Vector] = 'candidate_metacell',
+    candidate_metacells: Union[str, ut.Vector] = 'candidate_metacell',
     min_gene_fold_factor: float = 3.0,
     max_genes_fraction: float = 0.03,
     max_cells_fraction: float = 0.25,
@@ -61,14 +61,14 @@ def find_outlier_cells(
     **Computation Parameters**
 
     Intuitively, we first select some fraction of the genes which were least predictable compared to
-    the mean expression in the communities. We then mark as outliers some fraction of the cells
-    whose expression of these genes was least predictable compared to the mean expression in the
-    communities. Operationally:
+    the mean expression in the candidate metacells. We then mark as outliers some fraction of the
+    cells whose expression of these genes was least predictable compared to the mean expression in
+    the candidate metacells. Operationally:
 
-    1. Compute for each community the mean fraction of the UMIs expressed by each gene.
+    1. Compute for each candidate metacell the mean fraction of the UMIs expressed by each gene.
        Scale this by each cell's total UMIs to compute the expected number of UMIs for each cell.
-       Compute the fold factor log2((actual UMIs + 1) / (expected UMIs + 1)) for each gene for
-       each cell.
+       Compute the fold factor log2((actual UMIs + 1) / (expected UMIs + 1)) for each gene for each
+       cell.
 
     2. Ignore all fold factors less than the ``min_gene_fold_factor`` (default:
        {min_gene_fold_factor}). Count the number of genes which have a fold factor above this
@@ -100,13 +100,11 @@ def find_outlier_cells(
                      intermediate=intermediate) as data:
         cells_count, genes_count = data.shape
 
-        if isinstance(communities, str):
-            community_of_cells = ut.get_o_data(adata, communities)
-        else:
-            community_of_cells = communities
-
-        community_of_cells = ut.to_dense_vector(community_of_cells)
-        assert community_of_cells.size == cells_count
+        candidate_metacell_of_cells = \
+            ut.get_vector_parameter_data(LOG, level, adata, candidate_metacells,
+                                         per='o', name='candidate_metacells')
+        assert candidate_metacell_of_cells is not None
+        assert candidate_metacell_of_cells.size == cells_count
 
         totals_of_cells = pp.get_per_obs(adata, ut.sum_per).proper
         assert totals_of_cells.size == cells_count
@@ -115,7 +113,7 @@ def find_outlier_cells(
 
         list_of_fold_factors, list_of_cell_index_of_rows = \
             _collect_fold_factors(data=data,
-                                  community_of_cells=community_of_cells,
+                                  candidate_metacell_of_cells=candidate_metacell_of_cells,
                                   totals_of_cells=totals_of_cells,
                                   min_gene_fold_factor=min_gene_fold_factor)
 
@@ -157,7 +155,7 @@ def find_outlier_cells(
 def _collect_fold_factors(
     *,
     data: ut.ProperMatrix,
-    community_of_cells: ut.DenseVector,
+    candidate_metacell_of_cells: ut.DenseVector,
     totals_of_cells: ut.DenseVector,
     min_gene_fold_factor: float,
 ) -> Tuple[List[ut.CompressedMatrix], List[ut.DenseVector]]:
@@ -165,44 +163,53 @@ def _collect_fold_factors(
     list_of_cell_index_of_rows: List[ut.DenseVector] = []
 
     cells_count, genes_count = data.shape
-    communities_count = np.max(community_of_cells) + 1
+    candidate_metacells_count = np.max(candidate_metacell_of_cells) + 1
 
-    ut.timed_parameters(communities=communities_count,
+    ut.timed_parameters(candidate_metacells=candidate_metacells_count,
                         cells=cells_count, genes=genes_count)
     remaining_cells_count = cells_count
 
-    for community_index in range(communities_count):
-        community_cell_indices = \
-            np.where(community_of_cells == community_index)[0]
+    for candidate_metacell_index in range(candidate_metacells_count):
+        candidate_metacell_cell_indices = \
+            np.where(candidate_metacell_of_cells ==
+                     candidate_metacell_index)[0]
 
-        community_cells_count = community_cell_indices.size
-        assert community_cells_count > 0
+        candidate_metacell_cells_count = candidate_metacell_cell_indices.size
+        assert candidate_metacell_cells_count > 0
 
-        list_of_cell_index_of_rows.append(community_cell_indices)
-        remaining_cells_count -= community_cells_count
+        list_of_cell_index_of_rows.append(candidate_metacell_cell_indices)
+        remaining_cells_count -= candidate_metacell_cells_count
 
-        totals_of_community_cells = totals_of_cells[community_cell_indices]
+        totals_of_candidate_metacell_cells = \
+            totals_of_cells[candidate_metacell_cell_indices]
 
-        data_of_community = \
-            ut.to_dense_matrix(data[community_cell_indices, :], copy=True)
+        data_of_candidate_metacell = \
+            ut.to_dense_matrix(data[candidate_metacell_cell_indices, :],
+                               copy=True)
 
-        totals_of_community_genes = data_of_community.sum(axis=0)
-        assert totals_of_community_genes.size == genes_count
+        totals_of_candidate_metacell_genes = \
+            data_of_candidate_metacell.sum(axis=0)
+        assert totals_of_candidate_metacell_genes.size == genes_count
 
-        fractions_of_community_genes = \
-            totals_of_community_genes / np.sum(totals_of_community_genes)
+        fractions_of_candidate_metacell_genes = \
+            totals_of_candidate_metacell_genes \
+            / np.sum(totals_of_candidate_metacell_genes)
 
-        expected_data_of_community = \
-            np.outer(totals_of_community_cells, fractions_of_community_genes)
-        assert expected_data_of_community.shape == data_of_community.shape
+        expected_data_of_candidate_metacell = \
+            np.outer(totals_of_candidate_metacell_cells,
+                     fractions_of_candidate_metacell_genes)
+        assert expected_data_of_candidate_metacell.shape \
+            == data_of_candidate_metacell.shape
 
-        expected_data_of_community += 1
-        data_of_community += 1
-        data_of_community /= expected_data_of_community
-        np.log2(data_of_community, out=data_of_community)
-        data_of_community[data_of_community < min_gene_fold_factor] = 0
+        expected_data_of_candidate_metacell += 1
+        data_of_candidate_metacell += 1
+        data_of_candidate_metacell /= expected_data_of_candidate_metacell
+        np.log2(data_of_candidate_metacell, out=data_of_candidate_metacell)
+        data_of_candidate_metacell[data_of_candidate_metacell
+                                   < min_gene_fold_factor] = 0
 
-        list_of_fold_factors.append(sparse.csr_matrix(data_of_community))
+        list_of_fold_factors.append(  #
+            sparse.csr_matrix(data_of_candidate_metacell))
 
     assert remaining_cells_count == 0
     return list_of_fold_factors, list_of_cell_index_of_rows

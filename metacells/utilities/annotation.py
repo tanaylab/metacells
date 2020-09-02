@@ -113,6 +113,7 @@ caller is responsible to ensure that the names of manually set data are also uni
 
 import logging
 from contextlib import contextmanager
+from logging import Logger
 from typing import (Any, Callable, Dict, Iterable, Iterator, List,
                     MutableMapping, NamedTuple, Optional, Set, Sized, Tuple,
                     Union)
@@ -146,6 +147,7 @@ __all__ = [
     'get_proper',
     'get_proper_matrix',
     'get_proper_vector',
+    'get_vector_parameter_data',
     'has_data',
     'data_per',
 
@@ -218,7 +220,8 @@ def setup(
         adata.uns['__tmp__'] = True
     if name is not None:
         adata.uns['__name__'] = name
-        LOG.log(utl.log_level(adata), 'created %s shape %s', name, adata.shape)
+        LOG.log(utl.get_log_level(adata),
+                'created %s shape %s', name, adata.shape)
     adata.uns['__x__'] = x_name
     adata.uns['__focus__'] = x_name
     _log_set_data(adata, 'm', '__focus__', x_name, force=True)
@@ -436,7 +439,8 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
         bdata.uns['__tmp__'] = True
     if name is not None:
         bdata.uns['__name__'] = name
-        LOG.log(utl.log_level(bdata), 'sliced %s shape %s', name, bdata.shape)
+        LOG.log(utl.get_log_level(bdata),
+                'sliced %s shape %s', name, bdata.shape)
 
     assert get_x_name(bdata) == x_name
     if focus == x_name or focus in bdata.layers:
@@ -647,6 +651,36 @@ def _slice_action(
         return 'discard'
 
     return 'fix'
+
+
+def get_vector_parameter_data(
+    logger: Logger,
+    level: int,
+    adata: AnnData,
+    value: Optional[Union[str, utt.Vector]],
+    *,
+    name: str,
+    per: str,
+    default: str = 'None',
+) -> Optional[utt.DenseVector]:
+    '''
+    Given a parameter ``value`` which is either a name or an explicit (optional) vector parameter,
+    log it and either return it (as dense) or get it from the annotated data.
+    '''
+    assert per in ('o', 'v')
+
+    if isinstance(value, str):
+        logger.log(level, '  %s: %s', name, value)
+        value = get_data(adata, value, per=per)
+    elif value is None:
+        logger.log(level, '  %s: %s', name, default)
+    else:
+        logger.log(level, '  %s: <matrix>', name)
+
+    if value is not None:
+        value = utt.to_dense_vector(value)  # type: ignore
+
+    return value
 
 
 @utm.timed_call()
@@ -1466,7 +1500,7 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
     if '|' in name:
         level = logging.DEBUG
     else:
-        level = utl.log_level(adata)
+        level = utl.get_log_level(adata)
 
     if not LOG.isEnabledFor(level):
         return

@@ -69,13 +69,14 @@ def group_obs_data(
     layouts) for future reuse. Otherwise, discard it.
     '''
     ut.log_operation(LOG, adata, 'group_data')
+    level = ut.get_log_level(adata)
 
     with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major',
                      intermediate=intermediate) as data:
-        if isinstance(groups, str):
-            group_of_cells = ut.to_dense_vector(ut.get_o_data(adata, groups))
-        else:
-            group_of_cells = ut.to_dense_vector(groups)
+        group_of_cells = \
+            ut.get_vector_parameter_data(LOG, level, adata, groups,
+                                         per='o', name='group indices')
+        assert group_of_cells is not None
 
         summed_data = ut.sum_groups(data, group_of_cells, per='row')
         if summed_data is None:

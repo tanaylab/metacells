@@ -34,10 +34,13 @@ __all__ = [
     'log_data',
 
     'max_per',
+    'nanmax_per',
     'min_per',
+    'nanmin_per',
     'nnz_per',
     'sum_per',
     'sum_squared_per',
+    'rank_per',
 
     'bincount_vector',
 
@@ -296,7 +299,7 @@ def log_data(
     else:
         where = dense > 0
         if normalization < 0:
-            dense[~where] = np.amin(dense[where])
+            dense[~where] = np.min(dense[where])
 
     if base is None:
         log_function = np.log
@@ -556,7 +559,19 @@ def max_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
         return _reduce_matrix(sparse, per, lambda sparse: sparse.max(axis=1 - axis))
 
     dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
-    return _reduce_matrix(dense, per, lambda dense: np.amax(dense, axis=1 - axis))
+    return _reduce_matrix(dense, per, lambda dense: np.max(dense, axis=1 - axis))
+
+
+@ utm.timed_call()
+def nanmax_per(matrix: utt.DenseMatrix, *, per: str) -> utt.DenseVector:
+    '''
+    Compute the maximal value ``per`` (``row`` or ``column``) of some ``matrix``,
+    ignoring ``None`` values, if any.
+    '''
+    axis = utt.PER_OF_AXIS.index(per)
+
+    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
+    return _reduce_matrix(dense, per, lambda dense: np.nanmax(dense, axis=1 - axis))
 
 
 @ utm.timed_call()
@@ -571,7 +586,23 @@ def min_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
         return _reduce_matrix(sparse, per, lambda sparse: sparse.min(axis=1 - axis))
 
     dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
-    return _reduce_matrix(dense, per, lambda dense: np.amin(dense, axis=1 - axis))
+    return _reduce_matrix(dense, per, lambda dense: np.min(dense, axis=1 - axis))
+
+
+@ utm.timed_call()
+def nanmin_per(matrix: utt.DenseMatrix, *, per: str) -> utt.DenseVector:
+    '''
+    Compute the minimal value ``per`` (``row`` or ``column``) of some ``matrix``,
+    ignoring ``None`` values, if any.
+    '''
+    axis = utt.PER_OF_AXIS.index(per)
+
+    sparse = utt.SparseMatrix.maybe(matrix)
+    if sparse is not None:
+        return _reduce_matrix(sparse, per, lambda sparse: sparse.nanmin(axis=1 - axis))
+
+    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
+    return _reduce_matrix(dense, per, lambda dense: np.nanmin(dense, axis=1 - axis))
 
 
 @ utm.timed_call()
@@ -627,6 +658,34 @@ def sum_squared_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
     return _reduce_matrix(dense, per,
                           lambda dense: np.square(dense).sum(axis=1 - axis))
+
+
+@ utm.timed_call()
+def rank_per(matrix: utt.DenseMatrix, rank: int, *, per: Optional[str]) -> utt.DenseVector:
+    '''
+    Get the ``rank`` element ``per`` (``row`` or ``column``) of some ``matrix``.
+
+    If ``per`` (default: {per}) is ``None``, the matrix must be square and is assumed to be
+    symmetric, so the most efficient direction is used based on the matrix layout. Otherwise it must
+    be one of ``row`` or ``column``, and the matrix must be in the appropriate layout (row-major for
+    ranking data in each row, column-major for ranking data in each column).
+    '''
+    if per is None:
+        layout = utt.matrix_layout(matrix)
+        assert layout is not None
+        per = layout[:-6]
+
+    assert per in utt.PER_OF_AXIS
+    assert utt.matrix_layout(matrix) == per + '_major'
+
+    if per == 'column':
+        matrix = matrix.transpose()
+
+    output = np.empty(matrix.shape[0], dtype=matrix.dtype)
+    extension_name = 'rank_matrix_%s_t' % matrix.dtype
+    extension = getattr(xt, extension_name)
+    extension(matrix, output, rank)
+    return output
 
 
 M = TypeVar('M', bound=utt.Matrix)
@@ -899,6 +958,7 @@ def sum_groups(
 
     groups = utt.to_dense_vector(groups)
     groups_count = np.max(groups) + 1
+
     if groups_count == 0:
         return None
 

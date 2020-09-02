@@ -115,7 +115,7 @@ def find_rare_genes_modules(
        Gene modules with no associated cells are discarded.
     '''
 
-    level = ut.log_level(adata)
+    level = ut.get_log_level(adata)
     LOG.log(level, 'find_rare_genes_modules...')
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
