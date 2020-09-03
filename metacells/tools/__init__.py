@@ -10,7 +10,9 @@ Functions for analysis tools.
 All the functions included here are exported under ``metacells.tl``.
 '''
 
+from .apply_metacells import *
 from .candidate_metacells import *
+from .downsample_cells import *
 from .excess_r2 import *
 from .final_metacells import *
 from .high_genes import *

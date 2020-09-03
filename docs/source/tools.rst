@@ -15,11 +15,17 @@ Filtering
 .. automodule:: metacells.tools.high_genes
     :members:
 
+.. automodule:: metacells.tools.lonely_genes
+    :members:
+
 .. automodule:: metacells.tools.rare_gene_modules
     :members:
 
 Building a Graph
 ----------------
+
+.. automodule:: metacells.tools.downsample_cells
+    :members:
 
 .. automodule:: metacells.tools.similarity
     :members:
@@ -36,5 +42,14 @@ Computing Metacells
 .. automodule:: metacells.tools.outlier_cells
     :members:
 
-.. automodule:: metacells.tools.finalize_metacells
+.. automodule:: metacells.tools.final_metacells
+    :members:
+
+.. automodule:: metacells.tools.apply_metacells
+    :members:
+
+Evaluating Metacells
+--------------------
+
+.. automodule:: metacells.tools.excess_r2
     :members:

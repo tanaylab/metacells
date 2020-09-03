@@ -32,6 +32,7 @@ import metacells.utilities.typing as utt
 __all__ = [
     'setup_logger',
     'get_log_level',
+    'log_pipeline_step',
     'log_operation',
     'log_of',
     'log_mask',
@@ -103,6 +104,17 @@ def get_log_level(adata: AnnData) -> int:
     By default, this is ``INFO``. For ``tmp`` data, this is ``DEBUG``.
     '''
     return logging.DEBUG if adata.uns.get('__tmp__', False) else logging.INFO
+
+
+def log_pipeline_step(logger: Logger, adata: AnnData, name: str) -> int:
+    '''
+    Log the start of a pipeline step.
+
+    Returns the log level for the ``adata``.
+    '''
+    level = get_log_level(adata)
+    logger.log(level, '# %s:', name)
+    return level
 
 
 def log_operation(

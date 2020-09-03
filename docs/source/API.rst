@@ -5,6 +5,7 @@ API
 
 .. toctree::
 
+  pipeline
   tools
   preprocessing
   utilities

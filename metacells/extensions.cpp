@@ -987,6 +987,48 @@ rank_matrix(const pybind11::array_t<D>& input_matrix,
     }
 }
 
+/// See the Python `metacell.tools.outlier_cells._collect_fold_factors` function.
+template<typename D, typename I, typename P>
+static void
+fold_factor(pybind11::array_t<D>& data_array,
+            pybind11::array_t<I>& indices_array,
+            pybind11::array_t<P>& indptr_array,
+            const int elements_count,
+            const double min_gene_fold_factor,
+            const pybind11::array_t<D>& total_of_bands_array,
+            const pybind11::array_t<D>& fraction_of_elements_array) {
+    CompressedMatrix<D, I, P> data(ArraySlice<D>(data_array, "data"),
+                                   ArraySlice<I>(indices_array, "indices"),
+                                   ArraySlice<P>(indptr_array, "indptr"),
+                                   elements_count,
+                                   "data");
+    ConstArraySlice<D> total_of_bands(total_of_bands_array, "total_of_bands");
+    ConstArraySlice<D> fraction_of_elements(fraction_of_elements_array, "fraction_of_elements");
+
+    FastAssertCompare(total_of_bands.size(), ==, data.bands_count());
+    FastAssertCompare(fraction_of_elements.size(), ==, data.elements_count());
+
+    const int bands_count = data.bands_count();
+#pragma omp parallel for
+    for (int band_index = 0; band_index < bands_count; ++band_index) {
+        const auto band_total = total_of_bands[band_index];
+        auto band_indices = data.get_band_indices(band_index);
+        auto band_data = data.get_band_data(band_index);
+
+        const int band_elements_count = band_indices.size();
+        for (int position = 0; position < band_elements_count; ++position) {
+            const auto element_index = band_indices[position];
+            const auto element_fraction = fraction_of_elements[element_index];
+            const auto expected = band_total * element_fraction;
+            auto& value = band_data[position];
+            value = log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE;
+            if (value < min_gene_fold_factor) {
+                value = 0.0;
+            }
+        }
+    }
+}
+
 }  // namespace metacells
 
 PYBIND11_MODULE(extensions, module) {
@@ -1017,7 +1059,10 @@ PYBIND11_MODULE(extensions, module) {
                "Sort indices in a compressed matrix.");      \
     module.def("shuffle_compressed_" #D "_" #I "_" #P,       \
                &metacells::shuffle_compressed<D, I, P>,      \
-               "Shuffle compressed data.");
+               "Shuffle compressed data.");                  \
+    module.def("fold_factor_" #D "_" #I "_" #P,              \
+               &metacells::fold_factor<D, I, P>,             \
+               "Fold factors of compressed data.");
 
     module.def("collect_outgoing",
                &metacells::collect_outgoing,

@@ -68,7 +68,7 @@ def group_obs_data(
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. cached
     layouts) for future reuse. Otherwise, discard it.
     '''
-    ut.log_operation(LOG, adata, 'group_data')
+    ut.log_operation(LOG, adata, 'group_obs_data')
     level = ut.get_log_level(adata)
 
     with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major',

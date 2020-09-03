@@ -8,3 +8,6 @@ Preprocessing
 
 .. automodule:: metacells.preprocessing.filter_data
     :members:
+
+.. automodule:: metacells.preprocessing.group_data
+    :members:

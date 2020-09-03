@@ -1,5 +1,5 @@
 '''
-Compute COmmonly Used Data
+Compute Commonly Used Data
 --------------------------
 
 Most functions here use the facilities of :py:mod:`metacells.utilities.annotation` to wrap the
@@ -587,7 +587,8 @@ def get_fraction_of_var_per_obs(
 
         sparse = utt.SparseMatrix.maybe(matrix)
         if sparse is not None:
-            return sparse.multiply(tmp[:, None])
+            return utc.to_layout(sparse.multiply(tmp[:, None]),
+                                 layout or 'row_major')
 
         dense = utt.DenseMatrix.be(matrix)
         return dense * tmp[:, None]
@@ -647,7 +648,8 @@ def get_fraction_of_obs_per_var(
 
         sparse = utt.SparseMatrix.maybe(matrix)
         if sparse is not None:
-            return sparse.multiply(tmp[None, :])
+            return utc.to_layout(sparse.multiply(tmp[None, :]),
+                                 layout or 'column_major')
 
         dense = utt.DenseMatrix.be(matrix)
         return dense * tmp[None, :]

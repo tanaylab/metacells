@@ -180,14 +180,17 @@ def relayout_compressed(matrix: utt.CompressedMatrix) -> utt.CompressedMatrix:
     with utm.timed_step('extensions.collect_compressed'):
         utm.timed_parameters(results=output_bands_count,
                              elements=matrix_bands_count)
+        assert compressed.indptr[-1] == compressed.data.size
         extension(compressed.data, compressed.indices, compressed.indptr,
                   output_data, output_indices, output_indptr[1:])
 
     assert output_indptr[-1] == compressed.indptr[-1]
 
     constructor = (sp.csr_matrix, sp.csc_matrix)[1 - axis]
-    compressed = constructor((output_data, output_indices,
-                              output_indptr), shape=compressed.shape)
+    compressed = constructor((output_data,
+                              output_indices,
+                              output_indptr),
+                             shape=compressed.shape)
 
     compressed.has_canonical_format = True
     sort_compressed_indices(compressed, force=True)
@@ -458,8 +461,10 @@ def _downsample_compressed_matrix(
     else:
         constructor = (sp.csr_matrix, sp.csc_matrix)[axis]
         output_data = np.empty(matrix.data.shape, dtype=matrix.data.dtype)
-        output = constructor((output_data, matrix.indices,
-                              matrix.indptr), shape=matrix.shape)
+        output = constructor((output_data,
+                              np.copy(matrix.indices),
+                              np.copy(matrix.indptr)),
+                             shape=matrix.shape)
         output.has_sorted_indices = matrix.has_sorted_indices
         output.has_canonical_format = matrix.has_canonical_format
 
@@ -475,7 +480,8 @@ def _downsample_compressed_matrix(
         extension(matrix.data, matrix.indptr,
                   output.data, samples, random_seed)
 
-    output.has_canonical_format = False
+    output.has_sorted_indices = matrix.has_sorted_indices
+    output.has_canonical_format = True
     if eliminate_zeros:
         utt.unfreeze(output)
         with utm.timed_step('sparse.eliminate_zeros'):
@@ -519,18 +525,6 @@ def downsample_vector(
     Otherwise, treat the input as if it was a set where each index appeared its value number of
     times. Randomly select the desired number of samples from this set (without repetition), and
     store in the output the number of times each index was chosen.
-
-    **Motivation**
-
-    Downsampling is an effective way to get the same number of samples in multiple observations (in
-    particular, the same number of total UMIs in multiple cells), and serves as an alternative to
-    normalization (e.g., working with UMI fractions instead of raw UMI counts).
-
-    Downsampling is especially important when computing correlations between observations. When
-    there is high variance between the total samples count in different observations (total UMI
-    count in different cells), then normalization will return higher values when correlating
-    observations with a higher sample count, which will result in an inflated estimation of their
-    similarity to other observations. Downsampling avoids this effect.
     '''
     array = utt.to_proper_vector(vector)
 
@@ -741,7 +735,7 @@ def _reduce_matrix(
 
     with utm.timed_step(timed_step):
         utm.timed_parameters(results=results_count, elements=elements_count)
-        return reducer(matrix)
+        return utt.to_dense_vector(reducer(matrix))
 
 
 @ utm.timed_call()

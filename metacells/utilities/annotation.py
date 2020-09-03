@@ -211,6 +211,8 @@ def setup(
         use :py:func:`metacells.utilities.annotation.get_vo_data`.
     '''
     X = adata.X
+    if not utt.frozen(X):  # type: ignore
+        utt.freeze(X)  # type: ignore
     assert X is not None
     assert utt.Shaped.be(X).ndim == 2
     assert '__x__' not in adata.uns_keys()
@@ -221,7 +223,7 @@ def setup(
     if name is not None:
         adata.uns['__name__'] = name
         LOG.log(utl.get_log_level(adata),
-                'created %s shape %s', name, adata.shape)
+                '  created %s shape %s', name, adata.shape)
     adata.uns['__x__'] = x_name
     adata.uns['__focus__'] = x_name
     _log_set_data(adata, 'm', '__focus__', x_name, force=True)
@@ -440,7 +442,7 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     if name is not None:
         bdata.uns['__name__'] = name
         LOG.log(utl.get_log_level(bdata),
-                'sliced %s shape %s', name, bdata.shape)
+                '  sliced %s shape %s', name, bdata.shape)
 
     assert get_x_name(bdata) == x_name
     if focus == x_name or focus in bdata.layers:
@@ -662,6 +664,7 @@ def get_vector_parameter_data(
     name: str,
     per: str,
     default: str = 'None',
+    indent: str = '  ',
 ) -> Optional[utt.DenseVector]:
     '''
     Given a parameter ``value`` which is either a name or an explicit (optional) vector parameter,
@@ -670,12 +673,12 @@ def get_vector_parameter_data(
     assert per in ('o', 'v')
 
     if isinstance(value, str):
-        logger.log(level, '  %s: %s', name, value)
+        logger.log(level, '%s%s: %s', indent, name, value)
         value = get_data(adata, value, per=per)
     elif value is None:
-        logger.log(level, '  %s: %s', name, default)
+        logger.log(level, '%s%s: %s', indent, name, default)
     else:
-        logger.log(level, '  %s: <matrix>', name)
+        logger.log(level, '%s%s: <vector>', indent, name)
 
     if value is not None:
         value = utt.to_dense_vector(value)  # type: ignore
@@ -1128,7 +1131,8 @@ def _get_layout_data(
 
     data = utc.to_layout(data, layout=layout)
     if inplace:
-        utt.freeze(data)
+        if not utt.frozen(data):
+            utt.freeze(data)
         _log_set_data(adata, 'vo', name, layout)
         annotations[layout_name] = data
 
@@ -1149,11 +1153,17 @@ def _get_shaped_data(
     assert '__' not in name
 
     if per == 'vo' and name == get_x_name(adata):
-        return adata.X
+        data = adata.X
+        if not utt.frozen(data):  # type: ignore
+            utt.freeze(data)  # type: ignore
+        return data
 
     if (isinstance(annotations, pd.DataFrame) and name in annotations.columns) \
             or name in annotations:
-        return annotations[name]
+        data = annotations[name]
+        if not utt.frozen(data):
+            utt.freeze(data)
+        return data
 
     if compute is None:
         raise KeyError('unavailable %s data: %s' % (per_text, name))
@@ -1161,9 +1171,11 @@ def _get_shaped_data(
     data = compute()
     assert data is not None
     assert data.shape == shape
+    assert utt.is_canonical(data)
 
     if inplace:
-        utt.freeze(data)
+        if not utt.frozen(data):
+            utt.freeze(data)
         _log_set_data(adata, per, name, data)
         annotations[name] = data
 
@@ -1372,6 +1384,7 @@ def set_m_data(
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
     _log_set_data(adata, 'm', name, data, log_value=log_value)
+
     adata.uns[name] = data
     if slicing_mask is not None:
         safe_slicing_data(name, slicing_mask)
@@ -1393,6 +1406,12 @@ def set_o_data(
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
     _log_set_data(adata, 'o', name, data, log_value=log_value)
+
+    if not isinstance(data, list):
+        assert utt.is_canonical(data)
+        if not utt.frozen(data):
+            utt.freeze(data)
+
     adata.obs[name] = data
     if slicing_mask is not None:
         safe_slicing_data(name, slicing_mask)
@@ -1414,6 +1433,11 @@ def set_v_data(
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
     _log_set_data(adata, 'v', name, data, log_value=log_value)
+
+    assert utt.is_canonical(data)
+    if not utt.frozen(data):
+        utt.freeze(data)
+
     adata.var[name] = data
     if slicing_mask is not None:
         safe_slicing_data(name, slicing_mask)
@@ -1435,6 +1459,11 @@ def set_oo_data(
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
     _log_set_data(adata, 'oo', name, data, log_value=log_value)
+
+    assert utt.is_canonical(data)
+    if not utt.frozen(data):
+        utt.freeze(data)
+
     adata.obsp[name] = data
     if slicing_mask is not None:
         safe_slicing_data(name, slicing_mask)
@@ -1456,33 +1485,53 @@ def set_vv_data(
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
     _log_set_data(adata, 'vv', name, data, log_value=log_value)
+
+    assert utt.is_canonical(data)
+    if not utt.frozen(data):
+        utt.freeze(data)
+
     adata.varp[name] = data
     if slicing_mask is not None:
         safe_slicing_data(name, slicing_mask)
 
 
 @utm.timed_call()
+@utd.expand_doc()
 def set_vo_data(
     adata: AnnData,
     name: str,
     data: utt.Matrix,
     slicing_mask: Optional[SlicingMask] = None,
-    log_value: Optional[Callable[[], str]] = None
+    *,
+    log_value: Optional[Callable[[], str]] = None,
+    infocus: bool = False,
 ) -> Any:
     '''
     Set per-variable-per-observation (per-gene-per-cell) meta-data.
 
     Optionally specify the ``slicing_mask`` for this data.
+
+    If ``infocus`` (default: {infocus}, also make the result the new focus.
     '''
     if name == get_x_name(adata):
-        adata.X = data
         _log_set_data(adata, 'x', name, data, log_value=log_value)
     else:
         _log_set_data(adata, 'vo', name, data, log_value=log_value)
+
+    assert utt.is_canonical(data)
+    if not utt.frozen(data):
+        utt.freeze(data)
+
+    if name == get_x_name(adata):
+        adata.X = data
+    else:
         adata.layers[name] = data
 
     if slicing_mask is not None:
         safe_slicing_data(name, slicing_mask)
+
+    if infocus:
+        adata.uns['__focus__'] = name
 
 
 MEMBER_OF_PER = \
@@ -1505,7 +1554,7 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
     if not LOG.isEnabledFor(level):
         return
 
-    texts: List[str] = []
+    texts = ['  ']
 
     try:
         data_name = get_name(adata)
@@ -1521,7 +1570,7 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
             texts.append(value)
             return
 
-        texts.append('  setting ')
+        texts.append('setting ')
         if data_name is not None:
             texts.append(data_name)
             texts.append('.')
@@ -1537,7 +1586,7 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
 
         if per == 'vo' and isinstance(value, str):
             level = logging.DEBUG
-            texts[0] = '  caching '
+            texts[0] = 'caching '
             texts.append(' ')
             texts.append(value)
             texts.append(' layout')
@@ -1552,7 +1601,7 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
             return
 
         if isinstance(value, (pd.Series, np.ndarray)) and value.dtype == 'bool':
-            texts.append(' to a ')
+            texts.append(' to a mask of ')
             texts.append(utl.mask_description(value))
             return
 
@@ -1573,5 +1622,5 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
 
     finally:
         text = ''.join(texts)
-        if text != '':
+        if text != '  ':
             LOG.log(level, text)

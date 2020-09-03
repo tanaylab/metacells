@@ -37,7 +37,8 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
     mindices: Optional[Union[str, ut.Vector]] = None,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Compute the excess gene-gene coefficient of determination (R^2) for the metacells.
+    Compute the excess gene-gene coefficient of determination (R^2) for the metacells based ``of``
+    some data.
 
     In an ideal metacell, all cells have the same biological state, and the only variation is due to
     sampling noise. In such an ideal metacell, there would be zero R^2 between the expression of
@@ -51,8 +52,8 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
 
     **Input**
 
-    A :py:func:`metacells.utilities.preparation.prepare`-ed annotated ``adata``, where the
-    observations are cells and the variables are genes.
+    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
+    are cells and the variables are genes.
 
     **Returns**
 
@@ -106,8 +107,8 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
 
     2. Collect, for each gene, the maximal excess R^2 across all metacells into
        ``gene_max_excess_r2``. If ``intermediate``, also compute the global ``gene_max_top_r2`` and
-       ``gene_max_top_shuffled_r2``.
-        Note that ``gene_max_excess_r2 != gene_max_top_r2 - gene_max_top_shuffled_r2``.
+       ``gene_max_top_shuffled_r2``. Note
+       that ``gene_max_excess_r2 != gene_max_top_r2 - gene_max_top_shuffled_r2``.
     '''
     of, level = ut.log_operation(LOG, adata, 'compute_excess_r2', of)
     assert shuffles_count > 0
@@ -191,17 +192,25 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
     max_excess_r2_per_gene[max_excess_r2_per_gene < -5] = None
 
     if inplace:
-        ut.set_v_data(adata, 'gene_max_excess_r2', max_excess_r2_per_gene)
+        ut.set_v_data(adata, 'gene_max_excess_r2', max_excess_r2_per_gene,
+                      log_value=lambda: _log_r2(max_excess_r2_per_gene))
         if max_top_r2_per_gene is not None:
             max_top_r2_per_gene[max_top_r2_per_gene < -5] = None
-            ut.set_v_data(adata, 'gene_max_top_r2', max_top_r2_per_gene)
+            ut.set_v_data(adata, 'gene_max_top_r2', max_top_r2_per_gene,
+                          log_value=lambda: _log_r2(max_top_r2_per_gene))
         if max_top_shuffled_r2_per_gene is not None:
             max_top_shuffled_r2_per_gene[max_top_shuffled_r2_per_gene < -5] = None
             ut.set_v_data(adata, 'gene_max_top_shuffled_r2',
-                          max_top_shuffled_r2_per_gene)
+                          max_top_shuffled_r2_per_gene,
+                          log_value=lambda: _log_r2(max_top_shuffled_r2_per_gene))
         return None
 
     return pd.DataSeries(max_excess_r2_per_gene, index=adata.var_names)
+
+
+def _log_r2(values: Optional[ut.DenseVector]) -> str:
+    assert values is not None
+    return '%s for %s' % (np.nanmean(values), ut.mask_description(~np.isnan(values)))
 
 
 def _collect_metacell_excess(  # pylint: disable=too-many-statements
@@ -280,24 +289,26 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements
     top_shuffled_r2_per_correlated_gene = \
         np.zeros(top_r2_per_correlated_gene.size)
 
-    for shuffle_index in range(shuffles_count):
-        if random_seed == 0:
-            shuffle_seed = 0
-        else:
-            shuffle_seed = random_seed + 977 * shuffle_index
+    with ut.timed_step('.shuffle'):
+        for shuffle_index in range(shuffles_count):
+            if random_seed == 0:
+                shuffle_seed = 0
+            else:
+                shuffle_seed = random_seed + 977 * shuffle_index
 
-        ut.shuffle_matrix(shuffled_data, per='column',
-                          random_seed=shuffle_seed)
+            ut.shuffle_matrix(shuffled_data, per='column',
+                              random_seed=shuffle_seed)
 
-        shuffled_r2 = ut.corrcoef(shuffled_data, per='column')
-        shuffled_r2 *= shuffled_r2
-        assert ut.matrix_layout(shuffled_r2) == 'row_major'
-        np.fill_diagonal(shuffled_r2, 0)
+            shuffled_r2 = ut.corrcoef(shuffled_data, per='column')
 
-        top_shuffled_r2_per_correlated_gene += \
-            ut.rank_per(shuffled_r2, per=None, rank=correlated_gene_rank)
+            shuffled_r2 *= shuffled_r2
+            assert ut.matrix_layout(shuffled_r2) == 'row_major'
+            np.fill_diagonal(shuffled_r2, 0)
 
-    top_shuffled_r2_per_correlated_gene /= shuffles_count
+            top_shuffled_r2_per_correlated_gene += \
+                ut.rank_per(shuffled_r2, per=None, rank=correlated_gene_rank)
+
+        top_shuffled_r2_per_correlated_gene /= shuffles_count
 
     if top_shuffled_r2_per_gene_per_metacell is not None:
         top_shuffled_r2_per_gene_per_metacell[metacell_index,

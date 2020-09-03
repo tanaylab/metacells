@@ -108,6 +108,9 @@ __all__ = [
 
     'is_contiguous',
     'to_contiguous',
+
+    'is_canonical',
+    'eliminate_zeros',
 ]
 
 
@@ -545,6 +548,8 @@ def to_proper(
 
     if isinstance(shaped, (pd.Series, pd.DataFrame)):
         shaped = shaped.values
+        if isinstance(shaped, pd.core.arrays.categorical.Categorical):
+            shaped = np.array(shaped)
 
     if isinstance(shaped, np.matrix):
         shaped = np.array(shaped)
@@ -644,7 +649,6 @@ def frozen(shaped: Shaped) -> bool:
     raise NotImplementedError('frozen of %s' % shaped.__class__)
 
 
-@utm.timed_call()
 def freeze(shaped: Shaped) -> None:
     '''
     Protect the ``shaped`` data against future modification.
@@ -666,7 +670,6 @@ def freeze(shaped: Shaped) -> None:
     raise NotImplementedError('freeze of %s' % shaped.__class__)
 
 
-@utm.timed_call()
 def unfreeze(shaped: Shaped) -> None:
     '''
     Permit future modification of some ``shaped`` data.
@@ -858,3 +861,57 @@ def to_contiguous(vector: Vector, *, copy: bool = False) -> DenseVector:
     if copy or not dense.flags.c_contiguous or not dense.flags.f_contiguous:
         dense = np.copy(dense)
     return dense
+
+
+def is_canonical(shaped: Shaped) -> bool:
+    '''
+    Return whether the data is in proper canonical format.
+
+    For numpy matrices or vectors, this means the data is contiguous
+    (for matrices, in either row-major or column-major order).
+
+    For sparse matrices, it means the data is in COO format, or compressed (in CSC or CSR format)
+    with sorted indices and no duplicates.
+
+    In general, we'd like all the data stored in the annotated data to be canonical.
+    '''
+    if shaped.ndim == 1:
+        return is_contiguous(to_proper_vector(shaped))  # type: ignore
+
+    sparse = SparseMatrix.maybe(shaped)
+    if sparse is None:
+        return matrix_layout(shaped) is not None  # type: ignore
+
+    if sparse.getformat() not in ('coo', 'csr', 'csc'):
+        return False
+
+    if hasattr(sparse, 'has_canonical_format') \
+            and not getattr(sparse, 'has_canonical_format'):
+        return False
+
+    if hasattr(sparse, 'has_sorted_indices') \
+            and not getattr(sparse, 'has_sorted_indices'):
+        return False
+
+    compressed = CompressedMatrix.maybe(sparse)
+    if compressed is not None:
+        assert compressed.indptr[-1] == compressed.data.size
+
+    return True
+
+
+@utm.timed_call('sparse.eliminate_zeros')
+def eliminate_zeros(compressed: CompressedMatrix) -> None:
+    '''
+    Eliminate zeros in a compressed matrix.
+    '''
+    is_frozen = frozen(compressed)
+    if is_frozen:
+        unfreeze(compressed)
+
+    utm.timed_parameters(before=compressed.nnz)
+    compressed.eliminate_zeros()
+    utm.timed_parameters(after=compressed.nnz)
+
+    if is_frozen:
+        freeze(compressed)
