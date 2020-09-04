@@ -1,0 +1,4 @@
+Parameters
+==========
+
+.. automodule:: metacells.parameters

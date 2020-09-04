@@ -15,7 +15,7 @@ Filtering
 .. automodule:: metacells.tools.high_genes
     :members:
 
-.. automodule:: metacells.tools.lonely_genes
+.. automodule:: metacells.tools.noisy_lonely_genes
     :members:
 
 .. automodule:: metacells.tools.rare_gene_modules

@@ -12,6 +12,7 @@ import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from anndata import AnnData
 
+import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
@@ -30,9 +31,9 @@ def compute_candidate_metacells(
     of: str = 'obs_outgoing_weights',
     partition_method: 'ut.PartitionMethod' = ut.leiden_bounded_surprise,
     target_metacell_size: int,
-    cell_sizes: Optional[Union[str, ut.Vector]],
-    min_split_factor: Optional[float] = 2.0,
-    max_merge_factor: Optional[float] = 0.25,
+    cell_sizes: Optional[Union[str, ut.Vector]] = pr.candidates_cell_sizes,
+    min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
+    max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
     random_seed: int = 0,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -61,7 +62,10 @@ def compute_candidate_metacells(
     **Computation Parameters**
 
     1. We are trying to build metacells of ``target_metacell_size``. Use the ``cell_sizes``
-       to assign a size for each node. If ``None``, each has a size of one.
+       (default: {cell_sizes}) to assign a size for each node (cell). If the cell sizes is a string
+       that contains ``<of>``, it is expanded using the name of the ``of`` data. If it is ``None``,
+       each has a size of one. These parameters are typically identical to these passed to
+       :py:func:`metacells.tools.final_metacells.finalize_metacells`.
 
        .. note::
 
@@ -73,21 +77,21 @@ def compute_candidate_metacells(
        are provided in this module, and you can also provide your own as long as it is compatible
        with the :py:const:`metacells.utilities.partition.PartitionMethod` interface.
 
-    3. If ``min_split_factor`` (default: {min_split_factor}) is specified, re-run the partition
-       method on each community whose size is at least ``target_metacell_size
-       * min_split_factor``, to split it to into smaller communities.
+    3. If ``min_split_size_factor`` (default: {min_split_size_factor}) is specified, re-run the
+       partition method on each community whose size is at least ``target_metacell_size
+       * min_split_size_factor``, to split it to into smaller communities.
 
-    4. If ``max_merge_factor`` (default: {max_merge_factor}) is specified, condense each
+    4. If ``max_merge_size_factor`` (default: {max_merge_size_factor}) is specified, condense each
        community whose size is at most ``target_metacell_size
-       * max_merge_factor`` into a single node (using the mean of the edge weights),
+       * max_merge_size_factor`` into a single node (using the mean of the edge weights),
        and re-run the partition method on the resulting graph (of just these condensed nodes) to
        merge these communities into large ones.
 
     5. Repeat the above steps until no further progress can be made.
 
-    6. If the ``max_merge_factor`` was specified, arbitrarily combine the remaining communities
+    6. If the ``max_merge_size_factor`` was specified, arbitrarily combine the remaining communities
        whose size is at most the ``target_metacell_size
-       * max_merge_factor`` into a single community using
+       * max_merge_size_factor`` into a single community using
        :py:func:`metacells.utilities.computation.bin_pack`.
 
     .. note::
@@ -122,18 +126,18 @@ def compute_candidate_metacells(
     max_metacell_size = None
     min_metacell_size = None
 
-    if min_split_factor is not None:
-        assert min_split_factor > 0
+    if min_split_size_factor is not None:
+        assert min_split_size_factor > 0
         max_metacell_size = \
-            ceil(target_metacell_size * min_split_factor) - 1
+            ceil(target_metacell_size * min_split_size_factor) - 1
 
-    if max_merge_factor is not None:
-        assert max_merge_factor > 0
+    if max_merge_size_factor is not None:
+        assert max_merge_size_factor > 0
         min_metacell_size = \
-            floor(target_metacell_size * max_merge_factor) + 1
+            floor(target_metacell_size * max_merge_size_factor) + 1
 
-    if min_split_factor is not None and max_merge_factor is not None:
-        assert max_merge_factor < min_split_factor
+    if min_split_size_factor is not None and max_merge_size_factor is not None:
+        assert max_merge_size_factor < min_split_size_factor
         assert min_metacell_size is not None
         assert max_metacell_size is not None
         assert min_metacell_size <= max_metacell_size
@@ -171,7 +175,7 @@ def compute_candidate_metacells(
         return None
 
     if LOG.isEnabledFor(level):
-        LOG.log(level, '  candidate_metacells: %s',
+        LOG.log(level, '  candidate_metacell: %s',
                 np.max(community_of_cells) + 1)
 
     return pd.Series(community_of_cells, index=adata.obs_names)

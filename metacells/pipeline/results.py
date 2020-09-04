@@ -66,6 +66,6 @@ def collect_result_metacells(
     '''
     ut.log_pipeline_step(LOG, adata, 'collect_result_metacells')
 
-    tl.apply_metacells(adata, cdata)
+    tl.collect_metacells(adata, cdata)
     return pp.group_obs_data(adata, of=of, groups='metacell',
                              name=name, tmp=tmp, intermediate=intermediate)

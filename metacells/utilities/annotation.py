@@ -1580,13 +1580,14 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
 
         if log_value is not None:
             value = log_value()
+            assert isinstance(value, str)
 
         if value is None:
             return
 
         if per == 'vo' and isinstance(value, str):
             level = logging.DEBUG
-            texts[0] = 'caching '
+            texts[1] = 'caching '
             texts.append(' ')
             texts.append(value)
             texts.append(' layout')

@@ -9,6 +9,7 @@ from typing import Optional
 import pandas as pd  # type: ignore
 from anndata import AnnData
 
+import metacells.parameters as pr
 import metacells.preprocessing as pp
 import metacells.utilities as ut
 
@@ -28,7 +29,7 @@ def find_high_fraction_genes(
     adata: AnnData,
     *,
     of: Optional[str] = None,
-    min_fraction_of_genes: float = 1e-5,
+    min_gene_fraction: float = pr.significant_gene_fraction,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -62,16 +63,16 @@ def find_high_fraction_genes(
     1. Use :py:func:`metacells.preprocessing.common.get_fraction_per_var` to get the
        normalized variance of each gene.
 
-    2. Select the genes whose fraction is at least ``min_fraction_of_genes`` (default:
-       {min_fraction_of_genes}).
+    2. Select the genes whose fraction is at least ``min_gene_fraction`` (default:
+       {min_gene_fraction}).
     '''
     of, level = \
         ut.log_operation(LOG, adata, 'find_high_fraction_genes', of)
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         fraction_of_genes = pp.get_fraction_per_var(adata).proper
-        LOG.log(level, '  min_fraction_of_genes: %s', min_fraction_of_genes)
-        genes_mask = fraction_of_genes >= min_fraction_of_genes
+        LOG.log(level, '  min_gene_fraction: %s', min_gene_fraction)
+        genes_mask = fraction_of_genes >= min_gene_fraction
 
     if inplace:
         ut.set_v_data(adata, 'high_fraction_genes', genes_mask, ut.NEVER_SAFE)
@@ -88,7 +89,7 @@ def find_high_normalized_variance_genes(
     adata: AnnData,
     *,
     of: Optional[str] = None,
-    min_normalized_variance_of_genes: float = 2.5,
+    min_gene_normalized_variance: float = pr.significant_gene_normalized_variance,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -126,7 +127,7 @@ def find_high_normalized_variance_genes(
        normalized variance of each gene.
 
     2. Select the genes whose normalized variance is at least
-       ``min_normalized_variance_of_genes`` (default: {min_normalized_variance_of_genes}).
+       ``min_gene_normalized_variance`` (default: {min_gene_normalized_variance}).
     '''
     of, level = \
         ut.log_operation(LOG, adata, 'find_high_normalized_variance_genes', of)
@@ -134,10 +135,10 @@ def find_high_normalized_variance_genes(
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         normalized_variance_of_genes = \
             pp.get_normalized_variance_per_var(adata).proper
-        LOG.log(level, '  min_normalized_variance_of_genes: %s',
-                min_normalized_variance_of_genes)
+        LOG.log(level, '  min_gene_normalized_variance: %s',
+                min_gene_normalized_variance)
         genes_mask = \
-            normalized_variance_of_genes >= min_normalized_variance_of_genes
+            normalized_variance_of_genes >= min_gene_normalized_variance
 
     if inplace:
         ut.set_v_data(adata, 'high_normalized_variance_genes',
@@ -155,7 +156,7 @@ def find_high_relative_variance_genes(
     adata: AnnData,
     *,
     of: Optional[str] = None,
-    min_relative_variance_of_genes: float = 0.1,
+    min_gene_relative_variance: float = pr.significant_gene_relative_variance,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -195,7 +196,7 @@ def find_high_relative_variance_genes(
        relative variance of each gene.
 
     2. Select the genes whose relative variance is at least
-       ``min_relative_variance_of_genes`` (default: {min_relative_variance_of_genes}).
+       ``min_gene_relative_variance`` (default: {min_gene_relative_variance}).
     '''
     of, level = \
         ut.log_operation(LOG, adata, 'find_high_relative_variance_genes', of)
@@ -203,10 +204,9 @@ def find_high_relative_variance_genes(
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         relative_variance_of_genes = \
             pp.get_relative_variance_per_var(adata).proper
-        LOG.log(level, '  min_relative_variance_of_genes: %s',
-                min_relative_variance_of_genes)
-        genes_mask = \
-            relative_variance_of_genes >= min_relative_variance_of_genes
+        LOG.log(level, '  min_gene_relative_variance: %s',
+                min_gene_relative_variance)
+        genes_mask = relative_variance_of_genes >= min_gene_relative_variance
 
     if inplace:
         ut.set_v_data(adata, 'high_relative_variance_genes',

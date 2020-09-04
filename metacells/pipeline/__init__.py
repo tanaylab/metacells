@@ -12,8 +12,8 @@ implementation here as a starting point.
 All the functions included here are exported under ``metacells.pl``.
 '''
 
-from .clean_data import *
+from .clean import *
+from .complete import *
 from .direct import *
-from .direct_metacells import *
-from .feature_data import *
-from .result_metacells import *
+from .feature import *
+from .results import *

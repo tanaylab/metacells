@@ -9,6 +9,7 @@ from typing import Collection, Optional, Union
 
 from anndata import AnnData
 
+import metacells.parameters as pr
 import metacells.preprocessing as pp
 import metacells.tools as tl
 import metacells.utilities as ut
@@ -29,12 +30,12 @@ def extract_feature_data(
     *,
     name: Optional[str] = 'FEATURE',
     tmp: bool = True,
-    downsample_cell_quantile: float = 0.05,
-    random_seed: int = 0,
-    min_relative_variance_of_genes: float = 0.1,
-    min_fraction_of_genes: float = 1e-5,
+    downsample_cell_quantile: float = pr.feature_downsample_cell_quantile,
+    min_gene_fraction: float = pr.feature_min_gene_fraction,
+    min_gene_relative_variance: float = pr.feature_min_gene_relative_variance,
     forbidden_gene_names: Optional[Collection[str]] = None,
     forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    random_seed: int = 0,
     intermediate: bool = True,
 ) -> Optional[AnnData]:
     '''
@@ -68,15 +69,15 @@ def extract_feature_data(
        to the same total number of UMIs, using the ``downsample_cell_quantile`` (default:
        {downsample_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
 
-    2. Invoke :py:func:`metacells.tools.high_genes.find_high_relative_variance_genes` to select
-       high-variance feature genes (based on the downsampled data), using
-       ``min_relative_variance_of_genes``.
-
     2. Invoke :py:func:`metacells.tools.high_genes.find_high_fraction_genes` to select
        high-expression feature genes (based on the downsampled data), using
-       ``min_fraction_of_genes``.
+       ``min_gene_fraction``.
 
-    3. Invoke :py:func:`metacells.tools.named_genes.find_named_genes` to forbid genes from being
+    3. Invoke :py:func:`metacells.tools.high_genes.find_high_relative_variance_genes` to select
+       high-variance feature genes (based on the downsampled data), using
+       ``min_gene_relative_variance``.
+
+    4. Invoke :py:func:`metacells.tools.named_genes.find_named_genes` to forbid genes from being
        used as feature genes, based on their name. using the ``forbidden_gene_names`` (default:
        {forbidden_gene_names}) and ``forbidden_gene_patterns`` (default: {forbidden_gene_patterns}).
        This is stored in an intermediate per-variable (gene) ``forbidden_genes`` boolean mask.
@@ -92,11 +93,11 @@ def extract_feature_data(
                             random_seed=random_seed,
                             infocus=True)
 
-        tl.find_high_relative_variance_genes(adata,
-                                             min_relative_variance_of_genes=min_relative_variance_of_genes)
-
         tl.find_high_fraction_genes(adata,
-                                    min_fraction_of_genes=min_fraction_of_genes)
+                                    min_gene_fraction=min_gene_fraction)
+
+        tl.find_high_relative_variance_genes(adata,
+                                             min_gene_relative_variance=min_gene_relative_variance)
 
         if forbidden_gene_names is not None \
                 or forbidden_gene_patterns is not None:

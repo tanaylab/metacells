@@ -20,7 +20,7 @@ or :py:func:`metacells.utilities.annotation.slice` some data.
 import logging
 import sys
 from datetime import datetime
-from logging import Formatter, Logger, StreamHandler, getLogger
+from logging import Formatter, Logger, LogRecord, StreamHandler, getLogger
 from typing import IO, Any, Optional, Tuple
 
 import numpy as np  # type: ignore
@@ -60,6 +60,24 @@ class LoggingFormatter(Formatter):
         return '%s.%03d' % (seconds, record.msecs)
 
 
+class ShortLoggingFormatter(LoggingFormatter):
+    '''
+    Provide short level names.
+    '''
+
+    #: Map the long level names to the fixed-width short level names.
+    SHORT_LEVEL_NAMES = dict(CRITICAL='CRT',
+                             ERROR='ERR',
+                             WARNING='WRN',
+                             INFO='INF',
+                             DEBUG='DBG',
+                             NOTSET='NOT')
+
+    def format(self, record: LogRecord) -> Any:
+        record.levelname = self.SHORT_LEVEL_NAMES[record.levelname]
+        return LoggingFormatter.format(self, record)
+
+
 @utd.expand_doc()
 def setup_logger(
     *,
@@ -67,7 +85,8 @@ def setup_logger(
     to: IO = sys.stderr,
     time: bool = True,
     process: bool = True,
-    name: Optional[str] = None
+    name: Optional[str] = None,
+    short_level_names: bool = False,
 ) -> Logger:
     '''
     Setup logging to stderr at some ``level`` (default: {level}).
@@ -80,17 +99,25 @@ def setup_logger(
 
     If ``process`` (default: {process}), include the process index (the main process has the index
     zero).
+
+    If ``short_level_names``, the log level names are shortened to three characters, for consistent
+    formatting of indented (nested) log messages.
     '''
     log_format = '%(levelname)s - %(message)s'
+
     if process:
         log_format = '%(threadName)s - ' + log_format
+
     if name is not None:
         log_format = name + ' - ' + log_format
     if time:
         log_format = '%(asctime)s - ' + log_format
 
     handler = StreamHandler(to)
-    handler.setFormatter(LoggingFormatter(log_format))
+    if short_level_names:
+        handler.setFormatter(ShortLoggingFormatter(log_format))
+    else:
+        handler.setFormatter(LoggingFormatter(log_format))
     logger = getLogger('metacells')
     logger.addHandler(handler)
     logger.setLevel(level)

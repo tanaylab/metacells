@@ -1,5 +1,5 @@
 '''
-Test the preprocessing functions.
+Test applying functions to real data.
 '''
 
 from glob import glob
@@ -52,27 +52,21 @@ def test_find_rare_genes_modules(path: str) -> None:
 
 
 @pytest.mark.parametrize('path', glob('../metacells-test-data/*.h5ad'))
-def test_find_noisy_lonely_genes(path: str) -> None:
+def test_direct_pipeline(path: str) -> None:
     adata, expected = _load(path)
 
-    adata = adata[range(20000), :].copy()
-    mc.tl.find_high_fraction_genes(adata)
-    mc.tl.find_high_normalized_variance_genes(adata)
+    pdata = adata[range(6000), :].copy()
+    kwargs = expected['kwargs']
 
-    mc.pp.track_base_indices(adata)
-    bdata = mc.pp.filter_data(adata, ['high_fraction_genes',
-                                      'high_normalized_variance_genes'])
-    assert bdata is not None
+    mdata = mc.pl.direct_pipeline(pdata, random_seed=123456, **kwargs)
 
-    mc.tl.compute_var_var_similarity(bdata, repeated=False)
-    mc.tl.find_lonely_genes(bdata)
+    mc.tl.compute_excess_r2(pdata, random_seed=123456, mdata=mdata)
 
-    actual_noisy_lonely_genes_mask = np.full(adata.n_vars, False)
-    actual_noisy_lonely_genes_mask[mc.ut.get_v_data(bdata, 'var_base_index')] = \
-        mc.ut.get_v_data(bdata, 'lonely_genes')
+    assert np.allclose(expected['gene_max_top_r2'],
+                       np.nanmean(mc.ut.get_v_data(pdata, 'gene_max_top_r2')))
 
-    actual_noisy_lonely_gene_names = \
-        sorted(adata.var_names[actual_noisy_lonely_genes_mask])
-    expected_noisy_lonely_gene_names = expected['noisy_lonely_genes']
+    assert np.allclose(expected['gene_max_top_shuffled_r2'],
+                       np.nanmean(mc.ut.get_v_data(pdata, 'gene_max_top_shuffled_r2')))
 
-    assert actual_noisy_lonely_gene_names == expected_noisy_lonely_gene_names
+    assert np.allclose(expected['gene_max_excess_r2'],
+                       np.nanmean(mc.ut.get_v_data(pdata, 'gene_max_excess_r2')))

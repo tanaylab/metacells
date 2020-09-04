@@ -124,6 +124,8 @@ def _compute_elements_similarity(
         ut.log_operation(LOG, adata,
                          'compute_%s_%s_similarity' % (elements, elements), of)
 
+    LOG.log(level, '  repeated: %s', repeated)
+
     with ut.intermediate_step(adata, intermediate=intermediate):
         if elements == 'obs':
             similarity = pp.get_obs_obs_correlation(adata, of,
@@ -139,8 +141,6 @@ def _compute_elements_similarity(
                 similarity = pp.get_var_var_correlation(adata, similarity.name,
                                                         inplace=inplace)
 
-    LOG.log(level, '  repeated: %s', repeated)
-
     if inplace:
         to = elements + '_similarity'
         if elements == 'obs':
@@ -155,4 +155,5 @@ def _compute_elements_similarity(
         names = adata.obs_names
     else:
         names = adata.var_names
+
     return pd.DataFrame(similarity.matrix, index=names, columns=names)

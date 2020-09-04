@@ -13,6 +13,7 @@ import scipy.stats as stats  # type: ignore
 from anndata import AnnData
 
 import metacells.extensions as xt  # type: ignore
+import metacells.parameters as pr
 import metacells.preprocessing as pp
 import metacells.utilities as ut
 
@@ -31,9 +32,9 @@ def find_outlier_cells(
     *,
     of: Optional[str] = None,
     candidate_metacells: Union[str, ut.Vector] = 'candidate_metacell',
-    min_gene_fold_factor: float = 3.0,
-    max_genes_fraction: float = 0.03,
-    max_cells_fraction: float = 0.25,
+    min_gene_fold_factor: float = pr.outliers_min_gene_fold_factor,
+    max_gene_fraction: float = pr.outliers_max_gene_fraction,
+    max_cell_fraction: float = pr.outliers_max_cell_fraction,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -73,8 +74,8 @@ def find_outlier_cells(
 
     2. Ignore all fold factors less than the ``min_gene_fold_factor`` (default:
        {min_gene_fold_factor}). Count the number of genes which have a fold factor above this
-       minimum in at least one cell. If the fraction of such genes is above ``max_genes_fraction``
-       (default: {max_genes_fraction}), then raise the minimal gene fold factor such that at most
+       minimum in at least one cell. If the fraction of such genes is above ``max_gene_fraction``
+       (default: {max_gene_fraction}), then raise the minimal gene fold factor such that at most
        this fraction of genes remain.
 
     3. For each remaining gene, rank all the cells where it is expressed above the min fold
@@ -87,13 +88,13 @@ def find_outlier_cells(
 
     5. Select as outliers all cells whose minimal rank is below the artificial maximum rank, that
        is, which contain at least one gene whose expression fold factor is high relative to the rest
-       of the cells. If the fraction of such cells is higher than ``max_cells_fraction`` (default:
-       {max_cells_fraction}), reduce the maximal rank such that at most this fraction of cells are
+       of the cells. If the fraction of such cells is higher than ``max_cell_fraction`` (default:
+       {max_cell_fraction}), reduce the maximal rank such that at most this fraction of cells are
        selected as outliers.
     '''
     assert min_gene_fold_factor > 0
-    assert 0 < max_genes_fraction < 1
-    assert 0 < max_cells_fraction < 1
+    assert 0 < max_gene_fraction < 1
+    assert 0 < max_cell_fraction < 1
 
     of, level = ut.log_operation(LOG, adata, 'find_outlier_cells', of)
 
@@ -127,7 +128,7 @@ def find_outlier_cells(
                           genes_count=genes_count,
                           fold_factors=fold_factors,
                           min_gene_fold_factor=min_gene_fold_factor,
-                          max_genes_fraction=max_genes_fraction)
+                          max_gene_fraction=max_gene_fraction)
 
         if intermediate:
             ut.set_vo_data(adata, 'fold_factors', fold_factors, ut.NEVER_SAFE)
@@ -140,7 +141,7 @@ def find_outlier_cells(
         mask_of_outlier_cells = \
             _filter_cells(cells_count=cells_count,
                           outlier_genes_fold_ranks=outlier_genes_fold_ranks,
-                          max_cells_fraction=max_cells_fraction)
+                          max_cell_fraction=max_cell_fraction)
 
     if inplace:
         ut.set_o_data(adata, 'outlier_cells',
@@ -242,7 +243,7 @@ def _filter_genes(
     genes_count: int,
     fold_factors: ut.CompressedMatrix,
     min_gene_fold_factor: float,
-    max_genes_fraction: Optional[float] = None,
+    max_gene_fraction: Optional[float] = None,
 ) -> ut.DenseVector:
     ut.timed_parameters(cells=cells_count, genes=genes_count,
                         fold_factors=fold_factors.nnz)
@@ -250,19 +251,19 @@ def _filter_genes(
     assert max_fold_factors_of_genes.size == genes_count
 
     mask_of_outlier_genes = max_fold_factors_of_genes >= min_gene_fold_factor
-    outlier_genes_fraction = np.sum(mask_of_outlier_genes) / genes_count
+    outlier_gene_fraction = np.sum(mask_of_outlier_genes) / genes_count
 
-    LOG.debug('  outlier_genes_fraction: %s',
-              ut.fraction_description(outlier_genes_fraction))
+    LOG.debug('  outlier_gene_fraction: %s',
+              ut.fraction_description(outlier_gene_fraction))
 
-    if max_genes_fraction is not None \
-            and outlier_genes_fraction > max_genes_fraction:
+    if max_gene_fraction is not None \
+            and outlier_gene_fraction > max_gene_fraction:
         quantile_gene_fold_factor = np.quantile(max_fold_factors_of_genes,
-                                                1 - max_genes_fraction)
+                                                1 - max_gene_fraction)
         assert quantile_gene_fold_factor is not None
 
-        LOG.debug('  max_genes_fraction: %s',
-                  ut.fraction_description(max_genes_fraction))
+        LOG.debug('  max_gene_fraction: %s',
+                  ut.fraction_description(max_gene_fraction))
         LOG.debug('  quantile_gene_fold_factor: %s', quantile_gene_fold_factor)
 
         if quantile_gene_fold_factor > min_gene_fold_factor:
@@ -319,24 +320,24 @@ def _filter_cells(
     *,
     cells_count: int,
     outlier_genes_fold_ranks: ut.DenseMatrix,
-    max_cells_fraction: Optional[float],
+    max_cell_fraction: Optional[float],
 ) -> ut.DenseVector:
     min_fold_ranks_of_cells = np.min(outlier_genes_fold_ranks, axis=1)
     assert min_fold_ranks_of_cells.size == cells_count
 
     mask_of_outlier_cells = min_fold_ranks_of_cells < cells_count
     outliers_cells_count = sum(mask_of_outlier_cells)
-    outlier_cells_fraction = outliers_cells_count / cells_count
+    outlier_cell_fraction = outliers_cells_count / cells_count
 
     LOG.debug('  outlier_cells: %s',
               ut.ratio_description(outliers_cells_count, cells_count))
 
-    if max_cells_fraction is not None \
-            and outlier_cells_fraction > max_cells_fraction:
-        LOG.debug('  max_cells_fraction: %s',
-                  ut.fraction_description(max_cells_fraction))
+    if max_cell_fraction is not None \
+            and outlier_cell_fraction > max_cell_fraction:
+        LOG.debug('  max_cell_fraction: %s',
+                  ut.fraction_description(max_cell_fraction))
         quantile_cells_fold_rank = np.quantile(min_fold_ranks_of_cells,
-                                               max_cells_fraction)
+                                               max_cell_fraction)
         assert quantile_cells_fold_rank is not None
 
         LOG.debug('  quantile_cells_fold_rank: %s', quantile_cells_fold_rank)

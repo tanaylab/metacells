@@ -9,6 +9,7 @@ import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from anndata import AnnData
 
+import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
@@ -26,11 +27,11 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
     of: Optional[str] = None,
     *,
     metacells: Union[str, ut.Vector] = 'metacell',
-    top_gene_rank: int = 5,
-    min_gene_total: float = 10,
-    downsample_cell_quantile: float = 0.1,
-    random_seed: int = 0,
-    shuffles_count: int = 10,
+    downsample_cell_quantile: float = pr.excess_downsample_cell_quantile,
+    min_gene_total: float = pr.excess_min_gene_total,
+    top_gene_rank: int = pr.excess_top_gene_rank,
+    shuffles_count: int = pr.excess_shuffles_count,
+    random_seed: int = pr.random_seed,
     inplace: bool = True,
     intermediate: bool = True,
     mdata: Optional[AnnData] = None,
@@ -204,6 +205,16 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
                           max_top_shuffled_r2_per_gene,
                           log_value=lambda: _log_r2(max_top_shuffled_r2_per_gene))
         return None
+
+    if LOG.isEnabledFor(level):
+        LOG.log(level, '  gene_max_excess_r2: %s',
+                _log_r2(max_excess_r2_per_gene))
+        if max_top_r2_per_gene is not None:
+            LOG.log(level, '  gene_max_top_r2: %s',
+                    _log_r2(max_top_r2_per_gene))
+        if max_top_shuffled_r2_per_gene is not None:
+            LOG.log(level, '  gene_max_top_shuffled_r2: %s',
+                    _log_r2(max_top_shuffled_r2_per_gene))
 
     return pd.DataSeries(max_excess_r2_per_gene, index=adata.var_names)
 

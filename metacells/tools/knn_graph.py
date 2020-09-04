@@ -12,6 +12,7 @@ import scipy.sparse as sparse  # type: ignore
 from anndata import AnnData
 
 import metacells.extensions as xt  # type: ignore
+import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
@@ -30,9 +31,9 @@ def compute_obs_obs_knn_graph(
     of: Optional[str] = None,
     *,
     k: int,
-    balanced_ranks_factor: float = 4.0,
-    incoming_degree_factor: float = 3.0,
-    outgoing_degree_factor: float = 1.0,
+    balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
+    incoming_degree_factor: float = pr.knn_incoming_degree_factor,
+    outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasFrame]:
@@ -119,9 +120,9 @@ def compute_var_var_knn_graph(
     of: Optional[str] = None,
     *,
     k: int,
-    balanced_ranks_factor: float = 4.0,
-    incoming_degree_factor: float = 3.0,
-    outgoing_degree_factor: float = 1.0,
+    balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
+    incoming_degree_factor: float = pr.knn_incoming_degree_factor,
+    outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasFrame]:
@@ -267,6 +268,7 @@ def _compute_elements_knn_graph(
         names = adata.obs_names
     else:
         names = adata.var_names
+
     return pd.DataFrame(ut.to_dense_matrix(outgoing_weights), index=names, columns=names)
 
 

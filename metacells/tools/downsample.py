@@ -10,6 +10,7 @@ import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from anndata import AnnData
 
+import metacells.parameters as pr
 import metacells.preprocessing as pp
 import metacells.utilities as ut
 
@@ -27,8 +28,8 @@ def downsample_cells(
     adata: AnnData,
     *,
     of: Optional[str] = None,
-    downsample_cell_quantile: float = 0.05,
-    random_seed: int = 0,
+    downsample_cell_quantile: float = pr.downsample_cell_quantile,
+    random_seed: int = pr.random_seed,
     inplace: bool = True,
     infocus: bool = True,
     intermediate: bool = True,

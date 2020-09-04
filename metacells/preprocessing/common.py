@@ -298,10 +298,14 @@ def get_log(
 
     Returns the result and its name.
     '''
-    if normalization != 0:
-        to = 'log_%s_normalization_%s' % (base or 'e', normalization)
-    else:
+    if normalization == 0:
         to = 'log_%s' % (base or 'e')
+    elif normalization == 1:
+        to = 'log_%s_normalization_1' % (base or 'e')
+    elif 1 / normalization == int(1 / normalization):
+        to = 'log_%s_normalization_1/%d' % (base or 'e', 1/normalization)
+    else:
+        to = 'log_%s_normalization_%s' % (base or 'e', normalization)
 
     def derive(data: utt.Shaped) -> utt.Shaped:
         return utc.log_data(data, base=base, normalization=normalization)

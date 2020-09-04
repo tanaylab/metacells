@@ -1,6 +1,6 @@
 '''
-Finalize Grouping of Cells to Metacells
----------------------------------------
+Dissolve Too-Small Metacells
+----------------------------
 '''
 
 import logging
@@ -10,11 +10,12 @@ import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from anndata import AnnData
 
+import metacells.parameters as pr
 import metacells.preprocessing as pp
 import metacells.utilities as ut
 
 __all__ = [
-    'finalize_metacells',
+    'dissolve_metacells',
 ]
 
 
@@ -23,22 +24,22 @@ LOG = logging.getLogger(__name__)
 
 @ut.expand_doc()
 @ut.timed_call()
-def finalize_metacells(  # pylint: disable=too-many-branches
+def dissolve_metacells(  # pylint: disable=too-many-branches
     adata: AnnData,
     *,
     of: Optional[str] = None,
     candidate_metacells: Union[str, ut.Vector] = 'candidate_metacell',
     outliers: Optional[Union[str, ut.Vector]] = 'outlier_cells',
-    target_metacell_size: int,
-    cell_sizes: Optional[Union[str, ut.Vector]],
-    min_robust_size_factor: Optional[float] = 0.5,
-    min_convincing_size_factor: Optional[float] = 0.25,
-    min_convincing_gene_fold_factor: float = 3.0,
+    target_metacell_size: int = pr.dissolve_target_metacell_size,
+    cell_sizes: Optional[Union[str, ut.Vector]] = pr.dissolve_cell_sizes,
+    min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
+    min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
+    min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Finalize the grouping of cells to metacells based ``of`` some data (by default, the focus).
+    Dissolve too-small metacells based ``of`` some data (by default, the focus).
 
     **Input**
 
@@ -48,7 +49,7 @@ def finalize_metacells(  # pylint: disable=too-many-branches
     **Returns**
 
     Observation (Cell) Annotations
-        ``metacell``
+        ``solid_metacell``
             The integer index of the metacell each cell belongs to. The metacells are in no
             particular order. Cells with no metacell assignment are given a metacell index of
             ``-1``.
@@ -66,10 +67,11 @@ def finalize_metacells(  # pylint: disable=too-many-branches
        outlier cell indices, or ``None`` if there are no outlier cells to mark.
 
     2. We are trying to create metacells of size ``target_metacell_size``. Compute the sizes of the
-       resulting metacells by summing the ``cell_sizes``, which again can be the name of a
-       per-observation (cell) annotation, or an explicit sizes vector. If it is ``None``, then each
-       cell is given a size of one. These parameters are typically identical to these passed to
-       :py:func:`metacells.tools.candidate_metacells.compute_candidate_metacells`.
+       resulting metacells by summing the ``cell_sizes`` (default: {cell_sizes}) If the cell sizes
+       is a string that contains ``<of>``, it is expanded using the name of the ``of`` data. If it
+       is ``None``, each has a size of one.
+       These parameters are typically identical to these passed
+       to :py:func:`metacells.tools.candidate_metacells.compute_candidate_metacells`.
 
     3. If ``min_robust_size_factor` (default: {min_robust_size_factor}) is specified, then any
        metacell whose total size is at least ``target_metacell_size * min_robust_size_factor`` is
@@ -85,7 +87,7 @@ def finalize_metacells(  # pylint: disable=too-many-branches
 
     4 . Any remaining metacell is dissolved into outlier cells.
     '''
-    of, level = ut.log_operation(LOG, adata, 'finalize_metacells', of)
+    of, level = ut.log_operation(LOG, adata, 'dissolve_metacells', of)
 
     with ut.focus_on(ut.get_vo_data, adata, of,
                      layout='row_major', intermediate=intermediate) as data:
@@ -151,18 +153,22 @@ def finalize_metacells(  # pylint: disable=too-many-branches
         metacell_of_cells = ut.compress_indices(candidate_of_cells)
     else:
         metacell_of_cells = candidate_of_cells
-    metacells_count = np.max(candidate_of_cells) + 1
 
     if LOG.isEnabledFor(level):
-        LOG.log(level, '  final metacells: %s',
-                ut.ratio_description(metacells_count, raw_candidates_count))
+        metacells_count = np.max(metacell_of_cells) + 1
+    else:
+        metacells_count = -1
 
     if inplace:
-        ut.set_o_data(adata, 'metacell', metacell_of_cells, ut.NEVER_SAFE,
+        ut.set_o_data(adata, 'solid_metacell', metacell_of_cells, ut.NEVER_SAFE,
                       log_value=lambda:
                       ut.ratio_description(metacells_count,
                                            raw_candidates_count))
         return None
+
+    if LOG.isEnabledFor(level):
+        LOG.log(level, '  solid_metacell: %s',
+                ut.ratio_description(metacells_count, raw_candidates_count))
 
     return pd.Series(metacell_of_cells, adata.obs_names)
 

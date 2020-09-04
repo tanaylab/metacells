@@ -2,7 +2,6 @@
 Measure used elapsed and CPU times.
 '''
 
-import atexit
 import os
 import sys
 from contextlib import contextmanager
@@ -142,15 +141,6 @@ class Counters:
         return self
 
 
-if COLLECT_TIMING:
-    OVERHEAD = Counters()
-
-    def _print_overhead() -> None:
-        _print_timing('__timing_overhead__', OVERHEAD)
-
-    atexit.register(_print_overhead)
-
-
 class StepTiming:  # pylint: disable=too-many-instance-attributes
     '''
     Timing information for some named processing step.
@@ -181,9 +171,6 @@ class StepTiming:  # pylint: disable=too-many-instance-attributes
 
         #: The amount of CPU used in nested steps in the same thread.
         self.total_nested = Counters()
-
-        #: Amount of resources used in timing measurement functions
-        self.overhead = Counters()
 
 
 if COLLECT_TIMING:
@@ -245,13 +232,9 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
     If the ``name`` starts with a ``.``, then it is prefixed with the names of the innermost
     surrounding step name (which must exist). This is commonly used to time sub-steps of a function.
     '''
-    global OVERHEAD
-
     if not COLLECT_TIMING:
         yield None
         return
-
-    start_point = Counters.now()
 
     steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
     if steps_stack is None:
@@ -290,14 +273,7 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
         assert total_times.elapsed_ns >= 0
         assert total_times.cpu_ns >= 0
 
-        _print_timing(step_timing.context, total_times - step_timing.overhead,
-                      step_timing.parameters)
-
-        overhead = Counters.now() - back_point + yield_point - start_point
-        if parent_timing is not None:
-            overhead.elapsed_ns = 0
-            parent_timing.overhead += overhead
-        OVERHEAD += overhead
+        _print_timing(step_timing.context, total_times, step_timing.parameters)
 
 
 def _print_timing(
