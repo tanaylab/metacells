@@ -46,10 +46,17 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
     different genes. Naturally, ideal metacells do not exist. Measuring internal gene-gene
     correlation in each metacell gives us an estimate of the quality of the metacells we got.
 
-    Due to technical sampling issues, even if we randomize each gene's expression across the cells
-    in each metacell, we would still get some residual R^2 value. We therefore subtract this
-    from the actual R^2 value to obtain the "excess R^2" value, which we use as a rough measure
-    of the metacell's quality.
+    Since we are dealing with sparse data, small metacell sizes, and a large number of genes,
+    sometimes we get high gene-gene correlation "just because" two genes happened to have non-zero
+    measured expression in the same cell. To estimate this effect, we shuffle the gene expressions
+    between the cells. In theory, this should give us zero gene-gene correlation, but due to the
+    above effect, we get a significant non-zero correlation (and therefore R^2) value.
+
+    We therefore compensate for this effect by subtracting the maximal R^2 value from the real data
+    from the maximal R^2 value from the shuffled data. The average over all genes of this "excess"
+    R^2 value serves as a rough measure of the metacell's quality, which we can average over all
+    metacells to get an even rougher estimate of the metacells algorithm results. In general we'd
+    like to see this being low, with values of a "few" * 0.01 - the lower the better.
 
     **Input**
 

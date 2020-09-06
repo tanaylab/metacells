@@ -4,10 +4,6 @@ annotations, as well as two-dimensional variable and observation annotations.
 
 .. todo::
 
-    Move the description here to a more appropriate part of the documentation.
-
-.. todo::
-
     Discuss the different models with the maintainers of ``AnnData`` to see whether it would be
     possible to reconcile the two approaches.
 

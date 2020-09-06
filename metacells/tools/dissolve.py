@@ -71,7 +71,7 @@ def dissolve_metacells(  # pylint: disable=too-many-branches
        is a string that contains ``<of>``, it is expanded using the name of the ``of`` data. If it
        is ``None``, each has a size of one.
        These parameters are typically identical to these passed
-       to :py:func:`metacells.tools.candidate_metacells.compute_candidate_metacells`.
+       to :py:func:`metacells.tools.candidates.compute_candidate_metacells`.
 
     3. If ``min_robust_size_factor` (default: {min_robust_size_factor}) is specified, then any
        metacell whose total size is at least ``target_metacell_size * min_robust_size_factor`` is

@@ -14,7 +14,6 @@ import metacells.utilities as ut
 
 from .clean import extract_clean_data
 from .direct import compute_direct_metacells
-from .feature import extract_feature_data
 from .results import collect_result_metacells
 
 __all__ = [
@@ -56,6 +55,7 @@ def direct_pipeline(
     candidates_partition_method: 'ut.PartitionMethod' = pr.candidates_partition_method,
     candidates_min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
+    must_complete_cover: bool = False,
     outliers_min_gene_fold_factor: float = pr.outliers_min_gene_fold_factor,
     outliers_max_gene_fraction: float = pr.outliers_max_gene_fraction,
     outliers_max_cell_fraction: float = pr.outliers_max_cell_fraction,
@@ -72,8 +72,14 @@ def direct_pipeline(
     '''
     Complete pipeline directly computing the metacells on the whole data.
 
-    If your data is reasonably sized (up to O(10,000) cells), don't want to bother with details, and
-    maybe just tweak a few parameters, use this and forget about most anything else in the package.
+    This is applicable to reasonably sized data, (up to O(10,000) cells). Above this point, both CPU
+    and memory costs grow (roughly quadratically). In addition, while some processing steps included
+    here can use multiple CPUs, some can't (most notably, the expensive ``leidenalg`` graph
+    partitioning algorithm).
+
+    .. todo::
+
+        Add a link to the divide-and-conquer from the direct pipeline.
 
     **Input**
 
@@ -99,44 +105,55 @@ def direct_pipeline(
 
     **Computation Parameters**
 
-    1. Invoke :py:func:`metacells.pipeline.clean_data.extract_clean_data` to extract the "clean"
-       data from the full input data, using the ``properly_sampled_min_cell_total`` (default:
-       {properly_sampled_min_cell_total}), ``properly_sampled_max_cell_total`` (default:
-       {properly_sampled_max_cell_total}), ``excluded_gene_names`` (default: {excluded_gene_names})
-       and ``excluded_gene_patterns`` (default: {excluded_gene_patterns}).
+    1. Invoke :py:func:`metacells.pipeline.clean.extract_clean_data` to extract the "clean" data
+       from the full input data, using the
+       ``properly_sampled_min_cell_total`` (default: {properly_sampled_min_cell_total}),
+       ``properly_sampled_max_cell_total`` (default: {properly_sampled_max_cell_total}),
+       ``properly_sampled_min_gene_total`` (default: {properly_sampled_min_gene_total}),
+       ``noisy_lonely_max_sampled_cells`` (default: {noisy_lonely_max_sampled_cells}),
+       ``noisy_lonely_downsample_cell_quantile`` (default: {noisy_lonely_downsample_cell_quantile}),
+       ``noisy_lonely_min_gene_fraction`` (default: {noisy_lonely_min_gene_fraction}),
+       ``noisy_lonely_min_gene_normalized_variance`` (default: {noisy_lonely_min_gene_normalized_variance}),
+       ``noisy_lonely_max_gene_similarity`` (default: {noisy_lonely_max_gene_similarity}),
+       ``excluded_gene_names`` (default: {excluded_gene_names})
+       and
+       ``excluded_gene_patterns`` (default: {excluded_gene_patterns}).
 
-    2. Invoke :py:func:`metacells.pipeline.feature_data.extract_feature_data` to extract "feature"
-       data from the clean data, using the ``noisy_lonely_max_sampled_cells`` (default:
-       {noisy_lonely_max_sampled_cells}), ``noisy_lonely_downsample_cell_quantile`` (default:
-       {noisy_lonely_downsample_cell_quantile}), ``noisy_lonely_min_gene_fraction`` (default:
-       {noisy_lonely_min_gene_fraction}), ``noisy_lonely_min_gene_normalized_variance``
-       (default: {noisy_lonely_min_gene_normalized_variance}), ``forbidden_gene_names`` (default:
-       {forbidden_gene_names}), ``forbidden_gene_patterns`` (default: {forbidden_gene_patterns}),
-       and the ``random_seed`` (default: {random_seed}) to make this replicable.
+    2. Invoke :py:func:`metacells.pipeline.direct.compute_direct_metacells` to directly compute
+       metacells using the clean data, using the
+       ``feature_downsample_cell_quantile`` (default: {feature_downsample_cell_quantile}),
+       ``feature_min_gene_fraction`` (default: {feature_min_gene_fraction}),
+       ``feature_min_gene_relative_variance (default: {feature_min_gene_relative_variance}),
+       ``forbidden_gene_names`` (default: {forbidden_gene_names}),
+       ``forbidden_gene_patterns`` (default: {forbidden_gene_patterns}),
+       ``cells_similarity_log_data`` (default: {cells_similarity_log_data}),
+       ``cells_similarity_log_normalization`` (default: {cells_similarity_log_normalization}),
+       ``cells_repeated_similarity`` (default: {cells_repeated_similarity}),
+       ``knn_k`` (default: {knn_k}),
+       ``knn_balanced_ranks_factor`` (default: {knn_balanced_ranks_factor}),
+       ``knn_incoming_degree_factor`` (default: {knn_incoming_degree_factor}),
+       ``knn_outgoing_degree_factor`` (default: {knn_outgoing_degree_factor}),
+       ``candidates_partition_method`` (default: {candidates_partition_method.__qualname__}),
+       ``candidates_min_split_size_factor`` (default: {candidates_min_split_size_factor}),
+       ``candidates_max_merge_size_factor`` (default: {candidates_max_merge_size_factor}),
+       ``must_complete_cover`` (default: {must_complete_cover}),
+       ``outliers_min_gene_fold_factor`` (default: {outliers_min_gene_fold_factor}),
+       ``outliers_max_gene_fraction`` (default: {outliers_max_gene_fraction}),
+       ``outliers_max_cell_fraction`` (default: {outliers_max_cell_fraction}),
+       ``dissolve_min_robust_size_factor`` (default: {dissolve_min_robust_size_factor}),
+       ``dissolve_min_convincing_size_factor`` (default: {dissolve_min_convincing_size_factor}),
+       ``dissolve_min_convincing_gene_fold_factor`` (default: {dissolve_min_convincing_gene_fold_factor}),
+       ``target_metacell_size`` (default: {target_metacell_size}),
+       ``cell_sizes`` (default: {cell_sizes})
+       and
+       ``random_seed`` (default: {random_seed})
+       to make this replicable.
 
-    3. Invoke :py:func:`metacells.pipeline.direct_metacells.compute_direct_metacells` to directly
-       compute metacells using the clean and feature data, using ``cells_similarity_log_data``
-       (default: {cells_similarity_log_data}), ``cells_similarity_log_normalization`` (default:
-       {cells_similarity_log_normalization}), ``cells_repeated_similarity`` (default:
-       {cells_repeated_similarity}), ``knn_k`` (default: {knn_k}), ``knn_balanced_ranks_factor``
-       (default: {knn_balanced_ranks_factor}), ``knn_incoming_degree_factor`` (default:
-       {knn_incoming_degree_factor}), ``knn_outgoing_degree_factor`` (default:
-       {knn_outgoing_degree_factor}), ``candidates_partition_method`` (default:
-       {candidates_partition_method.__qualname__}), ``candidates_min_split_size_factor`` (default:
-       {candidates_min_split_size_factor}), ``candidates_max_merge_size_factor`` (default:
-       {candidates_max_merge_size_factor}), ``outliers_min_gene_fold_factor`` (default:
-       {outliers_min_gene_fold_factor}), ``outliers_max_gene_fraction`` (default:
-       {outliers_max_gene_fraction}), ``outliers_max_cell_fraction`` (default:
-       {outliers_max_cell_fraction}), ``dissolve_min_robust_size_factor`` (default:
-       {dissolve_min_robust_size_factor}), ``dissolve_min_convincing_size_factor`` (default:
-       {dissolve_min_convincing_size_factor}), ``dissolve_min_convincing_gene_fold_factor``
-       (default: {dissolve_min_convincing_gene_fold_factor}), ``target_metacell_size`` (default:
-       {target_metacell_size}), ``cell_sizes`` (default: {cell_sizes}), and the ``random_seed``
-       (default: {random_seed}) to make this replicable.
-
-    4. Invoke :py:func:`metacells.pipeline.result_metacells.collect_result_metacells` to collect the
-       result metacells, using the ``results_name`` (default: {results_name}) and ``results_tmp``
-       (default: {results_tmp}).
+    3. Invoke :py:func:`metacells.pipeline.results.collect_result_metacells` to collect the result
+       metacells, using the
+       ``results_name`` (default: {results_name})
+       and
+       ``results_tmp`` (default: {results_tmp}).
     '''
     cdata = \
         extract_clean_data(adata, of,
@@ -153,23 +170,14 @@ def direct_pipeline(
                            intermediate=intermediate)
 
     if cdata is None:
-        LOG.warning('! Empty clean data, giving up')
-        return None
+        raise ValueError('Empty clean data, giving up')
 
-    fdata = \
-        extract_feature_data(cdata, of,
-                             downsample_cell_quantile=feature_downsample_cell_quantile,
-                             min_gene_relative_variance=feature_min_gene_relative_variance,
-                             min_gene_fraction=feature_min_gene_fraction,
+    compute_direct_metacells(cdata, of,
+                             feature_downsample_cell_quantile=feature_downsample_cell_quantile,
+                             feature_min_gene_relative_variance=feature_min_gene_relative_variance,
+                             feature_min_gene_fraction=feature_min_gene_fraction,
                              forbidden_gene_names=forbidden_gene_names,
                              forbidden_gene_patterns=forbidden_gene_patterns,
-                             random_seed=random_seed)
-
-    if fdata is None:
-        LOG.warning('! Empty feature data, giving up')
-        return None
-
-    compute_direct_metacells(cdata, fdata, of,
                              cells_similarity_log_data=cells_similarity_log_data,
                              cells_similarity_log_normalization=cells_similarity_log_normalization,
                              cells_repeated_similarity=cells_repeated_similarity,
@@ -180,6 +188,7 @@ def direct_pipeline(
                              candidates_partition_method=candidates_partition_method,
                              candidates_min_split_size_factor=candidates_min_split_size_factor,
                              candidates_max_merge_size_factor=candidates_max_merge_size_factor,
+                             must_complete_cover=must_complete_cover,
                              outliers_min_gene_fold_factor=outliers_min_gene_fold_factor,
                              outliers_max_gene_fraction=outliers_max_gene_fraction,
                              outliers_max_cell_fraction=outliers_max_cell_fraction,
@@ -195,7 +204,6 @@ def direct_pipeline(
                                      intermediate=intermediate)
 
     if mdata is None:
-        LOG.warning('! Empty metacells data, giving up')
-        return None
+        raise ValueError('Empty metacells data, giving up')
 
     return mdata

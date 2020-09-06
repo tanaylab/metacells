@@ -229,25 +229,34 @@ def test_parallel_map() -> None:
 
 
 def test_sum_groups() -> None:
-    expected = np.array([[5, 7, 2], [10, 8, 13]])
+    expected_sums = np.array([[5, 7, 2], [10, 8, 13]])
+    expected_sizes = np.array([2, 2])
     groups = np.array([0, 1, 0, 1])
 
     dense_rows = \
         np.array([[0, 1, 2], [3, 0, 4], [5, 6, 0], [7, 8, 9]], dtype='float')
 
     results = ut.sum_groups(dense_rows, groups, per='row')
-    assert np.allclose(results, expected)
+    assert results is not None
+    assert np.allclose(results[0], expected_sums)
+    assert np.allclose(results[1], expected_sizes)
 
     results = ut.sum_groups(dense_rows.transpose(), groups, per='column')
-    assert np.allclose(results, expected.transpose())
+    assert results is not None
+    assert np.allclose(results[0], expected_sums.transpose())
+    assert np.allclose(results[1], expected_sizes)
 
     sparse_rows = sparse.csr_matrix(dense_rows)
 
     results = ut.sum_groups(sparse_rows, groups, per='row')
-    assert np.allclose(results, expected)
+    assert results is not None
+    assert np.allclose(results[0], expected_sums)
+    assert np.allclose(results[1], expected_sizes)
 
     results = ut.sum_groups(sparse_rows.transpose(), groups, per='column')
-    assert np.allclose(results, expected.transpose())
+    assert results is not None
+    assert np.allclose(results[0], expected_sums.transpose())
+    assert np.allclose(results[1], expected_sizes)
 
 
 def test_shuffle_dense_matrix() -> None:

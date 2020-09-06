@@ -9,22 +9,22 @@ Filtering
 .. automodule:: metacells.tools.properly_sampled
     :members:
 
-.. automodule:: metacells.tools.named_genes
+.. automodule:: metacells.tools.named
     :members:
 
-.. automodule:: metacells.tools.high_genes
+.. automodule:: metacells.tools.high
     :members:
 
-.. automodule:: metacells.tools.noisy_lonely_genes
+.. automodule:: metacells.tools.noisy_lonely
     :members:
 
-.. automodule:: metacells.tools.rare_gene_modules
+.. automodule:: metacells.tools.rare
     :members:
 
 Building a Graph
 ----------------
 
-.. automodule:: metacells.tools.downsample_cells
+.. automodule:: metacells.tools.downsample
     :members:
 
 .. automodule:: metacells.tools.similarity
@@ -36,20 +36,20 @@ Building a Graph
 Computing Metacells
 -------------------
 
-.. automodule:: metacells.tools.candidate_metacells
+.. automodule:: metacells.tools.candidates
     :members:
 
-.. automodule:: metacells.tools.outlier_cells
+.. automodule:: metacells.tools.outliers
     :members:
 
-.. automodule:: metacells.tools.final_metacells
+.. automodule:: metacells.tools.dissolve
     :members:
 
-.. automodule:: metacells.tools.apply_metacells
+.. automodule:: metacells.tools.collect
     :members:
 
 Evaluating Metacells
 --------------------
 
-.. automodule:: metacells.tools.excess_r2
+.. automodule:: metacells.tools.excess
     :members:

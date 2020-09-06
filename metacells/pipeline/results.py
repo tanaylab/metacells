@@ -57,12 +57,12 @@ def collect_result_metacells(
 
     **Computation Parameters**
 
-    1. Invoke :py:func:`metacells.tools.apply_metacells.apply_metacells` to add a ``metacell``
+    1. Invoke :py:func:`metacells.tools.collect.collect_metacells` to add a ``metacell``
        per-observation (cell) annotation to the full data.
 
-    2. Invoke :py:func:`metacells.preprocessing.group_data.group_obs_data` to sum the ``of`` data
-       into a new metacells annotated data, using the ``name`` (default: {name}) and ``tmp``
-       (default: {tmp}).
+    2. Invoke :py:func:`metacells.preprocessing.group.group_obs_data` to sum the ``of`` data into a
+       new metacells annotated data, using the ``name`` (default: {name}) and ``tmp`` (default:
+       {tmp}).
     '''
     ut.log_pipeline_step(LOG, adata, 'collect_result_metacells')
 

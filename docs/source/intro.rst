@@ -18,17 +18,21 @@ Analyzing scRNA-seq data therefore requires processing the profiles in bulk. Cla
 been done by directly clustering the cells using various methods.
 
 In contrast, the metacell approach groups together profiles of the "same" biological state into
-groups with the *minimal* number of profiles needed for computing robust statistics (in particular,
-mean gene expression). Each such group is a single "metacell".
+groups of cells of the "same" biological state, with the *minimal* number of profiles needed for
+computing robust statistics (in particular, mean gene expression). Each such group is a single
+"metacell".
 
-By summing profiles together, each metacell greatly reduces the sampling variance, and provides a
-more robust estimation of some transcription state. In particular, a metacell is not a cell type
-(multiple metacells may belong to the same type), and is not a parametric model of the cell state.
+By summing profiles of cells of the "same" state together, each metacell greatly reduces the
+sampling variance, and provides a more robust estimation of the transcription state. Note a metacell
+is *not* a cell type (multiple metacells may belong to the same "type", or even have the "same"
+state, if the data sufficiently over-samples this state). Also, a metacell is *not* a parametric
+model of the cell state. It is merely a more robust description of some cell state.
 
-The metacells should therefore be further analyzed using additional methods to classify cell types,
-detect cell trajectories and/or lineage, build parametric models for cell behavior, etc. Using
-metacells as input for such analysis techniques should benefit both from the more robust, less noisy
-input; and also from the (~100-fold) reduction in the number of profiles to analyze.
+The metacells should therefore be further analyzed as if they were cells, using additional methods
+to classify cell types, detect cell trajectories and/or lineage, build parametric models for cell
+behavior, etc. Using metacells as input for such analysis techniques should benefit both from the
+more robust, less noisy input; and also from the (~100-fold) reduction in the number of cells to
+analyze when dealing with large data (e.g. analyzing millions of individual cells).
 
 Usage
 -----

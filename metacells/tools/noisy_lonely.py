@@ -74,9 +74,9 @@ def find_noisy_lonely_genes(
     1. If we have more than ``max_sampled_cells`` (default: {max_sampled_cells}), pick this number
        of random cells from the data using the ``random_seed``.
 
-    2. Invoke :py:func:`metacells.tools.downsample_cells.downsample_cells` to downsample the
-       surviving cells to the same total number of UMIs, using the ``downsample_cell_quantile``
-       (default: {downsample_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
+    2. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the surviving
+       cells to the same total number of UMIs, using the ``downsample_cell_quantile`` (default:
+       {downsample_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
 
     3. Find "noisy" genes which have a mean fraction of at least ``min_gene_fraction`` (default:
        {min_gene_fraction}) and a relative variance of at least ``min_gene_normalized_variance``

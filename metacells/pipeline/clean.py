@@ -41,7 +41,7 @@ def extract_clean_data(
     random_seed: int = pr.random_seed,
     name: Optional[str] = 'CLEAN',
     tmp: bool = True,
-    intermediate: bool = True,
+    intermediate: bool = False,
 ) -> Optional[AnnData]:
     '''
     Extract a "clean" subset of the ``adata`` to compute metacells for.
@@ -78,7 +78,7 @@ def extract_clean_data(
     3. Invoke :py:func:`metacells.tools.properly_sampled.find_properly_sampled_genes` using
        ``properly_sampled_min_gene_total`` (default: {properly_sampled_min_gene_total}).
 
-    4. Invoke :py:func:`metacells.tools.noisy_lonely_genes.find_noisy_lonely_genes` using
+    4. Invoke :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes` using
        ``noisy_lonely_max_sampled_cells`` (default: {noisy_lonely_max_sampled_cells}),
        ``noisy_lonely_downsample_cell_quantile`` (default: {noisy_lonely_downsample_cell_quantile}),
        ``noisy_lonely_min_gene_fraction`` (default: {noisy_lonely_min_gene_fraction}),
@@ -86,12 +86,12 @@ def extract_clean_data(
        {noisy_lonely_min_gene_normalized_variance}), and ``noisy_lonely_max_gene_similarity``
        (default: {noisy_lonely_max_gene_similarity}).
 
-    5. Invoke :py:func:`metacells.tools.named_genes.find_named_genes` to exclude genes based on
-       their name, using the ``excluded_gene_names`` (default: {excluded_gene_names}) and
+    5. Invoke :py:func:`metacells.tools.named.find_named_genes` to exclude genes based on their
+       name, using the ``excluded_gene_names`` (default: {excluded_gene_names}) and
        ``excluded_gene_patterns`` (default: {excluded_gene_patterns}). This is stored in an
        intermediate per-variable (gene) ``excluded_genes`` boolean mask.
 
-    5. Invoke :py:func:`metacells.preprocessing.filter_data.filter_data` to slice just the surviving
+    5. Invoke :py:func:`metacells.preprocessing.filter.filter_data` to slice just the surviving
        cells and genes using the ``name`` (default: {name}) and ``tmp`` (default: {tmp}).
     '''
     ut.log_pipeline_step(LOG, adata, 'clean_data')

@@ -7,7 +7,7 @@ docs/build
 docs/source/timing_script.rst
 *.egg-info
 .eggs
-flame.html
+flame*.html
 junk*
 metacells/*.so
 metacells/version.py
@@ -17,5 +17,5 @@ __pycache__
 .*.swo
 .*.swp
 tags
-timing.csv*
+timing*.csv
 .tox

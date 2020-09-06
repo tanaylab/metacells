@@ -15,5 +15,4 @@ All the functions included here are exported under ``metacells.pl``.
 from .clean import *
 from .complete import *
 from .direct import *
-from .feature import *
 from .results import *

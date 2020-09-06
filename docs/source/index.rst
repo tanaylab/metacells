@@ -1,6 +1,10 @@
 metacells documentation
 =======================
 
+.. todo::
+
+   Thoroughly review and complete the documentation.
+
 .. toctree::
   :maxdepth: 2
 

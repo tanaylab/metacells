@@ -237,8 +237,8 @@ def corrcoef(
 
     .. todo::
 
-        This always uses the dense implementation. Need to investigate whether a sparse
-        implementation may be faster.
+        The :py:func:`corrcoef` always uses the dense implementation. Need to investigate whether a
+        sparse implementation may be faster.
 
     .. note::
 
@@ -636,9 +636,9 @@ def sum_squared_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
 
     .. todo::
 
-        This implementation allocates and frees a complete copy of the matrix (to hold the squared
-        values). An implementation that directly squares-and-adds the elements would be more
-        efficient.
+        The :py:func:`sum_squared_per` implementation allocates and frees a complete copy of the
+        matrix (to hold the squared values). An implementation that directly squares-and-adds the
+        elements would be more efficient.
     '''
     axis = utt.PER_OF_AXIS.index(per)
 
@@ -746,11 +746,6 @@ def bincount_vector(
 ) -> utt.DenseVector:
     '''
     Drop-in replacement for ``np.bincount``, which is timed and also works on pandas data.
-
-    .. todo::
-
-        This isn't lightning-fast, and seems to be the builtin operation most likely to benefit from
-        parallelization.
     '''
     proper = utt.to_proper_vector(vector)
     array = utt.DenseVector.be(proper)

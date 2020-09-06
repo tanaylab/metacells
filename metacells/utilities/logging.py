@@ -156,7 +156,7 @@ def log_operation(
 
     Also log the ``of`` data it applies to, similarly to using :py:func:`log_of`. If the (default)
     special value ``__no_of__`` is given, then the operation has no ``of`` data (e.g.,
-    py:func:`metacells.tools.named_genes.find_named_genes`).
+    py:func:`metacells.tools.named.find_named_genes`).
 
     Return the explicit ``of`` data name and the log level for the ``adata``.
     '''

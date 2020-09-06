@@ -65,7 +65,7 @@ def compute_candidate_metacells(
        (default: {cell_sizes}) to assign a size for each node (cell). If the cell sizes is a string
        that contains ``<of>``, it is expanded using the name of the ``of`` data. If it is ``None``,
        each has a size of one. These parameters are typically identical to these passed to
-       :py:func:`metacells.tools.final_metacells.finalize_metacells`.
+       :py:func:`metacells.tools.dissolve.dissolve_metacells`.
 
        .. note::
 

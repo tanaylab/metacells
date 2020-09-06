@@ -9,9 +9,6 @@ Pipeline
 .. automodule:: metacells.pipeline.clean
     :members:
 
-.. automodule:: metacells.pipeline.feature
-    :members:
-
 .. automodule:: metacells.pipeline.direct
     :members:
 

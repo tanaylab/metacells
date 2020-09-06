@@ -15,7 +15,7 @@ from .collect import *
 from .dissolve import *
 from .downsample import *
 from .excess import *
-from .high_genes import *
+from .high import *
 from .knn_graph import *
 from .named import *
 from .noisy_lonely import *
