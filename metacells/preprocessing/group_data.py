@@ -6,6 +6,7 @@ Group Data
 import logging
 from typing import Optional, Union
 
+import numpy as np  # type: ignore
 from anndata import AnnData
 
 import metacells.utilities as ut
@@ -58,6 +59,9 @@ def group_obs_data(
     * Any per-variable (gene) data or per-variable-per-variable data which is safe when slicing
       observations (cells).
 
+    * A new ``grouped`` per-observation data which counts, for each group, the numnber
+      of grouped observations summed into it.
+
     If ``name`` is specified, this will be the logging name of the new data. Otherwise, it will be
     unnamed.
 
@@ -75,15 +79,19 @@ def group_obs_data(
                      intermediate=intermediate) as data:
         group_of_cells = \
             ut.get_vector_parameter_data(LOG, level, adata, groups,
-                                         per='o', name='group indices')
+                                         per='o', name='groups')
         assert group_of_cells is not None
 
-        summed_data = ut.sum_groups(data, group_of_cells, per='row')
-        if summed_data is None:
+        results = ut.sum_groups(data, group_of_cells, per='row')
+        if results is None:
             return None
+        summed_data, cell_counts = results
 
         gdata = AnnData(summed_data)
         ut.setup(gdata, name=name, x_name=ut.get_focus_name(adata), tmp=tmp)
+
+        ut.set_o_data(gdata, 'grouped', cell_counts,
+                      log_value=lambda: str(np.mean(cell_counts)))
 
         for v_name, v_value in adata.var.items():
             if ut.safe_slicing_mask(v_name).obs:

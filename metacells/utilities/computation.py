@@ -11,8 +11,8 @@ analysis pipeline.
 
 import re
 from re import Pattern
-from typing import (Callable, Collection, List, Optional, TypeVar, Union,
-                    overload)
+from typing import (Callable, Collection, List, Optional, Tuple, TypeVar,
+                    Union, overload)
 from warnings import warn
 
 import numpy as np  # type: ignore
@@ -939,10 +939,11 @@ def sum_groups(
     groups: utt.Vector,
     *,
     per: str
-) -> Optional[utt.Matrix]:
+) -> Optional[Tuple[utt.Matrix, utt.Vector]]:
     '''
     Given a ``matrix``, and a vector of ``groups`` ``per`` row or column, return a matrix with a row
-    or column per group, containing the sum of the groups rows or columns.
+    or column per group, containing the sum of the groups rows or columns, and a vector of sizes
+    (the number of summed rows or columns) per group.
 
     Negative group indices are ignored and their data is not included in the result. If there are no
     non-negative group indices, returns ``None``.
@@ -983,6 +984,8 @@ def sum_groups(
     if per == 'column':
         matrix = matrix.transpose()
 
+    group_sizes = np.zeros(groups_count, dtype='int32')
+
     with utm.timed_step(timed_step):
         utm.timed_parameters(groups=groups_count, entities=matrix.shape[0],
                              elements=matrix.shape[1])
@@ -990,14 +993,16 @@ def sum_groups(
 
         for group_index in range(groups_count):
             group_mask = groups == group_index
+            group_size = np.sum(group_mask)
+            assert group_size > 0
+            group_sizes[group_index] = group_size
             group_matrix = matrix[group_mask, :]
-            assert group_matrix.shape[0] > 0
             results[group_index, :] = \
                 utt.to_dense_vector(group_matrix.sum(axis=0))
 
     if per == 'column':
         results = results.transpose()
-    return results
+    return results, group_sizes
 
 
 @utm.timed_call()
