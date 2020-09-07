@@ -1,15 +1,17 @@
 [MASTER]
-jobs=0
 persistent=no
+load_plugins=pylint_strict_informational
 
 [MESSAGES CONTROL]
 
-disable=C0330,
+enable=useless-suppression
+
+disable=C0330,R0801,
         c-extension-no-member,
-        inherit-non-class,
-        invalid-unary-operand-type,
         fixme,
         global-statement,
+        inherit-non-class,
+        invalid-unary-operand-type,
         line-too-long,
         missing-module-docstring,
         multiple-statements,

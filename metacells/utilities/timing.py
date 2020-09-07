@@ -141,7 +141,7 @@ class Counters:
         return self
 
 
-class StepTiming:  # pylint: disable=too-many-instance-attributes
+class StepTiming:
     '''
     Timing information for some named processing step.
     '''
@@ -209,7 +209,7 @@ if COLLECT_TIMING:
 
 
 @contextmanager
-def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches,too-many-statements
+def timed_step(name: str) -> Iterator[None]:
     '''
     Collect timing information for a computation step.
 

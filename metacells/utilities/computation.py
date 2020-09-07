@@ -85,7 +85,7 @@ def to_layout(
 
 @utm.timed_call()
 @utd.expand_doc()
-def to_layout(  # pylint: disable=too-many-return-statements
+def to_layout(
     matrix: utt.Matrix,
     layout: str,
     *,

@@ -12,8 +12,11 @@ from anndata import AnnData
 
 import metacells.parameters as pr
 import metacells.preprocessing as pp
-import metacells.tools as tl
 import metacells.utilities as ut
+from metacells.tools.downsample import downsample_cells
+from metacells.tools.high import (find_high_fraction_genes,
+                                  find_high_normalized_variance_genes)
+from metacells.tools.similarity import compute_var_var_similarity
 
 __all__ = [
     'find_noisy_lonely_genes',
@@ -103,14 +106,14 @@ def find_noisy_lonely_genes(
 
     pp.track_base_indices(bdata, name='sampled_base_index')
 
-    tl.downsample_cells(bdata,
-                        downsample_cell_quantile=downsample_cell_quantile,
-                        random_seed=random_seed,
-                        infocus=True)
+    downsample_cells(bdata,
+                     downsample_cell_quantile=downsample_cell_quantile,
+                     random_seed=random_seed,
+                     infocus=True)
 
-    tl.find_high_fraction_genes(bdata, min_gene_fraction=min_gene_fraction)
-    tl.find_high_normalized_variance_genes(bdata,
-                                           min_gene_normalized_variance=min_gene_normalized_variance)
+    find_high_fraction_genes(bdata, min_gene_fraction=min_gene_fraction)
+    find_high_normalized_variance_genes(bdata,
+                                        min_gene_normalized_variance=min_gene_normalized_variance)
 
     ndata = pp.filter_data(bdata, name='NOISY', tmp=True,
                            masks=['high_fraction_genes',
@@ -122,7 +125,7 @@ def find_noisy_lonely_genes(
         LOG.log(level, '  max_gene_similarity: %s', max_gene_similarity)
 
         gene_gene_similarity_frame = \
-            tl.compute_var_var_similarity(ndata, inplace=False)
+            compute_var_var_similarity(ndata, inplace=False)
         assert gene_gene_similarity_frame is not None
         gene_gene_similarity = \
             ut.to_dense_matrix(gene_gene_similarity_frame)

@@ -838,7 +838,7 @@ def has_data(
 
 
 @utd.expand_doc()
-def data_per(  # pylint: disable=too-many-return-statements
+def data_per(
     adata: AnnData,
     name: str,
     must_exist: bool = True,
@@ -852,23 +852,17 @@ def data_per(  # pylint: disable=too-many-return-statements
     Otherwise, return ``None``.
     '''
 
-    if name == get_x_name(adata) or name in adata.layers:
+    if name == get_x_name(adata):
         return 'vo'
 
-    if name in adata.uns:
-        return 'm'
-
-    if name in adata.obs:
-        return 'o'
-
-    if name in adata.obsp:
-        return 'oo'
-
-    if name in adata.var:
-        return 'v'
-
-    if name in adata.varp:
-        return 'vo'
+    for per, annotation in (('vo', adata.layers),
+                            ('m', adata.uns),
+                            ('o', adata.obs),
+                            ('v', adata.var),
+                            ('oo', adata.obsp),
+                            ('vv', adata.varp)):
+        if name in annotation:
+            return per
 
     if must_exist:
         raise KeyError('unknown data: %s' % name)
@@ -1602,20 +1596,17 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
             texts.append(utl.mask_description(value))
             return
 
-        if per == 'm':
-            try:
-                if value.ndim == 2:
-                    texts.append(' to a matrix of type ')
-                    texts.append(str(value.dtype))
-                    texts.append(' shape ')
-                    texts.append(str(value.shape))
-                elif value.ndim == 1:
-                    texts.append(' to a vector of type ')
-                    texts.append(str(value.dtype))
-                    texts.append(' size ')
-                    texts.append(str(value.size))
-            except:  # pylint: disable=bare-except
-                pass
+        if per == 'm' and hasattr(value, 'ndim'):
+            if value.ndim == 2:
+                texts.append(' to a matrix of type ')
+                texts.append(str(value.dtype))
+                texts.append(' shape ')
+                texts.append(str(value.shape))
+            elif value.ndim == 1:
+                texts.append(' to a vector of type ')
+                texts.append(str(value.dtype))
+                texts.append(' size ')
+                texts.append(str(value.size))
 
     finally:
         text = ''.join(texts)

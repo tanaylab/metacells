@@ -35,6 +35,7 @@ DEVELOP_REQUIRES = [
     'isort',
     'mypy',
     'pylint',
+    'pylint_strict_informational',
     'sphinx',
     'sphinx_rtd_theme'
 ]

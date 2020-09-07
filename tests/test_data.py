@@ -13,7 +13,7 @@ from anndata import AnnData
 
 import metacells as mc
 
-# pylint: disable=missing-docstring
+# pylint: disable=missing-function-docstring
 
 
 LOADED: Dict[str, Tuple[AnnData, Dict[str, Any]]] = {}

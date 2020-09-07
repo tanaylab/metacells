@@ -10,7 +10,7 @@ from scipy import stats
 import metacells.preprocessing as pp
 import metacells.utilities as ut
 
-# pylint: disable=missing-docstring
+# pylint: disable=missing-function-docstring
 
 
 def test_mean() -> None:

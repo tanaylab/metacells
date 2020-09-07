@@ -34,7 +34,7 @@ build:
 	python setup.py build_ext --inplace
 
 pylint: build
-	pylint metacells tests
+	pylint --jobs `nproc` metacells tests
 
 test: build
 	@rm -rf timing.csv .coverage* coverage

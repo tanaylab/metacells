@@ -12,7 +12,7 @@ from scipy import stats
 
 import metacells.utilities as ut
 
-# pylint: disable=missing-docstring
+# pylint: disable=missing-function-docstring
 
 
 def test_expand_doc() -> None:
