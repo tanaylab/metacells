@@ -1,6 +1,6 @@
 '''
-Compute Cross-Similarity
-------------------------
+Cross-Similarity
+----------------
 '''
 
 import logging

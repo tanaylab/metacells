@@ -1,4 +1,7 @@
 '''
+Computation
+-----------
+
 Most of the functions defined here are thin wrappers around builtin numpy or scipy functions.
 However, they are provided with a uniform interface that works for both sparse and dense data. This
 allows safely passing them to functions such as

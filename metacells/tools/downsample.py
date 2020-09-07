@@ -1,6 +1,6 @@
 '''
-Downsample Cells
-----------------
+Downsample
+----------
 '''
 
 import logging

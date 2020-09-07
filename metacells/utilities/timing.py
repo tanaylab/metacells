@@ -1,5 +1,6 @@
 '''
-Measure used elapsed and CPU times.
+Timing
+------
 '''
 
 import os

@@ -1,5 +1,5 @@
 '''
-Script for processing a ``timing.csv`` file.
+Process a ``timing.csv`` file.
 
 .. todo::
 

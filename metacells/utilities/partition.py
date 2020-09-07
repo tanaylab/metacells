@@ -1,5 +1,6 @@
 '''
-Graph partition methods for computing metacells.
+Partition
+---------
 '''
 
 from typing import Callable, Optional, Tuple

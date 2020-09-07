@@ -1,6 +1,6 @@
 '''
-Find Outlier Cells
-------------------
+Outliers
+--------
 '''
 
 import logging

@@ -1,6 +1,6 @@
 '''
-Detect Properly-Sampled Cells and Genes
----------------------------------------
+Properly Sampled
+----------------
 '''
 
 import logging

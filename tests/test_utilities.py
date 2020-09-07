@@ -290,3 +290,17 @@ def test_rank_matrix() -> None:
     result = ut.rank_per(dense, per='column', rank=1)
     expected = np.array([3, 1, 2])
     assert np.allclose(result, expected)
+
+
+def test_random_piles() -> None:
+    result = ut.random_piles(10, target_pile_size=3, random_seed=123456)
+    expected = np.array([2, 2, 1, 1, 1, 0, 0, 2, 0, 0])
+    assert np.allclose(result, expected)
+
+
+def test_group_piles() -> None:
+    group_of_elements = np.array([0, 1, 2, 3, 0, 1, 2, 3, 0, 1])
+    group_of_groups = np.array([0, 1, 1, 0])
+    expected = np.array([0, 1, 1, 0, 0, 1, 1, 0, 0, 1])
+    result = ut.group_piles(group_of_elements, group_of_groups)
+    assert np.allclose(result, expected)

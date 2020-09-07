@@ -1,6 +1,6 @@
 '''
-Clean Data
-----------
+Clean
+-----
 '''
 
 import logging
@@ -39,7 +39,7 @@ def extract_clean_data(
     excluded_gene_names: Optional[Collection[str]] = None,
     excluded_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     random_seed: int = pr.random_seed,
-    name: Optional[str] = 'CLEAN',
+    name: Optional[str] = 'clean',
     tmp: bool = True,
     intermediate: bool = False,
 ) -> Optional[AnnData]:
@@ -61,7 +61,7 @@ def extract_clean_data(
     **Returns**
 
     Annotated sliced data containing the "clean" subset of the original data. The focus of the data
-    will be the (slice) ``of`` the input data. By default, the ``name`` of this data is ``CLEAN``.
+    will be the (slice) ``of`` the input data. By default, the ``name`` of this data is {name}.
 
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
     for future reuse. Otherwise, discard it.

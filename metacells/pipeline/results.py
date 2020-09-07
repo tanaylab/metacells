@@ -1,6 +1,6 @@
 '''
-Result Metacells
-----------------
+Results
+-------
 '''
 
 import logging

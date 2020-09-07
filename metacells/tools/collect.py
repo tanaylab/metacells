@@ -1,6 +1,6 @@
 '''
-Collect the Final Metacells
----------------------------
+Collect
+-------
 '''
 
 import logging

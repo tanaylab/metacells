@@ -1,4 +1,7 @@
 '''
+Annotation
+----------
+
 This tries to deal safely with slicing data layers, observation, variable and unstructured
 annotations, as well as two-dimensional variable and observation annotations.
 
@@ -8,7 +11,7 @@ annotations, as well as two-dimensional variable and observation annotations.
     possible to reconcile the two approaches.
 
 Data Model
-----------
+..........
 
 The data model for the managed ``AnnData`` is slightly different from that of the raw ``AnnData``.
 Specifically, the mapping is:
@@ -34,7 +37,7 @@ Specifically, the mapping is:
     Support multidimensional annotations.
 
 Mapping Code Complexity
------------------------
+.......................
 
 The mapping between the models is mostly simply 1-1 which is trivial to implement. However, there
 are three sources of (implementation) code complexity here:
@@ -83,7 +86,7 @@ The interaction between the above three features is the cause of most of the imp
 complexity. The upside is that application code becomes simpler and is more efficient.
 
 Usage Differences
------------------
+.................
 
 The managed ``AnnData`` model prefers to consider all data as immutable. That is, if one wants to
 compute the log of some values, the common approach in raw ``AnnData`` is to mutate ``X`` to hold
@@ -96,15 +99,15 @@ data, using arbitrary compute functions. See the :py:mod:`metacells.preprocessin
 these functions.
 
 Data Names
-----------
+..........
 
 The names of annotated data must be unique across all the kinds of data, otherwise
 functions such as ``sc.pl.scatter`` get confused and may silently(!) use the wrong
 data.
 
 In general the auto-generated names are tediously long and detailed (e.g.,
-``log_2_of_1_plus_sum_of_var_per_obs_of_UMIs``), but ensure that they are properly unique. The
-caller is responsible to ensure that the names of manually set data are also unique.
+``UMIs|sum_per_obs|log_2_normalization_1``), but ensure that they are properly unique. The caller is
+responsible to ensure that the names of manually set data are also unique.
 '''
 
 import logging

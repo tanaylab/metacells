@@ -1,5 +1,6 @@
 '''
-Support effective logging.
+Logging
+-------
 
 This provides a useful formatter which includes high-resolution time and thread names, and a set of
 utility functions for effective logging of operations on annotation data.

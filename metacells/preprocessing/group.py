@@ -1,6 +1,6 @@
 '''
-Group Data
-----------
+Group
+-----
 '''
 
 import logging

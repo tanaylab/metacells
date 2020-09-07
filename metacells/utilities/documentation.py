@@ -1,5 +1,6 @@
 '''
-Support documentation generation.
+Documentation
+-------------
 '''
 
 from inspect import Parameter, signature

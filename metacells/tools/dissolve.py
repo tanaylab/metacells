@@ -1,6 +1,6 @@
 '''
-Dissolve Too-Small Metacells
-----------------------------
+Dissolve
+--------
 '''
 
 import logging

@@ -1,6 +1,6 @@
 '''
-Detect "Noisy Lonely" Genes
----------------------------
+Noisy Lonely
+------------
 '''
 
 import logging
@@ -99,7 +99,7 @@ def find_noisy_lonely_genes(
         cell_indices = \
             np.random.choice(np.arange(adata.n_obs),
                              size=max_sampled_cells, replace=False)
-        bdata = ut.slice(adata, obs=cell_indices, name='SAMPLED', tmp=True)
+        bdata = ut.slice(adata, obs=cell_indices, name='sampled', tmp=True)
     else:
         bdata = adata.copy()
         bdata.uns['__tmp__'] = True
@@ -115,7 +115,7 @@ def find_noisy_lonely_genes(
     find_high_normalized_variance_genes(bdata,
                                         min_gene_normalized_variance=min_gene_normalized_variance)
 
-    ndata = pp.filter_data(bdata, name='NOISY', tmp=True,
+    ndata = pp.filter_data(bdata, name='noisy', tmp=True,
                            masks=['high_fraction_genes',
                                   'high_normalized_variance_genes'])
 

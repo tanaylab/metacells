@@ -1,5 +1,6 @@
 '''
-Deal with shaped data types.
+Typing
+------
 
 The code has to deal with many different alternative data types for what is essentially two basic
 data types: 2D matrices and 1D vectors.

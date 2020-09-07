@@ -1,5 +1,6 @@
 '''
-Use multiple CPUs.
+Parallel
+--------
 
 Due to the notorious GIL, using multiple Python threads is useless. This leaves us
 with two options for using multiple CPUs:

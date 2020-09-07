@@ -1,6 +1,6 @@
 '''
-Direct Metacells
-----------------
+Direct
+------
 
 This directly computes the metacells on the whole data. Like any method that directly looks at the
 whole data at once, the amount of CPU and memory needed becomes unreasonable when the data size
@@ -44,7 +44,7 @@ def compute_direct_metacells(
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_log_normalization: float = pr.cells_similarity_log_normalization,
     cells_repeated_similarity: bool = pr.cells_repeated_similarity,
-    knn_k: Optional[int] = None,
+    knn_k: Optional[int] = pr.knn_k,
     knn_balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     knn_incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     knn_outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
@@ -60,7 +60,7 @@ def compute_direct_metacells(
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
     target_metacell_size: int = pr.target_metacell_size,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
-    random_seed: int = 0,
+    random_seed: int = pr.random_seed,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -248,7 +248,7 @@ def extract_feature_data(
     adata: AnnData,
     of: Optional[str] = None,
     *,
-    name: Optional[str] = 'FEATURE',
+    name: Optional[str] = 'feature',
     tmp: bool = False,
     downsample_cell_quantile: float = pr.feature_downsample_cell_quantile,
     min_gene_fraction: float = pr.feature_min_gene_fraction,
@@ -278,7 +278,7 @@ def extract_feature_data(
 
     Annotated sliced data containing the "feature" subset of the original data. The focus of the
     data will be the (slice) ``of`` the (downsampled) input data. By default, the ``name`` of this
-    data is ``FEATURE``.
+    data is {name}.
 
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
     for future reuse. Otherwise, discard it.

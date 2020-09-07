@@ -1,6 +1,6 @@
 '''
-Assign Cells to (Raw, Candidate) Metacells
-------------------------------------------
+Candidates
+----------
 '''
 
 import logging

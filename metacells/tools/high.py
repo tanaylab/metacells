@@ -1,6 +1,6 @@
 '''
-Find High Expression/Variance Genes
------------------------------------
+High
+----
 '''
 
 import logging

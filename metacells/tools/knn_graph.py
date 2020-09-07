@@ -1,6 +1,6 @@
 '''
-Compute a K-Nearest-Neighbors Graph
------------------------------------
+K-Nearest-Neighbors Graph
+-------------------------
 '''
 
 import logging

@@ -3,8 +3,8 @@ Tools
 
 .. automodule:: metacells.tools
 
-Filtering
----------
+Filtering the Data
+++++++++++++++++++
 
 .. automodule:: metacells.tools.properly_sampled
     :members:
@@ -21,8 +21,8 @@ Filtering
 .. automodule:: metacells.tools.rare
     :members:
 
-Building a Graph
-----------------
+Building the Graph
+++++++++++++++++++
 
 .. automodule:: metacells.tools.downsample
     :members:
@@ -33,8 +33,8 @@ Building a Graph
 .. automodule:: metacells.tools.knn_graph
     :members:
 
-Computing Metacells
--------------------
+Computing the Metacells
++++++++++++++++++++++++
 
 .. automodule:: metacells.tools.candidates
     :members:
@@ -48,8 +48,8 @@ Computing Metacells
 .. automodule:: metacells.tools.collect
     :members:
 
-Evaluating Metacells
---------------------
+Evaluating the Metacells
+++++++++++++++++++++++++
 
 .. automodule:: metacells.tools.excess
     :members:

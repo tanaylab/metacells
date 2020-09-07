@@ -1,6 +1,6 @@
 '''
-Compute Commonly Used Data
---------------------------
+Common
+------
 
 Most functions here use the facilities of :py:mod:`metacells.utilities.annotation` to wrap the
 functions of :py:mod:`metacells.utilities.computation` in an easily accessible way.

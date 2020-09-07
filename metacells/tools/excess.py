@@ -1,5 +1,6 @@
 '''
-Compute the excess gene-gene coefficient of determination (R^2).
+Excess R^2
+----------
 '''
 
 import logging
