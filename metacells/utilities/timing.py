@@ -3,6 +3,7 @@ Timing
 ------
 '''
 
+import logging
 import os
 import sys
 from contextlib import contextmanager
@@ -12,9 +13,12 @@ from threading import local as thread_local
 from time import perf_counter_ns, process_time_ns
 from typing import IO, Any, Callable, Dict, Iterator, List, Optional, TypeVar
 
+import metacells.utilities.documentation as utd
+
 __all__ = [
-    'timing_file',
     'collect_timing',
+    'flush',
+    'in_parallel_map',
     'log_steps',
     'timed_step',
     'timed_call',
@@ -28,60 +32,95 @@ __all__ = [
 COLLECT_TIMING = False
 
 TIMING_PATH = 'timing.csv'
-TIMING_MODE = 'timing.csv'
+TIMING_MODE = 'a'
 TIMING_BUFFERING = 1
 TIMING_FILE: Optional[IO] = None
 
-LOG_STEPS = False
+LOG = logging.getLogger(__name__)
+LOG_ALL_STEPS = False
 
 THREAD_LOCAL = thread_local()
 COUNTED_THREADS = 0
 
 
-def timing_file(file: IO) -> None:
+@utd.expand_doc()
+def collect_timing(
+    collect: bool,
+    path: str = TIMING_PATH,  # pylint: disable=used-prior-global-declaration
+    mode: str = TIMING_MODE,  # pylint: disable=used-prior-global-declaration
+    *,
+    buffering: int = TIMING_BUFFERING  # pylint: disable=used-prior-global-declaration
+) -> None:
     '''
-    Specify where to write the timing CSV lines.
-
-    By default this is ``open('timing.csv', 'a', buffering=1)``. Override this by setting the
-    ``METACELL_TIMING_PATH``, ``METACELL_TIMING_MODE`` and/or the ``METACELL_TIMING_BUFFERING``
-    environment variables, or by invoking this function from the main thread.
-
-    This will flush and close the previous timing file, if any.
-    '''
-    assert current_thread().name == 'MainThread'
-
-    global TIMING_FILE
-    if TIMING_FILE is not None:
-        TIMING_FILE.flush()
-        TIMING_FILE.close()
-    TIMING_FILE = file
-
-
-def collect_timing(collect: bool) -> None:
-    '''
-    Specify whether to collect timing information.
+    Specify whether and where to collect timing information.
 
     By default, we do not. Override this by setting the ``METACELLS_COLLECT_TIMING`` environment
     variable to ``true``, or by invoking this function from the main thread.
-    '''
-    assert current_thread().name == 'MainThread'
 
+    By default, the ``path`` is {path}, the mode is {mode} and the buffering is {buffering}.
+    Override this by setting the ``METACELL_TIMING_PATH``, ``METACELL_TIMING_MODE`` and/or the
+    ``METACELL_TIMING_BUFFERING`` environment variables, or by invoking this function from the main
+    thread.
+
+    This will flush and close the previous timing file, if any.
+    '''
+    assert current_thread().name in ('#0', 'MainThread')
+
+    global TIMING_PATH
+    global TIMING_MODE
+    global TIMING_BUFFERING
+    global TIMING_FILE
     global COLLECT_TIMING
 
-    if collect == COLLECT_TIMING:
-        return
+    if not path.endswith('.csv'):
+        raise ValueError('The METACELL_TIMING_PATH: %s does not end with: .csv'
+                         % path)
 
-    if collect and TIMING_FILE is None:
-        timing_file(open(TIMING_PATH, TIMING_MODE, buffering=TIMING_BUFFERING))
+    TIMING_PATH = path
+    TIMING_MODE = mode
+    TIMING_BUFFERING = buffering
+
+    if TIMING_FILE is not None:
+        TIMING_FILE.flush()
+        TIMING_FILE.close()
+        TIMING_FILE = None
+
+    if collect:
+        TIMING_FILE = open(TIMING_PATH, TIMING_MODE,
+                           buffering=TIMING_BUFFERING)
 
     COLLECT_TIMING = collect
 
 
+def flush() -> None:
+    '''
+    Flush the timing information, if we are collecting it.
+    '''
+    if TIMING_FILE is not None:
+        TIMING_FILE.flush()
+
+
+def in_parallel_map(map_index: int, process_index: int) -> None:
+    '''
+    Reconfigure timing collection when running in a parallel sub-process via
+    :py:func:`metacells.utilities.parallel.parallel_map`.
+
+    This will direct the timing information from ``<timing>.csv`` to
+    ``<timing>.<map>.<process>.csv`` (where ``<timing>`` is from the original path, ``<map>`` is the
+    serial number of the :py:func:`metacells.utilities.parallel.parallel_map` invocation, and
+    ``<process>`` is the serial number of the process in the map).
+    '''
+    if COLLECT_TIMING:
+        assert TIMING_PATH.endswith('.csv')
+        collect_timing(True, '%s.%s.%s.csv'
+                       % (TIMING_PATH[:-4], map_index, process_index))
+
+
 def log_steps(log: bool) -> None:
     '''
-    Whether to log every step invocation to ``sys.stderr``.
+    Whether to log every step invocation.
 
-    By default, we do not. Override this by setting the ``METACELLS_LOG_STEPS`` environment variable
+    By default, we do not. Override this by setting the ``METACELLS_LOG_ALL_STEPS`` environment variable
     to ``true`` or by invoking this function from the main thread.
 
     .. note::
@@ -91,20 +130,21 @@ def log_steps(log: bool) -> None:
         taking 100% CPU and you have no idea what it is doing, turning this on would give you some
         idea of where it is stuck.
     '''
-    global LOG_STEPS
-    LOG_STEPS = log
+    global LOG_ALL_STEPS
+    LOG_ALL_STEPS = log
 
 
 if not 'sphinx' in sys.argv[0]:
-    TIMING_PATH = os.environ.get('METACELL_TIMING_CSV', 'timing.csv')
-    TIMING_MODE = os.environ.get('METACELL_TIMING_MODE', 'a')
-    TIMING_BUFFERING = int(os.environ.get('METACELL_TIMING_BUFFERING', '1'))
+    TIMING_PATH = os.environ.get('METACELL_TIMING_CSV', TIMING_PATH)
+    TIMING_MODE = os.environ.get('METACELL_TIMING_MODE', TIMING_MODE)
+    TIMING_BUFFERING = \
+        int(os.environ.get('METACELL_TIMING_BUFFERING', str(TIMING_BUFFERING)))
     collect_timing({'true': True,
                     'false': False}[os.environ.get('METACELLS_COLLECT_TIMING',
-                                                   'False').lower()])
+                                                   str(COLLECT_TIMING)).lower()])
     log_steps({'true': True,
-               'false': False}[os.environ.get('METACELLS_LOG_STEPS',
-                                              'False').lower()])
+               'false': False}[os.environ.get('METACELLS_LOG_ALL_STEPS',
+                                              str(LOG_ALL_STEPS)).lower()])
 
 
 class Counters:
@@ -251,9 +291,8 @@ def timed_step(name: str) -> Iterator[None]:
     steps_stack.append(step_timing)
 
     try:
-        if LOG_STEPS:
-            sys.stderr.write(step_timing.context + ' BEGIN {\n')
-            sys.stderr.flush()
+        if LOG_ALL_STEPS:
+            LOG.debug('{[( %s', step_timing.context)
         yield_point = Counters.now()
         yield None
     finally:
@@ -261,9 +300,8 @@ def timed_step(name: str) -> Iterator[None]:
         total_times = back_point - yield_point
         assert total_times.elapsed_ns >= 0
         assert total_times.cpu_ns >= 0
-        if LOG_STEPS:
-            sys.stderr.write(step_timing.context + ' END }\n')
-            sys.stderr.flush()
+        if LOG_ALL_STEPS:
+            LOG.debug('}]) %s', step_timing.context)
 
         steps_stack.pop()
 

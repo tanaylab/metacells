@@ -62,6 +62,8 @@ from typing import Any, Callable, Iterable, Optional
 
 from threadpoolctl import threadpool_limits  # type: ignore
 
+import metacells.utilities.timing as utm
+
 __all__ = [
     'set_cpus_count',
     'get_cpus_count',
@@ -77,8 +79,8 @@ CPUS_COUNT = 0
 MAIN_PROCESS_PID = os.getpid()
 IS_MAIN_PROCESS: Optional[bool] = True
 
+MAP_INDEX = 0
 PROCESS_INDEX = 0
-current_thread().name = '#0'
 
 PROCESSES_COUNT = 0
 NEXT_PROCESS_INDEX = Value(ctypes.c_int32, lock=True)
@@ -139,6 +141,11 @@ def parallel_map(
     downside is that this is slow. The upside is that each of these processes starts with a shared
     memory copy(-on-write) of the full Python state, that is, all the inputs for the function are
     available "for free".
+
+    .. todo::
+
+        It is currently only possible to invoke :py:func:`parallel_map` from the main application
+        thread (that is, it does not nest).
     '''
     assert function.__is_timed__  # type: ignore
 
@@ -155,11 +162,17 @@ def parallel_map(
     global PARALLEL_FUNCTION
     assert PARALLEL_FUNCTION is None
 
+    global MAP_INDEX
+    MAP_INDEX += 1
+
     PARALLEL_FUNCTION = function
     IS_MAIN_PROCESS = None
     try:
-        with Pool(PROCESSES_COUNT) as pool:
-            return pool.map(_invocation, range(invocations))
+        utm.flush()
+        with utm.timed_step('parallel_map'):
+            utm.timed_parameters(index=MAP_INDEX, processes=PROCESSES_COUNT)
+            with Pool(PROCESSES_COUNT) as pool:
+                return pool.map(_invocation, range(invocations))
     finally:
         IS_MAIN_PROCESS = True
         PARALLEL_FUNCTION = None
@@ -177,7 +190,9 @@ def _invocation(index: int) -> Any:
             PROCESS_INDEX = NEXT_PROCESS_INDEX.value
             NEXT_PROCESS_INDEX.value += 1
 
-        current_thread().name = '#%s' % PROCESS_INDEX
+        utm.in_parallel_map(MAP_INDEX, PROCESS_INDEX)
+
+        current_thread().name = '#%s.%s' % (MAP_INDEX, PROCESS_INDEX)
 
         global CPUS_COUNT
         start_cpu_index = \

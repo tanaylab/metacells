@@ -22,6 +22,7 @@ import logging
 import sys
 from datetime import datetime
 from logging import Formatter, Logger, LogRecord, StreamHandler, getLogger
+from threading import current_thread
 from typing import IO, Any, Optional, Tuple
 
 import numpy as np  # type: ignore
@@ -103,8 +104,15 @@ def setup_logger(
 
     If ``short_level_names``, the log level names are shortened to three characters, for consistent
     formatting of indented (nested) log messages.
+
+    .. note::
+
+        Invoking :py:func:`setup_logger` replaces the name of the main thread to ``#0`` to make it
+        more compatible with the sub-thread names.
     '''
     log_format = '%(levelname)s - %(message)s'
+
+    current_thread().name = '#0'
 
     if process:
         log_format = '%(threadName)s - ' + log_format
