@@ -7,10 +7,11 @@ Process a ``timing.csv`` file.
 '''
 
 import csv
+import os
 import sys
 from argparse import ArgumentParser
 from textwrap import dedent
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 
 def main() -> None:
@@ -23,8 +24,30 @@ def main() -> None:
 
     subparsers.required = True
 
-    _sum_parser = subparsers.add_parser('sum', help='Sum the total time for each step',
-                                        description=dedent('''
+    combine_parser = subparsers.add_parser('combine', help='Combine parallel timing files',
+                                           description=dedent('''
+        Read a main `timings.csv` file and all the parallel `timing.<map>.<process>.csv` files, and
+        combine them to a single timing CSV file written to the standard output. In this case, the
+        input main timing CSV file name is required (to allow locating the associated parallel
+        timing CSV file names).
+
+        The data in the combined file normalizes the data from the parallel map loops such that the
+        results show the average elapsed time per process within such loops, but still the total CPU
+        time.
+
+        The combined output is in no particular order. Pass it through the `sum` or `flame` command
+        to obtain a human-readable format.
+    '''))
+
+    combine_parser.add_argument('-o', '--output', metavar='OUTPUT',
+                                help='The optional path to write the output to '
+                                     '(otherwise, writes to the standard output).')
+
+    combine_parser.add_argument('input', metavar='FILE',
+                                help='The path to the timing CSV file.')
+
+    sum_parser = subparsers.add_parser('sum', help='Sum the total time for each step',
+                                       description=dedent('''
         Read a `timings.csv` file from the input and write a sum file with one line per
         step containing the sum of the data and the number of invocations to the output.
 
@@ -35,6 +58,14 @@ def main() -> None:
 
         You can pipe the output through `column -t -s,` to make it more legible.
     '''))
+
+    sum_parser.add_argument('-o', '--output', metavar='OUTPUT',
+                            help='The optional path to write the output to '
+                                 '(otherwise, writes to the standard output).')
+
+    sum_parser.add_argument('input', metavar='FILE', nargs='?',
+                            help='The optional path to the timing CSV file '
+                                 '(otherwise, reads from the standard input).')
 
     flame_parser = \
         subparsers.add_parser('flame',
@@ -54,19 +85,87 @@ def main() -> None:
                                    'nanoseconds. Note that most flamegraph viewers can '
                                    'only handle integer data (flameview can handle float).')
 
+    flame_parser.add_argument('-o', '--output', metavar='OUTPUT',
+                              help='The optional path to write the output to '
+                                   '(otherwise, writes to the standard output).')
+
+    flame_parser.add_argument('input', metavar='FILE', nargs='?',
+                              help='The optional path to the timing CSV file '
+                                   '(otherwise, reads from the standard input).')
+
     args = parser.parse_args()
 
-    if args.command == 'sum':
-        _sum_main()
+    if args.input is not None:
+        assert args.input.endswith('.csv')
+
+    if args.command == 'combine':
+        assert args.input is not None
+        _combine_main(args.input, args.output)
+
+    elif args.command == 'sum':
+        _sum_main(args.input, args.output)
 
     elif args.command == 'flame':
-        _flame_main(args.focus, args.seconds)
+        _flame_main(args.input, args.output, args.focus, args.seconds)
 
 
-def _sum_main() -> None:
-    data_by_name = _collect_data_by_name(True)
+def _combine_main(input_path: str, output_path: Optional[str]) -> None:
+    map_index = 0
 
-    total_data: List[int] = []
+    if output_path is None:
+        output_file = sys.stdout
+    else:
+        output_file = open(output_path, 'w')
+
+    for line in open(input_path, 'r').readlines():
+        if not line.startswith('parallel_map,'):
+            output_file.write(line)
+            continue
+
+        map_index += 1
+        line = line.strip()
+        fields = line.split(',')
+        assert fields[5] == 'index'
+        assert map_index == int(fields[6])
+        assert fields[7] == 'processes'
+        fields[7] = 'expected_processes'
+        expected_processes_count = int(fields[8])
+
+        actual_processes_count = expected_processes_count
+        process_index = 0
+        while True:
+            process_index += 1
+            process_input = \
+                '%s.%s.%s.csv' % (input_path[:-4], map_index, process_index)
+            if not os.path.exists(process_input):
+                actual_processes_count = process_index
+                break
+
+        fields.append('actual_processes')
+        fields.append(str(actual_processes_count))
+        assert fields[1] == 'elapsed_ns'
+        fields[2] = str(float(fields[2]) / (actual_processes_count + 1))
+        line = ','.join(fields)
+        output_file.write(line)
+        output_file.write('\n')
+
+        for process_index in range(actual_processes_count):
+            process_input = \
+                '%s.%s.%s.csv' % (input_path[:-4], map_index, process_index)
+            for process_line in open(process_input, 'r').readlines():
+                process_fields = process_line.split(',')
+                assert process_fields[1] == 'elapsed_ns'
+                process_fields[2] = \
+                    str(float(process_fields[2])
+                        / (actual_processes_count + 1))
+                process_line = ','.join(process_fields)
+                output_file.write(process_line)
+
+
+def _sum_main(input_path: Optional[str], output_path: Optional[str]) -> None:
+    data_by_name = _collect_data_by_name(input_path, True)
+
+    total_data: List[float] = []
     for name, data in data_by_name.items():
         while len(total_data) < len(data):
             total_data.append(0)
@@ -74,6 +173,11 @@ def _sum_main() -> None:
             total_data[index] += datum
 
     data_by_name['TOTAL'] = total_data
+
+    if output_path is None:
+        output_file = sys.stdout
+    else:
+        output_file = open(output_path, 'w')
 
     fields = ['invocations', 'elapsed_s', 'cpu_s']
     for name, data in sorted(data_by_name.items(), key=lambda data: data[1][1], reverse=True):
@@ -84,11 +188,22 @@ def _sum_main() -> None:
                 text.append(str(value))
             else:
                 text.append(str(value / 1_000_000_000))
-        print(','.join(text))
+        output_file.write(','.join(text))
+        output_file.write('\n')
 
 
-def _flame_main(focus: str, seconds: bool) -> None:
-    data_by_name = _collect_data_by_name(False)
+def _flame_main(
+    input_path: Optional[str],
+    output_path: Optional[str],
+    focus: str,
+    seconds: bool
+) -> None:
+    data_by_name = _collect_data_by_name(input_path, False)
+
+    if output_path is None:
+        output_file = sys.stdout
+    else:
+        output_file = open(output_path, 'w')
 
     for name, data in data_by_name.items():
         if seconds:
@@ -96,7 +211,9 @@ def _flame_main(focus: str, seconds: bool) -> None:
                          elapsed=data[1] / 1_000_000_000,
                          cpu=data[2] / 1_000_000_000)
         else:
-            datum = dict(invocations=data[0], elapsed=data[1], cpu=data[2])
+            datum = dict(invocations=data[0],
+                         elapsed=round(data[1]),
+                         cpu=round(data[2]))
         html = 'Elapsed Time: %.2f<br/>' \
                'CPU Time: %.2f<br/>' \
                'Utilization: %.0f%%<br/>' \
@@ -105,20 +222,29 @@ def _flame_main(focus: str, seconds: bool) -> None:
                   datum['cpu'],
                   100 * datum['cpu'] / datum['elapsed'],
                   datum['invocations'])
-        print('%s %s #%s' % (name.replace('.', ';'), datum[focus], html))
+        output_file.write('%s %s #%s\n'
+                          % (name.replace('.', ';'), datum[focus], html))
 
 
-def _collect_data_by_name(split: bool) -> Dict[str, List[int]]:
-    data_by_name: Dict[str, List[int]] = {}
+def _collect_data_by_name(
+    input_path: Optional[str],
+    split: bool
+) -> Dict[str, List[float]]:
+    data_by_name: Dict[str, List[float]] = {}
 
-    for row in csv.reader(sys.stdin):
+    if input_path is None:
+        input_file = sys.stdin
+    else:
+        input_file = open(input_path, 'r')
+
+    for row in csv.reader(input_file):
         name = row[0]
         if split:
             name = name.split(';')[-1]
         assert row[1] == 'elapsed_ns'
-        elapsed_ns = int(row[2])
+        elapsed_ns = float(row[2])
         assert row[3] == 'cpu_ns'
-        cpu_ns = int(row[4])
+        cpu_ns = float(row[4])
 
         data = data_by_name.get(name)
         if data is None:

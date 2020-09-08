@@ -37,7 +37,7 @@ pylint: build
 	pylint --jobs `nproc` metacells tests
 
 test: build
-	@rm -rf timing.csv .coverage* coverage
+	@rm -rf timing.*csv .coverage* coverage
 	pytest -s -vv --cov=metacells tests
 
 tox:
@@ -54,14 +54,17 @@ docs/source/timing_script.rst: \
     metacells/scripts/timing.py
 	( cat docs/source/timing_script.part.1 \
 	; python metacells/scripts/timing.py --help 2>&1 \
-	| sed 's/timing.py/metacells_timing.py/;s/^/    /' \
+	| sed 's/timing.py/metacells_timing.py/;s/^/    /;s/`/``/g' \
 	; cat docs/source/timing_script.part.2 \
-	; python metacells/scripts/timing.py sum --help 2>&1 \
-	| sed 's/timing.py/metacells_timing.py/;s/^/    /' \
+	; python metacells/scripts/timing.py combine --help 2>&1 \
+	| sed 's/timing.py/metacells_timing.py/;s/^/    /;s/`/``/g' \
 	; cat docs/source/timing_script.part.3 \
-	; python metacells/scripts/timing.py flame --help 2>&1 \
-	| sed 's/timing.py/metacells_timing.py/;s/^/    /' \
+	; python metacells/scripts/timing.py sum --help 2>&1 \
+	| sed 's/timing.py/metacells_timing.py/;s/^/    /;s/`/``/g' \
 	; cat docs/source/timing_script.part.4 \
+	; python metacells/scripts/timing.py flame --help 2>&1 \
+	| sed 's/timing.py/metacells_timing.py/;s/^/    /;s/`/``/g' \
+	; cat docs/source/timing_script.part.5 \
 	) > $@
 
 rst: README.rst LICENSE.rst
@@ -90,8 +93,12 @@ coverage/index.html: timing.csv
 flame: flame.html
 
 flame.html: timing.csv
-	python metacells/scripts/timing.py flame -s < timing.csv \
-	| flameview.py --sizename 'Total Elapsed Time' --sortby size > flame.html
+	python metacells/scripts/timing.py combine timing.csv \
+	| python metacells/scripts/timing.py flame -s \
+	| flameview.py --sizename 'Total Elapsed Time' --sortby size \
+	> flame.html
 
 sum:
-	python metacells/scripts/timing.py sum < timing.csv | column -t -s,
+	python metacells/scripts/timing.py combine timing.csv \
+	| python metacells/scripts/timing.py sum \
+	| column -t -s,
