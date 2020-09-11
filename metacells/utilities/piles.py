@@ -87,8 +87,8 @@ def group_piles(
 
     .. note::
 
-        Neither the ``group_of_elements`` nor the ``group_of_groups`` may contain outliers, that is,
-        they must assign an valid group index to each element and group.
+        Neither the ``group_of_elements`` nor the ``group_of_groups`` may contain "outsiders", that
+        is, they must assign an valid group index to each element and group.
     '''
     group_of_group_of_elements = group_of_groups[group_of_elements]
     return group_of_group_of_elements

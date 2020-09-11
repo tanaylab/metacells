@@ -39,7 +39,7 @@ Computing the Metacells
 .. automodule:: metacells.tools.candidates
     :members:
 
-.. automodule:: metacells.tools.outliers
+.. automodule:: metacells.tools.deviants
     :members:
 
 .. automodule:: metacells.tools.dissolve

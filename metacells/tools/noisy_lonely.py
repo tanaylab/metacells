@@ -46,7 +46,7 @@ def find_noisy_lonely_genes(
     Return the indices of genes which are "noisy" (have high variance compared to their mean) and
     also "lonely" (have low correlation with all other genes). Such genes should be excluded since
     they will never meaningfully help us compute groups, and will actively cause profiles to be
-    considered outliers.
+    considered "deviants".
 
     Noisy genes have high expression and variance. Lonely genes have no (or low) correlations with
     any other gene. Noisy lonely genes tend to throw off clustering algorithms. In general, such
@@ -115,9 +115,11 @@ def find_noisy_lonely_genes(
     find_high_normalized_variance_genes(bdata,
                                         min_gene_normalized_variance=min_gene_normalized_variance)
 
-    ndata = pp.filter_data(bdata, name='noisy', tmp=True,
-                           masks=['high_fraction_genes',
-                                  'high_normalized_variance_genes'])
+    results = pp.filter_data(bdata, name='noisy', tmp=True,
+                             masks=['high_fraction_genes',
+                                    'high_normalized_variance_genes'])
+    assert results is not None
+    ndata = results[0]
 
     noisy_lonely_genes_mask = np.full(adata.n_vars, False)
 

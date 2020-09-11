@@ -1,5 +1,5 @@
 '''
-Outliers
+Deviants
 --------
 '''
 
@@ -18,7 +18,7 @@ import metacells.preprocessing as pp
 import metacells.utilities as ut
 
 __all__ = [
-    'find_outlier_cells',
+    'find_deviant_cells',
 ]
 
 
@@ -27,20 +27,20 @@ LOG = logging.getLogger(__name__)
 
 @ut.timed_call()
 @ut.expand_doc()
-def find_outlier_cells(
+def find_deviant_cells(
     adata: AnnData,
     *,
     of: Optional[str] = None,
     candidate_metacells: Union[str, ut.Vector] = 'candidate_metacell',
-    min_gene_fold_factor: float = pr.outliers_min_gene_fold_factor,
-    max_gene_fraction: float = pr.outliers_max_gene_fraction,
-    max_cell_fraction: float = pr.outliers_max_cell_fraction,
+    min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
+    max_gene_fraction: float = pr.deviants_max_gene_fraction,
+    max_cell_fraction: float = pr.deviants_max_cell_fraction,
     inplace: bool = True,
     intermediate: bool = True,
-) -> Optional[ut.PandasSeries]:
+) -> Optional[Tuple[ut.PandasSeries, ut.PandasSeries]]:
     '''
-    Find cells which are outliers in the metacells they are belong to based ``of`` some data (by
-    default, the focus).
+    Find cells which are have significantly different gene expression from the metacells they are
+    belong to based ``of`` some data (by default, the focus).
 
     **Input**
 
@@ -50,12 +50,18 @@ def find_outlier_cells(
     **Returns**
 
     Observation (Cell) Annotations
-        ``outlier_cells``
-            A boolean mask indicating whether each cell was found to be an outlier in the metacells
-            it belongs to.
+        ``cell_deviant_votes``
+            The number of genes that were the reason the cell was marked as deviant (if zero, the
+            cell is not deviant).
+
+    Variable (Gene) Annotations
+        ``gene_deviant_votes``
+            The number of cells each gene marked as deviant (if zero, the gene did not mark any cell
+            as deviant).
 
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
-    ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
+    ``None``. Otherwise this is returned as two pandas series (indexed by the observation and
+    variable names).
 
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
     for future reuse. Otherwise, discard it.
@@ -63,7 +69,7 @@ def find_outlier_cells(
     **Computation Parameters**
 
     Intuitively, we first select some fraction of the genes which were least predictable compared to
-    the mean expression in the candidate metacells. We then mark as outliers some fraction of the
+    the mean expression in the candidate metacells. We then mark as deviants some fraction of the
     cells whose expression of these genes was least predictable compared to the mean expression in
     the candidate metacells. Operationally:
 
@@ -86,17 +92,17 @@ def find_outlier_cells(
        a rank of 1, it means that it has at least one gene whose expression fold factor is the worst
        (highest) across all cells (and is also above the minimum).
 
-    5. Select as outliers all cells whose minimal rank is below the artificial maximum rank, that
+    5. Select as deviants all cells whose minimal rank is below the artificial maximum rank, that
        is, which contain at least one gene whose expression fold factor is high relative to the rest
        of the cells. If the fraction of such cells is higher than ``max_cell_fraction`` (default:
        {max_cell_fraction}), reduce the maximal rank such that at most this fraction of cells are
-       selected as outliers.
+       selected as deviants.
     '''
     assert min_gene_fold_factor > 0
     assert 0 < max_gene_fraction < 1
     assert 0 < max_cell_fraction < 1
 
-    of, level = ut.log_operation(LOG, adata, 'find_outlier_cells', of)
+    of, level = ut.log_operation(LOG, adata, 'find_deviant_cells', of)
 
     with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major',
                      intermediate=intermediate) as data:
@@ -123,7 +129,7 @@ def find_outlier_cells(
                                                list_of_fold_factors,
                                                list_of_cell_index_of_rows)
 
-        outlier_gene_indices = \
+        deviant_gene_indices = \
             _filter_genes(cells_count=cells_count,
                           genes_count=genes_count,
                           fold_factors=fold_factors,
@@ -133,24 +139,30 @@ def find_outlier_cells(
         if intermediate:
             ut.set_vo_data(adata, 'fold_factors', fold_factors, ut.NEVER_SAFE)
 
-        outlier_genes_fold_ranks = \
+        deviant_genes_fold_ranks = \
             _fold_ranks(cells_count=cells_count,
                         fold_factors=fold_factors,
-                        outlier_gene_indices=outlier_gene_indices)
+                        deviant_gene_indices=deviant_gene_indices)
 
-        mask_of_outlier_cells = \
+        votes_of_deviant_cells, votes_of_deviant_genes = \
             _filter_cells(cells_count=cells_count,
-                          outlier_genes_fold_ranks=outlier_genes_fold_ranks,
+                          genes_count=genes_count,
+                          deviant_genes_fold_ranks=deviant_genes_fold_ranks,
+                          deviant_gene_indices=deviant_gene_indices,
                           max_cell_fraction=max_cell_fraction)
 
     if inplace:
-        ut.set_o_data(adata, 'outlier_cells',
-                      mask_of_outlier_cells, ut.NEVER_SAFE)
+        ut.set_o_data(adata, 'cell_deviant_votes',
+                      votes_of_deviant_cells, ut.NEVER_SAFE)
+        ut.set_v_data(adata, 'gene_deviant_votes',
+                      votes_of_deviant_genes, ut.NEVER_SAFE)
         return None
 
-    ut.log_mask(LOG, level, 'outlier_cells', mask_of_outlier_cells)
+    ut.log_mask(LOG, level, 'deviant_cells', votes_of_deviant_cells > 0)
+    ut.log_mask(LOG, level, 'deviant_genes', votes_of_deviant_genes > 0)
 
-    return pd.Series(mask_of_outlier_cells, index=adata.obs_names)
+    return pd.Series(votes_of_deviant_cells, index=adata.obs_names), \
+        pd.Series(votes_of_deviant_genes, index=adata.var_names)
 
 
 @ut.timed_call('.collect_fold_factors')
@@ -250,14 +262,14 @@ def _filter_genes(
     max_fold_factors_of_genes = ut.max_per(fold_factors, per='column')
     assert max_fold_factors_of_genes.size == genes_count
 
-    mask_of_outlier_genes = max_fold_factors_of_genes >= min_gene_fold_factor
-    outlier_gene_fraction = np.sum(mask_of_outlier_genes) / genes_count
+    mask_of_deviant_genes = max_fold_factors_of_genes >= min_gene_fold_factor
+    deviant_gene_fraction = np.sum(mask_of_deviant_genes) / genes_count
 
-    LOG.debug('  outlier_gene_fraction: %s',
-              ut.fraction_description(outlier_gene_fraction))
+    LOG.debug('  deviant_gene_fraction: %s',
+              ut.fraction_description(deviant_gene_fraction))
 
     if max_gene_fraction is not None \
-            and outlier_gene_fraction > max_gene_fraction:
+            and deviant_gene_fraction > max_gene_fraction:
         quantile_gene_fold_factor = np.quantile(max_fold_factors_of_genes,
                                                 1 - max_gene_fraction)
         assert quantile_gene_fold_factor is not None
@@ -268,17 +280,17 @@ def _filter_genes(
 
         if quantile_gene_fold_factor > min_gene_fold_factor:
             min_gene_fold_factor = quantile_gene_fold_factor
-            mask_of_outlier_genes = max_fold_factors_of_genes >= min_gene_fold_factor
+            mask_of_deviant_genes = max_fold_factors_of_genes >= min_gene_fold_factor
 
             fold_factors.data[fold_factors.data < min_gene_fold_factor] = 0
             ut.eliminate_zeros(fold_factors)
 
-    outlier_gene_indices = np.where(mask_of_outlier_genes)[0]
-    LOG.debug('  outlier_genes: %s',
-              ut.ratio_description(outlier_gene_indices.size,
+    deviant_gene_indices = np.where(mask_of_deviant_genes)[0]
+    LOG.debug('  deviant_genes: %s',
+              ut.ratio_description(deviant_gene_indices.size,
                                    genes_count))
 
-    return outlier_gene_indices
+    return deviant_gene_indices
 
 
 @ ut.timed_call('.fold_ranks')
@@ -286,19 +298,19 @@ def _fold_ranks(
     *,
     cells_count: int,
     fold_factors: ut.CompressedMatrix,
-    outlier_gene_indices: ut.DenseVector,
+    deviant_gene_indices: ut.DenseVector,
 ) -> ut.DenseMatrix:
     assert fold_factors.getformat() == 'csc'
 
-    outlier_genes_count = outlier_gene_indices.size
+    deviant_genes_count = deviant_gene_indices.size
 
-    ut.timed_parameters(cells=cells_count, outlier_genes=outlier_genes_count)
+    ut.timed_parameters(cells=cells_count, deviant_genes=deviant_genes_count)
 
-    outlier_genes_fold_ranks = \
-        np.full((cells_count, outlier_genes_count), cells_count, order='F')
-    assert ut.matrix_layout(outlier_genes_fold_ranks) == 'column_major'
+    deviant_genes_fold_ranks = \
+        np.full((cells_count, deviant_genes_count), cells_count, order='F')
+    assert ut.matrix_layout(deviant_genes_fold_ranks) == 'column_major'
 
-    for outlier_gene_index, gene_index in enumerate(outlier_gene_indices):
+    for deviant_gene_index, gene_index in enumerate(deviant_gene_indices):
         gene_start_offset = fold_factors.indptr[gene_index]
         gene_stop_offset = fold_factors.indptr[gene_index + 1]
 
@@ -309,31 +321,35 @@ def _fold_ranks(
         gene_fold_ranks *= -1
         gene_fold_ranks += gene_fold_ranks.size + 1
 
-        outlier_genes_fold_ranks[gene_suspect_cell_indices,
-                                 outlier_gene_index] = gene_fold_ranks
+        deviant_genes_fold_ranks[gene_suspect_cell_indices,
+                                 deviant_gene_index] = gene_fold_ranks
 
-    return outlier_genes_fold_ranks
+    return deviant_genes_fold_ranks
 
 
 @ ut.timed_call('.filter_cells')
 def _filter_cells(
     *,
     cells_count: int,
-    outlier_genes_fold_ranks: ut.DenseMatrix,
+    genes_count: int,
+    deviant_genes_fold_ranks: ut.DenseMatrix,
+    deviant_gene_indices: ut.DenseVector,
     max_cell_fraction: Optional[float],
-) -> ut.DenseVector:
-    min_fold_ranks_of_cells = np.min(outlier_genes_fold_ranks, axis=1)
+) -> Tuple[ut.DenseVector, ut.DenseVector]:
+    min_fold_ranks_of_cells = np.min(deviant_genes_fold_ranks, axis=1)
     assert min_fold_ranks_of_cells.size == cells_count
 
-    mask_of_outlier_cells = min_fold_ranks_of_cells < cells_count
-    outliers_cells_count = sum(mask_of_outlier_cells)
-    outlier_cell_fraction = outliers_cells_count / cells_count
+    threshold_cells_fold_rank = cells_count
 
-    LOG.debug('  outlier_cells: %s',
-              ut.ratio_description(outliers_cells_count, cells_count))
+    mask_of_deviant_cells = min_fold_ranks_of_cells < threshold_cells_fold_rank
+    deviants_cells_count = sum(mask_of_deviant_cells)
+    deviant_cell_fraction = deviants_cells_count / cells_count
+
+    LOG.debug('  deviant_cell: %s',
+              ut.ratio_description(deviants_cells_count, cells_count))
 
     if max_cell_fraction is not None \
-            and outlier_cell_fraction > max_cell_fraction:
+            and deviant_cell_fraction > max_cell_fraction:
         LOG.debug('  max_cell_fraction: %s',
                   ut.fraction_description(max_cell_fraction))
         quantile_cells_fold_rank = np.quantile(min_fold_ranks_of_cells,
@@ -342,11 +358,26 @@ def _filter_cells(
 
         LOG.debug('  quantile_cells_fold_rank: %s', quantile_cells_fold_rank)
 
-        if quantile_cells_fold_rank < cells_count:
-            mask_of_outlier_cells = min_fold_ranks_of_cells < quantile_cells_fold_rank
+        if quantile_cells_fold_rank < threshold_cells_fold_rank:
+            threshold_cells_fold_rank = quantile_cells_fold_rank
+            mask_of_deviant_cells = min_fold_ranks_of_cells < threshold_cells_fold_rank
 
         if LOG.isEnabledFor(logging.DEBUG):
-            LOG.debug('  outlier_cells: %s',
-                      ut.mask_description(mask_of_outlier_cells))
+            LOG.debug('  deviant_cell: %s',
+                      ut.mask_description(mask_of_deviant_cells))
 
-    return mask_of_outlier_cells
+    deviant_votes = deviant_genes_fold_ranks < threshold_cells_fold_rank
+    votes_of_deviant_cells = np.sum(deviant_votes, axis=1)
+    assert votes_of_deviant_cells.size == cells_count
+    votes_of_deviant_genes = np.sum(deviant_votes, axis=0)
+    assert votes_of_deviant_genes.size == deviant_gene_indices.size
+
+    votes_of_all_genes = np.zeros(genes_count, dtype='int32')
+    votes_of_all_genes[deviant_gene_indices] = votes_of_deviant_genes
+
+    if LOG.isEnabledFor(logging.DEBUG):
+        LOG.debug('  deviant_genes: %s',
+                  ut.ratio_description(np.sum(votes_of_all_genes > 0),
+                                       genes_count))
+
+    return votes_of_deviant_cells, votes_of_all_genes

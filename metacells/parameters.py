@@ -35,7 +35,7 @@ significant_gene_relative_variance: float = 0.1
 significant_gene_similarity: float = 0.15
 
 #: The generic "significant" fold factor. See
-#: :py:const:`outliers_min_gene_fold_factor` and
+#: :py:const:`deviants_min_gene_fold_factor` and
 #: :py:const:`dissolve_min_convincing_gene_fold_factor`.
 significant_gene_fold_factor: float = 3.0
 
@@ -356,40 +356,40 @@ candidates_min_split_size_factor: float = min_split_size_factor
 #: :py:func:`metacells.pipeline.complete.divide_and_conquer_pipeline`.
 candidates_max_merge_size_factor: float = max_merge_size_factor
 
-#: The minimal fold factor for a gene to indicate a cell is an "outlier". See
+#: The minimal fold factor for a gene to indicate a cell is "deviant". See
 #: :py:const:`significant_gene_fold_factor`,
-#: :py:func:`metacells.tools.outliers.find_outlier_cells`,
+#: :py:func:`metacells.tools.deviants.find_deviant_cells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
 #: :py:func:`metacells.pipeline.complete.direct_pipeline` and
 #: :py:func:`metacells.pipeline.complete.divide_and_conquer_pipeline`.
-outliers_min_gene_fold_factor: float = significant_gene_fold_factor
+deviants_min_gene_fold_factor: float = significant_gene_fold_factor
 
-#: The maximal fraction of genes to use to indicate cell are "outliers". See
-#: :py:func:`metacells.tools.outliers.find_outlier_cells`,
+#: The maximal fraction of genes to use to indicate cell are "deviants". See
+#: :py:func:`metacells.tools.deviants.find_deviant_cells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
 #: :py:func:`metacells.pipeline.complete.direct_pipeline` and
 #: :py:func:`metacells.pipeline.complete.divide_and_conquer_pipeline`.
-outliers_max_gene_fraction: float = 0.03
+deviants_max_gene_fraction: float = 0.03
 
-#: The maximal fraction of cells to mark as "outliers". See
-#: :py:func:`metacells.tools.outliers.find_outlier_cells`,
+#: The maximal fraction of cells to mark as "deviants". See
+#: :py:func:`metacells.tools.deviants.find_deviant_cells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
 #: :py:func:`metacells.pipeline.complete.direct_pipeline` and
 #: :py:func:`metacells.pipeline.complete.divide_and_conquer_pipeline`.
-outliers_max_cell_fraction: float = 0.25
+deviants_max_cell_fraction: float = 0.25
 
-#: The maximal fraction of cells to mark as "outliers" in the second phase of the divide and conquer
+#: The maximal fraction of cells to mark as "deviants" in the second phase of the divide and conquer
 #: algorithm. See
-#: :py:const:`outliers_max_cell_fraction`,
+#: :py:const:`deviants_max_cell_fraction`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.complete.divide_and_conquer_pipeline`.
-outliers_phase_2_max_cell_fraction: float = 1.0
+deviants_phase_2_max_cell_fraction: float = 1.0
 
-#: The target total metacell size for finalizing the metacells. See
+#: The target total metacell size for dissolving too-small metacells. See
 #: :py:const:`target_metacell_size`
 #: :py:func:`metacells.tools.dissolve.dissolve_metacells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
@@ -398,7 +398,7 @@ outliers_phase_2_max_cell_fraction: float = 1.0
 #: :py:func:`metacells.pipeline.complete.divide_and_conquer_pipeline`.
 dissolve_target_metacell_size: int = target_metacell_size
 
-#: The size of each cell for for finalizing the metacells. See
+#: The size of each cell for for dissolving too-small metacells. See
 #: :py:const:`cell_sizes`,
 #: :py:func:`metacells.tools.dissolve.dissolve_metacells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,

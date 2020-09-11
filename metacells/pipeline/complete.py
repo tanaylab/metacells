@@ -61,9 +61,9 @@ def divide_and_conquer_pipeline(
     candidates_min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
     must_complete_cover: bool = False,
-    outliers_min_gene_fold_factor: float = pr.outliers_min_gene_fold_factor,
-    outliers_max_gene_fraction: float = pr.outliers_max_gene_fraction,
-    outliers_max_cell_fraction: float = pr.outliers_max_cell_fraction,
+    deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
+    deviants_max_gene_fraction: float = pr.deviants_max_gene_fraction,
+    deviants_max_cell_fraction: float = pr.deviants_max_cell_fraction,
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
     dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
@@ -99,7 +99,7 @@ def divide_and_conquer_pipeline(
 
     Observations (Cell) Annotations
         ``metacell``
-            The index of the metacell each cell belongs to. This is ``-1`` for outlier cells and
+            The index of the metacell each cell belongs to. This is ``-1`` for "outsider" cells and
             ``-2`` for excluded cells.
 
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
@@ -139,9 +139,9 @@ def divide_and_conquer_pipeline(
        ``candidates_min_split_size_factor`` (default: {candidates_min_split_size_factor}),
        ``candidates_max_merge_size_factor`` (default: {candidates_max_merge_size_factor}),
        ``must_complete_cover`` (default: {must_complete_cover}),
-       ``outliers_min_gene_fold_factor`` (default: {outliers_min_gene_fold_factor}),
-       ``outliers_max_gene_fraction`` (default: {outliers_max_gene_fraction}),
-       ``outliers_max_cell_fraction`` (default: {outliers_max_cell_fraction}),
+       ``deviants_min_gene_fold_factor`` (default: {deviants_min_gene_fold_factor}),
+       ``deviants_max_gene_fraction`` (default: {deviants_max_gene_fraction}),
+       ``deviants_max_cell_fraction`` (default: {deviants_max_cell_fraction}),
        ``dissolve_min_robust_size_factor`` (default: {dissolve_min_robust_size_factor}),
        ``dissolve_min_convincing_size_factor`` (default: {dissolve_min_convincing_size_factor}),
        ``dissolve_min_convincing_gene_fold_factor`` (default: {dissolve_min_convincing_gene_fold_factor}),
@@ -194,9 +194,9 @@ def divide_and_conquer_pipeline(
                                          candidates_min_split_size_factor=candidates_min_split_size_factor,
                                          candidates_max_merge_size_factor=candidates_max_merge_size_factor,
                                          must_complete_cover=must_complete_cover,
-                                         outliers_min_gene_fold_factor=outliers_min_gene_fold_factor,
-                                         outliers_max_gene_fraction=outliers_max_gene_fraction,
-                                         outliers_max_cell_fraction=outliers_max_cell_fraction,
+                                         deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
+                                         deviants_max_gene_fraction=deviants_max_gene_fraction,
+                                         deviants_max_cell_fraction=deviants_max_cell_fraction,
                                          dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                                          dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                                          dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
@@ -246,9 +246,9 @@ def direct_pipeline(
     candidates_min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
     must_complete_cover: bool = False,
-    outliers_min_gene_fold_factor: float = pr.outliers_min_gene_fold_factor,
-    outliers_max_gene_fraction: float = pr.outliers_max_gene_fraction,
-    outliers_max_cell_fraction: float = pr.outliers_max_cell_fraction,
+    deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
+    deviants_max_gene_fraction: float = pr.deviants_max_gene_fraction,
+    deviants_max_cell_fraction: float = pr.deviants_max_cell_fraction,
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
     dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
@@ -292,7 +292,7 @@ def direct_pipeline(
 
     Observations (Cell) Annotations
         ``metacell``
-            The index of the metacell each cell belongs to. This is ``-1`` for outlier cells and
+            The index of the metacell each cell belongs to. This is ``-1`` for "outsider" cells and
             ``-2`` for excluded cells.
 
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
@@ -332,9 +332,9 @@ def direct_pipeline(
        ``candidates_min_split_size_factor`` (default: {candidates_min_split_size_factor}),
        ``candidates_max_merge_size_factor`` (default: {candidates_max_merge_size_factor}),
        ``must_complete_cover`` (default: {must_complete_cover}),
-       ``outliers_min_gene_fold_factor`` (default: {outliers_min_gene_fold_factor}),
-       ``outliers_max_gene_fraction`` (default: {outliers_max_gene_fraction}),
-       ``outliers_max_cell_fraction`` (default: {outliers_max_cell_fraction}),
+       ``deviants_min_gene_fold_factor`` (default: {deviants_min_gene_fold_factor}),
+       ``deviants_max_gene_fraction`` (default: {deviants_max_gene_fraction}),
+       ``deviants_max_cell_fraction`` (default: {deviants_max_cell_fraction}),
        ``dissolve_min_robust_size_factor`` (default: {dissolve_min_robust_size_factor}),
        ``dissolve_min_convincing_size_factor`` (default: {dissolve_min_convincing_size_factor}),
        ``dissolve_min_convincing_gene_fold_factor`` (default: {dissolve_min_convincing_gene_fold_factor}),
@@ -384,9 +384,9 @@ def direct_pipeline(
                              candidates_min_split_size_factor=candidates_min_split_size_factor,
                              candidates_max_merge_size_factor=candidates_max_merge_size_factor,
                              must_complete_cover=must_complete_cover,
-                             outliers_min_gene_fold_factor=outliers_min_gene_fold_factor,
-                             outliers_max_gene_fraction=outliers_max_gene_fraction,
-                             outliers_max_cell_fraction=outliers_max_cell_fraction,
+                             deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
+                             deviants_max_gene_fraction=deviants_max_gene_fraction,
+                             deviants_max_cell_fraction=deviants_max_cell_fraction,
                              dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                              dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                              dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,

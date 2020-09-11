@@ -4,9 +4,10 @@ Filter
 '''
 
 import logging
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import numpy as np  # type: ignore
+import pandas as pd  # type: ignore
 from anndata import AnnData
 
 import metacells.utilities as ut
@@ -30,7 +31,7 @@ def filter_data(  # pylint: disable=too-many-branches
     tmp: bool = False,
     invalidated_prefix: Optional[str] = None,
     invalidated_suffix: Optional[str] = None,
-) -> Optional[AnnData]:
+) -> Optional[Tuple[AnnData, pd.Series, pd.Series]]:
     '''
     Filter (slice) the data based on previously-computed masks.
 
@@ -48,7 +49,8 @@ def filter_data(  # pylint: disable=too-many-branches
 
     **Returns**
 
-    An annotated data containing a subset of the cells and genes.
+    An annotated data containing a subset of the cells and genes, the observations (cells) mask, and
+    the variables (genes) mask.
 
     If ``name`` is specified, this will be the logging name of the new data. Otherwise, it will be
     unnamed.
@@ -127,7 +129,10 @@ def filter_data(  # pylint: disable=too-many-branches
     if not np.any(cells_mask) or not np.any(genes_mask):
         return None
 
-    return ut.slice(adata, name=name, tmp=tmp,
-                    obs=cells_mask, vars=genes_mask,
-                    invalidated_prefix=invalidated_prefix,
-                    invalidated_suffix=invalidated_suffix)
+    fdata = ut.slice(adata, name=name, tmp=tmp,
+                     obs=cells_mask, vars=genes_mask,
+                     invalidated_prefix=invalidated_prefix,
+                     invalidated_suffix=invalidated_suffix)
+
+    return fdata, pd.Series(cells_mask, index=adata.obs_names), \
+        pd.Series(genes_mask, index=adata.var_names)

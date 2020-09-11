@@ -41,7 +41,7 @@ def compute_candidate_metacells(
     Assign observations (cells) to (raw, candidate) metacells based ``of`` a weighted directed graph
     (by default, {of}).
 
-    These candidate metacells typically go through additional vetting (e.g. outliers detection and
+    These candidate metacells typically go through additional vetting (e.g. deviant detection and
     dissolving too-small metacells) to obtain the final metacells.
 
     **Input**
@@ -100,7 +100,7 @@ def compute_candidate_metacells(
         close as possible to it given the choice of partition method. Also, since we force merging
         of communities beyond what the partition method would have done on its own, not all the
         communities would have the same quality. Any too-low-quality groupings are expected to be
-        corrected by removing outliers and/or by dissolving too-small communities.
+        corrected by removing deviants and/or by dissolving too-small communities.
 
     .. note::
 

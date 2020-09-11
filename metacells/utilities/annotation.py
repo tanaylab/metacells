@@ -1544,6 +1544,11 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
     else:
         level = utl.get_log_level(adata)
 
+#   if utt.Shaped.am(value) and value.ndim == 1:
+#       value = utt.to_dense_vector(value)
+#       if str(value.dtype) != 'object':
+#           LOG.debug('SET %s.%s to %s', get_name(adata) or 'adata', name, np.sum(value * np.arange(value.size)))
+
     if not LOG.isEnabledFor(level):
         return
 

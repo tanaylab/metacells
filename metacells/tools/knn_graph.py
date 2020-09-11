@@ -104,7 +104,7 @@ def compute_obs_obs_knn_graph(
 
             Ensuring each node has at least one outgoing edge allows us to always have at least one
             candidate grouping to add it to. This of course doesn't protect the node from being
-            rejected by its group as an outlier.
+            rejected by its group as deviant.
     '''
     return _compute_elements_knn_graph(adata, 'obs', of, k=k,
                                        balanced_ranks_factor=balanced_ranks_factor,
@@ -193,7 +193,7 @@ def compute_var_var_knn_graph(
 
             Ensuring each node has at least one outgoing edge allows us to always have at least one
             candidate grouping to add it to. This of course doesn't protect the node from being
-            rejected by its group as an outlier.
+            rejected by its group as deviant.
     '''
     return _compute_elements_knn_graph(adata, 'var', of, k=k,
                                        balanced_ranks_factor=balanced_ranks_factor,

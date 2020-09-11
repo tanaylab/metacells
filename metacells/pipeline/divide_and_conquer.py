@@ -5,7 +5,7 @@ Divide and Conquer
 
 import logging
 from re import Pattern
-from typing import Collection, Optional, Union
+from typing import Collection, Optional, Tuple, Union
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -49,10 +49,10 @@ def compute_divide_and_conquer_metacells(
     candidates_min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
     must_complete_cover: bool = False,
-    outliers_min_gene_fold_factor: float = pr.outliers_min_gene_fold_factor,
-    outliers_max_gene_fraction: float = pr.outliers_max_gene_fraction,
-    outliers_max_cell_fraction: float = pr.outliers_max_cell_fraction,
-    outliers_phase_2_max_cell_fraction: float = pr.outliers_phase_2_max_cell_fraction,
+    deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
+    deviants_max_gene_fraction: float = pr.deviants_max_gene_fraction,
+    deviants_max_cell_fraction: float = pr.deviants_max_cell_fraction,
+    deviants_phase_2_max_cell_fraction: float = pr.deviants_phase_2_max_cell_fraction,
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
     dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
@@ -61,7 +61,7 @@ def compute_divide_and_conquer_metacells(
     random_seed: int = pr.random_seed,
     inplace: bool = True,
     intermediate: bool = True,
-) -> Optional[ut.PandasSeries]:
+) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame]]:
     '''
     Directly compute metacells.
 
@@ -81,8 +81,38 @@ def compute_divide_and_conquer_metacells(
             particular order. Cells with no metacell assignment are given a metacell index of
             ``-1``.
 
+        ``cell_directs``
+            The total number of invocations of
+            :py:func:`metacells.pipeline.direct.compute_direct_metacells` the cell participated in.
+
+        ``cell_outliers``
+            The total number of times the cell was an outlier (not included in any metacell) across
+            all the invocations of :py:func:`metacells.pipeline.direct.compute_direct_metacells` the
+            cell participated in.
+
+        ``cell_deviant_votes``
+            The sum of the number of genes that were the reason the cell was marked as an deviant
+            across all the invocations of
+            :py:func:`metacells.pipeline.direct.compute_direct_metacells` the cell participated in.
+
+        ``cell_dissolves``
+            The number of times the cell was in a dissolved metacell across all the invocations of
+            :py:func:`metacells.pipeline.direct.compute_direct_metacells` the cell participated in.
+
+    Variable (Gene) Annotations
+        ``feature_gene``
+            A float value per gene which is 1.0 if it was selected as a feature and 0.0 if it
+            wasn't. This isn't a simple boolean to be compatible with the divide-and-conquer
+            algorithm.
+
+        ``gene_deviant_votes``
+            The sum of the number of cells each gene marked as an deviant
+            across all the invocations of
+            :py:func:`metacells.pipeline.direct.compute_direct_metacells` the cell participated in.
+
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
-    ``None``. Otherwise this is returned as a pandas series (indexed by the observation names).
+    ``None``. Otherwise this is returned as two pandas frames (indexed by the observation names and
+    the variable names).
 
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
     for future reuse. Otherwise, discard it.
@@ -117,8 +147,8 @@ def compute_divide_and_conquer_metacells(
 
     5. Split the data into the phase-1 piles, and invoke
        :py:func:`metacells.pipeline.direct.compute_direct_metacells` on each one. In this second
-       phase, use the ``outliers_phase_2_max_cell_fraction`` (default:
-       {outliers_phase_2_max_cell_fraction}). We are more aggressive weeding out outliers in the
+       phase, use the ``deviants_phase_2_max_cell_fraction`` (default:
+       {deviants_phase_2_max_cell_fraction}). We are more aggressive weeding out deviants in the
        second phase to obtain higher quality metacells, which is possible since all the cells in
        each pile are known to be similar to each other.
 
@@ -156,9 +186,9 @@ def compute_divide_and_conquer_metacells(
                                      candidates_min_split_size_factor=candidates_min_split_size_factor,
                                      candidates_max_merge_size_factor=candidates_max_merge_size_factor,
                                      must_complete_cover=must_complete_cover,
-                                     outliers_min_gene_fold_factor=outliers_min_gene_fold_factor,
-                                     outliers_max_gene_fraction=outliers_max_gene_fraction,
-                                     outliers_max_cell_fraction=outliers_max_cell_fraction,
+                                     deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
+                                     deviants_max_gene_fraction=deviants_max_gene_fraction,
+                                     deviants_max_cell_fraction=deviants_max_cell_fraction,
                                      dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                                      dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                                      dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
@@ -170,10 +200,23 @@ def compute_divide_and_conquer_metacells(
 
     pile_of_cells = ut.random_piles(adata.n_obs, target_pile_size)
 
+    feature_of_genes = np.zeros(adata.n_vars, dtype='int32')
+    deviant_votes_of_genes = np.zeros(adata.n_vars, dtype='int32')
+    directs_of_cells = np.zeros(adata.n_obs, dtype='int32')
+    deviant_votes_of_cells = np.zeros(adata.n_obs, dtype='int32')
+    dissolved_of_cells = np.zeros(adata.n_obs, dtype='int32')
+    outliers_of_cells = np.zeros(adata.n_obs, dtype='int32')
+
     with ut.timed_step('.phase-1'):
         metacell_of_cells = \
             _compute_piled_metacells(adata, of,
                                      phase='phase-1',
+                                     feature_of_genes=feature_of_genes,
+                                     deviant_votes_of_genes=deviant_votes_of_genes,
+                                     directs_of_cells=directs_of_cells,
+                                     deviant_votes_of_cells=deviant_votes_of_cells,
+                                     dissolved_of_cells=dissolved_of_cells,
+                                     outliers_of_cells=outliers_of_cells,
                                      pile_of_cells=pile_of_cells,
                                      target_pile_size=target_pile_size,
                                      pile_min_split_size_factor=pile_min_split_size_factor,
@@ -194,9 +237,9 @@ def compute_divide_and_conquer_metacells(
                                      candidates_min_split_size_factor=candidates_min_split_size_factor,
                                      candidates_max_merge_size_factor=candidates_max_merge_size_factor,
                                      must_complete_cover=must_complete_cover,
-                                     outliers_min_gene_fold_factor=outliers_min_gene_fold_factor,
-                                     outliers_max_gene_fraction=outliers_max_gene_fraction,
-                                     outliers_max_cell_fraction=outliers_max_cell_fraction,
+                                     deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
+                                     deviants_max_gene_fraction=deviants_max_gene_fraction,
+                                     deviants_max_cell_fraction=deviants_max_cell_fraction,
                                      dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                                      dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                                      dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
@@ -213,7 +256,7 @@ def compute_divide_and_conquer_metacells(
         if mdata is None:
             raise ValueError('Empty metacells data, giving up')
         assert mdata is not None
-        pile_of_metacells = \
+        results = \
             compute_divide_and_conquer_metacells(mdata,
                                                  target_pile_size=target_pile_size,
                                                  pile_min_split_size_factor=pile_min_split_size_factor,
@@ -233,9 +276,9 @@ def compute_divide_and_conquer_metacells(
                                                  candidates_min_split_size_factor=pile_min_split_size_factor,
                                                  candidates_max_merge_size_factor=pile_max_merge_size_factor,
                                                  must_complete_cover=True,
-                                                 outliers_min_gene_fold_factor=outliers_min_gene_fold_factor,
-                                                 outliers_max_gene_fraction=outliers_max_gene_fraction,
-                                                 outliers_max_cell_fraction=outliers_max_cell_fraction,
+                                                 deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
+                                                 deviants_max_gene_fraction=deviants_max_gene_fraction,
+                                                 deviants_max_cell_fraction=deviants_max_cell_fraction,
                                                  dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                                                  dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                                                  dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
@@ -244,16 +287,20 @@ def compute_divide_and_conquer_metacells(
                                                  random_seed=random_seed,
                                                  inplace=False,
                                                  intermediate=intermediate)
-        assert pile_of_metacells is not None
-
-    pile_of_cells = \
-        ut.group_piles(metacell_of_cells.values,
-                       pile_of_metacells.values)
+        assert results is not None
+        pile_of_metacells = ut.to_dense_vector(results[0]['metacell'])
+        pile_of_cells = ut.group_piles(metacell_of_cells, pile_of_metacells)
 
     with ut.timed_step('.phase-2'):
         metacell_of_cells = \
             _compute_piled_metacells(adata, of,
                                      phase='phase-2',
+                                     feature_of_genes=feature_of_genes,
+                                     deviant_votes_of_genes=deviant_votes_of_genes,
+                                     directs_of_cells=directs_of_cells,
+                                     deviant_votes_of_cells=deviant_votes_of_cells,
+                                     dissolved_of_cells=dissolved_of_cells,
+                                     outliers_of_cells=outliers_of_cells,
                                      pile_of_cells=pile_of_cells,
                                      target_pile_size=target_pile_size,
                                      pile_min_split_size_factor=pile_min_split_size_factor,
@@ -274,9 +321,9 @@ def compute_divide_and_conquer_metacells(
                                      candidates_min_split_size_factor=candidates_min_split_size_factor,
                                      candidates_max_merge_size_factor=candidates_max_merge_size_factor,
                                      must_complete_cover=must_complete_cover,
-                                     outliers_min_gene_fold_factor=outliers_min_gene_fold_factor,
-                                     outliers_max_gene_fraction=outliers_max_gene_fraction,
-                                     outliers_max_cell_fraction=outliers_phase_2_max_cell_fraction,
+                                     deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
+                                     deviants_max_gene_fraction=deviants_max_gene_fraction,
+                                     deviants_max_cell_fraction=deviants_phase_2_max_cell_fraction,
                                      dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                                      dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                                      dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
@@ -285,11 +332,42 @@ def compute_divide_and_conquer_metacells(
                                      random_seed=random_seed)
 
     if inplace:
+        ut.set_v_data(adata, 'feature_gene',
+                      ut.to_dense_vector(feature_of_genes))
+
+        ut.set_v_data(adata, 'gene_deviant_votes', deviant_votes_of_genes,
+                      log_value=lambda:
+                      ut.mask_description(deviant_votes_of_genes > 0))
+
+        ut.set_o_data(adata, 'cell_directs', directs_of_cells)
+
+        ut.set_o_data(adata, 'cell_deviant_votes', deviant_votes_of_cells,
+                      log_value=lambda:
+                      ut.mask_description(deviant_votes_of_cells > 0))
+
+        ut.set_o_data(adata, 'cell_dissolves', dissolved_of_cells,
+                      log_value=lambda:
+                      ut.mask_description(dissolved_of_cells > 0))
+
+        ut.set_o_data(adata, 'cell_outliers', outliers_of_cells,
+                      log_value=lambda:
+                      ut.mask_description(metacell_of_cells < 0))
+
         ut.set_o_data(adata, 'metacell', metacell_of_cells,
                       log_value=lambda: str(np.max(metacell_of_cells) + 1))
         return None
 
-    return pd.Series(metacell_of_cells, adata.obs_names)
+    var_frame = pd.DataFrame(index=adata.var_names)
+    var_frame['feature_gene'] = ut.to_dense_vector(feature_of_genes)
+    var_frame['gene_deviant_votes'] = deviant_votes_of_genes
+
+    obs_frame = pd.DataFrame(index=adata.obs_names)
+    obs_frame['cell_directs'] = directs_of_cells
+    obs_frame['cell_deviant_votes'] = deviant_votes_of_cells
+    obs_frame['cell_dissolves'] = dissolved_of_cells
+    obs_frame['cell_outliers'] = outliers_of_cells
+    obs_frame['metacell'] = metacell_of_cells
+    return obs_frame, var_frame
 
 
 def _compute_piled_metacells(
@@ -297,6 +375,12 @@ def _compute_piled_metacells(
     of: Optional[str],
     *,
     phase: str,
+    feature_of_genes: ut.DenseVector,
+    deviant_votes_of_genes: ut.DenseVector,
+    directs_of_cells: ut.DenseVector,
+    deviant_votes_of_cells: ut.DenseVector,
+    dissolved_of_cells: ut.DenseVector,
+    outliers_of_cells: ut.DenseVector,
     pile_of_cells: ut.DenseVector,
     target_pile_size: int,
     pile_min_split_size_factor: float,
@@ -317,16 +401,16 @@ def _compute_piled_metacells(
     candidates_min_split_size_factor: Optional[float],
     candidates_max_merge_size_factor: Optional[float],
     must_complete_cover: bool,
-    outliers_min_gene_fold_factor: float,
-    outliers_max_gene_fraction: float,
-    outliers_max_cell_fraction: float,
+    deviants_min_gene_fold_factor: float,
+    deviants_max_gene_fraction: float,
+    deviants_max_cell_fraction: float,
     dissolve_min_robust_size_factor: Optional[float],
     dissolve_min_convincing_size_factor: Optional[float],
     dissolve_min_convincing_gene_fold_factor: float,
     target_metacell_size: int,
     cell_sizes: Optional[Union[str, ut.Vector]],
     random_seed: int,
-) -> pd.Series:
+) -> ut.DenseVector:
     ut.log_operation(LOG, adata, phase, of)
     piles_count = np.max(pile_of_cells) + 1
     LOG.debug('  piles_count: %s', piles_count)
@@ -338,7 +422,7 @@ def _compute_piled_metacells(
         name = '%s.%s.pile-%s/%s' % (ut.get_name(adata)
                                      or 'clean', phase, pile_index, piles_count)
         pdata = ut.slice(adata, obs=pile_cells_mask, name=name, tmp=True)
-        metacell_of_cells_of_pile = \
+        results_of_pile = \
             compute_direct_metacells(pdata, of,
                                      feature_downsample_cell_quantile=feature_downsample_cell_quantile,
                                      feature_min_gene_fraction=feature_min_gene_fraction,
@@ -356,9 +440,9 @@ def _compute_piled_metacells(
                                      candidates_min_split_size_factor=candidates_min_split_size_factor,
                                      candidates_max_merge_size_factor=candidates_max_merge_size_factor,
                                      must_complete_cover=False,
-                                     outliers_min_gene_fold_factor=outliers_min_gene_fold_factor,
-                                     outliers_max_gene_fraction=outliers_max_gene_fraction,
-                                     outliers_max_cell_fraction=outliers_max_cell_fraction,
+                                     deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
+                                     deviants_max_gene_fraction=deviants_max_gene_fraction,
+                                     deviants_max_cell_fraction=deviants_max_cell_fraction,
                                      dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                                      dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                                      dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
@@ -366,63 +450,106 @@ def _compute_piled_metacells(
                                      cell_sizes=cell_sizes,
                                      random_seed=random_seed,
                                      inplace=False)
-        assert metacell_of_cells_of_pile is not None
-        metacell_of_cells_of_pile.index = np.where(pile_cells_mask)
-        return metacell_of_cells_of_pile
+        assert results_of_pile is not None
+        results_of_pile[0].index = np.where(pile_cells_mask)[0]
+        return results_of_pile
 
     with ut.timed_step('.piles'):
-        metacell_of_cells_of_piles = \
+        results_of_piles = \
             ut.parallel_map(_compute_pile_metacells, piles_count)
 
     metacells_count = 0
     metacell_of_cells = np.full(adata.n_obs, -1)
-    for metacell_of_cells_of_pile in metacell_of_cells_of_piles:
-        pile_metacells_count = np.max(metacell_of_cells_of_pile) + 1
-        metacell_of_cells_of_pile[metacell_of_cells_of_pile >= 0] += \
-            metacells_count
-        metacells_count += pile_metacells_count
-        metacell_of_cells[metacell_of_cells_of_pile.index] = \
-            metacell_of_cells_of_pile.values
 
-    with ut.timed_step('.outliers'):
-        outlier_cells = metacell_of_cells < 0
-        name = '%s.%s.outliers' % (ut.get_name(adata) or 'clean', phase)
-        odata = ut.slice(adata, obs=outlier_cells, name=name, tmp=True)
-        metacells_of_outlier_cells = \
-            compute_divide_and_conquer_metacells(odata, of,
-                                                 target_pile_size=target_pile_size,
-                                                 pile_min_split_size_factor=pile_min_split_size_factor,
-                                                 pile_max_merge_size_factor=pile_max_merge_size_factor,
-                                                 feature_downsample_cell_quantile=feature_downsample_cell_quantile,
-                                                 feature_min_gene_fraction=feature_min_gene_fraction,
-                                                 feature_min_gene_relative_variance=feature_min_gene_relative_variance,
-                                                 forbidden_gene_names=forbidden_gene_names,
-                                                 forbidden_gene_patterns=forbidden_gene_patterns,
-                                                 cells_similarity_log_data=cells_similarity_log_data,
-                                                 cells_similarity_log_normalization=cells_similarity_log_normalization,
-                                                 cells_repeated_similarity=cells_repeated_similarity,
-                                                 knn_k=knn_k,
-                                                 knn_balanced_ranks_factor=knn_balanced_ranks_factor,
-                                                 knn_incoming_degree_factor=knn_incoming_degree_factor,
-                                                 knn_outgoing_degree_factor=knn_outgoing_degree_factor,
-                                                 candidates_partition_method=candidates_partition_method,
-                                                 candidates_min_split_size_factor=candidates_min_split_size_factor,
-                                                 candidates_max_merge_size_factor=candidates_max_merge_size_factor,
-                                                 must_complete_cover=must_complete_cover,
-                                                 outliers_min_gene_fold_factor=outliers_min_gene_fold_factor,
-                                                 outliers_max_gene_fraction=outliers_max_gene_fraction,
-                                                 outliers_max_cell_fraction=outliers_max_cell_fraction,
-                                                 dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
-                                                 dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
-                                                 dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
-                                                 target_metacell_size=target_metacell_size,
-                                                 cell_sizes=cell_sizes,
-                                                 random_seed=random_seed,
-                                                 inplace=False)
+    for results_of_pile in results_of_piles:
+        metacells_count = \
+            _collect_results(results_of_pile,
+                             metacells_count=metacells_count,
+                             feature_of_genes=feature_of_genes,
+                             deviant_votes_of_genes=deviant_votes_of_genes,
+                             directs_of_cells=directs_of_cells,
+                             deviant_votes_of_cells=deviant_votes_of_cells,
+                             dissolved_of_cells=dissolved_of_cells,
+                             outliers_of_cells=outliers_of_cells,
+                             metacell_of_cells=metacell_of_cells)
 
-    assert metacells_of_outlier_cells is not None
-    metacells_of_outlier_cells[metacells_of_outlier_cells.values >=
-                               0] += metacells_count
-    metacell_of_cells[outlier_cells] = metacells_of_outlier_cells.values
+    outlier_cells = metacell_of_cells < 0
+    if np.any(outlier_cells):
+        with ut.timed_step('.outliers'):
+            name = '%s.%s.outliers' % (ut.get_name(adata) or 'clean', phase)
+            odata = ut.slice(adata, obs=outlier_cells, name=name, tmp=True)
+            results_of_outliers = \
+                compute_divide_and_conquer_metacells(odata, of,
+                                                     target_pile_size=target_pile_size,
+                                                     pile_min_split_size_factor=pile_min_split_size_factor,
+                                                     pile_max_merge_size_factor=pile_max_merge_size_factor,
+                                                     feature_downsample_cell_quantile=feature_downsample_cell_quantile,
+                                                     feature_min_gene_fraction=feature_min_gene_fraction,
+                                                     feature_min_gene_relative_variance=feature_min_gene_relative_variance,
+                                                     forbidden_gene_names=forbidden_gene_names,
+                                                     forbidden_gene_patterns=forbidden_gene_patterns,
+                                                     cells_similarity_log_data=cells_similarity_log_data,
+                                                     cells_similarity_log_normalization=cells_similarity_log_normalization,
+                                                     cells_repeated_similarity=cells_repeated_similarity,
+                                                     knn_k=knn_k,
+                                                     knn_balanced_ranks_factor=knn_balanced_ranks_factor,
+                                                     knn_incoming_degree_factor=knn_incoming_degree_factor,
+                                                     knn_outgoing_degree_factor=knn_outgoing_degree_factor,
+                                                     candidates_partition_method=candidates_partition_method,
+                                                     candidates_min_split_size_factor=candidates_min_split_size_factor,
+                                                     candidates_max_merge_size_factor=candidates_max_merge_size_factor,
+                                                     must_complete_cover=must_complete_cover,
+                                                     deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
+                                                     deviants_max_gene_fraction=deviants_max_gene_fraction,
+                                                     deviants_max_cell_fraction=deviants_max_cell_fraction,
+                                                     dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
+                                                     dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
+                                                     dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                                                     target_metacell_size=target_metacell_size,
+                                                     cell_sizes=cell_sizes,
+                                                     random_seed=random_seed,
+                                                     inplace=False)
+            assert results_of_outliers is not None
+            results_of_outliers[0].index = np.where(outlier_cells)[0]
+            metacells_count = \
+                _collect_results(results_of_outliers,
+                                 metacells_count=metacells_count,
+                                 feature_of_genes=feature_of_genes,
+                                 deviant_votes_of_genes=deviant_votes_of_genes,
+                                 directs_of_cells=directs_of_cells,
+                                 deviant_votes_of_cells=deviant_votes_of_cells,
+                                 dissolved_of_cells=dissolved_of_cells,
+                                 outliers_of_cells=outliers_of_cells,
+                                 metacell_of_cells=metacell_of_cells)
 
     return metacell_of_cells
+
+
+def _collect_results(
+    results: Tuple[pd.DataFrame, pd.DataFrame],
+    *,
+    metacells_count: int,
+    feature_of_genes: ut.DenseVector,
+    deviant_votes_of_genes: ut.DenseVector,
+    directs_of_cells: ut.DenseVector,
+    deviant_votes_of_cells: ut.DenseVector,
+    dissolved_of_cells: ut.DenseVector,
+    outliers_of_cells: ut.DenseVector,
+    metacell_of_cells: ut.DenseVector,
+) -> int:
+    cell_results, gene_results = results
+
+    directs_of_cells[cell_results.index] += 1
+    deviant_votes_of_cells[cell_results.index] += cell_results['cell_deviant_votes']
+    dissolved_of_cells[cell_results.index] += cell_results['cell_dissolves']
+    outliers_of_cells[cell_results.index] += cell_results['cell_outliers']
+
+    metacell_results = ut.to_dense_vector(cell_results['metacell'])
+    results_metacells_count = np.max(metacell_results) + 1
+    metacell_results[metacell_results >= 0] += metacells_count
+    metacell_of_cells[cell_results.index] = metacell_results
+
+    feature_of_genes += gene_results['feature_gene']
+    deviant_votes_of_genes += gene_results['gene_deviant_votes']
+
+    return metacells_count + results_metacells_count

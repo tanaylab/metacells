@@ -10,7 +10,7 @@ divide-and-conquer method.
 
 import logging
 from re import Pattern
-from typing import Collection, Optional, Union
+from typing import Collection, Optional, Tuple, Union
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -32,7 +32,7 @@ LOG = logging.getLogger(__name__)
 
 @ut.timed_call()
 @ut.expand_doc()
-def compute_direct_metacells(
+def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-statements
     adata: AnnData,
     of: Optional[str] = None,
     *,
@@ -52,9 +52,9 @@ def compute_direct_metacells(
     candidates_min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
     must_complete_cover: bool = False,
-    outliers_min_gene_fold_factor: float = pr.outliers_min_gene_fold_factor,
-    outliers_max_gene_fraction: float = pr.outliers_max_gene_fraction,
-    outliers_max_cell_fraction: float = pr.outliers_max_cell_fraction,
+    deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
+    deviants_max_gene_fraction: float = pr.deviants_max_gene_fraction,
+    deviants_max_cell_fraction: float = pr.deviants_max_cell_fraction,
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
     dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
@@ -63,7 +63,7 @@ def compute_direct_metacells(
     random_seed: int = pr.random_seed,
     inplace: bool = True,
     intermediate: bool = True,
-) -> Optional[ut.PandasSeries]:
+) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame]]:
     '''
     Directly compute metacells.
 
@@ -80,11 +80,39 @@ def compute_direct_metacells(
     Observation (Cell) Annotations
         ``metacell``
             The integer index of the metacell each cell belongs to. The metacells are in no
-            particular order. Cells with no metacell assignment are given a metacell index of
-            ``-1``.
+            particular order. Cells with no metacell assignment ("outliers") are given a metacell
+            index of ``-1``.
+
+        ``cell_directs``
+            All-1. Provided for compatibility with
+            :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`.
+
+        ``cell_outliers``
+            Is 1 for outlier cells (with a metacell index of -1) and 0 otherwise. Provided for
+            compatibility with
+            :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`.
+
+        ``cell_deviant_votes``
+            The number of genes that were the reason the cell was marked as deviant (if zero, the
+            cell is not deviant).
+
+        ``cell_dissolves``
+            Either 1 if the cell was in a dissolved metacell or 0 if it wasn't. This isn't a simple
+            boolean to be compatible with the divide-and-conquer algorithm.
+
+    Variable (Gene) Annotations
+        ``feature_gene``
+            A float value per gene which is 1.0 if it was selected as a feature and 0.0 if it
+            wasn't. This isn't a simple boolean to be compatible with the divide-and-conquer
+            algorithm.
+
+        ``gene_deviant_votes``
+            The number of cells each gene marked as deviant (if zero, the gene did not mark any cell
+            as deviant).
 
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
-    ``None``. Otherwise this is returned as a pandas series (indexed by the observation names).
+    ``None``. Otherwise this is returned as a tuple of two pandas data frames (indexed by the
+    observation and variable names).
 
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
     for future reuse. Otherwise, discard it.
@@ -134,12 +162,12 @@ def compute_direct_metacells(
        ``cell_sizes`` (default: {cell_sizes}).
 
     5. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
-       :py:func:`metacells.tools.outliers.find_outlier_cells` to remove outliers from the candidate
+       :py:func:`metacells.tools.deviants.find_deviant_cells` to remove deviants from the candidate
        metacells, using the
-       ``outliers_min_gene_fold_factor`` (default: {outliers_min_gene_fold_factor}),
-       ``outliers_max_gene_fraction`` (default: {outliers_max_gene_fraction})
+       ``deviants_min_gene_fold_factor`` (default: {deviants_min_gene_fold_factor}),
+       ``deviants_max_gene_fraction`` (default: {deviants_max_gene_fraction})
        and
-       ``outliers_max_cell_fraction`` (default: {outliers_max_cell_fraction}).
+       ``deviants_max_cell_fraction`` (default: {deviants_max_cell_fraction}).
 
     6. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
        :py:func:`metacells.tools.dissolve.dissolve_metacells` to dissolve small unconvincing
@@ -153,7 +181,7 @@ def compute_direct_metacells(
        and
        ``dissolve_min_convincing_gene_fold_factor`` (default: {dissolve_min_convincing_size_factor}).
     '''
-    fdata = \
+    fdata, feature_of_genes = \
         extract_feature_data(adata, of,
                              downsample_cell_quantile=feature_downsample_cell_quantile,
                              min_gene_relative_variance=feature_min_gene_relative_variance,
@@ -211,35 +239,108 @@ def compute_direct_metacells(
         candidate_metacell_of_cells = \
             ut.to_dense_vector(ut.get_o_data(fdata, 'candidate_metacell'))
 
+    deviant_votes_of_genes: Optional[ut.DenseVector] = None
+    deviant_votes_of_cells: Optional[ut.DenseVector] = None
+    dissolved_of_cells: Optional[ut.DenseVector] = None
+    final_metacell_of_cells: Optional[ut.DenseVector] = None
+
     if must_complete_cover:
         final_metacell_of_cells = candidate_metacell_of_cells
         assert np.min(final_metacell_of_cells) == 0
+
+        if inplace:
+            deviant_votes_of_genes = np.zeros(adata.n_vars, dtype='float32')
+            deviant_votes_of_cells = np.zeros(adata.n_obs, dtype='float32')
+            dissolved_of_cells = np.zeros(adata.n_obs, dtype='float32')
+
+            assert deviant_votes_of_genes is not None
+            assert deviant_votes_of_cells is not None
+            assert dissolved_of_cells is not None
+
+            ut.set_v_data(adata, 'gene_deviant_votes', deviant_votes_of_genes,
+                          log_value=lambda:
+                          ut.mask_description(deviant_votes_of_genes > 0))  # type: ignore
+
+            ut.set_o_data(adata, 'cell_deviant_votes', deviant_votes_of_cells,
+                          log_value=lambda:
+                          ut.mask_description(deviant_votes_of_cells > 0))  # type: ignore
+
+            ut.set_o_data(adata, 'cell_dissolves', dissolved_of_cells,
+                          log_value=lambda:
+                          ut.mask_description(dissolved_of_cells > 0))  # type: ignore
+
     else:
-        with ut.intermediate_step(adata, intermediate=intermediate):
-            ut.set_o_data(adata, 'candidate_metacell',
-                          candidate_metacell_of_cells, ut.NEVER_SAFE)
+        deviant_results = \
+            tl.find_deviant_cells(adata,
+                                  candidate_metacells=candidate_metacell_of_cells,
+                                  min_gene_fold_factor=deviants_min_gene_fold_factor,
+                                  max_gene_fraction=deviants_max_gene_fraction,
+                                  max_cell_fraction=deviants_max_cell_fraction,
+                                  inplace=inplace,
+                                  intermediate=intermediate)
 
-            tl.find_outlier_cells(adata,
-                                  min_gene_fold_factor=outliers_min_gene_fold_factor,
-                                  max_gene_fraction=outliers_max_gene_fraction,
-                                  max_cell_fraction=outliers_max_cell_fraction)
+        if deviant_results is not None:
+            deviant_votes_of_cells = ut.to_dense_vector(deviant_results[0])
+            deviant_votes_of_genes = ut.to_dense_vector(deviant_results[1])
 
+        dissolve_results = \
             tl.dissolve_metacells(adata,
+                                  candidate_metacells=candidate_metacell_of_cells,
                                   target_metacell_size=target_metacell_size,
                                   cell_sizes=cell_sizes,
                                   min_robust_size_factor=dissolve_min_robust_size_factor,
                                   min_convincing_size_factor=dissolve_min_convincing_size_factor,
-                                  min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor)
+                                  min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                                  inplace=inplace,
+                                  intermediate=intermediate)
 
+        if dissolve_results is None:
             final_metacell_of_cells = \
                 ut.to_dense_vector(ut.get_o_data(adata, 'solid_metacell'))
+        else:
+            final_metacell_of_cells = dissolve_results['solid_metacell']
+            dissolved_of_cells = dissolve_results['cell_dissolves']
+
+    assert final_metacell_of_cells is not None
+
+    directs_of_cells = np.full(adata.n_obs, 1, dtype='int32')
+    outliers_of_cells = np.zeros(adata.n_obs, dtype='int32')
+    outliers_of_cells[final_metacell_of_cells < 0] = 1
 
     if inplace:
+        ut.set_v_data(adata, 'feature_gene',
+                      ut.to_dense_vector(feature_of_genes))
+
+        ut.set_o_data(adata, 'cell_directs', directs_of_cells,
+                      log_value=lambda: '1')
+
+        ut.set_o_data(adata, 'cell_outliers', outliers_of_cells,
+                      log_value=lambda: ut.mask_description(outliers_of_cells))
+
         ut.set_o_data(adata, 'metacell', final_metacell_of_cells,
-                      log_value=lambda: str(np.max(final_metacell_of_cells) + 1))
+                      log_value=lambda:
+                      str(np.max(final_metacell_of_cells) + 1))
+
         return None
 
-    return pd.Series(final_metacell_of_cells, index=adata.obs_names)
+    assert feature_of_genes is not None
+    assert deviant_votes_of_genes is not None
+
+    var_frame = pd.DataFrame(index=adata.var_names)
+    var_frame['feature_gene'] = ut.to_dense_vector(feature_of_genes)
+    var_frame['gene_deviant_votes'] = deviant_votes_of_genes
+
+    assert deviant_votes_of_cells is not None
+    assert dissolved_of_cells is not None
+
+    obs_frame = pd.DataFrame(index=adata.obs_names)
+    obs_frame['cell_directs'] = directs_of_cells
+    obs_frame['cell_deviant_votes'] = deviant_votes_of_cells
+    obs_frame['cell_dissolves'] = dissolved_of_cells
+    obs_frame['cell_outliers'] = outliers_of_cells
+    obs_frame['metacell'] = final_metacell_of_cells
+
+    return obs_frame, var_frame
 
 
 @ut.timed_call()
@@ -257,7 +358,7 @@ def extract_feature_data(
     forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     random_seed: int = 0,
     intermediate: bool = True,
-) -> Optional[AnnData]:
+) -> Tuple[AnnData, pd.Series]:
     '''
     Extract a "feature" subset of the ``adata`` to compute metacells for.
 
@@ -276,9 +377,12 @@ def extract_feature_data(
 
     **Returns**
 
-    Annotated sliced data containing the "feature" subset of the original data. The focus of the
-    data will be the (slice) ``of`` the (downsampled) input data. By default, the ``name`` of this
-    data is {name}.
+    * Annotated sliced data containing the "feature" subset of the original data. The focus of the
+      data will be the (slice) ``of`` the (downsampled) input data. By default, the ``name`` of this
+      data is {name}.
+
+    * Either 1 for selected feature genes or 0 otherwise. This isn't a simple boolean to be
+      compatible with the divide-and-conquer algorithm.
 
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
     for future reuse. Otherwise, discard it.
@@ -325,12 +429,18 @@ def extract_feature_data(
                                 names=forbidden_gene_names,
                                 patterns=forbidden_gene_patterns)
 
-        fdata = pp.filter_data(adata, name=name, tmp=tmp,
-                               masks=['high_fraction_genes',
-                                      'high_relative_variance_genes',
-                                      '~forbidden_genes'])
+        results = pp.filter_data(adata, name=name, tmp=tmp,
+                                 masks=['high_fraction_genes',
+                                        'high_relative_variance_genes',
+                                        '~forbidden_genes'])
+        if results is None:
+            raise ValueError('Empty feature data, giving up')
 
-    if fdata is not None:
-        ut.get_vo_data(fdata, ut.get_focus_name(adata), infocus=True)
+    fdata, _cells_mask, genes_mask = results
 
-    return fdata
+    ut.get_vo_data(fdata, ut.get_focus_name(adata), infocus=True)
+
+    feature_of_genes = np.zeros(adata.n_vars, dtype='int32')
+    feature_of_genes[genes_mask] = 1
+
+    return fdata, feature_of_genes

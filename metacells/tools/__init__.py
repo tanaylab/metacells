@@ -12,6 +12,7 @@ All the functions included here are exported under ``metacells.tl``.
 
 from .candidates import *
 from .collect import *
+from .deviants import *
 from .dissolve import *
 from .downsample import *
 from .excess import *
@@ -19,7 +20,6 @@ from .high import *
 from .knn_graph import *
 from .named import *
 from .noisy_lonely import *
-from .outliers import *
 from .properly_sampled import *
 from .rare import *
 from .similarity import *

@@ -121,13 +121,15 @@ def extract_clean_data(
                                 names=excluded_gene_names,
                                 patterns=excluded_gene_patterns)
 
-        cdata = pp.filter_data(adata, name=name, tmp=tmp,
-                               masks=['properly_sampled_cells',
-                                      'properly_sampled_genes',
-                                      '~noisy_lonely_genes',
-                                      '~excluded_genes'])
+        results = pp.filter_data(adata, name=name, tmp=tmp,
+                                 masks=['properly_sampled_cells',
+                                        'properly_sampled_genes',
+                                        '~noisy_lonely_genes',
+                                        '~excluded_genes'])
+        if results is None:
+            return None
 
-    if cdata is not None:
-        ut.get_vo_data(cdata, ut.get_focus_name(adata), infocus=True)
+        cdata = results[0]
 
+    ut.get_vo_data(cdata, ut.get_focus_name(adata), infocus=True)
     return cdata
