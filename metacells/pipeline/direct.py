@@ -14,6 +14,7 @@ from typing import Collection, Optional, Tuple, Union
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
+import scipy.sparse as sparse  # type: ignore
 from anndata import AnnData
 
 import metacells.parameters as pr
@@ -63,7 +64,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
     random_seed: int = pr.random_seed,
     inplace: bool = True,
     intermediate: bool = True,
-) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame]]:
+) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame, ut.PandasFrame]]:
     '''
     Directly compute metacells.
 
@@ -82,6 +83,10 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
             The integer index of the metacell each cell belongs to. The metacells are in no
             particular order. Cells with no metacell assignment ("outliers") are given a metacell
             index of ``-1``.
+
+        ``cell_pile``
+            All-0. Provided for compatibility with
+            :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`.
 
         ``cell_directs``
             All-1. Provided for compatibility with
@@ -110,8 +115,14 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
             The number of cells each gene marked as deviant (if zero, the gene did not mark any cell
             as deviant).
 
+    Variable-Any (Gene) Annotations
+        ``gene_pile_feature``
+            A sparse boolean 2D mask which is ``True`` for each feature gene for each pile (only one
+            pile here). Provided for compatibility with
+            :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`.
+
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
-    ``None``. Otherwise this is returned as a tuple of two pandas data frames (indexed by the
+    ``None``. Otherwise this is returned as a tuple of three pandas data frames (indexed by the
     observation and variable names).
 
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
@@ -181,7 +192,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        and
        ``dissolve_min_convincing_gene_fold_factor`` (default: {dissolve_min_convincing_size_factor}).
     '''
-    fdata, feature_of_genes = \
+    fdata, feature_of_genes, feature_of_piles_of_genes = \
         extract_feature_data(adata, of,
                              downsample_cell_quantile=feature_downsample_cell_quantile,
                              min_gene_relative_variance=feature_min_gene_relative_variance,
@@ -303,13 +314,16 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
 
     assert final_metacell_of_cells is not None
 
+    pile_of_cells = np.zeros(adata.n_obs, dtype='int32')
     directs_of_cells = np.full(adata.n_obs, 1, dtype='int32')
     outliers_of_cells = np.zeros(adata.n_obs, dtype='int32')
     outliers_of_cells[final_metacell_of_cells < 0] = 1
 
     if inplace:
-        ut.set_v_data(adata, 'feature_gene',
-                      ut.to_dense_vector(feature_of_genes))
+        ut.set_v_data(adata, 'feature_gene', feature_of_genes)
+
+        ut.set_o_data(adata, 'cell_pile', pile_of_cells,
+                      log_value=lambda: '0')
 
         ut.set_o_data(adata, 'cell_directs', directs_of_cells,
                       log_value=lambda: '1')
@@ -321,26 +335,31 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
                       log_value=lambda:
                       str(np.max(final_metacell_of_cells) + 1))
 
+        ut.set_va_data(adata, 'gene_pile_feature',
+                       feature_of_piles_of_genes.tocsc())
+
         return None
 
-    assert feature_of_genes is not None
     assert deviant_votes_of_genes is not None
 
     var_frame = pd.DataFrame(index=adata.var_names)
-    var_frame['feature_gene'] = ut.to_dense_vector(feature_of_genes)
+    var_frame['feature_gene'] = feature_of_genes
     var_frame['gene_deviant_votes'] = deviant_votes_of_genes
 
     assert deviant_votes_of_cells is not None
     assert dissolved_of_cells is not None
 
     obs_frame = pd.DataFrame(index=adata.obs_names)
+    obs_frame['cell_pile'] = pile_of_cells
     obs_frame['cell_directs'] = directs_of_cells
     obs_frame['cell_deviant_votes'] = deviant_votes_of_cells
     obs_frame['cell_dissolves'] = dissolved_of_cells
     obs_frame['cell_outliers'] = outliers_of_cells
     obs_frame['metacell'] = final_metacell_of_cells
 
-    return obs_frame, var_frame
+    return obs_frame, var_frame, \
+        pd.DataFrame.sparse.from_spmatrix(feature_of_piles_of_genes,
+                                          index=adata.var_names)
 
 
 @ut.timed_call()
@@ -358,7 +377,7 @@ def extract_feature_data(
     forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     random_seed: int = 0,
     intermediate: bool = True,
-) -> Tuple[AnnData, pd.Series]:
+) -> Tuple[AnnData, ut.DenseVector, ut.SparseMatrix]:
     '''
     Extract a "feature" subset of the ``adata`` to compute metacells for.
 
@@ -381,8 +400,13 @@ def extract_feature_data(
       data will be the (slice) ``of`` the (downsampled) input data. By default, the ``name`` of this
       data is {name}.
 
-    * Either 1 for selected feature genes or 0 otherwise. This isn't a simple boolean to be
-      compatible with the divide-and-conquer algorithm.
+    * A mask of either 1 for selected feature genes or 0 otherwise. This isn't a simple boolean
+      for compatibility with
+      :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`.
+
+    * A sparse boolean 2D mask which is ``True`` for each feature gene for each pile (only one
+      pile here). Provided for compatibility with
+      :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`.
 
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
     for future reuse. Otherwise, discard it.
@@ -443,4 +467,11 @@ def extract_feature_data(
     feature_of_genes = np.zeros(adata.n_vars, dtype='int32')
     feature_of_genes[genes_mask] = 1
 
-    return fdata, feature_of_genes
+    feature_gene_indices = np.where(genes_mask)[0]
+    pile_indices = np.zeros(feature_gene_indices.size, dtype='int32')
+    truth = np.full(feature_gene_indices.size, True)
+    feature_of_piles_of_genes = \
+        sparse.coo_matrix((truth, (feature_gene_indices, pile_indices)),
+                          shape=(adata.n_vars, 1))
+
+    return fdata, feature_of_genes, feature_of_piles_of_genes

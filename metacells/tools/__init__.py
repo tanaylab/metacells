@@ -11,7 +11,6 @@ All the functions included here are exported under ``metacells.tl``.
 '''
 
 from .candidates import *
-from .collect import *
 from .deviants import *
 from .dissolve import *
 from .downsample import *

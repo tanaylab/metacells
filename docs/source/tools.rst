@@ -45,9 +45,6 @@ Computing the Metacells
 .. automodule:: metacells.tools.dissolve
     :members:
 
-.. automodule:: metacells.tools.collect
-    :members:
-
 Evaluating the Metacells
 ++++++++++++++++++++++++
 

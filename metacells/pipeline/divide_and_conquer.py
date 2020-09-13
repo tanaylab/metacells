@@ -5,7 +5,7 @@ Divide and Conquer
 
 import logging
 from re import Pattern
-from typing import Collection, Optional, Tuple, Union
+from typing import Collection, List, Optional, Tuple, Union
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -61,7 +61,7 @@ def compute_divide_and_conquer_metacells(
     random_seed: int = pr.random_seed,
     inplace: bool = True,
     intermediate: bool = True,
-) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame]]:
+) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame, ut.PandasFrame]]:
     '''
     Directly compute metacells.
 
@@ -80,6 +80,10 @@ def compute_divide_and_conquer_metacells(
             The integer index of the metacell each cell belongs to. The metacells are in no
             particular order. Cells with no metacell assignment are given a metacell index of
             ``-1``.
+
+        ``cell_pile``
+            The index of the (final) pile the cell was placed in when invoking
+            :py:func:`metacells.pipeline.direct.compute_direct_metacells`.
 
         ``cell_directs``
             The total number of invocations of
@@ -110,9 +114,13 @@ def compute_divide_and_conquer_metacells(
             across all the invocations of
             :py:func:`metacells.pipeline.direct.compute_direct_metacells` the cell participated in.
 
+    Variable-Any (Gene) Annotations
+        ``gene_pile_feature``
+            A sparse boolean 2D mask which is ``True`` for each feature gene for each (final) pile.
+
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
-    ``None``. Otherwise this is returned as two pandas frames (indexed by the observation names and
-    the variable names).
+    ``None``. Otherwise this is returned as three pandas frames (indexed by the observation names
+    and the variable names).
 
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
     for future reuse. Otherwise, discard it.
@@ -198,7 +206,7 @@ def compute_divide_and_conquer_metacells(
                                      inplace=inplace,
                                      intermediate=intermediate)
 
-    pile_of_cells = ut.random_piles(adata.n_obs, target_pile_size)
+    phase_pile_of_cells = ut.random_piles(adata.n_obs, target_pile_size)
 
     feature_of_genes = np.zeros(adata.n_vars, dtype='int32')
     deviant_votes_of_genes = np.zeros(adata.n_vars, dtype='int32')
@@ -208,16 +216,17 @@ def compute_divide_and_conquer_metacells(
     outliers_of_cells = np.zeros(adata.n_obs, dtype='int32')
 
     with ut.timed_step('.phase-1'):
-        metacell_of_cells = \
+        metacell_of_cells, _ = \
             _compute_piled_metacells(adata, of,
                                      phase='phase-1',
                                      feature_of_genes=feature_of_genes,
                                      deviant_votes_of_genes=deviant_votes_of_genes,
+                                     pile_of_cells=None,
                                      directs_of_cells=directs_of_cells,
                                      deviant_votes_of_cells=deviant_votes_of_cells,
                                      dissolved_of_cells=dissolved_of_cells,
                                      outliers_of_cells=outliers_of_cells,
-                                     pile_of_cells=pile_of_cells,
+                                     phase_pile_of_cells=phase_pile_of_cells,
                                      target_pile_size=target_pile_size,
                                      pile_min_split_size_factor=pile_min_split_size_factor,
                                      pile_max_merge_size_factor=pile_max_merge_size_factor,
@@ -289,19 +298,23 @@ def compute_divide_and_conquer_metacells(
                                                  intermediate=intermediate)
         assert results is not None
         pile_of_metacells = ut.to_dense_vector(results[0]['metacell'])
-        pile_of_cells = ut.group_piles(metacell_of_cells, pile_of_metacells)
+        phase_pile_of_cells = \
+            ut.group_piles(metacell_of_cells, pile_of_metacells)
+
+    pile_of_cells = np.full(adata.n_obs, -1, dtype='int32')
 
     with ut.timed_step('.phase-2'):
-        metacell_of_cells = \
+        metacell_of_cells, feature_of_piles_of_genes = \
             _compute_piled_metacells(adata, of,
                                      phase='phase-2',
                                      feature_of_genes=feature_of_genes,
                                      deviant_votes_of_genes=deviant_votes_of_genes,
+                                     pile_of_cells=pile_of_cells,
                                      directs_of_cells=directs_of_cells,
                                      deviant_votes_of_cells=deviant_votes_of_cells,
                                      dissolved_of_cells=dissolved_of_cells,
                                      outliers_of_cells=outliers_of_cells,
-                                     pile_of_cells=pile_of_cells,
+                                     phase_pile_of_cells=phase_pile_of_cells,
                                      target_pile_size=target_pile_size,
                                      pile_min_split_size_factor=pile_min_split_size_factor,
                                      pile_max_merge_size_factor=pile_max_merge_size_factor,
@@ -339,6 +352,8 @@ def compute_divide_and_conquer_metacells(
                       log_value=lambda:
                       ut.mask_description(deviant_votes_of_genes > 0))
 
+        ut.set_o_data(adata, 'cell_pile', pile_of_cells)
+
         ut.set_o_data(adata, 'cell_directs', directs_of_cells)
 
         ut.set_o_data(adata, 'cell_deviant_votes', deviant_votes_of_cells,
@@ -355,6 +370,10 @@ def compute_divide_and_conquer_metacells(
 
         ut.set_o_data(adata, 'metacell', metacell_of_cells,
                       log_value=lambda: str(np.max(metacell_of_cells) + 1))
+
+        ut.set_va_data(adata, 'gene_pile_feature',
+                       feature_of_piles_of_genes.sparse.get_coo().tocsc())  # type: ignore
+
         return None
 
     var_frame = pd.DataFrame(index=adata.var_names)
@@ -362,12 +381,13 @@ def compute_divide_and_conquer_metacells(
     var_frame['gene_deviant_votes'] = deviant_votes_of_genes
 
     obs_frame = pd.DataFrame(index=adata.obs_names)
+    obs_frame['cell_pile'] = pile_of_cells
     obs_frame['cell_directs'] = directs_of_cells
     obs_frame['cell_deviant_votes'] = deviant_votes_of_cells
     obs_frame['cell_dissolves'] = dissolved_of_cells
     obs_frame['cell_outliers'] = outliers_of_cells
     obs_frame['metacell'] = metacell_of_cells
-    return obs_frame, var_frame
+    return obs_frame, var_frame, feature_of_piles_of_genes
 
 
 def _compute_piled_metacells(
@@ -377,11 +397,12 @@ def _compute_piled_metacells(
     phase: str,
     feature_of_genes: ut.DenseVector,
     deviant_votes_of_genes: ut.DenseVector,
+    pile_of_cells: Optional[ut.DenseVector],
     directs_of_cells: ut.DenseVector,
     deviant_votes_of_cells: ut.DenseVector,
     dissolved_of_cells: ut.DenseVector,
     outliers_of_cells: ut.DenseVector,
-    pile_of_cells: ut.DenseVector,
+    phase_pile_of_cells: ut.DenseVector,
     target_pile_size: int,
     pile_min_split_size_factor: float,
     pile_max_merge_size_factor: Optional[float],
@@ -410,17 +431,18 @@ def _compute_piled_metacells(
     target_metacell_size: int,
     cell_sizes: Optional[Union[str, ut.Vector]],
     random_seed: int,
-) -> ut.DenseVector:
+) -> Tuple[ut.DenseVector, ut.PandasFrame]:
     ut.log_operation(LOG, adata, phase, of)
-    piles_count = np.max(pile_of_cells) + 1
-    LOG.debug('  piles_count: %s', piles_count)
-    assert piles_count > 1
+    phase_piles_count = np.max(phase_pile_of_cells) + 1
+    LOG.debug('  piles_count: %s', phase_piles_count)
+    assert phase_piles_count > 1
 
-    def _compute_pile_metacells(pile_index: int) -> pd.Series:
-        pile_cells_mask = pile_of_cells[pile_of_cells] == pile_index
+    def _compute_pile_metacells(phase_pile_index: int) -> pd.Series:
+        pile_cells_mask = phase_pile_of_cells[phase_pile_of_cells] == phase_pile_index
         assert np.sum(pile_cells_mask) > 0
-        name = '%s.%s.pile-%s/%s' % (ut.get_name(adata)
-                                     or 'clean', phase, pile_index, piles_count)
+        name = '%s.%s.pile-%s/%s' \
+            % (ut.get_name(adata) or 'clean',
+               phase, phase_pile_index, phase_piles_count)
         pdata = ut.slice(adata, obs=pile_cells_mask, name=name, tmp=True)
         results_of_pile = \
             compute_direct_metacells(pdata, of,
@@ -452,26 +474,32 @@ def _compute_piled_metacells(
                                      inplace=False)
         assert results_of_pile is not None
         results_of_pile[0].index = np.where(pile_cells_mask)[0]
+        results_of_pile[2].columns = [phase_pile_index]  # type: ignore
         return results_of_pile
 
     with ut.timed_step('.piles'):
         results_of_piles = \
-            ut.parallel_map(_compute_pile_metacells, piles_count)
+            ut.parallel_map(_compute_pile_metacells, phase_piles_count)
 
     metacells_count = 0
+    piles_count = 0
     metacell_of_cells = np.full(adata.n_obs, -1)
 
+    feature_of_piles_of_genes_list: List[pd.Frame] = []
     for results_of_pile in results_of_piles:
-        metacells_count = \
+        metacells_count, piles_count = \
             _collect_results(results_of_pile,
                              metacells_count=metacells_count,
+                             piles_count=piles_count,
                              feature_of_genes=feature_of_genes,
                              deviant_votes_of_genes=deviant_votes_of_genes,
+                             pile_of_cells=pile_of_cells,
                              directs_of_cells=directs_of_cells,
                              deviant_votes_of_cells=deviant_votes_of_cells,
                              dissolved_of_cells=dissolved_of_cells,
                              outliers_of_cells=outliers_of_cells,
-                             metacell_of_cells=metacell_of_cells)
+                             metacell_of_cells=metacell_of_cells,
+                             feature_of_piles_of_genes_list=feature_of_piles_of_genes_list)
 
     outlier_cells = metacell_of_cells < 0
     if np.any(outlier_cells):
@@ -511,33 +539,39 @@ def _compute_piled_metacells(
                                                      inplace=False)
             assert results_of_outliers is not None
             results_of_outliers[0].index = np.where(outlier_cells)[0]
-            metacells_count = \
+            metacells_count, piles_count = \
                 _collect_results(results_of_outliers,
                                  metacells_count=metacells_count,
+                                 piles_count=piles_count,
                                  feature_of_genes=feature_of_genes,
                                  deviant_votes_of_genes=deviant_votes_of_genes,
+                                 pile_of_cells=pile_of_cells,
                                  directs_of_cells=directs_of_cells,
                                  deviant_votes_of_cells=deviant_votes_of_cells,
                                  dissolved_of_cells=dissolved_of_cells,
                                  outliers_of_cells=outliers_of_cells,
-                                 metacell_of_cells=metacell_of_cells)
+                                 metacell_of_cells=metacell_of_cells,
+                                 feature_of_piles_of_genes_list=feature_of_piles_of_genes_list)
 
-    return metacell_of_cells
+    return metacell_of_cells, pd.concat(feature_of_piles_of_genes_list, axis=1)
 
 
 def _collect_results(
-    results: Tuple[pd.DataFrame, pd.DataFrame],
+    results: Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame],
     *,
     metacells_count: int,
+    piles_count: int,
     feature_of_genes: ut.DenseVector,
     deviant_votes_of_genes: ut.DenseVector,
+    pile_of_cells: Optional[ut.DenseVector],
     directs_of_cells: ut.DenseVector,
     deviant_votes_of_cells: ut.DenseVector,
     dissolved_of_cells: ut.DenseVector,
     outliers_of_cells: ut.DenseVector,
     metacell_of_cells: ut.DenseVector,
-) -> int:
-    cell_results, gene_results = results
+    feature_of_piles_of_genes_list: List[pd.DataFrame],
+) -> Tuple[int, int]:
+    cell_results, gene_results, feature_of_piles_of_genes = results
 
     directs_of_cells[cell_results.index] += 1
     deviant_votes_of_cells[cell_results.index] += cell_results['cell_deviant_votes']
@@ -552,4 +586,16 @@ def _collect_results(
     feature_of_genes += gene_results['feature_gene']
     deviant_votes_of_genes += gene_results['gene_deviant_votes']
 
-    return metacells_count + results_metacells_count
+    pile_results = ut.to_dense_vector(cell_results['cell_pile'])
+    results_piles_count = np.max(pile_results) + 1
+    assert results_piles_count == len(feature_of_piles_of_genes.columns)
+
+    if pile_of_cells is not None:
+        pile_results += piles_count
+        pile_of_cells[cell_results.index] = pile_results
+
+    feature_of_piles_of_genes.columns += piles_count
+    feature_of_piles_of_genes_list.append(feature_of_piles_of_genes)
+
+    return metacells_count + results_metacells_count, \
+        piles_count + results_piles_count

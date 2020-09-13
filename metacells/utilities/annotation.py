@@ -29,12 +29,9 @@ Specifically, the mapping is:
     per_var vector          variable annotations (``.var``)
     per_obs_per_obs matrix  observation pair matrix annotations (``.obsp``)
     per_var_per_var matrix  variable pair matrix annotations (``.varp``)
-    (none)                  multidimensional annotations (``.obsp``, ``.varp``, ``.obsm``, ``.varm``)
+    per_obs_per_any matrix  observation multidimensional annotations (``.obsm``)
+    per_var_per_any matrix  variable multidimensional annotations (``.varm``)
     ======================  =========================================================================
-
-.. todo::
-
-    Support multidimensional annotations.
 
 Mapping Code Complexity
 .......................
@@ -155,6 +152,8 @@ __all__ = [
     'get_v_data',
     'get_oo_data',
     'get_vv_data',
+    'get_oa_data',
+    'get_va_data',
 
     'get_vo_data',
     'del_vo_data',
@@ -170,6 +169,8 @@ __all__ = [
     'set_oo_data',
     'set_vv_data',
     'set_vo_data',
+    'set_va_data',
+    'set_oa_data',
 ]
 
 
@@ -232,6 +233,8 @@ def setup(
                         adata.var,
                         adata.obsp,
                         adata.varp,
+                        adata.obsm,
+                        adata.varm,
                         adata.uns):
         for data_name, _ in _items(annotations):
             safe_slicing_data(data_name, ALWAYS_SAFE)
@@ -470,6 +473,8 @@ def _save_data(
                              ('v', adata.var),
                              ('oo', adata.obsp),
                              ('vv', adata.varp),
+                             ('oa', adata.obsm),
+                             ('va', adata.varm),
                              ('m', adata.uns)):
         _save_per_data(saved_data, adata, per, annotations,
                        will_slice_obs, will_slice_var,
@@ -490,7 +495,7 @@ def _save_per_data(
 ) -> None:
     delete_names: Set[str] = set()
 
-    if per != 'vo':
+    if per not in ('vo', 'va', 'oa'):
         def patch(name: str) -> None:  # pylint: disable=unused-argument
             pass
     else:
@@ -515,7 +520,7 @@ def _save_per_data(
                 adata.X = data
             else:
                 base_data = adata.layers[base_name]
-                saved_data[('vo:', base_name)] = base_data
+                saved_data[(per, base_name)] = base_data
 
     for name, data in _items(annotations):
         action = _slice_action(name, will_slice_obs, will_slice_var,
@@ -541,12 +546,14 @@ def _save_per_data(
 
 
 def _restore_data(saved_data: Dict[Tuple[str, str], Any], adata: AnnData) -> None:
-    per_annotations = dict(vo=adata.layers,
+    per_annotations = dict(m=adata.uns,
                            o=adata.obs,
                            v=adata.var,
+                           vo=adata.layers,
                            oo=adata.obsp,
                            vv=adata.varp,
-                           m=adata.uns)
+                           oa=adata.obsm,
+                           va=adata.varm)
     for (per, name), data in saved_data.items():
         per_annotations[per][name] = data
 
@@ -563,6 +570,8 @@ def _fix_data(
                         bdata.var,
                         bdata.obsp,
                         bdata.varp,
+                        bdata.obsm,
+                        bdata.varm,
                         bdata.uns):
         _fix_per_data(annotations, did_slice_obs, did_slice_var,
                       invalidated_prefix, invalidated_suffix)
@@ -687,7 +696,7 @@ def get_vector_parameter_data(
 
 @utm.timed_call()
 @utd.expand_doc()
-def get_data(
+def get_data(  # pylint: disable=too-many-return-statements
     adata: AnnData,
     name: Optional[str] = None,
     *,
@@ -705,8 +714,8 @@ def get_data(
     If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
 
     If ``inplace`` (default: {inplace}), store the data for future reuse. This requires ``per`` (one
-    of: ``vo``, ``vv``, ``oo``, ``v``, ``o``, ``m``, default: {per}) to specify where to store the
-    data.
+    of: ``vo``, ``vv``, ``oo``, ``va``, ``oa``, ``v``, ``o``, ``m``, default: {per}) to specify
+    where to store the data.
 
     If the data is per-variable-per-observation, and ``infocus`` (default: {infocus}, implies
     ``inplace``), also makes the result the new focus.
@@ -733,6 +742,14 @@ def get_data(
 
     if per == 'vv' or (per is None and name in adata.varp):
         return get_vv_data(adata, name, compute=compute,
+                           inplace=inplace, layout=layout)
+
+    if per == 'oa' or (per is None and name in adata.obsm):
+        return get_oa_data(adata, name, compute=compute,
+                           inplace=inplace, layout=layout)
+
+    if per == 'va' or (per is None and name in adata.varm):
+        return get_va_data(adata, name, compute=compute,
                            inplace=inplace, layout=layout)
 
     assert layout is None
@@ -823,7 +840,7 @@ def has_data(
     '''
     assert layout is None or layout in utt.LAYOUT_OF_AXIS
 
-    for annotations in (adata.layers, adata.obsp, adata.varp):
+    for annotations in (adata.layers, adata.obsp, adata.varp, adata.obsm, adata.varm):
         if (id(annotations) == id(adata.layers) and name == get_x_name(adata)) \
                 or name in annotations:
             if layout is None:
@@ -863,7 +880,9 @@ def data_per(
                             ('o', adata.obs),
                             ('v', adata.var),
                             ('oo', adata.obsp),
-                            ('vv', adata.varp)):
+                            ('vv', adata.varp),
+                            ('oa', adata.obsm),
+                            ('va', adata.varm)):
         if name in annotation:
             return per
 
@@ -992,7 +1011,7 @@ def get_oo_data(
     '''
     return _get_layout_data(adata, 'oo', adata.obsp,
                             shape=(adata.n_obs, adata.n_obs),
-                            per_text='pre-observation-per-observation',
+                            per_text='per-observation-per-observation',
                             name=name, compute=compute,
                             inplace=inplace, layout=layout)
 
@@ -1029,7 +1048,81 @@ def get_vv_data(
     '''
     return _get_layout_data(adata, 'vv', adata.varp,
                             shape=(adata.n_vars, adata.n_vars),
-                            per_text='pre-variable-per-variable',
+                            per_text='per-variable-per-variable',
+                            name=name, compute=compute,
+                            inplace=inplace, layout=layout)
+
+
+@utm.timed_call()
+@utd.expand_doc()
+def get_oa_data(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Matrix]] = None,
+    inplace: bool = True,
+    layout: Optional[str] = None,
+) -> utt.Matrix:
+    '''
+    Lookup per-observation-per-any (cell) data in ``adata`` by its ``name``.
+
+    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
+
+    If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
+
+    If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
+    ``column_major`` (genes). This returns the data in a layout optimized for by-observation
+    (row-major / csr) or by-variable (column-major / csc). If also ``inplace``, this is cached in an
+    additional "hidden" annotation whose name is suffixed (e.g. ``...:__row_major__``).
+
+    .. note::
+
+        * In general names that contain ``__`` are reserved and should not be explicitly used.
+
+        * The original data returned by ``compute`` is always preserved under its non-suffixed name.
+
+        * The caller is responsible for specifying the slicing behavior of the data.
+    '''
+    return _get_layout_data(adata, 'oa', adata.obsp,
+                            shape=(adata.n_obs, 0),
+                            per_text='per-observation-per-any',
+                            name=name, compute=compute,
+                            inplace=inplace, layout=layout)
+
+
+@utm.timed_call()
+@utd.expand_doc()
+def get_va_data(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Matrix]] = None,
+    inplace: bool = True,
+    layout: Optional[str] = None,
+) -> utt.Matrix:
+    '''
+    Lookup per-variable-per-variable (gene) data in ``adata``.
+
+    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
+
+    If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
+
+    If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
+    ``column_major`` (genes). This returns the data in a layout optimized for by-observation
+    (row-major / csr) or by-variable (column-major / csc). If also ``inplace``, this is cached in an
+    additional "hidden" annotation whose name is suffixed (e.g. ``...:__row_major__``).
+
+    .. note::
+
+        * In general names that contain ``__`` are reserved and should not be explicitly used.
+
+        * The original data returned by ``compute`` is always preserved under its non-suffixed name.
+
+        * The caller is responsible for specifying the slicing behavior of the data.
+    '''
+    return _get_layout_data(adata, 'va', adata.varm,
+                            shape=(adata.n_vars, 0),
+                            per_text='per-variable-per-any',
                             name=name, compute=compute,
                             inplace=inplace, layout=layout)
 
@@ -1078,7 +1171,7 @@ def get_vo_data(
 
     data = _get_layout_data(adata, 'vo', adata.layers,
                             shape=(adata.n_obs, adata.n_vars),
-                            per_text='pre-variable-per-observation',
+                            per_text='per-variable-per-observation',
                             name=name, compute=compute,
                             inplace=inplace or infocus, layout=layout)
 
@@ -1163,7 +1256,10 @@ def _get_shaped_data(
 
     data = compute()
     assert data is not None
-    assert data.shape == shape
+    if len(shape) == 2 and shape[1] == 0:
+        assert data.shape[0] == shape[0]
+    else:
+        assert data.shape == shape
     assert utt.is_canonical(data)
 
     if inplace:
@@ -1331,7 +1427,9 @@ def _all_data(adata: AnnData) -> Set[str]:
     names: Set[str] = set()
 
     for annotations in (adata.layers, adata.uns,
-                        adata.obs, adata.var, adata.obsp, adata.varp):
+                        adata.obs, adata.var,
+                        adata.obsp, adata.varp,
+                        adata.obsm, adata.varm):
         for name, _ in _items(annotations):
             names.add(name)
 
@@ -1489,6 +1587,58 @@ def set_vv_data(
 
 
 @utm.timed_call()
+def set_oa_data(
+    adata: AnnData,
+    name: str,
+    data: utt.Matrix,
+    slicing_mask: Optional[SlicingMask] = None,
+    log_value: Optional[Callable[[], str]] = None
+) -> Any:
+    '''
+    Set per-observation-per-any (cell) meta-data.
+
+    Optionally specify the ``slicing_mask`` for this data.
+
+    If ``log_value`` is specified, its results is used when logging the operation.
+    '''
+    _log_set_data(adata, 'oa', name, data, log_value=log_value)
+
+    assert utt.is_canonical(data)
+    if not utt.frozen(data):
+        utt.freeze(data)
+
+    adata.obsm[name] = data
+    if slicing_mask is not None:
+        safe_slicing_data(name, slicing_mask)
+
+
+@utm.timed_call()
+def set_va_data(
+    adata: AnnData,
+    name: str,
+    data: utt.Matrix,
+    slicing_mask: Optional[SlicingMask] = None,
+    log_value: Optional[Callable[[], str]] = None
+) -> Any:
+    '''
+    Set per-variable-per-any (gene) meta-data.
+
+    Optionally specify the ``slicing_mask`` for this data.
+
+    If ``log_value`` is specified, its results is used when logging the operation.
+    '''
+    _log_set_data(adata, 'va', name, data, log_value=log_value)
+
+    assert utt.is_canonical(data)
+    if not utt.frozen(data):
+        utt.freeze(data)
+
+    adata.varm[name] = data
+    if slicing_mask is not None:
+        safe_slicing_data(name, slicing_mask)
+
+
+@utm.timed_call()
 @utd.expand_doc()
 def set_vo_data(
     adata: AnnData,
@@ -1528,7 +1678,11 @@ def set_vo_data(
 
 
 MEMBER_OF_PER = \
-    dict(m='uns', o='obs', v='var', oo='obsp', vv='varp', vo='layers', x='X')
+    dict(m='uns',
+         o='obs', v='var',
+         oo='obsp', vv='varp',
+         oa='obsm', va='varm',
+         vo='layers', x='X')
 
 
 def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branches,too-many-statements
