@@ -70,7 +70,7 @@ def test_focus_on() -> None:
             inner_focus = 'test|downsample_10_var_per_obs'
             assert ut.get_focus_name(adata) == inner_focus
             assert id(downsamled_data.proper) == id(adata.layers[inner_focus])
-            ut.del_vo_data(adata, outer_focus)
+            ut.del_data(adata, outer_focus, per='vo')
 
         assert ut.get_focus_name(adata) == 'test'
 

@@ -50,7 +50,7 @@ def find_properly_sampled_cells(
     **Returns**
 
     Observation (Cell) Annotations
-        ``properly_sampled_cells``
+        ``properly_sampled_cell``
             A boolean mask indicating whether each cell has a "proper" amount of samples.
 
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
@@ -83,11 +83,11 @@ def find_properly_sampled_cells(
                 cells_mask & (total_of_cells <= max_cell_total)
 
     if inplace:
-        ut.set_o_data(adata, 'properly_sampled_cells',
+        ut.set_o_data(adata, 'properly_sampled_cell',
                       cells_mask, ut.SAFE_WHEN_SLICING_OBS)
         return None
 
-    ut.log_mask(LOG, level, 'properly_sampled_cells', cells_mask)
+    ut.log_mask(LOG, level, 'properly_sampled_cell', cells_mask)
 
     return pd.Series(cells_mask, index=adata.obs_names)
 
@@ -122,7 +122,7 @@ def find_properly_sampled_genes(
     **Returns**
 
     Variable (Gene) Annotations
-        ``properly_sampled_genes``
+        ``properly_sampled_gene``
             A boolean mask indicating whether each gene has a "proper" number of samples.
 
     If ``inplace`` (default: {inplace}), this is written to the data and the function returns
@@ -144,10 +144,10 @@ def find_properly_sampled_genes(
         genes_mask = total_of_genes >= min_gene_total
 
     if inplace:
-        ut.set_v_data(adata, 'properly_sampled_genes',
+        ut.set_v_data(adata, 'properly_sampled_gene',
                       genes_mask, ut.SAFE_WHEN_SLICING_OBS)
         return None
 
-    ut.log_mask(LOG, level, 'properly_sampled_genes', genes_mask)
+    ut.log_mask(LOG, level, 'properly_sampled_gene', genes_mask)
 
     return pd.Series(genes_mask, index=adata.obs_names)

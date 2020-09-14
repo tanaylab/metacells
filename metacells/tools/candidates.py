@@ -52,7 +52,7 @@ def compute_candidate_metacells(
     **Returns**
 
     Observation (Cell) Annotations
-        ``candidate_metacell``
+        ``candidate``
             The integer index of the (raw, candidate) metacell each cell belongs to. The metacells
             are in no particular order.
 
@@ -169,14 +169,12 @@ def compute_candidate_metacells(
         community_of_cells = ut.compress_indices(improver.membership)
 
     if inplace:
-        ut.set_o_data(adata, 'candidate_metacell',
-                      community_of_cells, ut.NEVER_SAFE,
+        ut.set_o_data(adata, 'candidate', community_of_cells, ut.NEVER_SAFE,
                       lambda: str(np.max(community_of_cells) + 1) + ' metacells')
         return None
 
     if LOG.isEnabledFor(level):
-        LOG.log(level, '  candidate_metacell: %s',
-                np.max(community_of_cells) + 1)
+        LOG.log(level, '  candidate: %s', np.max(community_of_cells) + 1)
 
     return pd.Series(community_of_cells, index=adata.obs_names)
 

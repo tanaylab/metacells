@@ -38,6 +38,8 @@ __all__ = [
     'log_operation',
     'log_of',
     'log_mask',
+    'sizes_description',
+    'groups_description',
     'mask_description',
     'ratio_description',
     'fraction_description',
@@ -217,6 +219,28 @@ def log_mask(
     '''
     if logger.isEnabledFor(level):
         logger.log(level, '  %s: %s', name, mask_description(mask))
+
+
+def sizes_description(sizes: utt.Vector) -> str:
+    '''
+    Return a string for logging an array of sizes.
+
+    This returns the mean size.
+    '''
+    mean = np.mean(utt.to_dense_vector(sizes))
+    return 'mean size %.2f' % mean
+
+
+def groups_description(groups: utt.Vector) -> str:
+    '''
+    Return a string for logging an array of group indices.
+
+    This returns the number and mean size of the groups.
+    '''
+    groups = utt.to_dense_vector(groups)
+    count = np.max(groups) + 1
+    return '%s groups with mean size %.2f' \
+        % (count, np.sum(groups >= 0) / max(count, 1))
 
 
 def mask_description(mask: utt.Vector) -> str:

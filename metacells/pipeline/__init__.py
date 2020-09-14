@@ -13,7 +13,4 @@ All the functions included here are exported under ``metacells.pl``.
 '''
 
 from .clean import *
-from .complete import *
 from .direct import *
-from .divide_and_conquer import *
-from .results import *

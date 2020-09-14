@@ -18,8 +18,6 @@ import metacells.utilities.timing as utm
 import metacells.utilities.typing as utt
 
 __all__ = [
-    'track_base_indices',
-
     'NamedShaped',
     'NamedMatrix',
     'NamedVector',
@@ -57,20 +55,6 @@ __all__ = [
     'get_obs_obs_correlation',
     'get_var_var_correlation',
 ]
-
-
-@utd.expand_doc()
-def track_base_indices(adata: AnnData, *, name: str = 'base_index') -> None:
-    '''
-    Create ``obs_<name>`` per-observation (cells) and ``var_<name>`` per-variable (genes) data,
-    (default ``name``: {name}), which will be preserved when creating any
-    :py:func:`metacells.utilities.annotation.slice` of the data to easily refer back to the original
-    full data.
-    '''
-    uta.set_o_data(adata, 'obs_' + name,
-                   np.arange(adata.n_obs), uta.ALWAYS_SAFE)
-    uta.set_v_data(adata, 'var_' + name,
-                   np.arange(adata.n_vars), uta.ALWAYS_SAFE)
 
 
 class NamedShaped(NamedTuple):

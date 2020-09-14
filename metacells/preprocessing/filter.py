@@ -26,7 +26,10 @@ def filter_data(  # pylint: disable=too-many-branches
     adata: AnnData,
     masks: List[str],
     *,
-    to: Optional[str] = 'included',
+    mask_obs: Optional[str] = None,
+    mask_var: Optional[str] = None,
+    track_obs: Optional[str] = None,
+    track_var: Optional[str] = None,
     name: Optional[str] = None,
     tmp: bool = False,
     invalidated_prefix: Optional[str] = None,
@@ -49,8 +52,9 @@ def filter_data(  # pylint: disable=too-many-branches
 
     **Returns**
 
-    An annotated data containing a subset of the cells and genes, the observations (cells) mask, and
-    the variables (genes) mask.
+    An annotated data containing a subset of the observations (cells) and variables (genes).
+
+    If no observations and/or no variables were selected by the filter, return ``None``.
 
     If ``name`` is specified, this will be the logging name of the new data. Otherwise, it will be
     unnamed.
@@ -59,27 +63,28 @@ def filter_data(  # pylint: disable=too-many-branches
     ``DEBUG`` logging level. By default, logging of modifications is done using the ``INFO`` logging
     level.
 
-    If ``to`` (default: {to}) is specified, store the mask in ``<to>_cells`` and ``<to>_genes``
-    annotations of the full data.
+    If ``mask_obs`` and/or ``mask_var`` are specified, store the mask of the selected data as a
+    per-observation and/or per-variable annotation of the full ``adata``.
 
-    If no cells and/or no genes were selected by the filter, return ``None``.
+    If ``track_obs`` and/or ``track_var`` are specified, store the original indices of the selected
+    data as a per-observation and/or per-variable annotation of the result data.
 
     **Computation Parameters**
 
     1. For each of the mask in ``masks``, fetch it. Silently ignore missing masks if the name has a
        ``?`` suffix. Invert the mask if the name has a ``~`` suffix. Bitwise-AND the appropriate
-       (cells or genes) mask with the result.
+       (observations or variables) mask with the result.
 
-    2. If the final cells or genes mask is empty, return None. Otherwise, return a slice of the full
-       data containing just the cells and genes specified by the final masks. If
-       ``invalidated_prefix`` (default: {invalidated_prefix}) and/or ``invalidated_suffix``
+    2. If the final observations or variables mask is empty, return None. Otherwise, return a slice
+       of the full data containing just the observations and variables specified by the final masks.
+       If ``invalidated_prefix`` (default: {invalidated_prefix}) and/or ``invalidated_suffix``
        (default: {invalidated_suffix}) are specified, then invalidated data will not be removed;
        instead it will be renamed with the addition of the provided prefix and/or suffix.
     '''
     _, level = ut.log_operation(LOG, adata, 'filter_data')
 
-    cells_mask = np.full(adata.n_obs, True, dtype='bool')
-    genes_mask = np.full(adata.n_vars, True, dtype='bool')
+    obs_mask = np.full(adata.n_obs, True, dtype='bool')
+    vars_mask = np.full(adata.n_vars, True, dtype='bool')
 
     for mask_name in masks:
         log_mask_name = mask_name
@@ -106,33 +111,41 @@ def filter_data(  # pylint: disable=too-many-branches
         if invert:
             mask = ~mask
 
-        if LOG.isEnabledFor(logging.DEBUG):
-            LOG.debug('  %s: %s', log_mask_name, ut.mask_description(mask))
-
         if per == 'o':
-            cells_mask = cells_mask & mask
+            obs_mask = obs_mask & mask
+            per_name = 'observations'
         elif per == 'v':
-            genes_mask = genes_mask & mask
+            vars_mask = vars_mask & mask
+            per_name = 'variables'
         else:
             raise ValueError('the data: %s '
                              'is not per-observation or per-variable'
                              % mask_name)
 
-    if to is not None:
-        ut.set_o_data(adata, to + '_cells', cells_mask, ut.NEVER_SAFE)
-        ut.set_v_data(adata, to + '_genes', genes_mask, ut.NEVER_SAFE)
+        if LOG.isEnabledFor(logging.DEBUG):
+            LOG.debug('  %s (%s): %s', log_mask_name,
+                      per_name, ut.mask_description(mask))
+
+    if mask_obs is not None:
+        ut.set_o_data(adata, mask_obs, obs_mask, ut.ALWAYS_SAFE)
 
     elif LOG.isEnabledFor(level):
-        ut.log_mask(LOG, level, 'cells', cells_mask)
-        ut.log_mask(LOG, level, 'genes', genes_mask)
+        ut.log_mask(LOG, level, 'observations', obs_mask)
 
-    if not np.any(cells_mask) or not np.any(genes_mask):
+    if mask_var is not None:
+        ut.set_v_data(adata, mask_var, vars_mask, ut.ALWAYS_SAFE)
+
+    elif LOG.isEnabledFor(level):
+        ut.log_mask(LOG, level, 'variables', vars_mask)
+
+    if not np.any(obs_mask) or not np.any(vars_mask):
         return None
 
     fdata = ut.slice(adata, name=name, tmp=tmp,
-                     obs=cells_mask, vars=genes_mask,
+                     obs=obs_mask, vars=vars_mask,
+                     track_obs=track_obs, track_var=track_var,
                      invalidated_prefix=invalidated_prefix,
                      invalidated_suffix=invalidated_suffix)
 
-    return fdata, pd.Series(cells_mask, index=adata.obs_names), \
-        pd.Series(genes_mask, index=adata.var_names)
+    return fdata, pd.Series(obs_mask, index=adata.obs_names), \
+        pd.Series(vars_mask, index=adata.var_names)

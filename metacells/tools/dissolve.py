@@ -28,7 +28,8 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
     adata: AnnData,
     *,
     of: Optional[str] = None,
-    candidate_metacells: Union[str, ut.Vector] = 'candidate_metacell',
+    to: str = 'metacell',
+    candidates: Union[str, ut.Vector] = 'candidate',
     deviants: Optional[Union[str, ut.Vector]] = 'cell_deviant_votes',
     target_metacell_size: int = pr.dissolve_target_metacell_size,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.dissolve_cell_sizes,
@@ -49,20 +50,19 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
     **Returns**
 
     Observation (Cell) Annotations
-        ``solid_metacell``
+        ``<to>`` (default: {to})
             The integer index of the metacell each cell belongs to. The metacells are in no
             particular order. Cells with no metacell assignment are given a metacell index of
             ``-1``.
 
-        ``cell_dissolves``
-            Either 1 if the cell was in a dissolved metacell or 0 if it wasn't. This isn't a simple
-            boolean to be compatible with the divide-and-conquer algorithm.
+        ``dissolved`` (if ``intermediate``)
+            A boolean mask of the cells which were in a dissolved metacell.
 
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas data frame (indexed by the observation names).
 
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
+    If ``intermediate`` (default: {intermediate}), also keep all all the intermediate data (e.g.
+    sums) for future reuse. Otherwise, discard it.
 
     **Computation Parameters**
 
@@ -93,14 +93,14 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
     '''
     of, level = ut.log_operation(LOG, adata, 'dissolve_metacells', of)
 
-    dissolve_of_cells = np.zeros(adata.n_obs, dtype='int32')
+    dissolved_of_cells = np.zeros(adata.n_obs, dtype='bool')
 
     with ut.focus_on(ut.get_vo_data, adata, of,
                      layout='row_major', intermediate=intermediate) as data:
 
         candidate_of_cells = \
-            ut.get_vector_parameter_data(LOG, level, adata, candidate_metacells,
-                                         per='o', name='candidate_metacells')
+            ut.get_vector_parameter_data(LOG, level, adata, candidates,
+                                         per='o', name='candidates')
         candidate_of_cells = np.copy(candidate_of_cells)
         assert candidate_of_cells is not None
         raw_candidates_count = np.max(candidate_of_cells) + 1
@@ -152,7 +152,7 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
                                        min_convincing_gene_fold_factor=min_convincing_gene_fold_factor,
                                        candidates_count=candidates_count,
                                        candidate_cell_indices=candidate_cell_indices):
-                    dissolve_of_cells[candidate_cell_indices] = 1
+                    dissolved_of_cells[candidate_cell_indices] = True
                     candidate_of_cells[candidate_cell_indices] = -1
                     did_dissolve = True
 
@@ -167,24 +167,26 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
         metacells_count = -1
 
     if inplace:
-        ut.set_o_data(adata, 'cell_dissolves', dissolve_of_cells, ut.NEVER_SAFE,
-                      log_value=lambda:
-                      ut.mask_description(dissolve_of_cells > 0))
-        ut.set_o_data(adata, 'solid_metacell', metacell_of_cells, ut.NEVER_SAFE,
+        if intermediate:
+            ut.set_o_data(adata, 'dissolved', dissolved_of_cells, ut.NEVER_SAFE,
+                          log_value=lambda:
+                          ut.mask_description(dissolved_of_cells))
+
+        ut.set_o_data(adata, to, metacell_of_cells, ut.NEVER_SAFE,
                       log_value=lambda:
                       ut.ratio_description(metacells_count,
                                            raw_candidates_count))
         return None
 
     if LOG.isEnabledFor(level):
-        LOG.log(level, '  cell_dissolves: %s',
-                ut.mask_description(dissolve_of_cells > 0))
-        LOG.log(level, '  solid_metacell: %s',
+        LOG.log(level, '  dissolved: %s',
+                ut.mask_description(dissolved_of_cells))
+        LOG.log(level, '  %s: %s', to,
                 ut.ratio_description(metacells_count, raw_candidates_count))
 
     obs_frame = pd.DataFrame(index=adata.obs_names)
-    obs_frame['cell_dissolves'] = dissolve_of_cells
-    obs_frame['solid_metacell'] = metacell_of_cells
+    obs_frame['dissolved'] = dissolved_of_cells
+    obs_frame[to] = metacell_of_cells
     return obs_frame
 
 

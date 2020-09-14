@@ -31,7 +31,7 @@ def find_deviant_cells(
     adata: AnnData,
     *,
     of: Optional[str] = None,
-    candidate_metacells: Union[str, ut.Vector] = 'candidate_metacell',
+    candidates: Union[str, ut.Vector] = 'candidate',
     min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     max_gene_fraction: float = pr.deviants_max_gene_fraction,
     max_cell_fraction: float = pr.deviants_max_cell_fraction,
@@ -108,11 +108,11 @@ def find_deviant_cells(
                      intermediate=intermediate) as data:
         cells_count, genes_count = data.shape
 
-        candidate_metacell_of_cells = \
-            ut.get_vector_parameter_data(LOG, level, adata, candidate_metacells,
-                                         per='o', name='candidate_metacells')
-        assert candidate_metacell_of_cells is not None
-        assert candidate_metacell_of_cells.size == cells_count
+        candidate_of_cells = \
+            ut.get_vector_parameter_data(LOG, level, adata, candidates,
+                                         per='o', name='candidates')
+        assert candidate_of_cells is not None
+        assert candidate_of_cells.size == cells_count
 
         totals_of_cells = pp.get_per_obs(adata, ut.sum_per).proper
         assert totals_of_cells.size == cells_count
@@ -121,7 +121,7 @@ def find_deviant_cells(
 
         list_of_fold_factors, list_of_cell_index_of_rows = \
             _collect_fold_factors(data=data,
-                                  candidate_metacell_of_cells=candidate_metacell_of_cells,
+                                  candidate_of_cells=candidate_of_cells,
                                   totals_of_cells=totals_of_cells,
                                   min_gene_fold_factor=min_gene_fold_factor)
 
@@ -137,7 +137,7 @@ def find_deviant_cells(
                           max_gene_fraction=max_gene_fraction)
 
         if intermediate:
-            ut.set_vo_data(adata, 'fold_factors', fold_factors, ut.NEVER_SAFE)
+            ut.set_vo_data(adata, 'fold_factor', fold_factors, ut.NEVER_SAFE)
 
         deviant_genes_fold_ranks = \
             _fold_ranks(cells_count=cells_count,
@@ -169,7 +169,7 @@ def find_deviant_cells(
 def _collect_fold_factors(
     *,
     data: ut.ProperMatrix,
-    candidate_metacell_of_cells: ut.DenseVector,
+    candidate_of_cells: ut.DenseVector,
     totals_of_cells: ut.DenseVector,
     min_gene_fold_factor: float,
 ) -> Tuple[List[ut.CompressedMatrix], List[ut.DenseVector]]:
@@ -177,55 +177,52 @@ def _collect_fold_factors(
     list_of_cell_index_of_rows: List[ut.DenseVector] = []
 
     cells_count, genes_count = data.shape
-    candidate_metacells_count = np.max(candidate_metacell_of_cells) + 1
+    candidates_count = np.max(candidate_of_cells) + 1
 
-    ut.timed_parameters(candidate_metacells=candidate_metacells_count,
+    ut.timed_parameters(candidates=candidates_count,
                         cells=cells_count, genes=genes_count)
     remaining_cells_count = cells_count
 
-    for candidate_metacell_index in range(candidate_metacells_count):
-        candidate_metacell_cell_indices = \
-            np.where(candidate_metacell_of_cells ==
-                     candidate_metacell_index)[0]
+    for candidate_index in range(candidates_count):
+        candidate_cell_indices = \
+            np.where(candidate_of_cells == candidate_index)[0]
 
-        candidate_metacell_cells_count = candidate_metacell_cell_indices.size
-        assert candidate_metacell_cells_count > 0
+        candidate_cells_count = candidate_cell_indices.size
+        assert candidate_cells_count > 0
 
-        list_of_cell_index_of_rows.append(candidate_metacell_cell_indices)
-        remaining_cells_count -= candidate_metacell_cells_count
+        list_of_cell_index_of_rows.append(candidate_cell_indices)
+        remaining_cells_count -= candidate_cells_count
 
-        totals_of_candidate_metacell_cells = \
-            totals_of_cells[candidate_metacell_cell_indices]
+        totals_of_candidate_cells = totals_of_cells[candidate_cell_indices]
 
-        data_of_candidate_metacell = \
-            data[candidate_metacell_cell_indices, :].copy()
-        assert ut.matrix_layout(data_of_candidate_metacell) == 'row_major'
+        data_of_candidate = data[candidate_cell_indices, :].copy()
+        assert ut.matrix_layout(data_of_candidate) == 'row_major'
 
-        totals_of_candidate_metacell_genes = \
-            ut.sum_per(data_of_candidate_metacell, per='column')
-        assert totals_of_candidate_metacell_genes.size == genes_count
+        totals_of_candidate_genes = ut.sum_per(data_of_candidate, per='column')
+        assert totals_of_candidate_genes.size == genes_count
 
-        fractions_of_candidate_metacell_genes = ut.to_dense_vector(totals_of_candidate_metacell_genes
-                                                                   / np.sum(totals_of_candidate_metacell_genes))
+        fractions_of_candidate_genes = \
+            ut.to_dense_vector(totals_of_candidate_genes
+                               / np.sum(totals_of_candidate_genes))
 
         extension_name = 'fold_factor_%s_t_%s_t_%s_t' \
-            % (data_of_candidate_metacell.data.dtype,
-               data_of_candidate_metacell.indices.dtype,
-               data_of_candidate_metacell.indptr.dtype)
+            % (data_of_candidate.data.dtype,
+               data_of_candidate.indices.dtype,
+               data_of_candidate.indptr.dtype)
         extension = getattr(xt, extension_name)
 
         with ut.timed_step('extensions.fold_factor'):
-            extension(data_of_candidate_metacell.data,
-                      data_of_candidate_metacell.indices,
-                      data_of_candidate_metacell.indptr,
-                      data_of_candidate_metacell.shape[1],
+            extension(data_of_candidate.data,
+                      data_of_candidate.indices,
+                      data_of_candidate.indptr,
+                      data_of_candidate.shape[1],
                       min_gene_fold_factor,
-                      totals_of_candidate_metacell_cells,
-                      fractions_of_candidate_metacell_genes)
+                      totals_of_candidate_cells,
+                      fractions_of_candidate_genes)
 
-        ut.eliminate_zeros(data_of_candidate_metacell)
+        ut.eliminate_zeros(data_of_candidate)
 
-        list_of_fold_factors.append(data_of_candidate_metacell)
+        list_of_fold_factors.append(data_of_candidate)
 
     assert remaining_cells_count == 0
     return list_of_fold_factors, list_of_cell_index_of_rows

@@ -104,8 +104,6 @@ def find_noisy_lonely_genes(
         bdata = adata.copy()
         bdata.uns['__tmp__'] = True
 
-    pp.track_base_indices(bdata, name='sampled_base_index')
-
     downsample_cells(bdata,
                      downsample_cell_quantile=downsample_cell_quantile,
                      random_seed=random_seed,
@@ -116,8 +114,9 @@ def find_noisy_lonely_genes(
                                         min_gene_normalized_variance=min_gene_normalized_variance)
 
     results = pp.filter_data(bdata, name='noisy', tmp=True,
-                             masks=['high_fraction_genes',
-                                    'high_normalized_variance_genes'])
+                             track_var='sampled_gene_index',
+                             masks=['high_fraction_gene',
+                                    'high_normalized_variance_gene'])
     assert results is not None
     ndata = results[0]
 
@@ -138,7 +137,7 @@ def find_noisy_lonely_genes(
 
         lonely_genes_mask = max_similiraity_of_genes < max_gene_similarity
         base_index_of_genes = \
-            ut.to_dense_vector(ut.get_v_data(ndata, 'var_sampled_base_index'))
+            ut.to_dense_vector(ut.get_v_data(ndata, 'sampled_gene_index'))
         lonely_genes_indices = base_index_of_genes[lonely_genes_mask]
 
         noisy_lonely_genes_mask[lonely_genes_indices] = True
@@ -147,7 +146,7 @@ def find_noisy_lonely_genes(
               sorted(list(adata.var_names[noisy_lonely_genes_mask])))
 
     if inplace:
-        ut.set_v_data(adata, 'noisy_lonely_genes',
+        ut.set_v_data(adata, 'noisy_lonely_gene',
                       noisy_lonely_genes_mask, ut.SAFE_WHEN_SLICING_VAR)
         return None
 

@@ -30,7 +30,6 @@ def group_obs_data(
     groups: Union[str, ut.Vector],
     name: Optional[str] = None,
     tmp: bool = False,
-    intermediate: bool = True,
 ) -> Optional[AnnData]:
     '''
     Compute new data which has the sum ``of`` some data of the observations (cells) for each group.
@@ -58,10 +57,7 @@ def group_obs_data(
 
     * An ``X`` member holding the summed-per-group ``of`` data. This will also be the focus.
 
-    * Any per-variable (gene) data or per-variable-per-variable data which is safe when slicing
-      observations (cells).
-
-    * A new ``grouped`` per-observation data which counts, for each group, the numnber
+    * A new ``grouped`` per-observation data which counts, for each group, the number
       of grouped observations summed into it.
 
     If ``name`` is specified, this will be the logging name of the new data. Otherwise, it will be
@@ -70,15 +66,11 @@ def group_obs_data(
     If ``tmp`` (default: {tmp}) is set, logging of modifications to the result will use the
     ``DEBUG`` logging level. By default, logging of modifications is done using the ``INFO`` logging
     level.
-
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. cached
-    layouts) for future reuse. Otherwise, discard it.
     '''
     ut.log_operation(LOG, adata, 'group_obs_data')
     level = ut.get_log_level(adata)
 
-    with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major',
-                     intermediate=intermediate) as data:
+    with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major') as data:
         group_of_cells = \
             ut.get_vector_parameter_data(LOG, level, adata, groups,
                                          per='o', name='groups')
@@ -93,17 +85,10 @@ def group_obs_data(
         ut.setup(gdata, name=name, x_name=ut.get_focus_name(adata), tmp=tmp)
 
         ut.set_o_data(gdata, 'grouped', cell_counts,
-                      log_value=lambda: str(np.mean(cell_counts)))
+                      log_value=lambda:
+                      ut.sizes_description(cell_counts))
 
-        for v_name, v_value in adata.var.items():
-            if ut.safe_slicing_mask(v_name).obs:
-                ut.set_v_data(gdata, v_name, v_value)
-
-        for vv_name, vv_value in adata.varp.items():
-            if ut.safe_slicing_mask(vv_name).obs:
-                ut.set_vv_data(gdata, vv_name, vv_value)
-
-        return gdata
+    return gdata
 
 
 @ut.timed_call()
@@ -114,7 +99,7 @@ def group_obs_annotation(
     *,
     groups: Union[str, ut.Vector],
     name: str,
-    policy: str = 'majority',
+    method: str = 'majority',
     min_value_fraction: float = 0.5,
     conflict: Optional[Any] = None,
     inplace: bool = True,
@@ -147,8 +132,8 @@ def group_obs_annotation(
 
     3. Consider all the ``name`` annotation values of these cells.
 
-    4. Compute an annotation value for the whole group of cells using the ``policy``. Supported
-       policies are:
+    4. Compute an annotation value for the whole group of cells using the ``method``. Supported
+       methods are:
 
        ``unique``
             All the values of all the cells in the group are expected to be the same, use this
@@ -163,25 +148,27 @@ def group_obs_annotation(
     ut.log_operation(LOG, adata, 'group_obs_annotation')
     level = ut.get_log_level(adata)
 
-    assert policy in ('unique', 'majority')
-
     group_of_cells = \
         ut.get_vector_parameter_data(LOG, level, adata, groups,
                                      per='o', name='groups')
     assert group_of_cells is not None
 
     values_of_cells = ut.get_vector_parameter_data(LOG, level, adata, name,
-                                                   per='o', name=name)
+                                                   per='o', name='values')
     assert values_of_cells is not None
 
     value_of_groups = np.empty(gdata.n_obs, dtype=values_of_cells.dtype)
 
-    if policy == 'unique':
+    LOG.log(level, '  method: %s', method)
+
+    assert method in ('unique', 'majority')
+
+    if method == 'unique':
         with ut.timed_step('.unique'):
             value_of_groups[group_of_cells] = values_of_cells
 
     else:
-        assert policy == 'majority'
+        assert method == 'majority'
         with ut.timed_step('.majority'):
             for group_index in range(gdata.n_obs):
                 cells_mask = group_of_cells == group_index

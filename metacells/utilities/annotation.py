@@ -1,4 +1,4 @@
-'''
+''')
 Annotation
 ----------
 
@@ -110,7 +110,7 @@ responsible to ensure that the names of manually set data are also unique.
 import logging
 from contextlib import contextmanager
 from logging import Logger
-from typing import (Any, Callable, Dict, Iterable, Iterator, List,
+from typing import (Any, Callable, Collection, Dict, Iterable, Iterator, List,
                     MutableMapping, NamedTuple, Optional, Set, Sized, Tuple,
                     Union)
 from warnings import warn
@@ -156,7 +156,8 @@ __all__ = [
     'get_va_data',
 
     'get_vo_data',
-    'del_vo_data',
+    'all_data',
+    'del_data',
     'focus_on',
     'intermediate_step',
     'get_name',
@@ -171,6 +172,8 @@ __all__ = [
     'set_vo_data',
     'set_va_data',
     'set_oa_data',
+
+    'annotation_items',
 ]
 
 
@@ -236,7 +239,7 @@ def setup(
                         adata.obsm,
                         adata.varm,
                         adata.uns):
-        for data_name, _ in _items(annotations):
+        for data_name, _ in annotation_items(annotations):
             safe_slicing_data(data_name, ALWAYS_SAFE)
 
 
@@ -345,6 +348,8 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     obs: Optional[Union[Sized, utt.Vector]] = None,
     vars: Optional[Union[Sized, utt.Vector]] = None,
     name: Optional[str] = None,
+    track_obs: Optional[str] = None,
+    track_var: Optional[str] = None,
     tmp: bool = False,
     invalidated_prefix: Optional[str] = None,
     invalidated_suffix: Optional[str] = None,
@@ -355,6 +360,10 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     If ``obs`` and/or ``vars`` are specified, they should include either a boolean
     mask or a collection of indices to include in the data slice. In the case of an indices array,
     it is assumed the indices are unique and sorted, that is that their effect is similar to a mask.
+
+    If ``track_obs`` and/or ``track_var`` are specified, the result slice will include a
+    per-observation and/or per-variable annotation containing the indices of the sliced elements in
+    the original full data.
 
     In general, data might become invalid when slicing (e.g., the per-observation
     ``o:sum_of_vo:...`` data is invalidated when slicing some of the variables). Therefore, such
@@ -453,6 +462,14 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
         focus = bdata.uns['__focus__'] = x_name
     _log_set_data(bdata, 'm', '__focus__', focus, force=True)
 
+    if track_obs is not None:
+        obs_indices = np.arange(adata.n_obs)[obs]
+        set_o_data(bdata, track_obs, obs_indices, ALWAYS_SAFE)
+
+    if track_var is not None:
+        var_indices = np.arange(adata.n_vars)[vars]
+        set_v_data(bdata, track_var, var_indices, ALWAYS_SAFE)
+
     assert x_name not in bdata.layers
     assert has_data(bdata, focus)
 
@@ -522,7 +539,7 @@ def _save_per_data(
                 base_data = adata.layers[base_name]
                 saved_data[(per, base_name)] = base_data
 
-    for name, data in _items(annotations):
+    for name, data in annotation_items(annotations):
         action = _slice_action(name, will_slice_obs, will_slice_var,
                                invalidated_prefix is not None
                                or invalidated_suffix is not None)
@@ -590,7 +607,7 @@ def _fix_per_data(
     invalidated_prefix = invalidated_prefix or ''
     invalidated_suffix = invalidated_suffix or ''
 
-    for name, data in _items(annotations):
+    for name, data in annotation_items(annotations):
         action = _slice_action(name, did_slice_obs, did_slice_var, True)
 
         if action == 'preserve':
@@ -621,7 +638,11 @@ def _fix_per_data(
         annotations[name] = data
 
 
-def _items(annotations: Annotations) -> Iterable[Tuple[str, Any]]:
+def annotation_items(annotations: Annotations) -> Iterable[Tuple[str, Any]]:
+    '''
+    Given some annotations data (such as ``adata.obs``, ``adata.layers``, etc.), iterate on all the
+    name and value pairs it contains.
+    '''
     if isinstance(annotations, pd.DataFrame):
         return annotations.iteritems()
     return annotations.items()
@@ -1272,15 +1293,16 @@ def _get_shaped_data(
 
 
 @utd.expand_doc()
-def del_vo_data(
+def del_data(
     adata: AnnData,
     name: str,
     *,
+    per: Optional[str] = None,
     layout: Optional[str] = None,
     must_exist: bool = False,
 ) -> None:
     '''
-    Delete a per-variable-per-observation matrix in ``adata`` by its ``name``.
+    Delete some data from the ``adata``.
 
     If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` (cells) or
     ``column_major`` (genes). This will only delete the cached layout-specific data, if any. If
@@ -1295,34 +1317,74 @@ def del_vo_data(
 
     .. todo::
 
-        The function :py:func:`del_vo_data` is only required due to the need to delete cached
-        layout-specific data. A better way would be to intercept ``del`` of the ``AnnData``
-        ``layers`` field, but we do not own it.
+        It would be better to replace :py:func:`del_data` with intercepting ``del`` of the
+        ``AnnData`` fields, but we do not own them.
     '''
+    if name.endswith(':__row_major__'):
+        assert layout is None
+        layout = 'row_major'
+        name = name[:-14]
+    elif name.endswith(':__column_major__'):
+        assert layout is None
+        layout = 'column_major'
+        name = name[:-17]
+
     assert '__' not in name
 
-    x_name = get_x_name(adata)
-    assert name != x_name
+    if per is None:
+        per = data_per(adata, name)
+        assert per is not None
 
-    if name == get_focus_name(adata):
-        _log_set_data(adata, 'm', '__focus__', x_name)
-        adata.uns['__focus__'] = x_name
+    _log_del_data(adata, per, name, layout)
+
+    if per == 'vo':
+        x_name = get_x_name(adata)
+        if name == get_focus_name(adata):
+            _log_set_data(adata, 'm', '__focus__', x_name)
+            adata.uns['__focus__'] = x_name
+
+    annotation = _annotation_per(adata, per)
 
     if layout is not None:
         layout_name = '%s:__%s__' % (name, layout)
         if layout_name in adata.layers:
-            del adata.layers[layout_name]
+            del annotation[layout_name]
         elif must_exist:
-            assert layout_name in adata.layers
+            assert layout_name in annotation
         return
 
+    if per == 'vo':
+        assert name != x_name
+
     if must_exist:
-        assert name in adata.layers
+        assert name in annotation
 
     for suffix in ('', ':__row_major__', ':__column_major__'):
         suffixed_name = name + suffix
-        if suffixed_name in adata.layers:
-            del adata.layers[suffixed_name]
+        if suffixed_name in annotation:
+            del annotation[suffixed_name]
+
+
+def _annotation_per(  # pylint: disable=too-many-return-statements
+    adata: AnnData, per: str
+) -> Annotations:
+    if per == 'm':
+        return adata.uns
+    if per == 'vo':
+        return adata.layers
+    if per == 'v':
+        return adata.var
+    if per == 'o':
+        return adata.obs
+    if per == 'vv':
+        return adata.varp
+    if per == 'oo':
+        return adata.obsp
+    if per == 'va':
+        return adata.varm
+    if per == 'oa':
+        return adata.obsm
+    raise ValueError('unknown per: %s' % per)
 
 
 @contextmanager
@@ -1332,6 +1394,7 @@ def focus_on(
     adata: AnnData,
     *args: Any,
     intermediate: bool = True,
+    keep: Optional[Union[str, Collection[str]]] = None,
     **kwargs: Any
 ) -> Iterator[Any]:
     '''
@@ -1342,7 +1405,7 @@ def focus_on(
     focus will revert to whatever is in ``X``.
 
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
+    for future reuse. Otherwise, discard it, unless it is listed in ``keep``.
 
     For example, in order to temporarily focus on the log of some linear measurements,
     write:
@@ -1372,7 +1435,7 @@ def focus_on(
             warn(ignoring_redundant_explict_flags_to_focus_on)
             del kwargs[name]
 
-    with intermediate_step(adata, intermediate=intermediate):
+    with intermediate_step(adata, intermediate=intermediate, keep=keep):
         yield accessor(adata, *args, infocus=True, **kwargs)
 
 
@@ -1382,13 +1445,14 @@ def intermediate_step(
     adata: AnnData,
     *,
     intermediate: bool = True,
+    keep: Optional[Union[str, Collection[str]]] = None,
 ) -> Iterator[None]:
     '''
     Execute some code in a ``with`` statements and restore the focus at the end, if it was modified
     by the wrapped code.
 
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
+    for future reuse. Otherwise, discard it, unless it is listed in ``keep``.
 
     .. note::
 
@@ -1399,9 +1463,14 @@ def intermediate_step(
     if not intermediate:
         old_tmp = '__tmp__' in adata.uns
         adata.uns['__tmp__'] = True
-        old_data = _all_data(adata)
+        old_data = all_data(adata)
 
     old_focus = get_focus_name(adata)
+
+    if keep is None:
+        keep = []
+    elif isinstance(keep, str):
+        keep = [keep]
 
     try:
         yield
@@ -1410,10 +1479,12 @@ def intermediate_step(
         if not intermediate:
             if not old_tmp:
                 del adata.uns['__tmp__']
-            new_data = _all_data(adata)
-            for name in new_data:
-                if name not in old_data:
-                    del_vo_data(adata, name)
+            new_data = all_data(adata)
+            for per, new_names in new_data.items():
+                old_names = old_data[per]
+                for name in new_names:
+                    if name not in old_names and name not in keep:
+                        del_data(adata, name, per=per)
 
         if has_data(adata, old_focus):
             adata.uns['__focus__'] = old_focus
@@ -1423,15 +1494,23 @@ def intermediate_step(
             adata.uns['__focus__'] = x_name
 
 
-def _all_data(adata: AnnData) -> Set[str]:
-    names: Set[str] = set()
+def all_data(adata: AnnData) -> Dict[str, Set[str]]:
+    '''
+    Return all the data stored in the ``adata``.
+    '''
+    names = dict(x=set([get_x_name(adata)]))
 
-    for annotations in (adata.layers, adata.uns,
-                        adata.obs, adata.var,
-                        adata.obsp, adata.varp,
-                        adata.obsm, adata.varm):
-        for name, _ in _items(annotations):
-            names.add(name)
+    for per, annotations in (('m', adata.uns),
+                             ('vo', adata.layers),
+                             ('o', adata.obs),
+                             ('v', adata.var),
+                             ('oo', adata.obsp),
+                             ('vv', adata.varp),
+                             ('oa', adata.obsm),
+                             ('va', adata.varm)):
+        names[per] = set()
+        for name, _ in annotation_items(annotations):
+            names[per].add(name)
 
     return names
 
@@ -1698,11 +1777,6 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
     else:
         level = utl.get_log_level(adata)
 
-#   if utt.Shaped.am(value) and value.ndim == 1:
-#       value = utt.to_dense_vector(value)
-#       if str(value.dtype) != 'object':
-#           LOG.debug('SET %s.%s to %s', get_name(adata) or 'adata', name, np.sum(value * np.arange(value.size)))
-
     if not LOG.isEnabledFor(level):
         return
 
@@ -1774,3 +1848,40 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
         text = ''.join(texts)
         if text != '  ':
             LOG.log(level, text)
+
+
+def _log_del_data(
+    adata: AnnData,
+    per: str,
+    name: str,
+    layout: Optional[str],
+) -> None:
+    if '|' in name:
+        level = logging.DEBUG
+    else:
+        level = utl.get_log_level(adata)
+
+    if not LOG.isEnabledFor(level):
+        return
+
+    texts = ['  ']
+
+    if layout is None:
+        texts.append('deleting ')
+    else:
+        texts.append('uncaching ')
+
+    data_name = get_name(adata)
+    if data_name is not None:
+        texts.append(data_name)
+        texts.append('.')
+    texts.append(MEMBER_OF_PER[per])
+    texts.append('.')
+    texts.append(name)
+
+    if layout is not None:
+        texts.append(' ')
+        texts.append(layout)
+        texts.append(' layout')
+
+    LOG.log(level, ''.join(texts))
