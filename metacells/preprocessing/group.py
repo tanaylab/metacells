@@ -60,8 +60,8 @@ def group_obs_data(
     * A new ``grouped`` per-observation data which counts, for each group, the number
       of grouped observations summed into it.
 
-    If ``name`` is specified, this will be the logging name of the new data. Otherwise, it will be
-    unnamed.
+    If ``name`` is not specified, the data will be unnamed. Otherwise, if it starts with a ``.``, it
+    will be appended to the current name (if any). Otherwise, ``name`` is the new name.
 
     If ``tmp`` (default: {tmp}) is set, logging of modifications to the result will use the
     ``DEBUG`` logging level. By default, logging of modifications is done using the ``INFO`` logging
@@ -82,11 +82,18 @@ def group_obs_data(
         summed_data, cell_counts = results
 
         gdata = AnnData(summed_data)
+
+        if name is not None:
+            if name.startswith('.'):
+                base_name = ut.get_name(adata)
+                if base_name is None:
+                    name = name[1:]
+                else:
+                    name = base_name + name
         ut.setup(gdata, name=name, x_name=ut.get_focus_name(adata), tmp=tmp)
 
         ut.set_o_data(gdata, 'grouped', cell_counts,
-                      log_value=lambda:
-                      ut.sizes_description(cell_counts))
+                      log_value=ut.sizes_description)
 
     return gdata
 

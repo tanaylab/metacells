@@ -201,17 +201,16 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
     max_excess_r2_per_gene[max_excess_r2_per_gene < -5] = None
 
     if inplace:
-        ut.set_v_data(adata, 'gene_max_excess_r2', max_excess_r2_per_gene,
-                      log_value=lambda: _log_r2(max_excess_r2_per_gene))
+        ut.set_v_data(adata, 'gene_max_excess_r2',
+                      max_excess_r2_per_gene, log_value=_log_r2)
         if max_top_r2_per_gene is not None:
             max_top_r2_per_gene[max_top_r2_per_gene < -5] = None
-            ut.set_v_data(adata, 'gene_max_top_r2', max_top_r2_per_gene,
-                          log_value=lambda: _log_r2(max_top_r2_per_gene))
+            ut.set_v_data(adata, 'gene_max_top_r2',
+                          max_top_r2_per_gene, log_value=_log_r2)
         if max_top_shuffled_r2_per_gene is not None:
             max_top_shuffled_r2_per_gene[max_top_shuffled_r2_per_gene < -5] = None
             ut.set_v_data(adata, 'gene_max_top_shuffled_r2',
-                          max_top_shuffled_r2_per_gene,
-                          log_value=lambda: _log_r2(max_top_shuffled_r2_per_gene))
+                          max_top_shuffled_r2_per_gene, log_value=_log_r2)
         return None
 
     if LOG.isEnabledFor(level):

@@ -170,7 +170,8 @@ def compute_candidate_metacells(
 
     if inplace:
         ut.set_o_data(adata, 'candidate', community_of_cells, ut.NEVER_SAFE,
-                      lambda: str(np.max(community_of_cells) + 1) + ' metacells')
+                      log_value=lambda community_of_cells:
+                      str(np.max(community_of_cells) + 1) + ' metacells')
         return None
 
     if LOG.isEnabledFor(level):

@@ -374,8 +374,8 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     will not be removed; instead it will be renamed with the addition of the provided prefix and/or
     suffix.
 
-    If ``name`` is specified, this will be the logging name of the new data. Otherwise, it will be
-    unnamed.
+    If ``name`` is not specified, the data will be unnamed. Otherwise, if it starts with a ``.``, it
+    will be appended to the current name (if any). Otherwise, ``name`` is the new name.
 
     If ``tmp`` is set, logging of modifications to the result will use the ``DEBUG`` logging level.
     By default, logging of modifications is done using the ``INFO`` logging level.
@@ -451,6 +451,12 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     if tmp:
         bdata.uns['__tmp__'] = True
     if name is not None:
+        if name.startswith('.'):
+            base_name = get_name(adata)
+            if base_name is None:
+                name = name[1:]
+            else:
+                name = base_name + name
         bdata.uns['__name__'] = name
         LOG.log(utl.get_log_level(bdata),
                 '  sliced %s shape %s', name, bdata.shape)
@@ -1544,7 +1550,7 @@ def set_m_data(
     name: str,
     data: Any,
     slicing_mask: Optional[SlicingMask] = None,
-    log_value: Optional[Callable[[], str]] = None,
+    log_value: Optional[Callable[[Any], Optional[str]]] = None,
 ) -> Any:
     '''
     Set unstructured meta-data.
@@ -1566,7 +1572,7 @@ def set_o_data(
     name: str,
     data: utt.Vector,
     slicing_mask: Optional[SlicingMask] = None,
-    log_value: Optional[Callable[[], str]] = None,
+    log_value: Optional[Callable[[Any], Optional[str]]] = None,
 ) -> Any:
     '''
     Set per-observation (cell) meta-data.
@@ -1593,7 +1599,7 @@ def set_v_data(
     name: str,
     data: utt.Vector,
     slicing_mask: Optional[SlicingMask] = None,
-    log_value: Optional[Callable[[], str]] = None
+    log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
     Set per-variable (gene) meta-data.
@@ -1619,7 +1625,7 @@ def set_oo_data(
     name: str,
     data: utt.Matrix,
     slicing_mask: Optional[SlicingMask] = None,
-    log_value: Optional[Callable[[], str]] = None
+    log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
     Set per-observation-per-observation (cell) meta-data.
@@ -1645,7 +1651,7 @@ def set_vv_data(
     name: str,
     data: utt.Matrix,
     slicing_mask: Optional[SlicingMask] = None,
-    log_value: Optional[Callable[[], str]] = None
+    log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
     Set per-variable-per-variable (gene) meta-data.
@@ -1671,7 +1677,7 @@ def set_oa_data(
     name: str,
     data: utt.Matrix,
     slicing_mask: Optional[SlicingMask] = None,
-    log_value: Optional[Callable[[], str]] = None
+    log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
     Set per-observation-per-any (cell) meta-data.
@@ -1697,7 +1703,7 @@ def set_va_data(
     name: str,
     data: utt.Matrix,
     slicing_mask: Optional[SlicingMask] = None,
-    log_value: Optional[Callable[[], str]] = None
+    log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
     Set per-variable-per-any (gene) meta-data.
@@ -1725,7 +1731,7 @@ def set_vo_data(
     data: utt.Matrix,
     slicing_mask: Optional[SlicingMask] = None,
     *,
-    log_value: Optional[Callable[[], str]] = None,
+    log_value: Optional[Callable[[Any], Optional[str]]] = None,
     infocus: bool = False,
 ) -> Any:
     '''
@@ -1770,7 +1776,7 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
     name: str,
     value: Any = None,
     force: bool = False,
-    log_value: Optional[Callable[[], str]] = None,
+    log_value: Optional[Callable[[Any], Optional[str]]] = None,
 ) -> None:
     if '|' in name:
         level = logging.DEBUG
@@ -1805,7 +1811,7 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
         texts.append(name)
 
         if log_value is not None:
-            value = log_value()
+            value = log_value(value)
             assert isinstance(value, str)
 
         if value is None:
@@ -1856,10 +1862,12 @@ def _log_del_data(
     name: str,
     layout: Optional[str],
 ) -> None:
-    if '|' in name:
-        level = logging.DEBUG
-    else:
-        level = utl.get_log_level(adata)
+    level = logging.DEBUG
+
+#   if '|' in name:
+#       level = logging.DEBUG
+#   else:
+#       level = utl.get_log_level(adata)
 
     if not LOG.isEnabledFor(level):
         return

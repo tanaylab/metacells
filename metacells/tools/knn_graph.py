@@ -236,7 +236,7 @@ def _compute_elements_knn_graph(
         if when:
             name = elements + '_' + name
             set_data(adata, name, matrix, slicing_mask,
-                     log_value=lambda:
+                     log_value=lambda matrix:
                      ut.ratio_description(matrix.nnz,
                                           matrix.shape[0] * matrix.shape[1]))
         else:

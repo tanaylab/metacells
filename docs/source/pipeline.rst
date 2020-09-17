@@ -8,3 +8,6 @@ Pipeline
 
 .. automodule:: metacells.pipeline.direct
     :members:
+
+.. automodule:: metacells.pipeline.divide_and_conquer
+    :members:

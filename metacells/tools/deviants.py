@@ -33,8 +33,8 @@ def find_deviant_cells(
     of: Optional[str] = None,
     candidates: Union[str, ut.Vector] = 'candidate',
     min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
-    max_gene_fraction: float = pr.deviants_max_gene_fraction,
-    max_cell_fraction: float = pr.deviants_max_cell_fraction,
+    max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
+    max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
     inplace: bool = True,
     intermediate: bool = True,
 ) -> Optional[Tuple[ut.PandasSeries, ut.PandasSeries]]:
@@ -98,6 +98,12 @@ def find_deviant_cells(
        {max_cell_fraction}), reduce the maximal rank such that at most this fraction of cells are
        selected as deviants.
     '''
+    if max_gene_fraction is None:
+        max_gene_fraction = 1
+
+    if max_cell_fraction is None:
+        max_cell_fraction = 1
+
     assert min_gene_fold_factor > 0
     assert 0 < max_gene_fraction < 1
     assert 0 < max_cell_fraction < 1

@@ -10,7 +10,7 @@ divide-and-conquer method.
 
 import logging
 from re import Pattern
-from typing import Collection, Optional, Union
+from typing import Any, Callable, Collection, Optional, Union
 
 import numpy as np  # type: ignore
 from anndata import AnnData
@@ -26,7 +26,7 @@ __all__ = [
     'direct_pipeline',
     'compute_direct_metacells',
     'extract_feature_data',
-    'collect_direct_metacells',
+    'collect_metacells',
 ]
 
 
@@ -57,6 +57,7 @@ def direct_pipeline(
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_log_normalization: float = pr.cells_similarity_log_normalization,
     cells_repeated_similarity: bool = pr.cells_repeated_similarity,
+    target_metacell_size: int = pr.target_metacell_size,
     knn_k: Optional[int] = pr.knn_k,
     knn_balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     knn_incoming_degree_factor: float = pr.knn_incoming_degree_factor,
@@ -66,15 +67,14 @@ def direct_pipeline(
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
     must_complete_cover: bool = False,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
-    deviants_max_gene_fraction: float = pr.deviants_max_gene_fraction,
-    deviants_max_cell_fraction: float = pr.deviants_max_cell_fraction,
+    deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
+    deviants_max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
     dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
-    target_metacell_size: int = pr.target_metacell_size,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     random_seed: int = pr.random_seed,
-    results_name: str = 'metacells',
+    results_name: str = '.metacells',
     results_tmp: bool = False,
     intermediate: bool = True,
 ) -> Optional[AnnData]:
@@ -126,7 +126,7 @@ def direct_pipeline(
 
         ``candidate`` (if ``intermediate``)
             The index of the candidate metacell each cell was assigned to to. This is ``-1`` for
-            excluded cells.
+            non-"clean" cells.
 
     Sets the following in the full ``adata``:
 
@@ -184,78 +184,9 @@ def direct_pipeline(
             The integer index of the metacell each cell belongs to. The metacells are in no
             particular order. This is ``-1`` for outlier cells and ``-2`` for non-"clean" cells.
 
-
-
-
-
-    Sets the following in the full ``adata``:
-
-    Variable (Gene) Annotations
-        ``high_fraction_gene`` (if ``intermediate``)
-            A boolean mask of genes with "high" expression level.
-
-        ``high_relative_variance_gene`` (if ``intermediate``)
-            A boolean mask of genes with "high" normalized variance, relative to other genes with a
-            similar expression level.
-
-        ``forbidden`` (if ``intermediate``)
-            A boolean mask of genes which are forbidden from being chosen as "feature" genes based
-            on their name.
-
-        ``feature``
-            A boolean mask of the "feature" genes.
-
-        ``gene_deviant_votes`` (if ``intermediate``)
-            The number of cells each gene marked as deviant (if zero, the gene did not mark any cell
-            as deviant). This will be zero for non-"feature" genes.
-
-    Observation (Cell) Annotations
-        ``candidate`` (if ``intermediate``)
-            The index of the candidate metacell each cell was assigned to to. This is ``-1`` for
-            non-"clean" cells.
-
-        ``cell_deviant_votes`` (if ``intermediate``)
-            The number of genes that were the reason the cell was marked as deviant (if zero, the
-            cell is not deviant).
-
-        ``dissolved`` (if ``intermediate``)
-            A boolean mask of the cells contained in a dissolved metacell.
-
-        ``metacell``
-            The integer index of the metacell each cell belongs to. The metacells are in no
-            particular order. Cells with no metacell assignment ("outliers") are given a metacell
-            index of ``-1``.
-
-
-    Observations (Cell) Annotations
-        ``clean_cell`` (if ``intermediate``)
-            A boolean mask of the "clean" cells.
-
-        ``metacell``
-            The index of the metacell each cell belongs to. This is ``-1`` for outlier cells and
-            ``-2`` for excluded cells.
-
-        ``candidate`` (if ``intermediate``)
-            The index of the candidate metacell each cell was assigned to to. This is ``-1`` for
-            excluded cells.
-
-        ``cell_deviant_votes`` (if ``intermediate``)
-            The number of genes that were the reason the cell was marked as deviant (if zero, the
-            cell is not deviant).
-
-        ``dissolved`` (if ``intermediate``)
-            A boolean mask of the cells contained in a dissolved metacell.
-
-    Variable (Gene) Annotations
-        ``clean_gene``
-            A boolean mask of the "clean" genes.
-
-        ``feature``
-            A boolean mask of the "feature" genes.
-
-        ``gene_deviant_votes`` (if ``intermediate``)
-            The number of cells each gene marked as deviant (if zero, the gene did not mark any cell
-            as deviant).
+        ``outlier`` (if ``intermediate``)
+            A boolean mask of the cells contained in no metacell. This is ``True`` for non-"clean"
+            cells.
 
     If ``intermediate`` (default: {intermediate}), also keep all all the intermediate data (e.g.
     sums) for future reuse. Otherwise, discard it.
@@ -274,10 +205,11 @@ def direct_pipeline(
        ``noisy_lonely_max_gene_similarity`` (default: {noisy_lonely_max_gene_similarity}),
        ``excluded_gene_names`` (default: {excluded_gene_names})
        and
-       ``excluded_gene_patterns`` (default: {excluded_gene_patterns}).
+       ``excluded_gene_patterns`` (default: {excluded_gene_patterns}). All the following
+       steps will use this clean data.
 
     2. Invoke :py:func:`compute_direct_metacells` to directly compute
-       metacells using the clean data, using the
+       metacells, using the
        ``feature_downsample_cell_quantile`` (default: {feature_downsample_cell_quantile}),
        ``feature_min_gene_fraction`` (default: {feature_min_gene_fraction}),
        ``feature_min_gene_relative_variance (default: {feature_min_gene_relative_variance}),
@@ -286,6 +218,7 @@ def direct_pipeline(
        ``cells_similarity_log_data`` (default: {cells_similarity_log_data}),
        ``cells_similarity_log_normalization`` (default: {cells_similarity_log_normalization}),
        ``cells_repeated_similarity`` (default: {cells_repeated_similarity}),
+       ``target_metacell_size`` (default: {target_metacell_size}),
        ``knn_k`` (default: {knn_k}),
        ``knn_balanced_ranks_factor`` (default: {knn_balanced_ranks_factor}),
        ``knn_incoming_degree_factor`` (default: {knn_incoming_degree_factor}),
@@ -300,19 +233,17 @@ def direct_pipeline(
        ``dissolve_min_robust_size_factor`` (default: {dissolve_min_robust_size_factor}),
        ``dissolve_min_convincing_size_factor`` (default: {dissolve_min_convincing_size_factor}),
        ``dissolve_min_convincing_gene_fold_factor`` (default: {dissolve_min_convincing_gene_fold_factor}),
-       ``target_metacell_size`` (default: {target_metacell_size}),
        ``cell_sizes`` (default: {cell_sizes})
        and
        ``random_seed`` (default: {random_seed})
        to make this replicable.
 
-    3. Invoke :py:func:`collect_direct_metacells` to collect the result metacells, using the
-       ``results_name`` (default: {results_name})
-       and
-       ``results_tmp`` (default: {results_tmp}).
+    3. Invoke :py:func:`collect_metacells` to sum the ``of`` data into a
+       new metacells annotated data based on the computed ``metacell`` annotation, using the
+       ``results_name`` (default: {results_name}) and ``results_tmp`` (default: {results_tmp}).
     '''
     cdata = \
-        extract_clean_data(adata, of, tmp=True,
+        extract_clean_data(adata, of, tmp=False,
                            properly_sampled_min_cell_total=properly_sampled_min_cell_total,
                            properly_sampled_max_cell_total=properly_sampled_max_cell_total,
                            properly_sampled_min_gene_total=properly_sampled_min_gene_total,
@@ -337,6 +268,7 @@ def direct_pipeline(
                              cells_similarity_log_data=cells_similarity_log_data,
                              cells_similarity_log_normalization=cells_similarity_log_normalization,
                              cells_repeated_similarity=cells_repeated_similarity,
+                             target_metacell_size=target_metacell_size,
                              knn_k=knn_k,
                              knn_balanced_ranks_factor=knn_balanced_ranks_factor,
                              knn_incoming_degree_factor=knn_incoming_degree_factor,
@@ -351,24 +283,18 @@ def direct_pipeline(
                              dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                              dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                              dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
-                             target_metacell_size=target_metacell_size,
                              cell_sizes=cell_sizes,
                              random_seed=random_seed,
                              intermediate=intermediate)
 
-    mdata = collect_direct_metacells(adata, cdata, of,
-                                     name=results_name, tmp=results_tmp,
-                                     intermediate=intermediate)
-
-    if mdata is None:
-        raise ValueError('Empty metacells data, giving up')
-
-    return mdata
+    return collect_metacells(adata, cdata, of,
+                             name=results_name, tmp=results_tmp,
+                             intermediate=intermediate)
 
 
 @ut.timed_call()
 @ut.expand_doc()
-def compute_direct_metacells(
+def compute_direct_metacells(  # pylint: disable=too-many-branches
     adata: AnnData,
     of: Optional[str] = None,
     *,
@@ -380,6 +306,7 @@ def compute_direct_metacells(
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_log_normalization: float = pr.cells_similarity_log_normalization,
     cells_repeated_similarity: bool = pr.cells_repeated_similarity,
+    target_metacell_size: int = pr.target_metacell_size,
     knn_k: Optional[int] = pr.knn_k,
     knn_balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     knn_incoming_degree_factor: float = pr.knn_incoming_degree_factor,
@@ -389,12 +316,11 @@ def compute_direct_metacells(
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
     must_complete_cover: bool = False,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
-    deviants_max_gene_fraction: float = pr.deviants_max_gene_fraction,
-    deviants_max_cell_fraction: float = pr.deviants_max_cell_fraction,
+    deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
+    deviants_max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
     dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
-    target_metacell_size: int = pr.target_metacell_size,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     random_seed: int = pr.random_seed,
     intermediate: bool = True,
@@ -403,6 +329,11 @@ def compute_direct_metacells(
     Directly compute metacells.
 
     This is the heart of the metacells methodology.
+
+    .. todo::
+
+        Should :py:func:`compute_direct_metacells` avoid computing the graph and running
+        ``leidenalg`` for a very small number of cells?
 
     **Input**
 
@@ -449,6 +380,9 @@ def compute_direct_metacells(
             The integer index of the metacell each cell belongs to. The metacells are in no
             particular order. Cells with no metacell assignment ("outliers") are given a metacell
             index of ``-1``.
+
+        ``outlier`` (if ``intermediate``)
+            A boolean mask of the cells contained in no metacell.
 
     If ``intermediate`` (default: {intermediate}), also keep all all the intermediate data (e.g.
     sums) for future reuse. Otherwise, discard it.
@@ -591,24 +525,17 @@ def compute_direct_metacells(
             deviant_votes_of_cells = np.zeros(adata.n_obs, dtype='float32')
             dissolved_of_cells = np.zeros(adata.n_obs, dtype='bool')
 
-            assert deviant_votes_of_cells is not None
-            assert dissolved_of_cells is not None
-
             ut.set_v_data(adata, 'gene_deviant_votes', deviant_votes_of_genes,
-                          log_value=lambda:
-                          ut.mask_description(deviant_votes_of_genes > 0))
+                          log_value=ut.mask_description)
 
             ut.set_o_data(adata, 'cell_deviant_votes', deviant_votes_of_cells,
-                          log_value=lambda:
-                          ut.mask_description(deviant_votes_of_cells > 0))
+                          log_value=ut.mask_description)
 
             ut.set_o_data(adata, 'dissolved', dissolved_of_cells,
-                          log_value=lambda:
-                          ut.mask_description(dissolved_of_cells))
+                          log_value=ut.mask_description)
 
         ut.set_o_data(adata, 'metacell', candidate_of_cells,
-                      log_value=lambda:
-                      ut.groups_description(candidate_of_cells))
+                      log_value=ut.groups_description)
 
     else:
         with ut.intermediate_step(adata, intermediate=intermediate, keep='metacell'):
@@ -626,6 +553,14 @@ def compute_direct_metacells(
                                   min_convincing_size_factor=dissolve_min_convincing_size_factor,
                                   min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor)
 
+    if intermediate:
+        metacell_of_cells = \
+            ut.to_dense_vector(ut.get_o_data(adata, 'metacell'))
+
+        outlier_of_cells = metacell_of_cells < 0
+        ut.set_o_data(adata, 'outlier', outlier_of_cells,
+                      log_value=ut.mask_description)
+
 
 @ut.timed_call()
 @ut.expand_doc()
@@ -633,7 +568,7 @@ def extract_feature_data(
     adata: AnnData,
     of: Optional[str] = None,
     *,
-    name: Optional[str] = 'feature',
+    name: Optional[str] = '.feature',
     tmp: bool = False,
     downsample_cell_quantile: float = pr.feature_downsample_cell_quantile,
     min_gene_fraction: float = pr.feature_min_gene_fraction,
@@ -744,38 +679,32 @@ def extract_feature_data(
     return fdata
 
 
-@ut.timed_call()
-def collect_direct_metacells(
+@ut.timed_call('collect_metacells')
+def collect_metacells(  # pylint: disable=too-many-branches
     adata: AnnData,
     cdata: AnnData,
-    of: Optional[str] = None,
+    of: Optional[str],
     *,
-    name: str = 'metacells',
-    tmp: bool = False,
-    intermediate: bool = True,
-) -> Optional[AnnData]:
+    name: str,
+    tmp: bool,
+    intermediate: bool,
+) -> AnnData:
     '''
-    Collect the result metacells directly computed using the clean data.
+    Collect computed metacells data.
 
     **Input**
 
-    The full :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the
-    observations are cells and the variables are genes, and the clean ``cdata`` we have computed
-    metacells for using :py:func:`metacells.pipeline.direct.compute_direct_metacells`.
+    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
+    are cells and the variables are genes, and the "clean" ``cdata`` we have computed metacells
+    for.
+
+    Assumes the clean data has ``full_cell_index`` and ``full_gene_index`` annotations to map
+    it back to the full ``adata``.
 
     **Returns**
 
-    This will pass all the computed per-observation (cell) and per-variable (gene) annotations from
-    ``cdata`` back into the full ``adata``. Non-"clean" cells are given a ``metacell`` index of
-    ``-1``, a ``candidate`` index of ``-1``, and otherwise the value in all the annotations of all
-    the non-"clean" cells/genes is zero (``False`` for booleans).
-
-    Returns annotated metacell data containing for each observation the sum ``of`` the data (by
-    default, the focus) of the cells for each metacell. This will preserve any annotations of the
-    data which are safe for slicing observations (cells); in particular, it will preserve most
-    per-variable (gene) annotations such as ``feature``.
-
-    The result will also have the following annotations:
+    Annotated metacell data containing for each observation the sum ``of`` the data (by default,
+    the focus) of the cells for each metacell, which contains the following annotations:
 
     Variable (Gene) Annotations
         ``excluded`` (if ``intermediate``)
@@ -788,32 +717,41 @@ def collect_direct_metacells(
             A boolean mask of genes which are forbidden from being chosen as "feature" genes based
             on their name. This is ``False`` for non-"clean" genes.
 
+        If directly computing metecalls:
+
         ``feature``
             A boolean mask of the "feature" genes. This is ``False`` for non-"clean" genes.
 
-    Observation (Cell) Annotations
+        If using divide-and-conquer:
+
+        ``pre_feature`` (if ``intermediate``), ``feature``
+            The number of times the gene was used as a feature when computing the preliminary and
+            final metacells. This is zero for non-"clean" genes.
+
+    Observations (Cell) Annotations
         ``grouped``
             The number of ("clean") cells grouped into each metacell.
 
         ``candidate`` (if ``intermediate``)
-            The index of the metacell when it was only a candidate. This allows mapping deviant
-            cells to the metacell they were rejected from.
+            The index of the candidate metacell each cell was assigned to to. This is ``-1`` for
+            non-"clean" cells.
 
-    If ``intermediate`` (default: {intermediate}), also keep all all the intermediate data (e.g.
-    sums) for future reuse. Otherwise, discard it.
+    Also sets all relevant annotations in the full data based on their value in the clean data, with
+    appropriate defaults for non-"clean" data.
 
     **Computation Parameters**
 
-    1. Pass all the annotations from the clean ``cdata`` to the full ``adata``.
+    1. Pass all relevant per-gene and per-cell annotations from the "clean" data to the full data
+       using the appropriate defaults. The exact list of annotations depends on whether we store
+       intermediate annotations and whether we :py:func:`compute_direct_metacells` or
+       :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`.
 
-    2. Invoke :py:func:`metacells.preprocessing.group.group_obs_data` to sum the ``of`` data into a
-       new metacells annotated data based on the computed ``metacell`` annotation, using the
-       ``name`` (default: {name}) and ``tmp`` (default: {tmp}).
+    2. Invoke :py:func:`metacells.preprocessing.group.group_obs_data` to sum the cells into
+       metacells.
 
-    3. If ``intermediate``, invoke :py:func:`metacells.preprocessing.group.group_obs_annotation` to
-       fill the ``candidate`` annotation of the result.
+    3. Pass all relevant per-gene and per-cell annotations to the result.
     '''
-    ut.log_pipeline_step(LOG, adata, 'collect_direct_metacells')
+    ut.log_pipeline_step(LOG, adata, 'collect_metacells')
 
     if LOG.isEnabledFor(logging.DEBUG):
         clean_name = ut.get_name(cdata)
@@ -839,31 +777,48 @@ def collect_direct_metacells(
                 or per_cell_name == 'full_cell_index' \
                 or '|' in per_cell_name:
             continue
-        if per_cell_name == 'metacell':
+        log_value: Callable[[Any], Optional[str]] = ut.mask_description
+        if per_cell_name in ('metacell', 'pre_metacell'):
             value_of_all_cells = \
                 np.full(adata.n_obs, -2, dtype=value_of_clean_cells.dtype)
-        elif per_cell_name == 'candidate':
+            log_value = ut.groups_description
+        elif per_cell_name in ('pile', 'pre_pile', 'candidate', 'pre_candidate'):
             value_of_all_cells = \
                 np.full(adata.n_obs, -1, dtype=value_of_clean_cells.dtype)
+            log_value = ut.groups_description
+        elif per_cell_name == 'outlier':
+            value_of_all_cells = \
+                np.full(adata.n_obs, True, dtype=value_of_clean_cells.dtype)
         else:
             value_of_all_cells = \
                 np.zeros(adata.n_obs, dtype=value_of_clean_cells.dtype)
         value_of_all_cells[clean_cell_indices] = value_of_clean_cells
-        ut.set_o_data(adata, per_cell_name, value_of_all_cells)
+        ut.set_o_data(adata, per_cell_name, value_of_all_cells,
+                      log_value=log_value)
 
     mdata = \
         pp.group_obs_data(adata, of=of, groups='metacell', name=name, tmp=tmp)
     assert mdata is not None
 
-    ut.set_v_data(mdata, 'feature',
-                  ut.to_dense_vector(ut.get_v_data(adata, 'feature')))
+    for annotation_name, always in (('excluded', False),
+                                    ('clean_gene', False),
+                                    ('forbidden', False),
+                                    ('pre_feature', False),
+                                    ('feature', True)):
+        if not always and not intermediate:
+            continue
+        if annotation_name.startswith('pre_') and not ut.has_data(adata, annotation_name):
+            continue
+        value_per_gene = \
+            ut.to_dense_vector(ut.get_v_data(adata, annotation_name))
+        ut.set_v_data(mdata, annotation_name, value_per_gene,
+                      log_value=ut.mask_description)
 
     if intermediate:
-        for per_gene_name in ('clean_gene', 'forbidden', 'excluded'):
-            ut.set_v_data(mdata, per_gene_name,
-                          ut.to_dense_vector(ut.get_v_data(adata, per_gene_name)))
-
-        pp.group_obs_annotation(adata, mdata, groups='metacell',
-                                name='candidate', method='unique')
+        for annotation_name, always in (('pile', False),
+                                        ('candidate', True)):
+            if always or ut.has_data(adata, annotation_name):
+                pp.group_obs_annotation(adata, mdata, groups='metacell',
+                                        name=annotation_name, method='unique')
 
     return mdata

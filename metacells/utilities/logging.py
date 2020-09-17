@@ -250,7 +250,7 @@ def mask_description(mask: utt.Vector) -> str:
     This returns the number of set entries, the total number of entries, and the percentage.
     '''
     mask = utt.to_dense_vector(mask)
-    return ratio_description(np.sum(mask), mask.size)
+    return ratio_description(np.sum(mask > 0), mask.size)
 
 
 def ratio_description(numerator: float, denominator: float) -> str:

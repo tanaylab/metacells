@@ -39,7 +39,7 @@ def extract_clean_data(
     excluded_gene_names: Optional[Collection[str]] = None,
     excluded_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     random_seed: int = pr.random_seed,
-    name: Optional[str] = 'clean',
+    name: Optional[str] = '.clean',
     tmp: bool = False,
     intermediate: bool = True,
 ) -> Optional[AnnData]:
@@ -62,6 +62,7 @@ def extract_clean_data(
 
     Annotated sliced data containing the "clean" subset of the original data. The focus of the data
     will be the (slice) ``of`` the input data. By default, the ``name`` of this data is {name}.
+    If this starts with a ``.``, this will be appended to the current name of the data (if any).
 
     The returned data will have ``full_cell_index`` and ``full_gene_index`` per-observation (cell)
     and per-variable (gene) annotations to allow mapping the results back to the original data.

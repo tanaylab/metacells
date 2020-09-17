@@ -56,8 +56,8 @@ def filter_data(  # pylint: disable=too-many-branches
 
     If no observations and/or no variables were selected by the filter, return ``None``.
 
-    If ``name`` is specified, this will be the logging name of the new data. Otherwise, it will be
-    unnamed.
+    If ``name`` is not specified, the data will be unnamed. Otherwise, if it starts with a ``.``, it
+    will be appended to the current name (if any). Otherwise, ``name`` is the new name.
 
     If ``tmp`` (default: {tmp}) is set, logging of modifications to the result will use the
     ``DEBUG`` logging level. By default, logging of modifications is done using the ``INFO`` logging
