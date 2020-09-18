@@ -21,7 +21,9 @@ or :py:func:`metacells.utilities.annotation.slice` some data.
 import logging
 import sys
 from datetime import datetime
-from logging import Formatter, Logger, LogRecord, StreamHandler, getLogger
+from logging import (Formatter, Logger, LogRecord, StreamHandler, getLogger,
+                     setLoggerClass)
+from multiprocessing import Lock
 from threading import current_thread
 from typing import IO, Any, Optional, Tuple
 
@@ -44,6 +46,21 @@ __all__ = [
     'ratio_description',
     'fraction_description',
 ]
+
+
+class SynchronizedLogger(Logger):
+    '''
+    A logger that synchronizes between the sub-processes.
+
+    This ensures logging does not get garbled when when using multi-processing
+    (e.g., using :py:func:`metacells.utilities.parallel.parallel_map`).
+    '''
+
+    LOCK = Lock()
+
+    def _log(self, *args: Any, **kwargs: Any) -> Any:  # pylint: disable=signature-differs
+        with SynchronizedLogger.LOCK:
+            super()._log(*args, **kwargs)
 
 
 class LoggingFormatter(Formatter):
@@ -95,6 +112,10 @@ def setup_logger(
     '''
     Setup logging to stderr at some ``level`` (default: {level}).
 
+    Logging from multiple sub-processes (e.g., using (e.g., using
+    :py:func:`metacells.utilities.parallel.parallel_map`) will synchronize using a global lock so
+    messages will not get garbled.
+
     If ``to`` is not specified, the output is sent to ``sys.stderr``.
 
     If ``time`` (default: {time}), include a millisecond-resolution timestamp for each message.
@@ -129,6 +150,7 @@ def setup_logger(
         handler.setFormatter(ShortLoggingFormatter(log_format))
     else:
         handler.setFormatter(LoggingFormatter(log_format))
+    setLoggerClass(SynchronizedLogger)
     logger = getLogger('metacells')
     logger.addHandler(handler)
     logger.setLevel(level)
