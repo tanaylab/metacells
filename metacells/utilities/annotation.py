@@ -72,12 +72,17 @@ are three sources of (implementation) code complexity here:
     The managed ``AnnData`` provides a :py:func:`slice` operation that performs fast and safe
     slicing.
 
-    To achieve this, the code tracks, for each possible data, whether it is/not safe to slice it
-    along each of the axis (e.g., the per-observation ``o:sum_of_vo:...`` data is invalidated when
-    slicing some of the variables).
+    In general data is assumed to be safe to slice (e.g., ``gene_ids`` can be freely sliced when we
+    select a subset of the genes). However, derived data isn't always safe to slice; e.g.,
+    ``UMIs|sum_per_obs`` is not safe to slice when we select a subset of the variables (it is safe
+    to slice when we select a subset of the observations).
 
-    In addition, since slicing layout-optimized data is much faster, the code ensures that,
-    as much as possible, slicing is always applied to the proper layout form of the data.
+    We denote derived data by its name containing ``|``, chaining the source data and the operation
+    applied to it (e.g., the above ``UMIs|sum_per_obs`` example). The code tracks, for each derived
+    data, whether it is/not safe to slice it along each of the axis.
+
+    In addition, since slicing layout-optimized data is much faster, the code ensures
+    that, as much as possible, slicing is always applied to the proper layout form of the data.
 
 The interaction between the above three features is the cause of most of the implementation
 complexity. The upside is that application code becomes simpler and is more efficient.
@@ -136,7 +141,6 @@ __all__ = [
     'SAFE_WHEN_SLICING_OBS',
     'SAFE_WHEN_SLICING_VAR',
     'safe_slicing_mask',
-    'safe_slicing_data',
     'safe_slicing_derived',
 
     'get_data',
@@ -219,8 +223,8 @@ def setup(
     assert X is not None
     assert utt.Shaped.be(X).ndim == 2
     assert '__x__' not in adata.uns_keys()
+    assert '|' not in x_name
 
-    safe_slicing_data(x_name, ALWAYS_SAFE)
     if tmp:
         adata.uns['__tmp__'] = True
     if name is not None:
@@ -230,17 +234,6 @@ def setup(
     adata.uns['__x__'] = x_name
     adata.uns['__focus__'] = x_name
     _log_set_data(adata, 'm', '__focus__', x_name, force=True)
-
-    for annotations in (adata.layers,
-                        adata.obs,
-                        adata.var,
-                        adata.obsp,
-                        adata.varp,
-                        adata.obsm,
-                        adata.varm,
-                        adata.uns):
-        for data_name, _ in annotation_items(annotations):
-            safe_slicing_data(data_name, ALWAYS_SAFE)
 
 
 class SlicingMask(NamedTuple):
@@ -286,6 +279,9 @@ def safe_slicing_mask(
     '''
     Return a :py:const:`SlicingMask` specifying when it is safe to slice the ``name``-d data.
     '''
+    if '|' not in name:
+        return ALWAYS_SAFE
+
     slicing_mask = SAFE_SLICING.get(name)
     if slicing_mask is None:
         slicing_mask = SAFE_SLICING.get(name)
@@ -297,27 +293,6 @@ def safe_slicing_mask(
             warn(unknown_sliced_data)
             slicing_mask = SAFE_SLICING[name] = NEVER_SAFE
     return slicing_mask
-
-
-def safe_slicing_data(name: str, slicing_mask: SlicingMask) -> None:
-    '''
-    Specify when it is safe to slice the ``name``d data, using the ``slicing_mask``.
-
-    .. note::
-
-        This is thread-safe.
-    '''
-    SAFE_SLICING[name] = slicing_mask
-
-
-def _known_safe_slicing() -> None:
-    safe_slicing_data('__x__', ALWAYS_SAFE)
-    safe_slicing_data('__focus__', ALWAYS_SAFE)
-    safe_slicing_data('__tmp__', NEVER_SAFE)
-    safe_slicing_data('__name__', NEVER_SAFE)
-
-
-_known_safe_slicing()
 
 
 def safe_slicing_derived(
@@ -333,10 +308,12 @@ def safe_slicing_derived(
     either. Otherwise, the derived will be preserved based on the flags given here.
     '''
     if isinstance(base, str):
-        slicing_mask = slicing_mask & SAFE_SLICING[base]
+        if '|' in base:
+            slicing_mask = slicing_mask & SAFE_SLICING[base]
     else:
         for name in base:
-            slicing_mask = slicing_mask & SAFE_SLICING[name]
+            if '|' in name:
+                slicing_mask = slicing_mask & SAFE_SLICING[name]
 
     SAFE_SLICING[derived] = slicing_mask
 
@@ -351,8 +328,6 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     track_obs: Optional[str] = None,
     track_var: Optional[str] = None,
     tmp: bool = False,
-    invalidated_prefix: Optional[str] = None,
-    invalidated_suffix: Optional[str] = None,
 ) -> AnnData:
     '''
     Return new annotated data which includes a subset of the full ``adata``.
@@ -365,28 +340,16 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     per-observation and/or per-variable annotation containing the indices of the sliced elements in
     the original full data.
 
-    In general, data might become invalid when slicing (e.g., the per-observation
-    ``o:sum_of_vo:...`` data is invalidated when slicing some of the variables). Therefore, such
-    data will be removed from the result unless it was explicitly marked as preserved using
-    :py:func:`safe_slicing_data` or :py:func:`safe_slicing_derived`.
-
-    If ``invalidated_prefix`` and/or ``invalidated_suffix`` are specified, then invalidated data
-    will not be removed; instead it will be renamed with the addition of the provided prefix and/or
-    suffix.
+    In general, data might become invalid when slicing (e.g., ``UMIs|sum_per_obs`` data is
+    invalidated when slicing some of the variables). Therefore, such data will be removed from the
+    result.
 
     If ``name`` is not specified, the data will be unnamed. Otherwise, if it starts with a ``.``, it
     will be appended to the current name (if any). Otherwise, ``name`` is the new name.
 
     If ``tmp`` is set, logging of modifications to the result will use the ``DEBUG`` logging level.
     By default, logging of modifications is done using the ``INFO`` logging level.
-
-    .. note::
-
-        Setting the prefix and suffix to the empty string would simply preserve all the invalidated
-        data. As this is unsafe, it will trigger a run-time exception. If you wish to perform such
-        an unsafe slicing operation, invoke the built-in ``adata[..., ...]``.
     '''
-    assert invalidated_prefix != '' or invalidated_suffix != ''
     x_name = get_x_name(adata)
     focus = get_focus_name(adata)
     assert x_name not in adata.layers
@@ -424,9 +387,7 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
         with utm.timed_step('adata.copy'):
             return adata.copy()
 
-    saved_data = \
-        _save_data(adata, will_slice_obs, will_slice_var,
-                   invalidated_prefix, invalidated_suffix)
+    saved_data = _save_data(adata, will_slice_obs, will_slice_var)
 
     with utm.timed_step('adata.slice'):
         bdata = adata[obs, vars].copy()
@@ -436,10 +397,6 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
 
     assert did_slice_obs == will_slice_obs
     assert did_slice_var == will_slice_var
-
-    if invalidated_prefix is not None or invalidated_suffix is not None:
-        _fix_data(bdata, did_slice_obs, did_slice_var,
-                  invalidated_prefix, invalidated_suffix)
 
     _restore_data(saved_data, adata)
 
@@ -470,11 +427,11 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
 
     if track_obs is not None:
         obs_indices = np.arange(adata.n_obs)[obs]
-        set_o_data(bdata, track_obs, obs_indices, ALWAYS_SAFE)
+        set_o_data(bdata, track_obs, obs_indices)
 
     if track_var is not None:
         var_indices = np.arange(adata.n_vars)[vars]
-        set_v_data(bdata, track_var, var_indices, ALWAYS_SAFE)
+        set_v_data(bdata, track_var, var_indices)
 
     assert x_name not in bdata.layers
     assert has_data(bdata, focus)
@@ -486,8 +443,6 @@ def _save_data(
     adata: AnnData,
     will_slice_obs: bool,
     will_slice_var: bool,
-    invalidated_prefix: Optional[str],
-    invalidated_suffix: Optional[str],
 ) -> Dict[Tuple[str, str], Any]:
     saved_data: Dict[Tuple[str, str], Any] = {}
 
@@ -500,8 +455,7 @@ def _save_data(
                              ('va', adata.varm),
                              ('m', adata.uns)):
         _save_per_data(saved_data, adata, per, annotations,
-                       will_slice_obs, will_slice_var,
-                       invalidated_prefix, invalidated_suffix)
+                       will_slice_obs, will_slice_var)
 
     return saved_data
 
@@ -513,8 +467,6 @@ def _save_per_data(
     annotations: Annotations,
     will_slice_obs: bool,
     will_slice_var: bool,
-    invalidated_prefix: Optional[str],
-    invalidated_suffix: Optional[str],
 ) -> None:
     delete_names: Set[str] = set()
 
@@ -546,23 +498,11 @@ def _save_per_data(
                 saved_data[(per, base_name)] = base_data
 
     for name, data in annotation_items(annotations):
-        action = _slice_action(name, will_slice_obs, will_slice_var,
-                               invalidated_prefix is not None
-                               or invalidated_suffix is not None)
-
-        if action == 'discard':
+        if _preserve_data(name, will_slice_obs, will_slice_var):
+            patch(name)
+        else:
             saved_data[(per, name)] = data
             delete_names.add(name)
-            continue
-
-        patch(name)
-
-        if action == 'preserve':
-            continue
-
-        assert action == 'fix'
-        assert invalidated_prefix is not None or invalidated_suffix is not None
-        continue
 
     for name in delete_names:
         del annotations[name]
@@ -581,69 +521,6 @@ def _restore_data(saved_data: Dict[Tuple[str, str], Any], adata: AnnData) -> Non
         per_annotations[per][name] = data
 
 
-def _fix_data(
-    bdata: AnnData,
-    did_slice_obs: bool,
-    did_slice_var: bool,
-    invalidated_prefix: Optional[str],
-    invalidated_suffix: Optional[str],
-) -> None:
-    for annotations in (bdata.layers,
-                        bdata.obs,
-                        bdata.var,
-                        bdata.obsp,
-                        bdata.varp,
-                        bdata.obsm,
-                        bdata.varm,
-                        bdata.uns):
-        _fix_per_data(annotations, did_slice_obs, did_slice_var,
-                      invalidated_prefix, invalidated_suffix)
-
-
-def _fix_per_data(
-    annotations: MutableMapping[str, Any],
-    did_slice_obs: bool,
-    did_slice_var: bool,
-    invalidated_prefix: Optional[str],
-    invalidated_suffix: Optional[str],
-) -> None:
-    delete_names: List[str] = []
-    fixed_data: Dict[str, Any] = {}
-
-    invalidated_prefix = invalidated_prefix or ''
-    invalidated_suffix = invalidated_suffix or ''
-
-    for name, data in annotation_items(annotations):
-        action = _slice_action(name, did_slice_obs, did_slice_var, True)
-
-        if action == 'preserve':
-            continue
-        assert action == 'fix'
-
-        parts = name.split(':')
-        if parts[-1] not in ('__column_major__', '__row_major__'):
-            final_part = None
-        else:
-            final_part = parts[-1]
-            name = ':'.join(parts[:-1])
-
-        fixed_name = invalidated_prefix + name + invalidated_suffix
-        if final_part is not None:
-            fixed_name += ':' + final_part
-        assert fixed_name != name
-
-        fixed_data[fixed_name] = data
-        delete_names.append(name)
-
-        SAFE_SLICING[fixed_name] = SAFE_SLICING[name]
-
-    for name in delete_names:
-        del annotations[name]
-
-    for name, data in fixed_data.items():
-        annotations[name] = data
-
-
 def annotation_items(annotations: Annotations) -> Iterable[Tuple[str, Any]]:
     '''
     Given some annotations data (such as ``adata.obs``, ``adata.layers``, etc.), iterate on all the
@@ -654,21 +531,18 @@ def annotation_items(annotations: Annotations) -> Iterable[Tuple[str, Any]]:
     return annotations.items()
 
 
-def _slice_action(
+def _preserve_data(
     name: str,
     do_slice_obs: bool,
     do_slice_var: bool,
-    will_fix_invalidated: bool,
-) -> str:
+) -> bool:
     base_name = name
     if '__' in name:
-        is_per = True
         is_per_obs = name.endswith(':__row_major__')
         is_per_var = name.endswith(':__column_major__')
         if is_per_obs or is_per_var:
             base_name = ':'.join(name.split(':')[:-1])
     else:
-        is_per = False
         is_per_obs = False
         is_per_var = False
 
@@ -681,13 +555,7 @@ def _slice_action(
     slicing_mask = slicing_mask | SlicingMask(obs=not do_slice_obs,
                                               vars=not do_slice_var)
 
-    if slicing_mask.obs and slicing_mask.vars:
-        return 'preserve'
-
-    if is_per or not will_fix_invalidated:
-        return 'discard'
-
-    return 'fix'
+    return slicing_mask.obs and slicing_mask.vars
 
 
 def get_vector_parameter_data(
@@ -934,10 +802,6 @@ def get_m_data(
     If the metadata does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
 
     If ``inplace`` (default: {inplace}), store the result in ``adata``.
-
-    .. note::
-
-        The caller is responsible for specifying the slicing behavior of the data.
     '''
     data = adata.uns.get(name)
     if data is not None:
@@ -971,10 +835,6 @@ def get_o_data(
     If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
 
     If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
-
-    .. note::
-
-        The caller is responsible for specifying the slicing behavior of the data.
     '''
     return _get_shaped_data(adata, 'o', adata.obs, shape=(adata.n_obs,),
                             per_text='per-observation', name=name,
@@ -996,10 +856,6 @@ def get_v_data(
     If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
 
     If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
-
-    .. note::
-
-        The caller is responsible for specifying the slicing behavior of the data.
     '''
     return _get_shaped_data(adata, 'v', adata.var, shape=(adata.n_vars,),
                             per_text='per-variable', name=name,
@@ -1027,14 +883,6 @@ def get_oo_data(
     ``column_major`` (genes). This returns the data in a layout optimized for by-observation
     (row-major / csr) or by-variable (column-major / csc). If also ``inplace``, this is cached in an
     additional "hidden" annotation whose name is suffixed (e.g. ``...:__row_major__``).
-
-    .. note::
-
-        * In general names that contain ``__`` are reserved and should not be explicitly used.
-
-        * The original data returned by ``compute`` is always preserved under its non-suffixed name.
-
-        * The caller is responsible for specifying the slicing behavior of the data.
     '''
     return _get_layout_data(adata, 'oo', adata.obsp,
                             shape=(adata.n_obs, adata.n_obs),
@@ -1064,14 +912,6 @@ def get_vv_data(
     ``column_major`` (genes). This returns the data in a layout optimized for by-observation
     (row-major / csr) or by-variable (column-major / csc). If also ``inplace``, this is cached in an
     additional "hidden" annotation whose name is suffixed (e.g. ``...:__row_major__``).
-
-    .. note::
-
-        * In general names that contain ``__`` are reserved and should not be explicitly used.
-
-        * The original data returned by ``compute`` is always preserved under its non-suffixed name.
-
-        * The caller is responsible for specifying the slicing behavior of the data.
     '''
     return _get_layout_data(adata, 'vv', adata.varp,
                             shape=(adata.n_vars, adata.n_vars),
@@ -1101,14 +941,6 @@ def get_oa_data(
     ``column_major`` (genes). This returns the data in a layout optimized for by-observation
     (row-major / csr) or by-variable (column-major / csc). If also ``inplace``, this is cached in an
     additional "hidden" annotation whose name is suffixed (e.g. ``...:__row_major__``).
-
-    .. note::
-
-        * In general names that contain ``__`` are reserved and should not be explicitly used.
-
-        * The original data returned by ``compute`` is always preserved under its non-suffixed name.
-
-        * The caller is responsible for specifying the slicing behavior of the data.
     '''
     return _get_layout_data(adata, 'oa', adata.obsp,
                             shape=(adata.n_obs, 0),
@@ -1138,14 +970,6 @@ def get_va_data(
     ``column_major`` (genes). This returns the data in a layout optimized for by-observation
     (row-major / csr) or by-variable (column-major / csc). If also ``inplace``, this is cached in an
     additional "hidden" annotation whose name is suffixed (e.g. ``...:__row_major__``).
-
-    .. note::
-
-        * In general names that contain ``__`` are reserved and should not be explicitly used.
-
-        * The original data returned by ``compute`` is always preserved under its non-suffixed name.
-
-        * The caller is responsible for specifying the slicing behavior of the data.
     '''
     return _get_layout_data(adata, 'va', adata.varm,
                             shape=(adata.n_vars, 0),
@@ -1184,14 +1008,6 @@ def get_vo_data(
     ``...:__row_major__``).
 
     Returns the result data.
-
-    .. note::
-
-        * In general names that contain ``__`` are reserved and should not be explicitly used.
-
-        * The original data returned by ``compute`` is always preserved under its non-suffixed name.
-
-        * The caller is responsible for specifying the slicing behavior of the data.
     '''
     if name is None:
         name = get_focus_name(adata)
@@ -1549,21 +1365,16 @@ def set_m_data(
     adata: AnnData,
     name: str,
     data: Any,
-    slicing_mask: Optional[SlicingMask] = None,
     log_value: Optional[Callable[[Any], Optional[str]]] = None,
 ) -> Any:
     '''
     Set unstructured meta-data.
-
-    Optionally specify the ``slicing_mask`` for this data.
 
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
     _log_set_data(adata, 'm', name, data, log_value=log_value)
 
     adata.uns[name] = data
-    if slicing_mask is not None:
-        safe_slicing_data(name, slicing_mask)
 
 
 @utm.timed_call()
@@ -1571,13 +1382,10 @@ def set_o_data(
     adata: AnnData,
     name: str,
     data: utt.Vector,
-    slicing_mask: Optional[SlicingMask] = None,
     log_value: Optional[Callable[[Any], Optional[str]]] = None,
 ) -> Any:
     '''
     Set per-observation (cell) meta-data.
-
-    Optionally specify the ``slicing_mask`` for this data.
 
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
@@ -1589,8 +1397,6 @@ def set_o_data(
             utt.freeze(data)
 
     adata.obs[name] = data
-    if slicing_mask is not None:
-        safe_slicing_data(name, slicing_mask)
 
 
 @utm.timed_call()
@@ -1598,13 +1404,10 @@ def set_v_data(
     adata: AnnData,
     name: str,
     data: utt.Vector,
-    slicing_mask: Optional[SlicingMask] = None,
     log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
     Set per-variable (gene) meta-data.
-
-    Optionally specify the ``slicing_mask`` for this data.
 
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
@@ -1615,8 +1418,6 @@ def set_v_data(
         utt.freeze(data)
 
     adata.var[name] = data
-    if slicing_mask is not None:
-        safe_slicing_data(name, slicing_mask)
 
 
 @utm.timed_call()
@@ -1624,13 +1425,10 @@ def set_oo_data(
     adata: AnnData,
     name: str,
     data: utt.Matrix,
-    slicing_mask: Optional[SlicingMask] = None,
     log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
     Set per-observation-per-observation (cell) meta-data.
-
-    Optionally specify the ``slicing_mask`` for this data.
 
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
@@ -1641,8 +1439,6 @@ def set_oo_data(
         utt.freeze(data)
 
     adata.obsp[name] = data
-    if slicing_mask is not None:
-        safe_slicing_data(name, slicing_mask)
 
 
 @utm.timed_call()
@@ -1650,13 +1446,10 @@ def set_vv_data(
     adata: AnnData,
     name: str,
     data: utt.Matrix,
-    slicing_mask: Optional[SlicingMask] = None,
     log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
     Set per-variable-per-variable (gene) meta-data.
-
-    Optionally specify the ``slicing_mask`` for this data.
 
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
@@ -1667,8 +1460,6 @@ def set_vv_data(
         utt.freeze(data)
 
     adata.varp[name] = data
-    if slicing_mask is not None:
-        safe_slicing_data(name, slicing_mask)
 
 
 @utm.timed_call()
@@ -1676,13 +1467,10 @@ def set_oa_data(
     adata: AnnData,
     name: str,
     data: utt.Matrix,
-    slicing_mask: Optional[SlicingMask] = None,
     log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
     Set per-observation-per-any (cell) meta-data.
-
-    Optionally specify the ``slicing_mask`` for this data.
 
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
@@ -1693,8 +1481,6 @@ def set_oa_data(
         utt.freeze(data)
 
     adata.obsm[name] = data
-    if slicing_mask is not None:
-        safe_slicing_data(name, slicing_mask)
 
 
 @utm.timed_call()
@@ -1702,13 +1488,10 @@ def set_va_data(
     adata: AnnData,
     name: str,
     data: utt.Matrix,
-    slicing_mask: Optional[SlicingMask] = None,
     log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
     Set per-variable-per-any (gene) meta-data.
-
-    Optionally specify the ``slicing_mask`` for this data.
 
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
@@ -1719,8 +1502,6 @@ def set_va_data(
         utt.freeze(data)
 
     adata.varm[name] = data
-    if slicing_mask is not None:
-        safe_slicing_data(name, slicing_mask)
 
 
 @utm.timed_call()
@@ -1729,15 +1510,12 @@ def set_vo_data(
     adata: AnnData,
     name: str,
     data: utt.Matrix,
-    slicing_mask: Optional[SlicingMask] = None,
     *,
     log_value: Optional[Callable[[Any], Optional[str]]] = None,
     infocus: bool = False,
 ) -> Any:
     '''
     Set per-variable-per-observation (per-gene-per-cell) meta-data.
-
-    Optionally specify the ``slicing_mask`` for this data.
 
     If ``infocus`` (default: {infocus}, also make the result the new focus.
     '''
@@ -1754,9 +1532,6 @@ def set_vo_data(
         adata.X = data
     else:
         adata.layers[name] = data
-
-    if slicing_mask is not None:
-        safe_slicing_data(name, slicing_mask)
 
     if infocus:
         adata.uns['__focus__'] = name

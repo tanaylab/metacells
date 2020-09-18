@@ -146,8 +146,7 @@ def find_noisy_lonely_genes(
               sorted(list(adata.var_names[noisy_lonely_genes_mask])))
 
     if inplace:
-        ut.set_v_data(adata, 'noisy_lonely_gene',
-                      noisy_lonely_genes_mask, ut.SAFE_WHEN_SLICING_VAR)
+        ut.set_v_data(adata, 'noisy_lonely_gene', noisy_lonely_genes_mask)
         return None
 
     ut.log_mask(LOG, level, 'noisy_lonely_genes', noisy_lonely_genes_mask)

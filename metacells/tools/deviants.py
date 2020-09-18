@@ -143,7 +143,7 @@ def find_deviant_cells(
                           max_gene_fraction=max_gene_fraction)
 
         if intermediate:
-            ut.set_vo_data(adata, 'fold_factor', fold_factors, ut.NEVER_SAFE)
+            ut.set_vo_data(adata, 'fold_factor', fold_factors)
 
         deviant_genes_fold_ranks = \
             _fold_ranks(cells_count=cells_count,
@@ -158,10 +158,8 @@ def find_deviant_cells(
                           max_cell_fraction=max_cell_fraction)
 
     if inplace:
-        ut.set_o_data(adata, 'cell_deviant_votes',
-                      votes_of_deviant_cells, ut.NEVER_SAFE)
-        ut.set_v_data(adata, 'gene_deviant_votes',
-                      votes_of_deviant_genes, ut.NEVER_SAFE)
+        ut.set_o_data(adata, 'cell_deviant_votes', votes_of_deviant_cells)
+        ut.set_v_data(adata, 'gene_deviant_votes', votes_of_deviant_genes)
         return None
 
     ut.log_mask(LOG, level, 'deviant_cells', votes_of_deviant_cells > 0)

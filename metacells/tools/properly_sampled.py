@@ -83,8 +83,7 @@ def find_properly_sampled_cells(
                 cells_mask & (total_of_cells <= max_cell_total)
 
     if inplace:
-        ut.set_o_data(adata, 'properly_sampled_cell',
-                      cells_mask, ut.SAFE_WHEN_SLICING_OBS)
+        ut.set_o_data(adata, 'properly_sampled_cell', cells_mask)
         return None
 
     ut.log_mask(LOG, level, 'properly_sampled_cell', cells_mask)
@@ -144,8 +143,7 @@ def find_properly_sampled_genes(
         genes_mask = total_of_genes >= min_gene_total
 
     if inplace:
-        ut.set_v_data(adata, 'properly_sampled_gene',
-                      genes_mask, ut.SAFE_WHEN_SLICING_OBS)
+        ut.set_v_data(adata, 'properly_sampled_gene', genes_mask)
         return None
 
     ut.log_mask(LOG, level, 'properly_sampled_gene', genes_mask)

@@ -169,7 +169,7 @@ def compute_candidate_metacells(
         community_of_cells = ut.compress_indices(improver.membership)
 
     if inplace:
-        ut.set_o_data(adata, 'candidate', community_of_cells, ut.NEVER_SAFE,
+        ut.set_o_data(adata, 'candidate', community_of_cells,
                       log_value=lambda community_of_cells:
                       str(np.max(community_of_cells) + 1) + ' metacells')
         return None

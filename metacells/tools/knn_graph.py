@@ -226,16 +226,14 @@ def _compute_elements_knn_graph(
 
     if elements == 'obs':
         set_data = ut.set_oo_data
-        slicing_mask = ut.SAFE_WHEN_SLICING_OBS
     else:
         set_data = ut.set_vv_data
-        slicing_mask = ut.SAFE_WHEN_SLICING_VAR
 
     def store_matrix(matrix: ut.CompressedMatrix, name: str, when: bool,
                      store_log_level: int = logging.DEBUG) -> None:
         if when:
             name = elements + '_' + name
-            set_data(adata, name, matrix, slicing_mask,
+            set_data(adata, name, matrix,
                      log_value=lambda matrix:
                      ut.ratio_description(matrix.nnz,
                                           matrix.shape[0] * matrix.shape[1]))

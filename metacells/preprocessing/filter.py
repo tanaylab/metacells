@@ -32,8 +32,6 @@ def filter_data(  # pylint: disable=too-many-branches
     track_var: Optional[str] = None,
     name: Optional[str] = None,
     tmp: bool = False,
-    invalidated_prefix: Optional[str] = None,
-    invalidated_suffix: Optional[str] = None,
 ) -> Optional[Tuple[AnnData, pd.Series, pd.Series]]:
     '''
     Filter (slice) the data based on previously-computed masks.
@@ -77,9 +75,6 @@ def filter_data(  # pylint: disable=too-many-branches
 
     2. If the final observations or variables mask is empty, return None. Otherwise, return a slice
        of the full data containing just the observations and variables specified by the final masks.
-       If ``invalidated_prefix`` (default: {invalidated_prefix}) and/or ``invalidated_suffix``
-       (default: {invalidated_suffix}) are specified, then invalidated data will not be removed;
-       instead it will be renamed with the addition of the provided prefix and/or suffix.
     '''
     _, level = ut.log_operation(LOG, adata, 'filter_data')
 
@@ -127,13 +122,13 @@ def filter_data(  # pylint: disable=too-many-branches
                       per_name, ut.mask_description(mask))
 
     if mask_obs is not None:
-        ut.set_o_data(adata, mask_obs, obs_mask, ut.ALWAYS_SAFE)
+        ut.set_o_data(adata, mask_obs, obs_mask)
 
     elif LOG.isEnabledFor(level):
         ut.log_mask(LOG, level, 'observations', obs_mask)
 
     if mask_var is not None:
-        ut.set_v_data(adata, mask_var, vars_mask, ut.ALWAYS_SAFE)
+        ut.set_v_data(adata, mask_var, vars_mask)
 
     elif LOG.isEnabledFor(level):
         ut.log_mask(LOG, level, 'variables', vars_mask)
@@ -143,9 +138,7 @@ def filter_data(  # pylint: disable=too-many-branches
 
     fdata = ut.slice(adata, name=name, tmp=tmp,
                      obs=obs_mask, vars=vars_mask,
-                     track_obs=track_obs, track_var=track_var,
-                     invalidated_prefix=invalidated_prefix,
-                     invalidated_suffix=invalidated_suffix)
+                     track_obs=track_obs, track_var=track_var)
 
     return fdata, pd.Series(obs_mask, index=adata.obs_names), \
         pd.Series(vars_mask, index=adata.var_names)

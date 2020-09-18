@@ -168,10 +168,10 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
 
     if inplace:
         if intermediate:
-            ut.set_o_data(adata, 'dissolved', dissolved_of_cells, ut.NEVER_SAFE,
+            ut.set_o_data(adata, 'dissolved', dissolved_of_cells,
                           log_value=ut.mask_description)
 
-        ut.set_o_data(adata, to, metacell_of_cells, ut.NEVER_SAFE,
+        ut.set_o_data(adata, to, metacell_of_cells,
                       log_value=ut.mask_description)
         return None
 

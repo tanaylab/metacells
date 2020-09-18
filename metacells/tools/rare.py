@@ -444,15 +444,11 @@ def _results(
 
     if inplace:
         ut.set_m_data(adata, 'rare_gene_modules',
-                      array_of_names_of_genes_of_modules, ut.ALWAYS_SAFE)
-        ut.set_v_data(adata, 'genes_rare_gene_module',
-                      rare_module_of_genes, ut.ALWAYS_SAFE)
-        ut.set_v_data(adata, 'rare_gene',
-                      rare_module_of_genes >= 0, ut.ALWAYS_SAFE)
-        ut.set_o_data(adata, 'cells_rare_gene_module',
-                      rare_module_of_cells, ut.ALWAYS_SAFE)
-        ut.set_o_data(adata, 'rare_cell',
-                      rare_module_of_cells >= 0, ut.ALWAYS_SAFE)
+                      array_of_names_of_genes_of_modules)
+        ut.set_v_data(adata, 'genes_rare_gene_module', rare_module_of_genes)
+        ut.set_v_data(adata, 'rare_gene', rare_module_of_genes >= 0)
+        ut.set_o_data(adata, 'cells_rare_gene_module', rare_module_of_cells)
+        ut.set_o_data(adata, 'rare_cell', rare_module_of_cells >= 0)
         return None
 
     obs_metrics = pd.DataFrame(index=adata.obs_names)

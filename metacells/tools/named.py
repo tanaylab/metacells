@@ -71,7 +71,7 @@ def find_named_genes(
         genes_mask = ~genes_mask
 
     if to is not None:
-        ut.set_v_data(adata, to, genes_mask, ut.ALWAYS_SAFE)
+        ut.set_v_data(adata, to, genes_mask)
         return None
 
     ut.log_mask(LOG, level, 'named_genes', genes_mask)

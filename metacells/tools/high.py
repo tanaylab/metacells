@@ -75,7 +75,7 @@ def find_high_fraction_genes(
         genes_mask = fraction_of_genes >= min_gene_fraction
 
     if inplace:
-        ut.set_v_data(adata, 'high_fraction_gene', genes_mask, ut.NEVER_SAFE)
+        ut.set_v_data(adata, 'high_fraction_gene', genes_mask)
         return None
 
     ut.log_mask(LOG, level, 'high_fraction_genes', genes_mask)
@@ -141,8 +141,7 @@ def find_high_normalized_variance_genes(
             normalized_variance_of_genes >= min_gene_normalized_variance
 
     if inplace:
-        ut.set_v_data(adata, 'high_normalized_variance_gene',
-                      genes_mask, ut.NEVER_SAFE)
+        ut.set_v_data(adata, 'high_normalized_variance_gene', genes_mask)
         return None
 
     ut.log_mask(LOG, level, 'high_normalized_variance_genes', genes_mask)
@@ -209,8 +208,7 @@ def find_high_relative_variance_genes(
         genes_mask = relative_variance_of_genes >= min_gene_relative_variance
 
     if inplace:
-        ut.set_v_data(adata, 'high_relative_variance_gene',
-                      genes_mask, ut.NEVER_SAFE)
+        ut.set_v_data(adata, 'high_relative_variance_gene', genes_mask)
         return None
 
     ut.log_mask(LOG, level, 'high_relative_variance_genes', genes_mask)
