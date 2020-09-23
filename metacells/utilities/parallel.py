@@ -62,6 +62,7 @@ from typing import Any, Callable, Iterable, Optional
 
 from threadpoolctl import threadpool_limits  # type: ignore
 
+import metacells.extensions as xt  # type: ignore
 import metacells.utilities.timing as utm
 
 __all__ = [
@@ -109,6 +110,7 @@ def set_cpus_count(cpus: int) -> None:
     global CPUS_COUNT
     CPUS_COUNT = cpus
 
+    LOG.debug('CPUS_COUNT: %s', CPUS_COUNT)
     threadpool_limits(limits=CPUS_COUNT)
 
 
@@ -169,11 +171,13 @@ def parallel_map(
     IS_MAIN_PROCESS = None
     try:
         utm.flush()
+        xt.in_parallel(True)
         with utm.timed_step('parallel_map'):
             utm.timed_parameters(index=MAP_INDEX, processes=PROCESSES_COUNT)
             with Pool(PROCESSES_COUNT) as pool:
                 return pool.map(_invocation, range(invocations))
     finally:
+        xt.in_parallel(False)
         IS_MAIN_PROCESS = True
         PARALLEL_FUNCTION = None
 
@@ -202,6 +206,7 @@ def _invocation(index: int) -> Any:
         CPUS_COUNT = stop_cpu_index - start_cpu_index
 
         assert CPUS_COUNT > 0
+        LOG.debug('CPUS_COUNT: %s', CPUS_COUNT)
         threadpool_limits(limits=CPUS_COUNT)
 
     assert PARALLEL_FUNCTION is not None

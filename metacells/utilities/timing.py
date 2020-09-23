@@ -11,7 +11,8 @@ from functools import wraps
 from threading import current_thread
 from threading import local as thread_local
 from time import perf_counter_ns, process_time_ns
-from typing import IO, Any, Callable, Dict, Iterator, List, Optional, TypeVar
+from typing import (IO, Any, Callable, Dict, Iterator, List, NamedTuple,
+                    Optional, TypeVar)
 
 import metacells.utilities.documentation as utd
 
@@ -214,8 +215,22 @@ class StepTiming:
         self.total_nested = Counters()
 
 
+class GcStep(NamedTuple):
+    '''
+    Data about a GC collection step.
+    '''
+
+    #: The counters when we started the GC step.
+    start: Counters
+
+    #: The counters when we ended the GC step.
+    stop: Counters
+
+
 if COLLECT_TIMING:
     import gc
+
+    GC_STEPS: List[GcStep] = []
 
     GC_START_POINT: Optional[Counters] = None
 
@@ -233,18 +248,16 @@ if COLLECT_TIMING:
         assert phase == 'stop'
         assert GC_START_POINT is not None
 
-        gc_total_time = Counters.now() - GC_START_POINT
+        gc_step = GcStep(start=GC_START_POINT, stop=Counters.now())
+        GC_STEPS.append(gc_step)
         GC_START_POINT = None
-
-        parent_timing = steps_stack[-1]
-        parent_timing.total_nested += gc_total_time
 
         gc_parameters = []
         for name, value in info.items():
             gc_parameters.append(name)
             gc_parameters.append(str(value))
 
-        _print_timing('__gc__', gc_total_time, gc_parameters)
+        _print_timing('__gc__', gc_step.stop - gc_step.start, gc_parameters)
 
     gc.callbacks.append(_time_gc)
 
@@ -293,11 +306,24 @@ def timed_step(name: str) -> Iterator[None]:
     try:
         if LOG_ALL_STEPS:
             LOG.debug('{[( %s', step_timing.context)
+
         yield_point = Counters.now()
         yield None
+
     finally:
         back_point = Counters.now()
         total_times = back_point - yield_point
+
+        global GC_STEPS
+        gc_steps: List[GcStep] = []
+        for gc_step in GC_STEPS:
+            if yield_point.elapsed_ns <= gc_step.start.elapsed_ns \
+                    and gc_step.stop.elapsed_ns <= back_point.elapsed_ns:
+                total_times -= gc_step.stop - gc_step.start
+            else:
+                gc_steps.append(gc_step)
+        GC_STEPS = gc_steps
+
         assert total_times.elapsed_ns >= 0
         assert total_times.cpu_ns >= 0
         if LOG_ALL_STEPS:
@@ -309,10 +335,11 @@ def timed_step(name: str) -> Iterator[None]:
             parent_timing.total_nested += total_times
 
         total_times -= step_timing.total_nested
-        assert total_times.elapsed_ns >= 0
-        assert total_times.cpu_ns >= 0
 
         _print_timing(step_timing.context, total_times, step_timing.parameters)
+
+        assert total_times.elapsed_ns >= 0
+        assert total_times.cpu_ns >= 0
 
 
 def _print_timing(

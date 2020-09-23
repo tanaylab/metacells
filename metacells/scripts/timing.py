@@ -118,7 +118,7 @@ def _combine_main(input_path: str, output_path: Optional[str]) -> None:
         output_file = open(output_path, 'w')
 
     for line in open(input_path, 'r').readlines():
-        if not line.startswith('parallel_map,'):
+        if ';parallel_map,' not in line:
             output_file.write(line)
             continue
 
