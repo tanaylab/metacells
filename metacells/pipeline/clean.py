@@ -26,8 +26,8 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def extract_clean_data(
     adata: AnnData,
-    of: Optional[str] = None,
     *,
+    of: Optional[str] = None,
     properly_sampled_min_cell_total: Optional[int] = pr.properly_sampled_min_cell_total,
     properly_sampled_max_cell_total: Optional[int] = pr.properly_sampled_max_cell_total,
     properly_sampled_min_gene_total: int = pr.properly_sampled_min_gene_total,

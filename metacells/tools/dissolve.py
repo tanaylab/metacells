@@ -99,7 +99,7 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
                      layout='row_major', intermediate=intermediate) as data:
 
         candidate_of_cells = \
-            ut.get_vector_parameter_data(LOG, level, adata, candidates,
+            ut.get_vector_parameter_data(LOG, adata, candidates,
                                          per='o', name='candidates')
         candidate_of_cells = np.copy(candidate_of_cells)
         assert candidate_of_cells is not None
@@ -107,11 +107,11 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
         LOG.debug('  candidates: %s', raw_candidates_count)
 
         deviant_of_cells = \
-            ut.get_vector_parameter_data(LOG, level, adata, deviants,
+            ut.get_vector_parameter_data(LOG, adata, deviants,
                                          per='o', name='deviants')
 
         cell_sizes = \
-            ut.get_vector_parameter_data(LOG, level, adata, cell_sizes,
+            ut.get_vector_parameter_data(LOG, adata, cell_sizes,
                                          per='o', name='cell_sizes')
 
         if deviant_of_cells is not None:
@@ -119,23 +119,23 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
         candidate_of_cells = ut.compress_indices(candidate_of_cells)
         candidates_count = np.max(candidate_of_cells) + 1
 
-        LOG.log(level, '  target_metacell_size: %d', target_metacell_size)
+        LOG.debug('  target_metacell_size: %d', target_metacell_size)
         fraction_of_genes = pp.get_fraction_per_var(adata).proper
 
         if min_robust_size_factor is None:
             min_robust_size = None
         else:
             min_robust_size = target_metacell_size * min_robust_size_factor
-            LOG.log(level, '  min_robust_size: %d', min_robust_size)
+            LOG.debug('  min_robust_size: %d', min_robust_size)
 
         if min_convincing_size_factor is None:
             min_convincing_size = None
         else:
             min_convincing_size = \
                 target_metacell_size * min_convincing_size_factor
-            LOG.log(level, '  min_convincing_size: %d', min_convincing_size)
-            LOG.log(level, '  min_convincing_gene_fold_factor: %s',
-                    min_convincing_gene_fold_factor)
+            LOG.debug('  min_convincing_size: %d', min_convincing_size)
+            LOG.debug('  min_convincing_gene_fold_factor: %s',
+                      min_convincing_gene_fold_factor)
 
         if min_robust_size is not None and min_convincing_size is not None:
             did_dissolve = False

@@ -884,6 +884,7 @@ def get_normalized_variance_per_var(
         zeros_mask = mean_per_var == 0
 
         result = np.reciprocal(mean_per_var, where=~zeros_mask)
+        result[zeros_mask] = 0
         result *= variance_per_var
         result[zeros_mask] = 1
         np.log2(result, out=result)

@@ -68,11 +68,10 @@ def group_obs_data(
     level.
     '''
     ut.log_operation(LOG, adata, 'group_obs_data')
-    level = ut.get_log_level(adata)
 
     with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major') as data:
         group_of_cells = \
-            ut.get_vector_parameter_data(LOG, level, adata, groups,
+            ut.get_vector_parameter_data(LOG, adata, groups,
                                          per='o', name='groups')
         assert group_of_cells is not None
 
@@ -153,20 +152,19 @@ def group_obs_annotation(
             instead.
     '''
     ut.log_operation(LOG, adata, 'group_obs_annotation')
-    level = ut.get_log_level(adata)
 
     group_of_cells = \
-        ut.get_vector_parameter_data(LOG, level, adata, groups,
+        ut.get_vector_parameter_data(LOG, adata, groups,
                                      per='o', name='groups')
     assert group_of_cells is not None
 
-    values_of_cells = ut.get_vector_parameter_data(LOG, level, adata, name,
+    values_of_cells = ut.get_vector_parameter_data(LOG, adata, name,
                                                    per='o', name='values')
     assert values_of_cells is not None
 
     value_of_groups = np.empty(gdata.n_obs, dtype=values_of_cells.dtype)
 
-    LOG.log(level, '  method: %s', method)
+    LOG.debug('  method: %s', method)
 
     assert method in ('unique', 'majority')
 

@@ -120,11 +120,11 @@ def _compute_elements_similarity(
 ) -> Optional[ut.PandasFrame]:
     assert elements in ('obs', 'var')
 
-    of, level = \
+    of, _ = \
         ut.log_operation(LOG, adata,
                          'compute_%s_%s_similarity' % (elements, elements), of)
 
-    LOG.log(level, '  repeated: %s', repeated)
+    LOG.debug('  repeated: %s', repeated)
 
     with ut.intermediate_step(adata, intermediate=intermediate):
         if elements == 'obs':

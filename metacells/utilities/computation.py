@@ -158,45 +158,60 @@ def relayout_compressed(matrix: utt.CompressedMatrix) -> utt.CompressedMatrix:
     compressed = utt.CompressedMatrix.be(matrix)
 
     axis = ('csr', 'csc').index(compressed.getformat())
-    _output_elements_count = matrix_bands_count = compressed.shape[axis]
-    output_bands_count = matrix_elements_count = compressed.shape[1 - axis]
 
-    nnz_elements_of_output_bands = \
-        bincount_vector(compressed.indices, minlength=matrix_elements_count)
+    if compressed.nnz < 2:
+        if axis == 0:
+            compressed = compressed.tocsc()
+        else:
+            compressed = compressed.tocsr()
+        compressed.sort_indices()
 
-    output_indptr = np.empty(output_bands_count + 1,
-                             dtype=compressed.indptr.dtype)
-    output_indptr[0:2] = 0
-    with utm.timed_step('numpy.cumsum'):
-        utm.timed_parameters(elements=nnz_elements_of_output_bands.size - 1)
-        np.cumsum(nnz_elements_of_output_bands[:-1], out=output_indptr[2:])
+    else:
+        _output_elements_count = matrix_bands_count = compressed.shape[axis]
+        output_bands_count = matrix_elements_count = compressed.shape[1 - axis]
 
-    output_indices = np.empty(compressed.nnz, dtype=compressed.indices.dtype)
-    output_data = np.empty(compressed.nnz, dtype=compressed.data.dtype)
+        nnz_elements_of_output_bands = \
+            bincount_vector(compressed.indices,
+                            minlength=matrix_elements_count)
 
-    extension_name = 'collect_compressed_%s_t_%s_t_%s_t' \
-        % (compressed.data.dtype, compressed.indices.dtype, compressed.indptr.dtype)
-    extension = getattr(xt, extension_name)
+        output_indptr = \
+            np.empty(output_bands_count + 1, dtype=compressed.indptr.dtype)
+        output_indptr[0:2] = 0
+        with utm.timed_step('numpy.cumsum'):
+            utm.timed_parameters(elements=nnz_elements_of_output_bands.size
+                                 - 1)
+            np.cumsum(nnz_elements_of_output_bands[:-1], out=output_indptr[2:])
 
-    assert matrix_bands_count == compressed.indptr.size - 1
+        output_indices = \
+            np.empty(compressed.nnz, dtype=compressed.indices.dtype)
+        output_data = np.empty(compressed.nnz, dtype=compressed.data.dtype)
 
-    with utm.timed_step('extensions.collect_compressed'):
-        utm.timed_parameters(results=output_bands_count,
-                             elements=matrix_bands_count)
-        assert compressed.indptr[-1] == compressed.data.size
-        extension(compressed.data, compressed.indices, compressed.indptr,
-                  output_data, output_indices, output_indptr[1:])
+        extension_name = 'collect_compressed_%s_t_%s_t_%s_t' \
+            % (compressed.data.dtype,
+               compressed.indices.dtype,
+               compressed.indptr.dtype)
+        extension = getattr(xt, extension_name)
 
-    assert output_indptr[-1] == compressed.indptr[-1]
+        assert matrix_bands_count == compressed.indptr.size - 1
 
-    constructor = (sp.csr_matrix, sp.csc_matrix)[1 - axis]
-    compressed = constructor((output_data,
-                              output_indices,
-                              output_indptr),
-                             shape=compressed.shape)
+        with utm.timed_step('extensions.collect_compressed'):
+            utm.timed_parameters(results=output_bands_count,
+                                 elements=matrix_bands_count)
+            assert compressed.indptr[-1] == compressed.data.size
+            extension(compressed.data, compressed.indices, compressed.indptr,
+                      output_data, output_indices, output_indptr[1:])
+
+        assert output_indptr[-1] == compressed.indptr[-1]
+
+        constructor = (sp.csr_matrix, sp.csc_matrix)[1 - axis]
+        compressed = constructor((output_data,
+                                  output_indices,
+                                  output_indptr),
+                                 shape=compressed.shape)
+
+        sort_compressed_indices(compressed, force=True)
 
     compressed.has_canonical_format = True
-    sort_compressed_indices(compressed, force=True)
 
     return compressed
 

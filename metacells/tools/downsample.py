@@ -78,16 +78,17 @@ def downsample_cells(
     2. Downsample each cell so that it has at most the selected number of samples. Use the
        ``random_seed`` to allow making this replicable.
     '''
-    of, level = \
+    of, _ = \
         ut.log_operation(LOG, adata, 'downsample_cells', of)
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         total_per_cell = pp.get_per_obs(adata, ut.sum_per).proper
 
-        LOG.log(level, '  downsample_cell_quantile: %s',
-                downsample_cell_quantile)
+        LOG.debug('  downsample_cell_quantile: %s',
+                  downsample_cell_quantile)
         samples = round(np.quantile(total_per_cell, downsample_cell_quantile))
-        LOG.log(level, '  samples: %s', samples)
+        LOG.debug('  samples: %s', samples)
+        LOG.debug('  random_seed: %s', random_seed)
 
         downsampled = pp.get_downsample_of_var_per_obs(adata,
                                                        samples=samples,

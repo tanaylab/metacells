@@ -87,12 +87,12 @@ class ShortLoggingFormatter(LoggingFormatter):
     '''
 
     #: Map the long level names to the fixed-width short level names.
-    SHORT_LEVEL_NAMES = dict(CRITICAL='CRT',
-                             ERROR='ERR',
-                             WARNING='WRN',
-                             INFO='INF',
-                             DEBUG='DBG',
-                             NOTSET='NOT')
+    SHORT_LEVEL_NAMES = dict(CRITICAL='CRT', CRT='CRT',
+                             ERROR='ERR', ERR='ERR',
+                             WARNING='WRN', WRN='WRN',
+                             INFO='INF', INF='INF',
+                             DEBUG='DBG', DBG='DBG',
+                             NOTSET='NOT', NOT='NOT')
 
     def format(self, record: LogRecord) -> Any:
         record.levelname = self.SHORT_LEVEL_NAMES[record.levelname]
@@ -173,7 +173,11 @@ def log_pipeline_step(logger: Logger, adata: AnnData, name: str) -> int:
     Returns the log level for the ``adata``.
     '''
     level = get_log_level(adata)
-    logger.log(level, '# %s:', name)
+    data_name = adata.uns.get('__name__')
+    if data_name is None:
+        logger.log(level, '# %s: %s', name, adata.shape)
+    else:
+        logger.log(level, '# %s: %s %s', name, data_name, adata.shape)
     return level
 
 

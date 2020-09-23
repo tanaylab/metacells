@@ -3,6 +3,12 @@ Tools
 
 .. automodule:: metacells.tools
 
+General Tools
++++++++++++++
+
+.. automodule:: metacells.tools.apply
+    :members:
+
 Filtering the Data
 ++++++++++++++++++
 

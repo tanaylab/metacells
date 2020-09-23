@@ -245,6 +245,9 @@ def _compute_elements_knn_graph(
     similarity = ut.DenseMatrix.be(ut.get_proper_matrix(adata, of))
     similarity = ut.to_layout(similarity, 'row_major', symmetric=True)
 
+    LOG.debug('  k: %s', k)
+    LOG.debug('  size: %s', similarity.shape[0])
+
     outgoing_ranks = _rank_outgoing(similarity, k, balanced_ranks_factor)
     store_matrix(outgoing_ranks, 'outgoing_ranks', intermediate)
 
@@ -280,8 +283,10 @@ def _rank_outgoing(
     size = similarity.shape[0]
     assert similarity.shape == (size, size)
 
+    LOG.debug('  balanced_ranks_factor: %s', balanced_ranks_factor)
     degree = int(round(k * balanced_ranks_factor))
     degree = min(degree, size - 1)
+    LOG.debug('  degree: %s', degree)
 
     with ut.timed_step('numpy.amin'):
         ut.timed_parameters(size=size * size)
@@ -357,11 +362,15 @@ def _prune_ranks(
 ) -> ut.CompressedMatrix:
     size = balanced_ranks.shape[0]
 
+    LOG.debug('  incoming_degree_factor: %s', incoming_degree_factor)
     incoming_degree = int(round(k * incoming_degree_factor))
     incoming_degree = min(incoming_degree, size - 1)
+    LOG.debug('  incoming_degree: %s', incoming_degree)
 
+    LOG.debug('  outgoing_degree_factor: %s', outgoing_degree_factor)
     outgoing_degree = int(round(k * outgoing_degree_factor))
     outgoing_degree = min(outgoing_degree, size - 1)
+    LOG.debug('  outgoing_degree: %s', outgoing_degree)
 
     max_degree = max(incoming_degree, outgoing_degree)
 

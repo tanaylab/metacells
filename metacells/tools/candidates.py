@@ -116,31 +116,39 @@ def compute_candidate_metacells(
     edge_weights = ut.to_layout(edge_weights, 'row_major')
     assert edge_weights.shape[0] == edge_weights.shape[1]
 
+    LOG.debug('  partition_method: %s', partition_method.__qualname__)
     node_sizes = \
-        ut.get_vector_parameter_data(LOG, level, adata, cell_sizes,
+        ut.get_vector_parameter_data(LOG, adata, cell_sizes,
                                      per='o', name='cell_sizes', default='1')
     if node_sizes is not None:
         node_sizes = node_sizes.astype('int')
 
     assert target_metacell_size > 0
+    LOG.debug('  target_metacell_size: %s', target_metacell_size)
     max_metacell_size = None
     min_metacell_size = None
 
     if min_split_size_factor is not None:
+        LOG.debug('  min_split_size_factor: %s', min_split_size_factor)
         assert min_split_size_factor > 0
         max_metacell_size = \
             ceil(target_metacell_size * min_split_size_factor) - 1
+        LOG.debug('  max_metacell_size: %s', max_metacell_size)
 
     if max_merge_size_factor is not None:
+        LOG.debug('  max_merge_size_factor: %s', max_merge_size_factor)
         assert max_merge_size_factor > 0
         min_metacell_size = \
             floor(target_metacell_size * max_merge_size_factor) + 1
+        LOG.debug('  min_metacell_size: %s', min_metacell_size)
 
     if min_split_size_factor is not None and max_merge_size_factor is not None:
         assert max_merge_size_factor < min_split_size_factor
         assert min_metacell_size is not None
         assert max_metacell_size is not None
         assert min_metacell_size <= max_metacell_size
+
+    LOG.debug('  random_seed: %s', random_seed)
 
     community_of_cells = partition_method(edge_weights=edge_weights,
                                           node_sizes=node_sizes,
@@ -170,12 +178,11 @@ def compute_candidate_metacells(
 
     if inplace:
         ut.set_o_data(adata, 'candidate', community_of_cells,
-                      log_value=lambda community_of_cells:
-                      str(np.max(community_of_cells) + 1) + ' metacells')
+                      log_value=ut.groups_description)
         return None
 
     if LOG.isEnabledFor(level):
-        LOG.log(level, '  candidate: %s', np.max(community_of_cells) + 1)
+        LOG.log(level, '  candidates: %s', np.max(community_of_cells) + 1)
 
     return pd.Series(community_of_cells, index=adata.obs_names)
 

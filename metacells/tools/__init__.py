@@ -10,6 +10,7 @@ Functions for analysis tools.
 All the functions included here are exported under ``metacells.tl``.
 '''
 
+from .apply import *
 from .candidates import *
 from .deviants import *
 from .dissolve import *

@@ -127,7 +127,7 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
         data = ut.to_proper_matrix(data)
 
         metacell_of_cells = \
-            ut.get_vector_parameter_data(LOG, level, adata, metacells,
+            ut.get_vector_parameter_data(LOG, adata, metacells,
                                          per='o', name='metacells')
         assert metacell_of_cells is not None
 
@@ -135,9 +135,9 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
         assert metacells_count > 0
 
         if mdata is not None:
-            LOG.log(level, '  mdata: %s', ut.get_name(mdata) or '<adata>')
+            LOG.debug('  mdata: %s', ut.get_name(mdata) or '<adata>')
             mindex_of_genes = \
-                ut.get_vector_parameter_data(LOG, level, adata, mindices,
+                ut.get_vector_parameter_data(LOG, adata, mindices,
                                              per='v', name='mindices',
                                              default='same')
         if mindex_of_genes is None:
@@ -164,10 +164,10 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
                 top_shuffled_r2_per_gene_per_metacell = \
                     np.full(mdata.shape, None, dtype='float')
 
-        LOG.log(level, '  downsample_cell_quantile: %s',
-                downsample_cell_quantile)
-        LOG.log(level, '  min_gene_total: %s', min_gene_total)
-        LOG.log(level, '  top_gene_rank: %s', top_gene_rank)
+        LOG.debug('  downsample_cell_quantile: %s',
+                  downsample_cell_quantile)
+        LOG.debug('  min_gene_total: %s', min_gene_total)
+        LOG.debug('  top_gene_rank: %s', top_gene_rank)
 
         for metacell_index in range(metacells_count):
             _collect_metacell_excess(metacell_index, metacells_count,
@@ -228,7 +228,7 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
 
 def _log_r2(values: Optional[ut.DenseVector]) -> str:
     assert values is not None
-    return '%s for %s' % (np.nanmean(values), ut.mask_description(~np.isnan(values)))
+    return '%s <- %s' % (ut.mask_description(~np.isnan(values)), np.nanmean(values))
 
 
 def _collect_metacell_excess(  # pylint: disable=too-many-statements
@@ -308,6 +308,7 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements
         np.zeros(top_r2_per_correlated_gene.size)
 
     with ut.timed_step('.shuffle'):
+        LOG.debug('    random_seed: %s', random_seed)
         for shuffle_index in range(shuffles_count):
             if random_seed == 0:
                 shuffle_seed = 0

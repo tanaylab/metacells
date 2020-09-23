@@ -560,7 +560,6 @@ def _preserve_data(
 
 def get_vector_parameter_data(
     logger: Logger,
-    level: int,
     adata: AnnData,
     value: Optional[Union[str, utt.Vector]],
     *,
@@ -576,12 +575,12 @@ def get_vector_parameter_data(
     assert per in ('o', 'v')
 
     if isinstance(value, str):
-        logger.log(level, '%s%s: %s', indent, name, value)
+        logger.debug('%s%s: %s', indent, name, value)
         value = get_data(adata, value, per=per)
     elif value is None:
-        logger.log(level, '%s%s: %s', indent, name, default)
+        logger.debug('%s%s: %s', indent, name, default)
     else:
-        logger.log(level, '%s%s: <vector>', indent, name)
+        logger.debug('%s%s: <vector>', indent, name)
 
     if value is not None:
         value = utt.to_dense_vector(value)  # type: ignore
@@ -658,7 +657,7 @@ def get_data(  # pylint: disable=too-many-return-statements
     if per == 'v' or (per is None and name in adata.var):
         return get_v_data(adata, name, compute=compute, inplace=inplace)
 
-    raise KeyError('unknown data name: %s' % name)
+    raise _unknown_data(adata, name)
 
 
 @utm.timed_call()
@@ -782,7 +781,7 @@ def data_per(
             return per
 
     if must_exist:
-        raise KeyError('unknown data: %s' % name)
+        raise _unknown_data(adata, name)
 
     return None
 
@@ -808,7 +807,7 @@ def get_m_data(
         return data
 
     if compute is None:
-        raise KeyError('unavailable metadata: ' + name)
+        raise _unknown_data(adata, name)
 
     data = compute()
     assert data is not None
@@ -837,8 +836,7 @@ def get_o_data(
     If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
     '''
     return _get_shaped_data(adata, 'o', adata.obs, shape=(adata.n_obs,),
-                            per_text='per-observation', name=name,
-                            compute=compute, inplace=inplace)
+                            name=name, compute=compute, inplace=inplace)
 
 
 @utm.timed_call()
@@ -858,8 +856,7 @@ def get_v_data(
     If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
     '''
     return _get_shaped_data(adata, 'v', adata.var, shape=(adata.n_vars,),
-                            per_text='per-variable', name=name,
-                            compute=compute, inplace=inplace)
+                            name=name, compute=compute, inplace=inplace)
 
 
 @utm.timed_call()
@@ -886,7 +883,6 @@ def get_oo_data(
     '''
     return _get_layout_data(adata, 'oo', adata.obsp,
                             shape=(adata.n_obs, adata.n_obs),
-                            per_text='per-observation-per-observation',
                             name=name, compute=compute,
                             inplace=inplace, layout=layout)
 
@@ -915,7 +911,6 @@ def get_vv_data(
     '''
     return _get_layout_data(adata, 'vv', adata.varp,
                             shape=(adata.n_vars, adata.n_vars),
-                            per_text='per-variable-per-variable',
                             name=name, compute=compute,
                             inplace=inplace, layout=layout)
 
@@ -944,7 +939,6 @@ def get_oa_data(
     '''
     return _get_layout_data(adata, 'oa', adata.obsp,
                             shape=(adata.n_obs, 0),
-                            per_text='per-observation-per-any',
                             name=name, compute=compute,
                             inplace=inplace, layout=layout)
 
@@ -973,7 +967,6 @@ def get_va_data(
     '''
     return _get_layout_data(adata, 'va', adata.varm,
                             shape=(adata.n_vars, 0),
-                            per_text='per-variable-per-any',
                             name=name, compute=compute,
                             inplace=inplace, layout=layout)
 
@@ -1014,7 +1007,6 @@ def get_vo_data(
 
     data = _get_layout_data(adata, 'vo', adata.layers,
                             shape=(adata.n_obs, adata.n_vars),
-                            per_text='per-variable-per-observation',
                             name=name, compute=compute,
                             inplace=inplace or infocus, layout=layout)
 
@@ -1031,7 +1023,6 @@ def _get_layout_data(
     annotations: Annotations,
     *,
     shape: Tuple[int, ...],
-    per_text: str,
     name: str,
     compute: Optional[Callable[[], utt.Shaped]],
     inplace: bool,
@@ -1041,8 +1032,7 @@ def _get_layout_data(
 
     def get_base_data() -> Any:
         return _get_shaped_data(adata, per, annotations, shape=shape,
-                                per_text=per_text, name=name,
-                                compute=compute, inplace=inplace)
+                                name=name, compute=compute, inplace=inplace)
 
     if layout is None:
         return get_base_data()
@@ -1074,7 +1064,6 @@ def _get_shaped_data(
     annotations: Annotations,
     *,
     shape: Tuple[int, ...],
-    per_text: str,
     name: str,
     compute: Optional[Callable[[], utt.Shaped]],
     inplace: bool
@@ -1095,7 +1084,7 @@ def _get_shaped_data(
         return data
 
     if compute is None:
-        raise KeyError('unavailable %s data: %s' % (per_text, name))
+        raise _unknown_data(adata, name)
 
     data = compute()
     assert data is not None
@@ -1580,9 +1569,9 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
         texts.append('setting ')
         if data_name is not None:
             texts.append(data_name)
-            texts.append('.')
+            texts.append(':')
         texts.append(MEMBER_OF_PER[per])
-        texts.append('.')
+        texts.append(':')
         texts.append(name)
 
         if log_value is not None:
@@ -1603,9 +1592,9 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
         if len(per) > 1:
             return
 
-        if isinstance(value, str):
+        if isinstance(value, (str, int, float)):
             texts.append(' to ')
-            texts.append(value)
+            texts.append(str(value))
             return
 
         if isinstance(value, (pd.Series, np.ndarray)) and value.dtype == 'bool':
@@ -1668,3 +1657,10 @@ def _log_del_data(
         texts.append(' layout')
 
     LOG.log(level, ''.join(texts))
+
+
+def _unknown_data(adata: AnnData, name: str) -> KeyError:
+    data_name = get_name(adata)
+    if data_name is None:
+        return KeyError('unknown data name: %s' % name)
+    return KeyError('unknown data: %s name: %s' % (data_name, name))

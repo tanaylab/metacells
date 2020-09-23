@@ -71,7 +71,7 @@ def find_high_fraction_genes(
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         fraction_of_genes = pp.get_fraction_per_var(adata).proper
-        LOG.log(level, '  min_gene_fraction: %s', min_gene_fraction)
+        LOG.debug('  min_gene_fraction: %s', min_gene_fraction)
         genes_mask = fraction_of_genes >= min_gene_fraction
 
     if inplace:
@@ -135,8 +135,8 @@ def find_high_normalized_variance_genes(
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         normalized_variance_of_genes = \
             pp.get_normalized_variance_per_var(adata).proper
-        LOG.log(level, '  min_gene_normalized_variance: %s',
-                min_gene_normalized_variance)
+        LOG.debug('  min_gene_normalized_variance: %s',
+                  min_gene_normalized_variance)
         genes_mask = \
             normalized_variance_of_genes >= min_gene_normalized_variance
 
@@ -203,8 +203,8 @@ def find_high_relative_variance_genes(
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         relative_variance_of_genes = \
             pp.get_relative_variance_per_var(adata).proper
-        LOG.log(level, '  min_gene_relative_variance: %s',
-                min_gene_relative_variance)
+        LOG.debug('  min_gene_relative_variance: %s',
+                  min_gene_relative_variance)
         genes_mask = relative_variance_of_genes >= min_gene_relative_variance
 
     if inplace:

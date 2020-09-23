@@ -74,11 +74,11 @@ def find_properly_sampled_cells(
         cells_mask = np.full(adata.n_obs, True, dtype='bool')
 
         if min_cell_total is not None:
-            LOG.log(level, '  min_cell_total: %s', min_cell_total)
+            LOG.debug('  min_cell_total: %s', min_cell_total)
             cells_mask = cells_mask & (total_of_cells >= min_cell_total)
 
         if max_cell_total is not None:
-            LOG.log(level, '  max_cell_total: %s', max_cell_total)
+            LOG.debug('  max_cell_total: %s', max_cell_total)
             cells_mask = \
                 cells_mask & (total_of_cells <= max_cell_total)
 
@@ -139,7 +139,7 @@ def find_properly_sampled_genes(
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         total_of_genes = pp.get_per_var(adata, ut.sum_per).proper
-        LOG.log(level, '  min_gene_total: %s', min_gene_total)
+        LOG.debug('  min_gene_total: %s', min_gene_total)
         genes_mask = total_of_genes >= min_gene_total
 
     if inplace:

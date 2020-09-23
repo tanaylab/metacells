@@ -37,10 +37,10 @@ def _load(path: str) -> Tuple[AnnData, Dict[str, Any]]:
 
 
 @pytest.mark.parametrize('path', glob('../metacells-test-data/*.h5ad'))
-def test_find_rare_genes_modules(path: str) -> None:
+def test_find_rare_gene_modules(path: str) -> None:
     adata, expected = _load(path)
 
-    mc.tl.find_rare_genes_modules(adata)
+    mc.tl.find_rare_gene_modules(adata)
 
     actual_rare_gene_modules = [
         list(module_gene_names) for module_gene_names
@@ -56,17 +56,23 @@ def test_direct_pipeline(path: str) -> None:
     adata, expected = _load(path)
 
     pdata = adata[range(6000), :].copy()
-    kwargs = expected['kwargs']
 
-    mdata = mc.pl.direct_pipeline(pdata, random_seed=123456, **kwargs)
+    cdata = mc.pl.extract_clean_data(pdata, random_seed=123456,
+                                     **expected['clean_kwargs'])
+    assert cdata is not None
 
-    mc.tl.compute_excess_r2(pdata, random_seed=123456, mdata=mdata)
+    mc.pl.compute_direct_metacells(cdata, random_seed=123456,
+                                   **expected['compute_kwargs'])
+
+    mdata = mc.pl.collect_metacells(cdata)
+
+    mc.tl.compute_excess_r2(cdata, random_seed=123456, mdata=mdata)
 
     assert np.allclose(expected['gene_max_top_r2'],
-                       np.nanmean(mc.ut.get_v_data(pdata, 'gene_max_top_r2')))
+                       np.nanmean(mc.ut.get_v_data(cdata, 'gene_max_top_r2')))
 
     assert np.allclose(expected['gene_max_top_shuffled_r2'],
-                       np.nanmean(mc.ut.get_v_data(pdata, 'gene_max_top_shuffled_r2')))
+                       np.nanmean(mc.ut.get_v_data(cdata, 'gene_max_top_shuffled_r2')))
 
     assert np.allclose(expected['gene_max_excess_r2'],
-                       np.nanmean(mc.ut.get_v_data(pdata, 'gene_max_excess_r2')))
+                       np.nanmean(mc.ut.get_v_data(cdata, 'gene_max_excess_r2')))

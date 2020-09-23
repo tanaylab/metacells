@@ -93,13 +93,13 @@ def find_noisy_lonely_genes(
     of, level = ut.log_operation(LOG, adata, 'find_noisy_lonely_genes',
                                  of, 'var_similarity')
 
-    LOG.log(level, '  max_sampled_cells: %s', max_sampled_cells)
+    LOG.debug('  max_sampled_cells: %s', max_sampled_cells)
     if max_sampled_cells < adata.n_obs:
         np.random.seed(random_seed)
         cell_indices = \
             np.random.choice(np.arange(adata.n_obs),
                              size=max_sampled_cells, replace=False)
-        bdata = ut.slice(adata, obs=cell_indices, name='sampled', tmp=True)
+        bdata = ut.slice(adata, obs=cell_indices, name='.sampled', tmp=True)
     else:
         bdata = adata.copy()
         bdata.uns['__tmp__'] = True
@@ -123,7 +123,7 @@ def find_noisy_lonely_genes(
     noisy_lonely_genes_mask = np.full(adata.n_vars, False)
 
     if ndata is not None:
-        LOG.log(level, '  max_gene_similarity: %s', max_gene_similarity)
+        LOG.debug('  max_gene_similarity: %s', max_gene_similarity)
 
         gene_gene_similarity_frame = \
             compute_var_var_similarity(ndata, inplace=False)
@@ -142,7 +142,7 @@ def find_noisy_lonely_genes(
 
         noisy_lonely_genes_mask[lonely_genes_indices] = True
 
-    LOG.debug('noisy lonely gene names: %s',
+    LOG.debug('  noisy lonely gene names: %s',
               sorted(list(adata.var_names[noisy_lonely_genes_mask])))
 
     if inplace:
