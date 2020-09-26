@@ -15,7 +15,6 @@ random_seed: int = 0
 
 #: The generic minimal "significant" gene fraction. See
 #: :py:const:`noisy_lonely_min_gene_fraction`,
-#: :py:const:`rare_max_gene_cell_fraction`,
 #: :py:const:`feature_min_gene_fraction`
 #: and
 #: :py:func:`metacells.tools.high.find_high_fraction_genes`.
@@ -118,7 +117,8 @@ pile_min_split_size_factor: float = min_split_size_factor
 pile_min_robust_size_factor: float = min_robust_size_factor
 
 #: The maximal size factor of a file, below which we can merge it. See
-#: :py:const:`max_merge_size_factor`
+#: :py:const:`max_merge_size_factor`,
+#: :py:const:`dissolve_min_convincing_size_factor`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
@@ -177,13 +177,10 @@ noisy_lonely_min_gene_normalized_variance: float = significant_gene_normalized_v
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
 noisy_lonely_max_gene_similarity: float = significant_gene_similarity
 
-#: The maximal expression of a gene (in any cell) to be considered "rare". See
+#: The maximal fraction of the cells where a gene is expressed to be considered "rare". See
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-#: Note this is different from the lower
-#: :py:const:`significant_gene_fraction`
-#: which applies to the mean expression of the gene across the cells.
 rare_max_gene_cell_fraction: float = 1e-3
 
 #: The minimal maximum-across-all-cells value of a gene to be considered as a candidate for rare
@@ -194,7 +191,7 @@ rare_max_gene_cell_fraction: float = 1e-3
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 rare_min_gene_maximum: int = significant_value
 
-#: Whether to compute repeated gene-cgene similarity for computing the rare gene modules. See
+#: Whether to compute repeated gene-gene similarity for computing the rare gene modules. See
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
@@ -435,6 +432,16 @@ dissolve_cell_sizes: Union[str, utt.Vector] = cell_sizes
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 dissolve_min_robust_size_factor: float = min_robust_size_factor
+
+#: The minimal size factor for a metacell to be considered "robust" when grouping rare gene module
+#: cells. See
+#: :py:const:`max_merge_size_factor`
+#: :py:func:`metacells.tools.dissolve.dissolve_metacells`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+rare_dissolve_min_robust_size_factor: float = max_merge_size_factor
 
 #: The minimal size factor for a metacell to be kept if it is "convincing". See
 #: :py:const:`max_merge_size_factor`

@@ -31,6 +31,7 @@ import numpy as np  # type: ignore
 from anndata import AnnData
 
 import metacells.utilities.documentation as utd
+import metacells.utilities.parallel as utp
 import metacells.utilities.typing as utt
 
 __all__ = [
@@ -105,7 +106,7 @@ def setup_logger(
     level: int = logging.WARN,
     to: IO = sys.stderr,
     time: bool = True,
-    process: bool = True,
+    process: Optional[bool] = None,
     name: Optional[str] = None,
     short_level_names: bool = False,
 ) -> Logger:
@@ -123,7 +124,8 @@ def setup_logger(
     If ``name`` (default: {name}) is specified, it is added to each logged message.
 
     If ``process`` (default: {process}), include the process index (the main process has the index
-    zero).
+    zero). If ``None``, then is set if :py:func:`metacells.utilities.parallel.get_cpus_count` is
+    greater than one (that is, multiprocessing is used).
 
     If ``short_level_names``, the log level names are shortened to three characters, for consistent
     formatting of indented (nested) log messages.
@@ -136,6 +138,9 @@ def setup_logger(
     log_format = '%(levelname)s - %(message)s'
 
     current_thread().name = '#0'
+
+    if process is None:
+        process = utp.get_cpus_count() > 1
 
     if process:
         log_format = '%(threadName)s - ' + log_format

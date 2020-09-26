@@ -657,7 +657,7 @@ def get_data(  # pylint: disable=too-many-return-statements
     if per == 'v' or (per is None and name in adata.var):
         return get_v_data(adata, name, compute=compute, inplace=inplace)
 
-    raise _unknown_data(adata, name)
+    raise _unknown_data(adata, name, per)
 
 
 @utm.timed_call()
@@ -807,7 +807,7 @@ def get_m_data(
         return data
 
     if compute is None:
-        raise _unknown_data(adata, name)
+        raise _unknown_data(adata, name, 'm')
 
     data = compute()
     assert data is not None
@@ -1084,7 +1084,7 @@ def _get_shaped_data(
         return data
 
     if compute is None:
-        raise _unknown_data(adata, name)
+        raise _unknown_data(adata, name, per)
 
     data = compute()
     assert data is not None
@@ -1659,8 +1659,20 @@ def _log_del_data(
     LOG.log(level, ''.join(texts))
 
 
-def _unknown_data(adata: AnnData, name: str) -> KeyError:
+def _unknown_data(adata: AnnData, name: str, per: Optional[str] = None) -> KeyError:
+    texts = ['unknown']
+
+    if per is not None:
+        texts.append(' ')
+        texts.append(per)
+
+    texts.append(' data')
+
     data_name = get_name(adata)
-    if data_name is None:
-        return KeyError('unknown data name: %s' % name)
-    return KeyError('unknown data: %s name: %s' % (data_name, name))
+    if data_name is not None:
+        texts.append(': ')
+        texts.append(data_name)
+
+    texts.append(' name: ')
+    texts.append(name)
+    return KeyError(''.join(texts))

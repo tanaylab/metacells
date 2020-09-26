@@ -45,6 +45,7 @@ nitpick_ignore = [
     ('py:class', 'ProperMatrix'),
     ('py:class', 're.Pattern'),
     ('py:class', 'S'),
+    ('py:class', 'T'),
     ('py:class', 'scipy.sparse.base.spmatrix'),
     ('py:class', 'StepTiming'),
     ('py:class', 'utt.CompressedMatrix'),

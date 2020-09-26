@@ -27,7 +27,7 @@ LOG = logging.getLogger(__name__)
 
 @ut.timed_call()
 @ut.expand_doc()
-def compute_direct_metacells(  # pylint: disable=too-many-branches
+def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-statements
     adata: AnnData,
     *,
     of: Optional[str] = None,
@@ -232,21 +232,27 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches
             else:
                 total_cell_sizes = np.sum(cell_sizes)
             knn_k = round(total_cell_sizes / target_metacell_size)
-            assert knn_k > 0
 
-        tl.compute_obs_obs_knn_graph(fdata,
-                                     k=knn_k,
-                                     balanced_ranks_factor=knn_balanced_ranks_factor,
-                                     incoming_degree_factor=knn_incoming_degree_factor,
-                                     outgoing_degree_factor=knn_outgoing_degree_factor)
+        LOG.debug('  knn_k: %s', knn_k)
+        if knn_k == 0:
+            LOG.debug('  too small, try a single metacell')
+            ut.set_o_data(fdata, 'candidate',
+                          np.full(fdata.n_obs, 0, dtype='int32'),
+                          log_value=lambda _: '* <- 0')
+        else:
+            tl.compute_obs_obs_knn_graph(fdata,
+                                         k=knn_k,
+                                         balanced_ranks_factor=knn_balanced_ranks_factor,
+                                         incoming_degree_factor=knn_incoming_degree_factor,
+                                         outgoing_degree_factor=knn_outgoing_degree_factor)
 
-        tl.compute_candidate_metacells(fdata,
-                                       target_metacell_size=target_metacell_size,
-                                       cell_sizes=cell_sizes,
-                                       partition_method=candidates_partition_method,
-                                       min_split_size_factor=candidates_min_split_size_factor,
-                                       max_merge_size_factor=candidates_max_merge_size_factor,
-                                       random_seed=random_seed)
+            tl.compute_candidate_metacells(fdata,
+                                           target_metacell_size=target_metacell_size,
+                                           cell_sizes=cell_sizes,
+                                           partition_method=candidates_partition_method,
+                                           min_split_size_factor=candidates_min_split_size_factor,
+                                           max_merge_size_factor=candidates_max_merge_size_factor,
+                                           random_seed=random_seed)
 
         candidate_of_cells = \
             ut.to_dense_vector(ut.get_o_data(fdata, 'candidate'))

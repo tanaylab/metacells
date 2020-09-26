@@ -28,4 +28,4 @@ disable=C0330,R0801,
 check-quote-consistency=yes
 
 [BASIC]
-good-names=X,k,n,m,O_N,O_N_Log_N,by,of,to,version,S,am,be,M,N
+good-names=X,k,n,m,O_N,O_N_Log_N,by,of,to,version,S,am,be,M,N,T

@@ -172,7 +172,7 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
                           log_value=ut.mask_description)
 
         ut.set_o_data(adata, to, metacell_of_cells,
-                      log_value=ut.mask_description)
+                      log_value=ut.groups_description)
         return None
 
     if LOG.isEnabledFor(level):

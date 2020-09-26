@@ -91,8 +91,8 @@ def find_rare_gene_modules(
     **Computation Parameters**
 
     1. Pick as candidates all genes that are expressed in more than ``max_gene_cell_fraction``
-       (default: {max_gene_cell_fraction}), and whose maximal value in a cell is at least
-       ``min_gene_maximum`` (default: {min_gene_maximum}).
+       (default: {max_gene_cell_fraction}) of the cells, and whose maximal value in a cell is at
+       least ``min_gene_maximum`` (default: {min_gene_maximum}).
 
     2. Compute the similarity between the genes using
        :py:func:`metacells.tools.similarity.compute_var_var_similarity`. Pass it

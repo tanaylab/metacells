@@ -58,7 +58,7 @@ import os
 import sys
 from multiprocessing import Pool, Value
 from threading import current_thread
-from typing import Any, Callable, Iterable, Optional
+from typing import Any, Callable, Iterable, Optional, TypeVar
 
 from threadpoolctl import threadpool_limits  # type: ignore
 
@@ -127,10 +127,13 @@ def get_cpus_count() -> int:
     return CPUS_COUNT
 
 
+T = TypeVar('T')
+
+
 def parallel_map(
-    function: Callable[[int], Any],
+    function: Callable[[int], T],
     invocations: int,
-) -> Iterable[Any]:
+) -> Iterable[T]:
     '''
     Execute ``function``, in parallel, ``invocations`` times. Each invocation is given the
     invocation's index as its single argument.
