@@ -97,8 +97,7 @@ def collect_metacells(
             continue
         if annotation_name.startswith('pre_') and not ut.has_data(adata, annotation_name):
             continue
-        value_per_gene = \
-            ut.to_dense_vector(ut.get_v_data(adata, annotation_name))
+        value_per_gene = ut.get_v_dense(adata, annotation_name)
         ut.set_v_data(mdata, annotation_name, value_per_gene,
                       log_value=ut.mask_description)
 

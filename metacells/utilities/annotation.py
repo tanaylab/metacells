@@ -153,11 +153,17 @@ __all__ = [
 
     'get_m_data',
     'get_o_data',
+    'get_o_dense',
     'get_v_data',
+    'get_v_dense',
     'get_oo_data',
+    'get_oo_proper',
     'get_vv_data',
+    'get_vv_proper',
     'get_oa_data',
+    'get_oa_proper',
     'get_va_data',
+    'get_va_proper',
 
     'get_vo_data',
     'all_data',
@@ -839,6 +845,21 @@ def get_o_data(
                             name=name, compute=compute, inplace=inplace)
 
 
+def get_o_dense(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Vector]] = None,
+    inplace: bool = True,
+) -> utt.DenseVector:
+    '''
+    Same as :py:func:`get_o_data` but returns a numpy
+    :py:const:`metacells.utilities.typing.DenseVector`.
+    '''
+    return utt.to_dense_vector(get_o_data(adata, name,
+                                          compute=compute, inplace=inplace))
+
+
 @utm.timed_call()
 @utd.expand_doc()
 def get_v_data(
@@ -857,6 +878,21 @@ def get_v_data(
     '''
     return _get_shaped_data(adata, 'v', adata.var, shape=(adata.n_vars,),
                             name=name, compute=compute, inplace=inplace)
+
+
+def get_v_dense(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Vector]] = None,
+    inplace: bool = True,
+) -> utt.DenseVector:
+    '''
+    Same as :py:func:`get_v_data` but returns a numpy
+    :py:const:`metacells.utilities.typing.DenseVector`.
+    '''
+    return utt.to_dense_vector(get_v_data(adata, name,
+                                          compute=compute, inplace=inplace))
 
 
 @utm.timed_call()
@@ -887,6 +923,22 @@ def get_oo_data(
                             inplace=inplace, layout=layout)
 
 
+def get_oo_proper(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Matrix]] = None,
+    inplace: bool = True,
+    layout: Optional[str] = None,
+) -> utt.Matrix:
+    '''
+    Same as :py:func:`get_oo_data` but returns a numpy
+    :py:const:`metacells.utilities.typing.ProperMatrix`.
+    '''
+    return utt.to_proper_matrix(get_oo_data(adata, name, compute=compute,
+                                            inplace=inplace, layout=layout))
+
+
 @utm.timed_call()
 @utd.expand_doc()
 def get_vv_data(
@@ -913,6 +965,22 @@ def get_vv_data(
                             shape=(adata.n_vars, adata.n_vars),
                             name=name, compute=compute,
                             inplace=inplace, layout=layout)
+
+
+def get_vv_proper(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Matrix]] = None,
+    inplace: bool = True,
+    layout: Optional[str] = None,
+) -> utt.Matrix:
+    '''
+    Same as :py:func:`get_vv_data` but returns a numpy
+    :py:const:`metacells.utilities.typing.ProperMatrix`.
+    '''
+    return utt.to_proper_matrix(get_vv_data(adata, name, compute=compute,
+                                            inplace=inplace, layout=layout))
 
 
 @utm.timed_call()
@@ -943,6 +1011,22 @@ def get_oa_data(
                             inplace=inplace, layout=layout)
 
 
+def get_oa_proper(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Matrix]] = None,
+    inplace: bool = True,
+    layout: Optional[str] = None,
+) -> utt.Matrix:
+    '''
+    Same as :py:func:`get_oa_data` but returns a numpy
+    :py:const:`metacells.utilities.typing.ProperMatrix`.
+    '''
+    return utt.to_proper_matrix(get_oa_data(adata, name, compute=compute,
+                                            inplace=inplace, layout=layout))
+
+
 @utm.timed_call()
 @utd.expand_doc()
 def get_va_data(
@@ -969,6 +1053,22 @@ def get_va_data(
                             shape=(adata.n_vars, 0),
                             name=name, compute=compute,
                             inplace=inplace, layout=layout)
+
+
+def get_va_proper(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Matrix]] = None,
+    inplace: bool = True,
+    layout: Optional[str] = None,
+) -> utt.Matrix:
+    '''
+    Same as :py:func:`get_va_data` but returns a numpy
+    :py:const:`metacells.utilities.typing.ProperMatrix`.
+    '''
+    return utt.to_proper_matrix(get_va_data(adata, name, compute=compute,
+                                            inplace=inplace, layout=layout))
 
 
 @utm.timed_call()
@@ -1015,6 +1115,22 @@ def get_vo_data(
         adata.uns['__focus__'] = name
 
     return data
+
+
+def get_vo_proper(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Matrix]] = None,
+    inplace: bool = True,
+    layout: Optional[str] = None,
+) -> utt.Matrix:
+    '''
+    Same as :py:func:`get_vo_data` but returns a numpy
+    :py:const:`metacells.utilities.typing.ProperMatrix`.
+    '''
+    return utt.to_proper_matrix(get_vo_data(adata, name, compute=compute,
+                                            inplace=inplace, layout=layout))
 
 
 def _get_layout_data(

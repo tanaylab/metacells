@@ -254,8 +254,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
                                            max_merge_size_factor=candidates_max_merge_size_factor,
                                            random_seed=random_seed)
 
-        candidate_of_cells = \
-            ut.to_dense_vector(ut.get_o_data(fdata, 'candidate'))
+        candidate_of_cells = ut.get_o_dense(fdata, 'candidate')
 
         if intermediate:
             ut.set_o_data(adata, 'candidate', candidate_of_cells,
@@ -298,8 +297,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
                                   min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor)
 
     if intermediate:
-        metacell_of_cells = \
-            ut.to_dense_vector(ut.get_o_data(adata, 'metacell'))
+        metacell_of_cells = ut.get_o_dense(adata, 'metacell')
 
         outlier_of_cells = metacell_of_cells < 0
         ut.set_o_data(adata, 'outlier', outlier_of_cells,

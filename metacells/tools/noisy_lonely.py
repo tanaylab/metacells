@@ -136,8 +136,7 @@ def find_noisy_lonely_genes(
         max_similiraity_of_genes = ut.sum_per(gene_gene_similarity, per='row')
 
         lonely_genes_mask = max_similiraity_of_genes < max_gene_similarity
-        base_index_of_genes = \
-            ut.to_dense_vector(ut.get_v_data(ndata, 'sampled_gene_index'))
+        base_index_of_genes = ut.get_v_dense(ndata, 'sampled_gene_index')
         lonely_genes_indices = base_index_of_genes[lonely_genes_mask]
 
         noisy_lonely_genes_mask[lonely_genes_indices] = True

@@ -171,10 +171,9 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
                 continue
 
             self.genes_frame[gene_annotation.name] = \
-                ut.to_dense_vector(ut.get_v_data(adata, gene_annotation.name))
+                ut.get_v_dense(adata, gene_annotation.name)
 
-        cell_indices = \
-            ut.to_dense_vector(ut.get_o_data(adata, 'complete_cell_index'))
+        cell_indices = ut.get_o_dense(adata, 'complete_cell_index')
 
         #: The per-cell data.
         #:
@@ -194,7 +193,7 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
             # pylint: enable=too-many-boolean-expressions
 
             self.cells_frame[cell_annotation.name] = \
-                ut.to_dense_vector(ut.get_o_data(adata, cell_annotation.name))
+                ut.get_o_dense(adata, cell_annotation.name)
 
     def collect(  # pylint: disable=too-many-branches,too-many-statements
         self,
@@ -377,7 +376,7 @@ def _patch_direct_results(
                           log_value=lambda _: '* <- %s' % gene_annotation.default)
             continue
 
-        value = ut.to_dense_vector(ut.get_v_data(adata, gene_annotation.name))
+        value = ut.get_v_dense(adata, gene_annotation.name)
         if str(value.dtype) == gene_annotation.dtype:
             continue
 
@@ -627,9 +626,7 @@ def divide_and_conquer_pipeline(
                                   min_cell_module_total=rare_min_cell_module_total,
                                   intermediate=intermediate)
 
-        rare_module_of_cells = \
-            ut.to_dense_vector(ut.get_o_data(adata,
-                                             'cells_rare_gene_module'))
+        rare_module_of_cells = ut.get_o_dense(adata, 'cells_rare_gene_module')
         rare_modules_count = np.max(rare_module_of_cells) + 1
         if rare_modules_count > 0:
             subset_results = \
@@ -1023,11 +1020,9 @@ def compute_divide_and_conquer_metacells(
                                              cell_sizes='grouped',
                                              random_seed=random_seed,
                                              intermediate=intermediate)
-        preliminary_metacell_of_cells = \
-            ut.to_dense_vector(ut.get_o_data(adata, 'pre_metacell'))
+        preliminary_metacell_of_cells = ut.get_o_dense(adata, 'pre_metacell')
 
-        pile_of_preliminary_metacells = \
-            ut.to_dense_vector(ut.get_o_data(mdata, 'metacell'))
+        pile_of_preliminary_metacells = ut.get_o_dense(mdata, 'metacell')
 
         preliminary_pile_of_cells = \
             ut.group_piles(preliminary_metacell_of_cells,
@@ -1160,8 +1155,7 @@ def _compute_piled_metacells(
     else:
         metacell_annotation = 'metacell'
 
-    metacell_of_cells = \
-        ut.to_dense_vector(ut.get_o_data(adata, metacell_annotation))
+    metacell_of_cells = ut.get_o_dense(adata, metacell_annotation)
 
     outlier_of_cells = metacell_of_cells < 0
     if not np.any(outlier_of_cells) \
