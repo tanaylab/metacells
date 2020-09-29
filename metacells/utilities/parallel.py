@@ -110,8 +110,9 @@ def set_cpus_count(cpus: int) -> None:
     global CPUS_COUNT
     CPUS_COUNT = cpus
 
-    LOG.debug('CPUS_COUNT: %s', CPUS_COUNT)
+    LOG.debug('cpus_count: %s', CPUS_COUNT)
     threadpool_limits(limits=CPUS_COUNT)
+    xt.in_parallel(CPUS_COUNT < 2)
 
 
 if not 'sphinx' in sys.argv[0]:

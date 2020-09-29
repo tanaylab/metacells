@@ -307,6 +307,7 @@ def _rank_outgoing(
                                          shape=similarity.shape)
     preserved_matrix.has_canonical_format = True
 
+    assert degree * size < 2 ** 31
     indptr = np.arange(size + 1, dtype='int32')
     indptr *= degree
     indices = np.empty(degree * size, dtype='int32')
@@ -314,10 +315,7 @@ def _rank_outgoing(
 
     with ut.timed_step('extensions.collect_outgoing'):
         ut.timed_parameters(size=size, keep=degree)
-        xt.collect_outgoing(degree,
-                            similarity,
-                            indices,
-                            ranks)
+        xt.collect_outgoing(degree, similarity, indices, ranks)
 
     outgoing_ranks = \
         sparse.csr_matrix((ranks, indices, indptr), shape=similarity.shape)
@@ -390,6 +388,7 @@ def _prune_ranks(
                           shape=balanced_ranks.shape)
     preserved_matrix.has_canonical_format = True
 
+    assert size * max_degree < 2 ** 31
     indptr_array = np.empty(1 + size, dtype='int32')
     indices_array = np.empty(size * max_degree, dtype='int32')
     ranks_array = np.empty(size * max_degree, dtype='float32')

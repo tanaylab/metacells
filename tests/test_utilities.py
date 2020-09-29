@@ -27,17 +27,25 @@ def test_expand_doc() -> None:
         '''
 
 
-def test_sparse_corrcoef() -> None:
+def test_corrcoef() -> None:
     matrix = sparse.rand(100, 10000, density=0.1, format='csr')
-    sparse_correlation = ut.corrcoef(matrix)
-    numpy_correlation = np.corrcoef(matrix.toarray())
+    dense = matrix.toarray()
+    numpy_correlation = np.corrcoef(dense)
     assert numpy_correlation.shape == (100, 100)
-    assert np.allclose(sparse_correlation, numpy_correlation)
+
+    sparse_correlation = ut.corrcoef(matrix)
+    assert sparse_correlation.shape == (100, 100)
+    assert np.allclose(sparse_correlation, numpy_correlation, atol=1e-6)
+
+    dense = dense.T
+    dense_correlation = ut.corrcoef(dense, per='column')
+    assert dense_correlation.shape == (100, 100)
+    assert np.allclose(dense_correlation, numpy_correlation, atol=1e-6)
 
 
 def test_relayout_matrix() -> None:
     rvs = stats.poisson(10, loc=10).rvs
-    csr_matrix = sparse.random(1000, 10000, format='csr',
+    csr_matrix = sparse.random(20, 20, format='csr',
                                dtype='int32', random_state=123456, data_rvs=rvs)
     assert csr_matrix.getformat() == 'csr'
 

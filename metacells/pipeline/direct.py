@@ -63,8 +63,24 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
 
     This directly computes the metacells on the whole data. Like any method that directly looks at
     the whole data at once, the amount of CPU and memory needed becomes unreasonable when the data
-    size grows. At O(10,000) and definitely for anything above O(100,000) you are better off using
-    the divide-and-conquer method.
+    size grows. Above O(10,000) you are much better off using the divide-and-conquer method.
+
+    .. note::
+
+        The current implementation is naive in that it computes the full dense N^2 correlation
+        matrix, and only then extracts the sparse graph out of it. We actually need two copies where
+        each requires 4 bytes per entry, so for O(100,000) cells, we have storage of
+        O(100,000,000,000). In addition, the implementation is (mostly) serial for both the
+        correlation and graph clustering phases.
+
+        It is possible to mitigate this by fusing the correlations phase and the graph generation
+        phase, parallelizing the result, and also (somehow) parallelizing the graph clustering
+        phase. This might increase the "reasonable" size for the direct approach to O(100,000).
+
+        We have decided not to invest in this direction since it won't allow us to push the size to
+        O(1,000,000) and above. Instead we provide the divide-and-conquer method, which easily
+        scales to O(1,000,000) on a single multi-core server, and to "unlimited" size if we further
+        enhance the implementation to use a distributed compute cluster of such servers.
 
     .. todo::
 

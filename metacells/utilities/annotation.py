@@ -231,6 +231,12 @@ def setup(
     assert '__x__' not in adata.uns_keys()
     assert '|' not in x_name
 
+    if utt.SparseMatrix.am(X):
+        if not X.has_sorted_indices:
+            warn('%s does not have sorted indices' % (name or 'adata'))
+        if not X.has_canonical_format:
+            warn('%s does not have canonical format' % (name or 'adata'))
+
     if tmp:
         adata.uns['__tmp__'] = True
     if name is not None:

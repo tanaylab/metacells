@@ -86,11 +86,11 @@ template<typename T>
 class ConstArraySlice {
 private:
     const T* m_data;     ///< Pointer to the first element.
-    int m_size;          ///< Number of elements.
+    size_t m_size;       ///< Number of elements.
     const char* m_name;  ///< Name for error messages.
 
 public:
-    ConstArraySlice(const T* const data, const int size, const char* const name)
+    ConstArraySlice(const T* const data, const size_t size, const char* const name)
       : m_data(data), m_size(size), m_name(name) {}
 
     ConstArraySlice(const pybind11::array_t<T>& array, const char* const name)
@@ -112,7 +112,7 @@ public:
         return ConstArraySlice(m_data + start, stop - start, m_name);
     }
 
-    int size() const { return m_size; }
+    size_t size() const { return m_size; }
 
     template<typename I>
     const T& operator[](const I index) const {
@@ -131,11 +131,11 @@ template<typename T>
 class ArraySlice {
 private:
     T* m_data;           ///< Pointer to the first element.
-    int m_size;          ///< Number of elements.
+    size_t m_size;       ///< Number of elements.
     const char* m_name;  ///< Name for error messages.
 
 public:
-    ArraySlice(T* const data, const int size, const char* const name)
+    ArraySlice(T* const data, const size_t size, const char* const name)
       : m_data(data), m_size(size), m_name(name) {}
 
     ArraySlice(pybind11::array_t<T>& array, const char* const name)
@@ -157,7 +157,7 @@ public:
         return ArraySlice(m_data + start, stop - start, m_name);
     }
 
-    int size() const { return m_size; }
+    size_t size() const { return m_size; }
 
     template<typename I>
     T& operator[](const I index) {
@@ -177,17 +177,17 @@ public:
 template<typename T>
 class ConstMatrixSlice {
 private:
-    const T* m_data;      ///< Pointer to the first element.
-    int m_rows_count;     ///< Number of rows.
-    int m_columns_count;  ///< Number of columns.
-    int m_rows_offset;    ///< Offset between start of rows.
-    const char* m_name;   ///< Name for error messages.
+    const T* m_data;         ///< Pointer to the first element.
+    size_t m_rows_count;     ///< Number of rows.
+    size_t m_columns_count;  ///< Number of columns.
+    size_t m_rows_offset;    ///< Offset between start of rows.
+    const char* m_name;      ///< Name for error messages.
 
 public:
     ConstMatrixSlice(const T* const data,
-                     const int rows_count,
-                     const int columns_count,
-                     const int rows_offset,
+                     const size_t rows_count,
+                     const size_t columns_count,
+                     const size_t rows_offset,
                      const char* const name)
       : m_data(data)
       , m_rows_count(rows_count)
@@ -213,26 +213,26 @@ public:
         return ConstArraySlice<T>(m_data + row_index * m_rows_offset, m_columns_count, m_name);
     }
 
-    int rows_count() const { return m_rows_count; }
+    size_t rows_count() const { return m_rows_count; }
 
-    int columns_count() const { return m_columns_count; }
+    size_t columns_count() const { return m_columns_count; }
 };
 
 /// A mutable row-major slice of a matrix of type ``T``.
 template<typename T>
 class MatrixSlice {
 private:
-    T* m_data;            ///< Pointer to the first element.
-    int m_rows_count;     ///< Number of rows.
-    int m_columns_count;  ///< Number of columns.
-    int m_rows_offset;    ///< Offset between start of rows.
-    const char* m_name;   ///< Name for error messages.
+    T* m_data;               ///< Pointer to the first element.
+    size_t m_rows_count;     ///< Number of rows.
+    size_t m_columns_count;  ///< Number of columns.
+    size_t m_rows_offset;    ///< Offset between start of rows.
+    const char* m_name;      ///< Name for error messages.
 
 public:
     MatrixSlice(T* const data,
-                const int rows_count,
-                const int columns_count,
-                const int rows_offset,
+                const size_t rows_count,
+                const size_t columns_count,
+                const size_t rows_offset,
                 const char* const name)
       : m_data(data)
       , m_rows_count(rows_count)
@@ -258,9 +258,9 @@ public:
         return ArraySlice<T>(m_data + row_index * m_rows_offset, m_columns_count, m_name);
     }
 
-    int rows_count() const { return m_rows_count; }
+    size_t rows_count() const { return m_rows_count; }
 
-    int columns_count() const { return m_columns_count; }
+    size_t columns_count() const { return m_columns_count; }
 
     operator ConstMatrixSlice<T>() const {
         return ConstMatrixSlice<T>(m_data, m_rows_count, m_columns_count, m_rows_offset, m_name);
@@ -274,8 +274,8 @@ private:
     ConstArraySlice<D> m_data;     ///< Non-zero data.
     ConstArraySlice<I> m_indices;  ///< Column indices.
     ConstArraySlice<P> m_indptr;   ///< First and last indices positions per band.
-    int m_bands_count;             ///< Number of bands.
-    int m_elements_count;          ///< Number of elements.
+    size_t m_bands_count;          ///< Number of bands.
+    size_t m_elements_count;       ///< Number of elements.
     const char* m_name;            ///< Name for error messages.
 
 public:
@@ -300,9 +300,9 @@ public:
 
     ConstArraySlice<P> indptr() const { return m_indptr; }
 
-    int bands_count() const { return m_bands_count; }
+    size_t bands_count() const { return m_bands_count; }
 
-    int elements_count() const { return m_elements_count; }
+    size_t elements_count() const { return m_elements_count; }
 
     template<typename J>
     ConstArraySlice<I> get_band_indices(const J band_index) const {
@@ -326,8 +326,8 @@ private:
     ArraySlice<D> m_data;     ///< Non-zero data.
     ArraySlice<I> m_indices;  ///< Column indices.
     ArraySlice<P> m_indptr;   ///< First and last indices positions per band.
-    int m_bands_count;        ///< Number of bands.
-    int m_elements_count;     ///< Number of elements.
+    size_t m_bands_count;     ///< Number of bands.
+    size_t m_elements_count;  ///< Number of elements.
     const char* m_name;       ///< Name for error messages.
 
 public:
@@ -346,15 +346,15 @@ public:
         FastAssertCompareWhat(m_indptr[m_bands_count], ==, data.size(), m_name);
     }
 
-    int bands_count() const { return m_bands_count; }
+    size_t bands_count() const { return m_bands_count; }
 
-    int elements_count() const { return m_elements_count; }
+    size_t elements_count() const { return m_elements_count; }
 
     ConstArraySlice<D> data() const { return m_data; }
 
     ConstArraySlice<D> indices() const { return m_indices; }
 
-    ConstArraySlice<D> indptr() const { return m_indptr; }
+    ConstArraySlice<P> indptr() const { return m_indptr; }
 
     ArraySlice<D> data() { return m_data; }
 
@@ -388,11 +388,11 @@ in_parallel(bool new_is_in_parallel) {
 template<typename T>
 static T
 ceil_power_of_two(const T size) {
-    return 1 << int(ceil(log2(size)));
+    return 1 << T(ceil(log2(size)));
 }
 
-static int
-downsample_tmp_size(const int size) {
+static size_t
+downsample_tmp_size(const size_t size) {
     if (size <= 1) {
         return 0;
     }
@@ -401,10 +401,10 @@ downsample_tmp_size(const int size) {
 
 template<typename D>
 static void
-initialize_tree(ConstArraySlice<D> input, ArraySlice<int32_t> tree) {
+initialize_tree(ConstArraySlice<D> input, ArraySlice<size_t> tree) {
     FastAssertCompare(input.size(), >=, 2);
 
-    int input_size = ceil_power_of_two(input.size());
+    size_t input_size = ceil_power_of_two(input.size());
     std::copy(input.begin(), input.end(), tree.begin());
     std::fill(tree.begin() + input.size(), tree.begin() + input_size, 0);
 
@@ -414,43 +414,46 @@ initialize_tree(ConstArraySlice<D> input, ArraySlice<int32_t> tree) {
         tree = slices.second;
 
         input_size /= 2;
-        for (int index = 0; index < input_size; ++index) {
+        for (size_t index = 0; index < input_size; ++index) {
             const auto left = input[index * 2];
             const auto right = input[index * 2 + 1];
             tree[index] = left + right;
 
             SlowAssertCompare(left, >=, 0);
             SlowAssertCompare(right, >=, 0);
-            SlowAssertCompare(tree[index], ==, int64_t(left) + int64_t(right));
+            SlowAssertCompare(tree[index], ==, size_t(left) + size_t(right));
         }
     }
     FastAssertCompare(tree.size(), ==, 1);
 }
 
-static int
-random_sample(ArraySlice<int32_t> tree, int64_t random) {
-    int size_of_level = 1;
-    int base_of_level = tree.size() - 1;
-    int index_in_level = 0;
-    int index_in_tree = base_of_level + index_in_level;
+static size_t
+random_sample(ArraySlice<size_t> tree, ssize_t random) {
+    size_t size_of_level = 1;
+    ssize_t base_of_level = tree.size() - 1;
+    size_t index_in_level = 0;
+    size_t index_in_tree = base_of_level + index_in_level;
 
     while (true) {
         SlowAssertCompare(index_in_tree, ==, base_of_level + index_in_level);
         FastAssertCompare(tree[index_in_tree], >, random);
-        --tree[base_of_level + index_in_level];
+        --tree[index_in_tree];
         size_of_level *= 2;
         base_of_level -= size_of_level;
+
         if (base_of_level < 0) {
             return index_in_level;
         }
+
         index_in_level *= 2;
+        index_in_tree = base_of_level + index_in_level;
+        ssize_t right_random = random - ssize_t(tree[index_in_tree]);
+
         SlowAssertCompare(tree[base_of_level + index_in_level]
                               + tree[base_of_level + index_in_level + 1],
                           ==,
                           tree[base_of_level + size_of_level + index_in_level / 2] + 1);
 
-        index_in_tree = base_of_level + index_in_level;
-        int64_t right_random = random - int64_t(tree[index_in_tree]);
         if (right_random >= 0) {
             ++index_in_level;
             ++index_in_tree;
@@ -460,22 +463,22 @@ random_sample(ArraySlice<int32_t> tree, int64_t random) {
     }
 }
 
-static thread_local std::vector<int32_t> tmp_positions;
-static thread_local std::vector<int32_t> tmp_indices;
-static thread_local std::vector<double> tmp_data;
-static thread_local std::vector<int32_t> tmp_tree;
+static thread_local std::vector<size_t> tmp_positions;
+static thread_local std::vector<size_t> tmp_indices;
+static thread_local std::vector<float64_t> tmp_data;
+static thread_local std::vector<size_t> tmp_tree;
 
 template<typename D, typename O>
 static void
 downsample_slice(ConstArraySlice<D> input,
                  ArraySlice<O> output,
-                 const int samples,
+                 const size_t samples,
                  const int random_seed) {
     FastAssertCompare(samples, >=, 0);
     FastAssertCompare(output.size(), ==, input.size());
 
     tmp_tree.resize(downsample_tmp_size(input.size()));
-    ArraySlice<int32_t> tree(&tmp_tree[0], tmp_tree.size(), "tree");
+    ArraySlice<size_t> tree(&tmp_tree[0], tmp_tree.size(), "tree");
 
     if (input.size() == 0) {
         return;
@@ -487,7 +490,7 @@ downsample_slice(ConstArraySlice<D> input,
     }
 
     initialize_tree(input, tree);
-    auto& total = tree[tree.size() - 1];
+    size_t& total = tree[tree.size() - 1];
 
     if (total <= samples) {
         if (static_cast<const void*>(output.begin()) != static_cast<const void*>(input.begin())) {
@@ -499,8 +502,8 @@ downsample_slice(ConstArraySlice<D> input,
     std::fill(output.begin(), output.end(), 0);
 
     std::minstd_rand random(random_seed);
-    for (int index = 0; index < samples; ++index) {
-        ++output[random_sample(tree, random() % int64_t(total))];
+    for (size_t index = 0; index < samples; ++index) {
+        ++output[random_sample(tree, random() % total)];
     }
 }
 
@@ -509,7 +512,7 @@ template<typename D, typename O>
 static void
 downsample_array(const pybind11::array_t<D>& input_array,
                  pybind11::array_t<O>& output_array,
-                 const int samples,
+                 const size_t samples,
                  const int random_seed) {
     WithoutGil without_gil{};
 
@@ -524,17 +527,17 @@ template<typename D, typename O>
 static void
 downsample_matrix(const pybind11::array_t<D>& input_matrix,
                   pybind11::array_t<O>& output_array,
-                  const int samples,
+                  const size_t samples,
                   const int random_seed) {
     WithoutGil without_gil{};
 
     ConstMatrixSlice<D> input{ input_matrix, "input_matrix" };
     MatrixSlice<O> output{ output_array, "output_array" };
 
-    const int rows_count = input.rows_count();
+    const size_t rows_count = input.rows_count();
 
     if (is_in_parallel) {
-        for (int row_index = 0; row_index < rows_count; ++row_index) {
+        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
             int slice_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
             downsample_slice(input.get_row(row_index),
                              output.get_row(row_index),
@@ -543,7 +546,7 @@ downsample_matrix(const pybind11::array_t<D>& input_matrix,
         }
     } else {
 #pragma omp parallel for schedule(guided)
-        for (int row_index = 0; row_index < rows_count; ++row_index) {
+        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
             int slice_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
             downsample_slice(input.get_row(row_index),
                              output.get_row(row_index),
@@ -555,11 +558,11 @@ downsample_matrix(const pybind11::array_t<D>& input_matrix,
 
 template<typename D, typename P, typename O>
 static void
-downsample_band(const int band_index,
+downsample_band(const size_t band_index,
                 ConstArraySlice<D> input_data,
                 ConstArraySlice<P> input_indptr,
                 ArraySlice<O> output,
-                const int samples,
+                const size_t samples,
                 const int random_seed) {
     auto start_element_offset = input_indptr[band_index];
     auto stop_element_offset = input_indptr[band_index + 1];
@@ -576,24 +579,24 @@ static void
 downsample_compressed(const pybind11::array_t<D>& input_data_array,
                       const pybind11::array_t<P>& input_indptr_array,
                       pybind11::array_t<O>& output_array,
-                      const int samples,
+                      const size_t samples,
                       const int random_seed) {
-    // WithoutGil without_gil{};
+    WithoutGil without_gil{};
 
     ConstArraySlice<D> input_data{ input_data_array, "input_data_array" };
     ConstArraySlice<P> input_indptr{ input_indptr_array, "input_indptr_array" };
     ArraySlice<O> output{ output_array, "output_array" };
 
-    const int bands_count = input_indptr.size() - 1;
+    const size_t bands_count = input_indptr.size() - 1;
 
     if (is_in_parallel) {
-        for (int band_index = 0; band_index < bands_count; ++band_index) {
+        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
             int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
             downsample_band(band_index, input_data, input_indptr, output, samples, band_seed);
         }
     } else {
 #pragma omp parallel for schedule(guided)
-        for (int band_index = 0; band_index < bands_count; ++band_index) {
+        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
             int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
             downsample_band(band_index, input_data, input_indptr, output, samples, band_seed);
         }
@@ -602,23 +605,57 @@ downsample_compressed(const pybind11::array_t<D>& input_data_array,
 
 template<typename D, typename I, typename P>
 static void
-collect_compressed_band(const int input_band_index,
-                        ConstArraySlice<D> input_data,
-                        ConstArraySlice<I> input_indices,
-                        ConstArraySlice<P> input_indptr,
-                        ArraySlice<D> output_data,
-                        ArraySlice<I> output_indices,
-                        ArraySlice<P> output_indptr) {
-    auto start_input_element_offset = input_indptr[input_band_index];
-    auto stop_input_element_offset = input_indptr[input_band_index + 1];
+serial_collect_compressed_band(const size_t input_band_index,
+                               ConstArraySlice<D> input_data,
+                               ConstArraySlice<I> input_indices,
+                               ConstArraySlice<P> input_indptr,
+                               ArraySlice<D> output_data,
+                               ArraySlice<I> output_indices,
+                               ArraySlice<P> output_indptr) {
+    size_t start_input_element_offset = input_indptr[input_band_index];
+    size_t stop_input_element_offset = input_indptr[input_band_index + 1];
 
     FastAssertCompare(0, <=, start_input_element_offset);
     FastAssertCompare(start_input_element_offset, <=, stop_input_element_offset);
     FastAssertCompare(stop_input_element_offset, <=, input_data.size());
 
-    int output_element_index = input_band_index;
+    size_t output_element_index = input_band_index;
 
-    for (P input_element_offset = start_input_element_offset;
+    for (size_t input_element_offset = start_input_element_offset;
+         input_element_offset < stop_input_element_offset;
+         ++input_element_offset) {
+        auto input_element_index = input_indices[input_element_offset];
+        auto input_element_data = input_data[input_element_offset];
+
+        auto output_band_index = input_element_index;
+        auto output_element_data = input_element_data;
+
+        auto output_element_offset = output_indptr[output_band_index]++;
+
+        output_indices[output_element_offset] = output_element_index;
+        output_data[output_element_offset] = output_element_data;
+    }
+}
+
+template<typename D, typename I, typename P>
+static void
+parallel_collect_compressed_band(const size_t input_band_index,
+                                 ConstArraySlice<D> input_data,
+                                 ConstArraySlice<I> input_indices,
+                                 ConstArraySlice<P> input_indptr,
+                                 ArraySlice<D> output_data,
+                                 ArraySlice<I> output_indices,
+                                 ArraySlice<P> output_indptr) {
+    size_t start_input_element_offset = input_indptr[input_band_index];
+    size_t stop_input_element_offset = input_indptr[input_band_index + 1];
+
+    FastAssertCompare(0, <=, start_input_element_offset);
+    FastAssertCompare(start_input_element_offset, <=, stop_input_element_offset);
+    FastAssertCompare(stop_input_element_offset, <=, input_data.size());
+
+    size_t output_element_index = input_band_index;
+
+    for (size_t input_element_offset = start_input_element_offset;
          input_element_offset < stop_input_element_offset;
          ++input_element_offset) {
         auto input_element_index = input_indices[input_element_offset];
@@ -663,35 +700,37 @@ collect_compressed(const pybind11::array_t<D>& input_data_array,
     FastAssertCompare(output_indices.size(), ==, input_indices.size());
     FastAssertCompare(output_indptr[output_indptr.size() - 1], <=, output_data.size());
 
-    const int input_bands_count = input_indptr.size() - 1;
+    const size_t input_bands_count = input_indptr.size() - 1;
 
     if (is_in_parallel) {
-        for (int input_band_index = 0; input_band_index < input_bands_count; ++input_band_index) {
-            collect_compressed_band(input_band_index,
-                                    input_data,
-                                    input_indices,
-                                    input_indptr,
-                                    output_data,
-                                    output_indices,
-                                    output_indptr);
+        for (size_t input_band_index = 0; input_band_index < input_bands_count;
+             ++input_band_index) {
+            serial_collect_compressed_band(input_band_index,
+                                           input_data,
+                                           input_indices,
+                                           input_indptr,
+                                           output_data,
+                                           output_indices,
+                                           output_indptr);
         }
     } else {
 #pragma omp parallel for schedule(guided)
-        for (int input_band_index = 0; input_band_index < input_bands_count; ++input_band_index) {
-            collect_compressed_band(input_band_index,
-                                    input_data,
-                                    input_indices,
-                                    input_indptr,
-                                    output_data,
-                                    output_indices,
-                                    output_indptr);
+        for (size_t input_band_index = 0; input_band_index < input_bands_count;
+             ++input_band_index) {
+            parallel_collect_compressed_band(input_band_index,
+                                             input_data,
+                                             input_indices,
+                                             input_indptr,
+                                             output_data,
+                                             output_indices,
+                                             output_indptr);
         }
     }
 }
 
 template<typename D, typename I, typename P>
 static void
-sort_band(const int band_index, CompressedMatrix<D, I, P>& matrix) {
+sort_band(const size_t band_index, CompressedMatrix<D, I, P>& matrix) {
     if (matrix.indptr()[band_index] == matrix.indptr()[band_index + 1]) {
         return;
     }
@@ -703,7 +742,7 @@ sort_band(const int band_index, CompressedMatrix<D, I, P>& matrix) {
     std::iota(tmp_positions.begin(), tmp_positions.end(), 0);
     std::sort(tmp_positions.begin(),
               tmp_positions.end(),
-              [&](const int left_position, const int right_position) {
+              [&](const size_t left_position, const size_t right_position) {
                   auto left_index = band_indices[left_position];
                   auto right_index = band_indices[right_position];
                   return left_index < right_index;
@@ -715,9 +754,9 @@ sort_band(const int band_index, CompressedMatrix<D, I, P>& matrix) {
 #ifdef __INTEL_COMPILER
 #    pragma simd
 #endif
-    const int tmp_size = tmp_positions.size();
-    for (int location = 0; location < tmp_size; ++location) {
-        int32_t position = tmp_positions[location];
+    const size_t tmp_size = tmp_positions.size();
+    for (size_t location = 0; location < tmp_size; ++location) {
+        size_t position = tmp_positions[location];
         tmp_indices[location] = band_indices[position];
         tmp_data[location] = band_data[position];
     }
@@ -732,7 +771,7 @@ static void
 sort_compressed_indices(pybind11::array_t<D>& data_array,
                         pybind11::array_t<I>& indices_array,
                         pybind11::array_t<P>& indptr_array,
-                        const int elements_count) {
+                        const size_t elements_count) {
     WithoutGil without_gil{};
 
     CompressedMatrix<D, I, P> matrix(ArraySlice<D>(data_array, "data"),
@@ -741,31 +780,31 @@ sort_compressed_indices(pybind11::array_t<D>& data_array,
                                      elements_count,
                                      "compressed");
 
-    const int bands_count = matrix.bands_count();
+    const size_t bands_count = matrix.bands_count();
 
     if (is_in_parallel) {
-        for (int band_index = 0; band_index < bands_count; ++band_index) {
+        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
             sort_band(band_index, matrix);
         }
     } else {
 #pragma omp parallel for schedule(guided)
-        for (int band_index = 0; band_index < bands_count; ++band_index) {
+        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
             sort_band(band_index, matrix);
         }
     }
 }
 
 static void
-collect_outgoing_row(const int row_index,
-                     const int degree,
+collect_outgoing_row(const size_t row_index,
+                     const size_t degree,
                      ConstMatrixSlice<float32_t>& similarity_matrix,
                      ArraySlice<int32_t> output_indices,
                      ArraySlice<float32_t> output_ranks) {
-    const int size = similarity_matrix.rows_count();
+    const size_t size = similarity_matrix.rows_count();
     const auto row_similarities = similarity_matrix.get_row(row_index);
 
-    const int start_position = row_index * degree;
-    const int stop_position = start_position + degree;
+    const size_t start_position = row_index * degree;
+    const size_t stop_position = start_position + degree;
 
     auto row_indices = output_indices.slice(start_position, stop_position);
     auto row_ranks = output_ranks.slice(start_position, stop_position);
@@ -778,7 +817,7 @@ collect_outgoing_row(const int row_index,
         std::nth_element(tmp_positions.begin(),
                          tmp_positions.begin() + degree,
                          tmp_positions.end(),
-                         [&](const int32_t left_column_index, const int32_t right_column_index) {
+                         [&](const size_t left_column_index, const size_t right_column_index) {
                              float32_t left_similarity = row_similarities[left_column_index];
                              float32_t right_similarity = row_similarities[right_column_index];
                              return left_similarity > right_similarity;
@@ -796,7 +835,7 @@ collect_outgoing_row(const int row_index,
     std::iota(tmp_positions.begin(), tmp_positions.end(), 0);
     std::sort(tmp_positions.begin(),
               tmp_positions.end(),
-              [&](const int left_position, const int right_position) {
+              [&](const size_t left_position, const size_t right_position) {
                   float32_t left_similarity = row_similarities[row_indices[left_position]];
                   float32_t right_similarity = row_similarities[row_indices[right_position]];
                   return left_similarity < right_similarity;
@@ -804,15 +843,15 @@ collect_outgoing_row(const int row_index,
 #ifdef __INTEL_COMPILER
 #    pragma simd
 #endif
-    for (int location = 0; location < degree; ++location) {
-        int position = tmp_positions[location];
+    for (size_t location = 0; location < degree; ++location) {
+        size_t position = tmp_positions[location];
         row_ranks[position] = location + 1;
     }
 }
 
 /// See the Python `metacell.tools.knn_graph._rank_outgoing` function.
 static void
-collect_outgoing(const int degree,
+collect_outgoing(const size_t degree,
                  const pybind11::array_t<float32_t>& input_similarity_matrix,
                  pybind11::array_t<int32_t>& output_indices_array,
                  pybind11::array_t<float32_t>& output_ranks_array) {
@@ -823,7 +862,7 @@ collect_outgoing(const int degree,
                           ==,
                           similarity_matrix.columns_count(),
                           "similarity_matrix");
-    const int size = similarity_matrix.rows_count();
+    const size_t size = similarity_matrix.rows_count();
 
     ArraySlice<int32_t> output_indices(output_indices_array, "output_indices");
     ArraySlice<float32_t> output_ranks(output_ranks_array, "output_ranks");
@@ -835,7 +874,7 @@ collect_outgoing(const int degree,
     FastAssertCompare(output_ranks.size(), ==, degree * size);
 
     if (is_in_parallel) {
-        for (int row_index = 0; row_index < size; ++row_index) {
+        for (size_t row_index = 0; row_index < size; ++row_index) {
             collect_outgoing_row(row_index,
                                  degree,
                                  similarity_matrix,
@@ -844,7 +883,7 @@ collect_outgoing(const int degree,
         }
     } else {
 #pragma omp parallel for schedule(guided)
-        for (int row_index = 0; row_index < size; ++row_index) {
+        for (size_t row_index = 0; row_index < size; ++row_index) {
             collect_outgoing_row(row_index,
                                  degree,
                                  similarity_matrix,
@@ -855,8 +894,8 @@ collect_outgoing(const int degree,
 }
 
 static void
-prune_band(const int band_index,
-           const int pruned_degree,
+prune_band(const size_t band_index,
+           const size_t pruned_degree,
            ConstCompressedMatrix<float32_t, int32_t, int32_t>& input_pruned_ranks,
            ArraySlice<float32_t> output_pruned_ranks,
            ArraySlice<int32_t> output_pruned_indices,
@@ -883,7 +922,7 @@ prune_band(const int band_index,
     std::nth_element(tmp_indices.begin(),
                      tmp_indices.begin() + pruned_degree,
                      tmp_indices.end(),
-                     [&](const int32_t left_column_index, const int32_t right_column_index) {
+                     [&](const size_t left_column_index, const size_t right_column_index) {
                          const auto left_similarity = input_ranks[left_column_index];
                          const auto right_similarity = input_ranks[right_column_index];
                          return left_similarity > right_similarity;
@@ -895,8 +934,8 @@ prune_band(const int band_index,
 #ifdef __INTEL_COMPILER
 #    pragma simd
 #endif
-    for (int location = 0; location < pruned_degree; ++location) {
-        int position = tmp_indices[location];
+    for (size_t location = 0; location < pruned_degree; ++location) {
+        size_t position = tmp_indices[location];
         output_indices[location] = input_indices[position];
         output_ranks[location] = input_ranks[position];
     }
@@ -904,14 +943,14 @@ prune_band(const int band_index,
 
 /// See the Python `metacell.tools.knn_graph._prune_ranks` function.
 static void
-collect_pruned(const int pruned_degree,
+collect_pruned(const size_t pruned_degree,
                const pybind11::array_t<float32_t>& input_pruned_ranks_data,
                const pybind11::array_t<int32_t>& input_pruned_ranks_indices,
                const pybind11::array_t<int32_t>& input_pruned_ranks_indptr,
                pybind11::array_t<float32_t>& output_pruned_ranks_array,
                pybind11::array_t<int32_t>& output_pruned_indices_array,
                pybind11::array_t<int32_t>& output_pruned_indptr_array) {
-    int size = input_pruned_ranks_indptr.size() - 1;
+    size_t size = input_pruned_ranks_indptr.size() - 1;
     ConstCompressedMatrix<float32_t, int32_t, int32_t> input_pruned_ranks(
         ConstArraySlice<float32_t>(input_pruned_ranks_data, "input_pruned_ranks_data"),
         ConstArraySlice<int32_t>(input_pruned_ranks_indices, "input_pruned_ranks_indices"),
@@ -927,8 +966,8 @@ collect_pruned(const int pruned_degree,
     FastAssertCompare(output_pruned_indices.size(), >=, size * pruned_degree);
     FastAssertCompare(output_pruned_indptr.size(), ==, size + 1);
 
-    int start_position = output_pruned_indptr[0] = 0;
-    for (int band_index = 0; band_index < size; ++band_index) {
+    size_t start_position = output_pruned_indptr[0] = 0;
+    for (size_t band_index = 0; band_index < size; ++band_index) {
         FastAssertCompare(start_position, ==, output_pruned_indptr[band_index]);
         auto input_ranks = input_pruned_ranks.get_band_data(band_index);
         if (input_ranks.size() <= pruned_degree) {
@@ -940,7 +979,7 @@ collect_pruned(const int pruned_degree,
     }
 
     if (is_in_parallel) {
-        for (int band_index = 0; band_index < size; ++band_index) {
+        for (size_t band_index = 0; band_index < size; ++band_index) {
             prune_band(band_index,
                        pruned_degree,
                        input_pruned_ranks,
@@ -950,7 +989,7 @@ collect_pruned(const int pruned_degree,
         }
     } else {
 #pragma omp parallel for schedule(guided)
-        for (int band_index = 0; band_index < size; ++band_index) {
+        for (size_t band_index = 0; band_index < size; ++band_index) {
             prune_band(band_index,
                        pruned_degree,
                        input_pruned_ranks,
@@ -963,11 +1002,11 @@ collect_pruned(const int pruned_degree,
 
 template<typename D, typename I, typename P>
 static void
-shuffle_band(const int band_index, CompressedMatrix<D, I, P>& matrix, const int random_seed) {
+shuffle_band(const size_t band_index, CompressedMatrix<D, I, P>& matrix, const int random_seed) {
     std::minstd_rand random(random_seed);
     tmp_indices.resize(matrix.elements_count());
     std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
-    std::random_shuffle(tmp_indices.begin(), tmp_indices.end(), [&](int n) {
+    std::random_shuffle(tmp_indices.begin(), tmp_indices.end(), [&](size_t n) {
         return random() % n;
     });
     auto band_indices = matrix.get_band_indices(band_index);
@@ -982,7 +1021,7 @@ static void
 shuffle_compressed(pybind11::array_t<D>& data_array,
                    pybind11::array_t<I>& indices_array,
                    pybind11::array_t<P>& indptr_array,
-                   const int elements_count,
+                   const size_t elements_count,
                    const int random_seed) {
     CompressedMatrix<D, I, P> matrix(ArraySlice<D>(data_array, "data"),
                                      ArraySlice<I>(indices_array, "indices"),
@@ -990,16 +1029,16 @@ shuffle_compressed(pybind11::array_t<D>& data_array,
                                      elements_count,
                                      "compressed");
 
-    const int bands_count = matrix.bands_count();
+    const size_t bands_count = matrix.bands_count();
 
     if (is_in_parallel) {
-        for (int band_index = 0; band_index < bands_count; ++band_index) {
+        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
             int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
             shuffle_band(band_index, matrix, band_seed);
         }
     } else {
 #pragma omp parallel for schedule(guided)
-        for (int band_index = 0; band_index < bands_count; ++band_index) {
+        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
             int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
             shuffle_band(band_index, matrix, band_seed);
         }
@@ -1008,10 +1047,10 @@ shuffle_compressed(pybind11::array_t<D>& data_array,
 
 template<typename D>
 static void
-shuffle_row(const int row_index, MatrixSlice<D>& matrix, const int random_seed) {
+shuffle_row(const size_t row_index, MatrixSlice<D>& matrix, const int random_seed) {
     std::minstd_rand random(random_seed);
     auto row = matrix.get_row(row_index);
-    std::random_shuffle(row.begin(), row.end(), [&](int n) { return random() % n; });
+    std::random_shuffle(row.begin(), row.end(), [&](size_t n) { return random() % n; });
 }
 
 /// See the Python `metacell.utilities.computation.shuffle_matrix` function.
@@ -1020,16 +1059,16 @@ static void
 shuffle_matrix(pybind11::array_t<D>& matrix_array, const int random_seed) {
     MatrixSlice<D> matrix(matrix_array, "matrix");
 
-    const int rows_count = matrix.rows_count();
+    const size_t rows_count = matrix.rows_count();
 
     if (is_in_parallel) {
-        for (int row_index = 0; row_index < rows_count; ++row_index) {
+        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
             int row_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
             shuffle_row(row_index, matrix, row_seed);
         }
     } else {
 #pragma omp parallel for schedule(guided)
-        for (int row_index = 0; row_index < rows_count; ++row_index) {
+        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
             int row_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
             shuffle_row(row_index, matrix, row_seed);
         }
@@ -1038,14 +1077,14 @@ shuffle_matrix(pybind11::array_t<D>& matrix_array, const int random_seed) {
 
 template<typename D>
 static D
-rank_row(int row_index, ConstMatrixSlice<D>& input, int rank) {
+rank_row(size_t row_index, ConstMatrixSlice<D>& input, size_t rank) {
     const auto row_input = input.get_row(row_index);
     tmp_indices.resize(input.columns_count());
     std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
     std::nth_element(tmp_indices.begin(),
                      tmp_indices.begin() + rank,
                      tmp_indices.end(),
-                     [&](const int32_t left_column_index, const int32_t right_column_index) {
+                     [&](const size_t left_column_index, const size_t right_column_index) {
                          const auto left_value = row_input[left_column_index];
                          const auto right_value = row_input[right_column_index];
                          return left_value < right_value;
@@ -1058,21 +1097,21 @@ template<typename D>
 static void
 rank_matrix(const pybind11::array_t<D>& input_matrix,
             pybind11::array_t<D>& output_array,
-            const int rank) {
+            const size_t rank) {
     ConstMatrixSlice<D> input(input_matrix, "input");
     ArraySlice<D> output(output_array, "array");
 
-    const int rows_count = input.rows_count();
+    const size_t rows_count = input.rows_count();
     FastAssertCompare(rows_count, ==, output_array.size());
     FastAssertCompare(rank, <, input.columns_count());
 
     if (is_in_parallel) {
-        for (int row_index = 0; row_index < rows_count; ++row_index) {
+        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
             output[row_index] = rank_row(row_index, input, rank);
         }
     } else {
 #pragma omp parallel for schedule(guided)
-        for (int row_index = 0; row_index < rows_count; ++row_index) {
+        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
             output[row_index] = rank_row(row_index, input, rank);
         }
     }
@@ -1084,7 +1123,7 @@ static void
 fold_factor(pybind11::array_t<D>& data_array,
             pybind11::array_t<I>& indices_array,
             pybind11::array_t<P>& indptr_array,
-            const int elements_count,
+            const size_t elements_count,
             const double min_gene_fold_factor,
             const pybind11::array_t<D>& total_of_bands_array,
             const pybind11::array_t<D>& fraction_of_elements_array) {
@@ -1099,15 +1138,15 @@ fold_factor(pybind11::array_t<D>& data_array,
     FastAssertCompare(total_of_bands.size(), ==, data.bands_count());
     FastAssertCompare(fraction_of_elements.size(), ==, data.elements_count());
 
-    const int bands_count = data.bands_count();
+    const size_t bands_count = data.bands_count();
     if (is_in_parallel) {
-        for (int band_index = 0; band_index < bands_count; ++band_index) {
+        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
             const auto band_total = total_of_bands[band_index];
             auto band_indices = data.get_band_indices(band_index);
             auto band_data = data.get_band_data(band_index);
 
-            const int band_elements_count = band_indices.size();
-            for (int position = 0; position < band_elements_count; ++position) {
+            const size_t band_elements_count = band_indices.size();
+            for (size_t position = 0; position < band_elements_count; ++position) {
                 const auto element_index = band_indices[position];
                 const auto element_fraction = fraction_of_elements[element_index];
                 const auto expected = band_total * element_fraction;
@@ -1120,13 +1159,13 @@ fold_factor(pybind11::array_t<D>& data_array,
         }
     } else {
 #pragma omp parallel for schedule(guided)
-        for (int band_index = 0; band_index < bands_count; ++band_index) {
+        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
             const auto band_total = total_of_bands[band_index];
             auto band_indices = data.get_band_indices(band_index);
             auto band_data = data.get_band_data(band_index);
 
-            const int band_elements_count = band_indices.size();
-            for (int position = 0; position < band_elements_count; ++position) {
+            const size_t band_elements_count = band_indices.size();
+            for (size_t position = 0; position < band_elements_count; ++position) {
                 const auto element_index = band_indices[position];
                 const auto element_fraction = fraction_of_elements[element_index];
                 const auto expected = band_total * element_fraction;
@@ -1147,6 +1186,10 @@ PYBIND11_MODULE(extensions, module) {
 
     module.def("in_parallel", &metacells::in_parallel, "Specify if running inside a sub-process.");
 
+#define REGISTER_D(D)                                                                        \
+    module.def("shuffle_matrix_" #D, &metacells::shuffle_matrix<D>, "Shuffle matrix data."); \
+    module.def("rank_matrix_" #D, &metacells::rank_matrix<D>, "Rank of matrix data.");
+
 #define REGISTER_D_O(D, O)                          \
     module.def("downsample_array_" #D "_" #O,       \
                &metacells::downsample_array<D, O>,  \
@@ -1154,10 +1197,6 @@ PYBIND11_MODULE(extensions, module) {
     module.def("downsample_matrix_" #D "_" #O,      \
                &metacells::downsample_matrix<D, O>, \
                "Downsample matrix data.");
-
-#define REGISTER_D(D)                                                                        \
-    module.def("shuffle_matrix_" #D, &metacells::shuffle_matrix<D>, "Shuffle matrix data."); \
-    module.def("rank_matrix_" #D, &metacells::rank_matrix<D>, "Rank of matrix data.");
 
 #define REGISTER_D_P_O(D, P, O)                            \
     module.def("downsample_compressed_" #D "_" #P "_" #O,  \
@@ -1248,7 +1287,7 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D_P_O(float32_t, uint32_t, uint64_t)
     REGISTER_D_P_O(float32_t, uint64_t, float32_t)
     REGISTER_D_P_O(float32_t, uint64_t, float64_t)
-    REGISTER_D_P_O(float32_t, uint64_t, int32_t)
+    REGISTER_D_P_O(float32_t, uint64_t, int64_t)
     REGISTER_D_P_O(float32_t, uint64_t, int64_t)
     REGISTER_D_P_O(float32_t, uint64_t, uint32_t)
     REGISTER_D_P_O(float32_t, uint64_t, uint64_t)
@@ -1272,7 +1311,7 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D_P_O(float64_t, uint32_t, uint64_t)
     REGISTER_D_P_O(float64_t, uint64_t, float32_t)
     REGISTER_D_P_O(float64_t, uint64_t, float64_t)
-    REGISTER_D_P_O(float64_t, uint64_t, int32_t)
+    REGISTER_D_P_O(float64_t, uint64_t, int64_t)
     REGISTER_D_P_O(float64_t, uint64_t, int64_t)
     REGISTER_D_P_O(float64_t, uint64_t, uint32_t)
     REGISTER_D_P_O(float64_t, uint64_t, uint64_t)
@@ -1296,7 +1335,7 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D_P_O(int32_t, uint32_t, uint64_t)
     REGISTER_D_P_O(int32_t, uint64_t, float32_t)
     REGISTER_D_P_O(int32_t, uint64_t, float64_t)
-    REGISTER_D_P_O(int32_t, uint64_t, int32_t)
+    REGISTER_D_P_O(int32_t, uint64_t, int64_t)
     REGISTER_D_P_O(int32_t, uint64_t, int64_t)
     REGISTER_D_P_O(int32_t, uint64_t, uint32_t)
     REGISTER_D_P_O(int32_t, uint64_t, uint64_t)
@@ -1320,7 +1359,7 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D_P_O(int64_t, uint32_t, uint64_t)
     REGISTER_D_P_O(int64_t, uint64_t, float32_t)
     REGISTER_D_P_O(int64_t, uint64_t, float64_t)
-    REGISTER_D_P_O(int64_t, uint64_t, int32_t)
+    REGISTER_D_P_O(int64_t, uint64_t, int64_t)
     REGISTER_D_P_O(int64_t, uint64_t, int64_t)
     REGISTER_D_P_O(int64_t, uint64_t, uint32_t)
     REGISTER_D_P_O(int64_t, uint64_t, uint64_t)
@@ -1344,7 +1383,7 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D_P_O(uint32_t, uint32_t, uint64_t)
     REGISTER_D_P_O(uint32_t, uint64_t, float32_t)
     REGISTER_D_P_O(uint32_t, uint64_t, float64_t)
-    REGISTER_D_P_O(uint32_t, uint64_t, int32_t)
+    REGISTER_D_P_O(uint32_t, uint64_t, int64_t)
     REGISTER_D_P_O(uint32_t, uint64_t, int64_t)
     REGISTER_D_P_O(uint32_t, uint64_t, uint32_t)
     REGISTER_D_P_O(uint32_t, uint64_t, uint64_t)
@@ -1368,7 +1407,7 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D_P_O(uint64_t, uint32_t, uint64_t)
     REGISTER_D_P_O(uint64_t, uint64_t, float32_t)
     REGISTER_D_P_O(uint64_t, uint64_t, float64_t)
-    REGISTER_D_P_O(uint64_t, uint64_t, int32_t)
+    REGISTER_D_P_O(uint64_t, uint64_t, int64_t)
     REGISTER_D_P_O(uint64_t, uint64_t, int64_t)
     REGISTER_D_P_O(uint64_t, uint64_t, uint32_t)
     REGISTER_D_P_O(uint64_t, uint64_t, uint64_t)
@@ -1381,8 +1420,12 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D_I_P(float32_t, int64_t, int64_t)
     REGISTER_D_I_P(float32_t, int64_t, uint32_t)
     REGISTER_D_I_P(float32_t, int64_t, uint64_t)
+    REGISTER_D_I_P(float32_t, uint32_t, int32_t)
+    REGISTER_D_I_P(float32_t, uint32_t, int64_t)
     REGISTER_D_I_P(float32_t, uint32_t, uint32_t)
     REGISTER_D_I_P(float32_t, uint32_t, uint64_t)
+    REGISTER_D_I_P(float32_t, uint64_t, int32_t)
+    REGISTER_D_I_P(float32_t, uint64_t, int64_t)
     REGISTER_D_I_P(float32_t, uint64_t, uint32_t)
     REGISTER_D_I_P(float32_t, uint64_t, uint64_t)
     REGISTER_D_I_P(float64_t, int32_t, int32_t)
@@ -1393,8 +1436,12 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D_I_P(float64_t, int64_t, int64_t)
     REGISTER_D_I_P(float64_t, int64_t, uint32_t)
     REGISTER_D_I_P(float64_t, int64_t, uint64_t)
+    REGISTER_D_I_P(float64_t, uint32_t, int32_t)
+    REGISTER_D_I_P(float64_t, uint32_t, int64_t)
     REGISTER_D_I_P(float64_t, uint32_t, uint32_t)
     REGISTER_D_I_P(float64_t, uint32_t, uint64_t)
+    REGISTER_D_I_P(float64_t, uint64_t, int32_t)
+    REGISTER_D_I_P(float64_t, uint64_t, int64_t)
     REGISTER_D_I_P(float64_t, uint64_t, uint32_t)
     REGISTER_D_I_P(float64_t, uint64_t, uint64_t)
     REGISTER_D_I_P(int32_t, int32_t, int32_t)
@@ -1405,8 +1452,12 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D_I_P(int32_t, int64_t, int64_t)
     REGISTER_D_I_P(int32_t, int64_t, uint32_t)
     REGISTER_D_I_P(int32_t, int64_t, uint64_t)
+    REGISTER_D_I_P(int32_t, uint32_t, int32_t)
+    REGISTER_D_I_P(int32_t, uint32_t, int64_t)
     REGISTER_D_I_P(int32_t, uint32_t, uint32_t)
     REGISTER_D_I_P(int32_t, uint32_t, uint64_t)
+    REGISTER_D_I_P(int32_t, uint64_t, int32_t)
+    REGISTER_D_I_P(int32_t, uint64_t, int64_t)
     REGISTER_D_I_P(int32_t, uint64_t, uint32_t)
     REGISTER_D_I_P(int32_t, uint64_t, uint64_t)
     REGISTER_D_I_P(int64_t, int32_t, int32_t)
@@ -1417,8 +1468,12 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D_I_P(int64_t, int64_t, int64_t)
     REGISTER_D_I_P(int64_t, int64_t, uint32_t)
     REGISTER_D_I_P(int64_t, int64_t, uint64_t)
+    REGISTER_D_I_P(int64_t, uint32_t, int32_t)
+    REGISTER_D_I_P(int64_t, uint32_t, int64_t)
     REGISTER_D_I_P(int64_t, uint32_t, uint32_t)
     REGISTER_D_I_P(int64_t, uint32_t, uint64_t)
+    REGISTER_D_I_P(int64_t, uint64_t, int32_t)
+    REGISTER_D_I_P(int64_t, uint64_t, int64_t)
     REGISTER_D_I_P(int64_t, uint64_t, uint32_t)
     REGISTER_D_I_P(int64_t, uint64_t, uint64_t)
     REGISTER_D_I_P(uint32_t, int32_t, int32_t)
@@ -1429,8 +1484,12 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D_I_P(uint32_t, int64_t, int64_t)
     REGISTER_D_I_P(uint32_t, int64_t, uint32_t)
     REGISTER_D_I_P(uint32_t, int64_t, uint64_t)
+    REGISTER_D_I_P(uint32_t, uint32_t, int32_t)
+    REGISTER_D_I_P(uint32_t, uint32_t, int64_t)
     REGISTER_D_I_P(uint32_t, uint32_t, uint32_t)
     REGISTER_D_I_P(uint32_t, uint32_t, uint64_t)
+    REGISTER_D_I_P(uint32_t, uint64_t, int32_t)
+    REGISTER_D_I_P(uint32_t, uint64_t, int64_t)
     REGISTER_D_I_P(uint32_t, uint64_t, uint32_t)
     REGISTER_D_I_P(uint32_t, uint64_t, uint64_t)
     REGISTER_D_I_P(uint64_t, int32_t, int32_t)
@@ -1441,8 +1500,12 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D_I_P(uint64_t, int64_t, int64_t)
     REGISTER_D_I_P(uint64_t, int64_t, uint32_t)
     REGISTER_D_I_P(uint64_t, int64_t, uint64_t)
+    REGISTER_D_I_P(uint64_t, uint32_t, int32_t)
+    REGISTER_D_I_P(uint64_t, uint32_t, int64_t)
     REGISTER_D_I_P(uint64_t, uint32_t, uint32_t)
     REGISTER_D_I_P(uint64_t, uint32_t, uint64_t)
+    REGISTER_D_I_P(uint64_t, uint64_t, int32_t)
+    REGISTER_D_I_P(uint64_t, uint64_t, int64_t)
     REGISTER_D_I_P(uint64_t, uint64_t, uint32_t)
     REGISTER_D_I_P(uint64_t, uint64_t, uint64_t)
 }

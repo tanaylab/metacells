@@ -337,6 +337,7 @@ class DenseMatrix(NumpyShaped):
     '''
     shape: Tuple[int, int]
     strides: Tuple[int, int]
+    T: 'DenseMatrix'
 
     @abstractmethod
     def sum(self, *, axis: int) -> DenseVector: ...
@@ -750,21 +751,9 @@ def to_dense_vector(shaped: Shaped, *, copy: Optional[bool] = False) -> DenseVec
     array. If ``copy`` is ``None``, always returns the data without copying (fails on sparse data).
     '''
     dense = to_dense(shaped, copy=copy)
-
-    if dense.ndim == 1:
-        return dense  # type: ignore
-
-    seen_large_dimension = False
-    for size in dense.shape:
-        if size == 1:
-            continue
-        assert not seen_large_dimension
-        seen_large_dimension = True
-
-    array = np.reshape(dense, -1)
-    assert array.ndim == 1
-
-    return array
+    vector = np.reshape(dense, -1)
+    assert vector.ndim == 1
+    return vector
 
 
 #: Which flag indicates efficient 2D dense matrix layout.

@@ -173,7 +173,6 @@ def relayout_compressed(matrix: utt.CompressedMatrix) -> utt.CompressedMatrix:
         nnz_elements_of_output_bands = \
             bincount_vector(compressed.indices,
                             minlength=matrix_elements_count)
-
         output_indptr = \
             np.empty(output_bands_count + 1, dtype=compressed.indptr.dtype)
         output_indptr[0:2] = 0
@@ -261,6 +260,13 @@ def corrcoef(
     .. note::
 
         The result is always dense, as even for sparse data, the correlation is rarely exactly zero.
+
+    .. note::
+
+        This replicates the implementation from numpy, since the numpy implementation insists on
+        making a copy of the matrix, and doing the computations in double precision, which more than
+        doubles our memory usage, and slows down the computation with no significant benefit to our
+        final results.
     '''
     dense = utt.to_dense_matrix(matrix)
     layout = utt.matrix_layout(dense)
@@ -282,7 +288,27 @@ def corrcoef(
 
     utm.timed_parameters(results=dense.shape[axis],
                          elements=dense.shape[1 - axis])
-    return np.corrcoef(dense, rowvar=per == 'row')
+
+    is_frozen = utt.frozen(dense)
+    if is_frozen:
+        utt.unfreeze(dense)
+
+    # Replication of numpy code:
+    X = dense if per == 'row' else dense.T
+    row_averages = np.average(X, axis=1)
+    X -= row_averages[:, None]
+    result = np.matmul(X, X.T)
+    result *= 1 / X.shape[1]
+    X += row_averages[:, None]
+    diagonal = np.diag(result)
+    stddev = np.sqrt(diagonal)
+    result /= stddev[:, None]
+    result /= stddev[None, :]
+    np.clip(result, -1, 1, out=result)
+
+    if is_frozen:
+        utt.freeze(dense)
+    return result
 
 
 @utm.timed_call()
@@ -475,10 +501,11 @@ def _downsample_compressed_matrix(
                                   % (per, matrix.getformat(), axis_format))
 
     if inplace:
+        assert not utt.frozen(matrix)
         output = matrix
     else:
         constructor = (sp.csr_matrix, sp.csc_matrix)[axis]
-        output_data = np.empty(matrix.data.shape, dtype=matrix.data.dtype)
+        output_data = np.empty_like(matrix.data)
         output = constructor((output_data,
                               np.copy(matrix.indices),
                               np.copy(matrix.indptr)),
@@ -498,10 +525,7 @@ def _downsample_compressed_matrix(
         extension(matrix.data, matrix.indptr,
                   output.data, samples, random_seed)
 
-    output.has_sorted_indices = matrix.has_sorted_indices
-    output.has_canonical_format = True
     if eliminate_zeros:
-        utt.unfreeze(output)
         with utm.timed_step('sparse.eliminate_zeros'):
             utm.timed_parameters(before=output.nnz)
             output.eliminate_zeros()
