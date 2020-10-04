@@ -143,7 +143,7 @@ def parallel_map(
     processes, that is, we do not support nested ``parallel_map`` calls.
 
     If the current :py:func:`get_cpus_count` is one, just runs the function serially. Otherwise,
-    fork new processes to execute the function invocations (using ``multiprocessing.Pool``). The
+    fork new processes to execute the function invocations (using ``multiprocessing.Pool.map``). The
     downside is that this is slow. The upside is that each of these processes starts with a shared
     memory copy(-on-write) of the full Python state, that is, all the inputs for the function are
     available "for free".

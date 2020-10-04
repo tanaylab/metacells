@@ -758,7 +758,7 @@ def _reduce_matrix(
                        'f_contiguous' if dense.flags.f_contiguous
                        else 'c_contiguous' if dense.flags.c_contiguous
                        else 'non-contiguous',
-                       ['f_contiguous', 'c_contiguous'][axis])
+                       ['c_contiguous', 'f_contiguous'][axis])
                 warn(reducing_dense_matrix_of_inefficient_format)
 
         else:

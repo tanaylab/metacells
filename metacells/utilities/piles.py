@@ -34,7 +34,7 @@ def random_piles(
     assert target_pile_size > 0
     piles_count = elements_count / target_pile_size
 
-    few_piles_count = floor(piles_count)
+    few_piles_count = max(floor(piles_count), 1)
     many_piles_count = ceil(piles_count)
 
     if few_piles_count == many_piles_count:

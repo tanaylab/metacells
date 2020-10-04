@@ -107,7 +107,7 @@ max_merge_size_factor: float = 0.25
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-pile_min_split_size_factor: float = min_split_size_factor
+pile_min_split_size_factor: float = 1.25
 
 #: The generic minimal pile size factor, below which we should consider dissolving it. See
 #: :py:const:`min_robust_size_factor`,
@@ -116,7 +116,8 @@ pile_min_split_size_factor: float = min_split_size_factor
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 pile_min_robust_size_factor: float = min_robust_size_factor
 
-#: The maximal size factor of a file, below which we can merge it. See
+#: The maximal size factor of a pile, below which we can merge it. See
+#: :py:const:`min_robust_size_factor`,
 #: :py:const:`max_merge_size_factor`,
 #: :py:const:`dissolve_min_convincing_size_factor`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
@@ -435,6 +436,7 @@ dissolve_min_robust_size_factor: float = min_robust_size_factor
 
 #: The minimal size factor for a metacell to be considered "robust" when grouping rare gene module
 #: cells. See
+#: :py:const:`min_robust_size_factor`,
 #: :py:const:`max_merge_size_factor`
 #: :py:func:`metacells.tools.dissolve.dissolve_metacells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,

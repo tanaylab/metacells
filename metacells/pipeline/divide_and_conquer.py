@@ -3,6 +3,7 @@ Divide and Conquer
 ------------------
 '''
 
+import gc
 import logging
 from re import Pattern
 from typing import (Any, Callable, Collection, Dict, List, NamedTuple,
@@ -650,6 +651,7 @@ def divide_and_conquer_pipeline(
                                     candidates_partition_method=candidates_partition_method,
                                     candidates_min_split_size_factor=candidates_min_split_size_factor,
                                     candidates_max_merge_size_factor=candidates_max_merge_size_factor,
+                                    must_complete_cover=False,
                                     deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
                                     deviants_max_gene_fraction=deviants_max_gene_fraction,
                                     deviants_max_cell_fraction=deviants_max_cell_fraction,
@@ -660,24 +662,25 @@ def divide_and_conquer_pipeline(
                                     random_seed=random_seed,
                                     intermediate=intermediate)
 
-            for rare_index, rare_results in enumerate(subset_results):
-                mask = rare_results.cells_frame['metacell'] >= 0
-                if not np.any(mask):
-                    LOG.debug('skip empty results for rare gene module %s/%s',
+            with ut.timed_step('.collect_piles'):
+                for rare_index, rare_results in enumerate(subset_results):
+                    mask = rare_results.cells_frame['metacell'] >= 0
+                    if not np.any(mask):
+                        LOG.debug('skip empty results for rare gene module %s/%s',
+                                  rare_index, rare_modules_count)
+                        continue
+
+                    if not did_apply_subset:
+                        did_apply_subset = True
+                        _initialize_results(adata, intermediate=intermediate)
+
+                    LOG.debug('collect results for rare gene module %s/%s',
                               rare_index, rare_modules_count)
-                    continue
 
-                if not did_apply_subset:
-                    did_apply_subset = True
-                    _initialize_results(adata, intermediate=intermediate)
+                    cell_indices = rare_results.cells_frame.index.values[mask]
+                    normal_cells_mask[cell_indices] = False
 
-                LOG.debug('collect results for rare gene module %s/%s',
-                          rare_index, rare_modules_count)
-
-                cell_indices = rare_results.cells_frame.index.values[mask]
-                normal_cells_mask[cell_indices] = False
-
-                rare_results.collect(adata, counts)
+                    rare_results.collect(adata, counts)
 
     if did_apply_subset:
         cdata = ut.slice(adata, obs=normal_cells_mask, name='.common', tmp=True,
@@ -899,12 +902,14 @@ def compute_divide_and_conquer_metacells(
     ut.log_pipeline_step(LOG, adata, 'compute_divide_and_conquer_metacells')
 
     LOG.debug('  target_pile_size: %s', target_pile_size)
-    LOG.debug('  pile_min_split_size_factor: %s',
-              pile_min_split_size_factor)
+    LOG.debug('  random_seed: %s', random_seed)
+    random_pile_of_cells = \
+        ut.random_piles(adata.n_obs,
+                        target_pile_size=target_pile_size,
+                        random_seed=random_seed)
+    piles_count = np.max(random_pile_of_cells) + 1
 
-    pile_min_split_size = target_pile_size * pile_min_split_size_factor
-    LOG.debug('  pile_min_split_size: %s', pile_min_split_size)
-    if adata.n_obs < pile_min_split_size:
+    if piles_count < 2:
         with ut.timed_step('.direct'):
             compute_direct_metacells(adata, of=of,
                                      feature_downsample_cell_quantile=feature_downsample_cell_quantile,
@@ -937,12 +942,6 @@ def compute_divide_and_conquer_metacells(
         return
 
     _initialize_results(adata, intermediate=intermediate, pre_metacells=True)
-
-    LOG.debug('  random_seed: %s', random_seed)
-    random_pile_of_cells = \
-        ut.random_piles(adata.n_obs,
-                        target_pile_size=target_pile_size,
-                        random_seed=random_seed)
 
     with ut.timed_step('.preliminary_metacells'):
         _compute_piled_metacells(adata, of=of,
@@ -1105,8 +1104,8 @@ def _compute_piled_metacells(
 ) -> None:
     ut.log_operation(LOG, adata, phase + '_metacells', of)
     piles_count = np.max(pile_of_cells) + 1
+    assert piles_count > 0
     LOG.debug('  piles_count: %s', piles_count)
-    assert piles_count > 1
 
     subset_results = \
         _run_parallel_piles(adata, of=of,
@@ -1129,6 +1128,7 @@ def _compute_piled_metacells(
                             candidates_partition_method=candidates_partition_method,
                             candidates_min_split_size_factor=candidates_min_split_size_factor,
                             candidates_max_merge_size_factor=candidates_max_merge_size_factor,
+                            must_complete_cover=must_complete_cover and piles_count == 1,
                             deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
                             deviants_max_gene_fraction=deviants_max_gene_fraction,
                             deviants_max_cell_fraction=deviants_max_cell_fraction,
@@ -1145,9 +1145,10 @@ def _compute_piled_metacells(
                   pre_candidate=0, candidate=0,
                   pre_metacell=0, metacell=0)
 
-    for pile_index, pile_results in enumerate(subset_results):
-        LOG.debug('collect results of pile %s/%s', pile_index, piles_count)
-        pile_results.collect(adata, counts)
+    with ut.timed_step('.collect_piles'):
+        for pile_index, pile_results in enumerate(subset_results):
+            LOG.debug('collect results of pile %s/%s', pile_index, piles_count)
+            pile_results.collect(adata, counts)
 
     assert phase in ('preliminary', 'final')
     if phase == 'preliminary':
@@ -1158,7 +1159,8 @@ def _compute_piled_metacells(
     metacell_of_cells = ut.get_o_dense(adata, metacell_annotation)
 
     outlier_of_cells = metacell_of_cells < 0
-    if not np.any(outlier_of_cells) \
+    if piles_count == 1 \
+        or not np.any(outlier_of_cells) \
         or (not must_complete_cover
             and max_outliers_levels is not None
             and max_outliers_levels <= 0):
@@ -1235,6 +1237,7 @@ def _run_parallel_piles(
     candidates_partition_method: 'ut.PartitionMethod',
     candidates_min_split_size_factor: Optional[float],
     candidates_max_merge_size_factor: Optional[float],
+    must_complete_cover: bool,
     deviants_min_gene_fold_factor: float,
     deviants_max_gene_fraction: Optional[float],
     deviants_max_cell_fraction: Optional[float],
@@ -1245,7 +1248,6 @@ def _run_parallel_piles(
     random_seed: int,
     intermediate: bool,
 ) -> List[SubsetResults]:
-    @ut.timed_call('compute_pile_metacells')
     def _compute_pile_metacells(pile_index: int) -> SubsetResults:
         pile_cells_mask = pile_of_cells == pile_index
         assert np.any(pile_cells_mask)
@@ -1269,7 +1271,7 @@ def _run_parallel_piles(
                                  candidates_partition_method=candidates_partition_method,
                                  candidates_min_split_size_factor=candidates_min_split_size_factor,
                                  candidates_max_merge_size_factor=candidates_max_merge_size_factor,
-                                 must_complete_cover=False,
+                                 must_complete_cover=must_complete_cover,
                                  deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
                                  deviants_max_gene_fraction=deviants_max_gene_fraction,
                                  deviants_max_cell_fraction=deviants_max_cell_fraction,
@@ -1284,8 +1286,15 @@ def _run_parallel_piles(
                              final_target=phase,
                              intermediate=intermediate)
 
+    @ut.timed_call('compute_pile_metacells')
+    def _return_pile_results(pile_index: int) -> SubsetResults:
+        results = _compute_pile_metacells(pile_index)
+        gc.collect()
+        return results
+
     with ut.timed_step('.piles'):
-        return list(ut.parallel_map(_compute_pile_metacells, piles_count))
+        gc.collect()
+        return list(ut.parallel_map(_return_pile_results, piles_count))
 
 
 LogValue = Optional[Callable[[Any], Optional[str]]]

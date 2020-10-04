@@ -553,9 +553,6 @@ def to_proper(
         if isinstance(shaped, pd.core.arrays.categorical.Categorical):
             shaped = np.array(shaped)
 
-    if isinstance(shaped, np.matrix):
-        shaped = np.array(shaped)
-
     sparse = SparseMatrix.maybe(shaped)
     if sparse is not None:
         compressed = CompressedMatrix.maybe(sparse)
@@ -572,6 +569,8 @@ def to_proper(
                                          elements=compressed.nnz / compressed.shape[1])
         return compressed
 
+    if isinstance(shaped, np.matrix) or not isinstance(shaped, np.ndarray):
+        shaped = np.asarray(shaped)
     assert isinstance(shaped, np.ndarray)
 
     if ndim is not None and shaped.ndim != ndim:

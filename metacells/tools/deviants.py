@@ -208,23 +208,29 @@ def _collect_fold_factors(
         data_of_candidate = data[candidate_cell_indices, :].copy()
         assert ut.matrix_layout(data_of_candidate) == 'row_major'
 
-        totals_of_candidate_genes = ut.sum_per(data_of_candidate, per='column')
+        totals_of_candidate_genes = \
+            ut.sum_per(ut.to_layout(data_of_candidate, 'column_major'),
+                       per='column')
         assert totals_of_candidate_genes.size == genes_count
 
         fractions_of_candidate_genes = \
             ut.to_dense_vector(totals_of_candidate_genes
                                / np.sum(totals_of_candidate_genes))
 
+        candidates_data = data_of_candidate.data
+        candidates_indices = data_of_candidate.indices
+        candidates_indptr = data_of_candidate.indptr
+
         extension_name = 'fold_factor_%s_t_%s_t_%s_t' \
-            % (data_of_candidate.data.dtype,
-               data_of_candidate.indices.dtype,
-               data_of_candidate.indptr.dtype)
+            % (candidates_data.dtype,
+               candidates_indices.dtype,
+               candidates_indptr.dtype)
         extension = getattr(xt, extension_name)
 
         with ut.timed_step('extensions.fold_factor'):
-            extension(data_of_candidate.data,
-                      data_of_candidate.indices,
-                      data_of_candidate.indptr,
+            extension(candidates_data,
+                      candidates_indices,
+                      candidates_indptr,
                       data_of_candidate.shape[1],
                       min_gene_fold_factor,
                       totals_of_candidate_cells,
