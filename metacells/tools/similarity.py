@@ -61,8 +61,10 @@ def compute_obs_obs_similarity(
        rest of the observations (cells) in the same way. This compensates for the extreme sparsity
        of the data.
     '''
-    return _compute_elements_similarity(adata, 'obs', of, repeated=repeated,
-                                        inplace=inplace, intermediate=intermediate)
+    return _compute_elements_similarity(adata, 'obs', of,
+                                        repeated=repeated,
+                                        inplace=inplace,
+                                        intermediate=intermediate)
 
 
 @ut.timed_call()
@@ -98,15 +100,19 @@ def compute_var_var_similarity(
 
     **Computation Parameters**
 
-    1. Compute the cross-correlation between all the genes.
+    1. Compute the cross-correlation between all the genes. If ``repeated``, use the resolution here
+       as well to ensure further processing of the results is replicable regardless of the number of
+       processes used.
 
     2. If ``repeated`` (default: {repeated}), compute the cross-correlation of the correlations.
        That is, for two variables (genes) to be similar, they would need to be similar to the rest
        of the variables (genes) in the same way. This compensates for the extreme sparsity of the
        data.
     '''
-    return _compute_elements_similarity(adata, 'var', of, repeated=repeated,
-                                        inplace=inplace, intermediate=intermediate)
+    return _compute_elements_similarity(adata, 'var', of,
+                                        repeated=repeated,
+                                        inplace=inplace,
+                                        intermediate=intermediate)
 
 
 def _compute_elements_similarity(
@@ -130,14 +136,15 @@ def _compute_elements_similarity(
         if elements == 'obs':
             similarity = pp.get_obs_obs_correlation(adata, of,
                                                     inplace=inplace or repeated)
-            if repeated:
-                similarity = pp.get_obs_obs_correlation(adata, similarity.name,
-                                                        inplace=inplace)
-
         else:
             similarity = pp.get_var_var_correlation(adata, of,
                                                     inplace=inplace or repeated)
-            if repeated:
+
+        if repeated:
+            if elements == 'obs':
+                similarity = pp.get_obs_obs_correlation(adata, similarity.name,
+                                                        inplace=inplace)
+            else:
                 similarity = pp.get_var_var_correlation(adata, similarity.name,
                                                         inplace=inplace)
 

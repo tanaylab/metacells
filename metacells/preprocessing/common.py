@@ -310,7 +310,7 @@ def get_log_matrix(
     layout: Optional[str] = None,
 ) -> NamedMatrix:
     '''
-    Same as :py:func:`get_derived` when the result is a
+    Same as :py:func:`get_log` when the result is a
     :py:const:`metacells.utilities.typing.Matrix`.
     '''
     return NamedMatrix.be(get_log(adata, of, base=base,
@@ -331,7 +331,7 @@ def get_log_vector(
     layout: Optional[str] = None,
 ) -> NamedVector:
     '''
-    Same as :py:func:`get_derived` when the result is a
+    Same as :py:func:`get_log` when the result is a
     :py:const:`metacells.utilities.typing.Vector`.
     '''
     return NamedVector.be(get_log(adata, of, base=base,

@@ -63,6 +63,7 @@ from typing import Any, Callable, Iterable, Optional, TypeVar
 from threadpoolctl import threadpool_limits  # type: ignore
 
 import metacells.extensions as xt  # type: ignore
+import metacells.utilities.documentation as utd
 import metacells.utilities.timing as utm
 
 __all__ = [
@@ -101,7 +102,7 @@ def set_cpus_count(cpus: int) -> None:
     assert IS_MAIN_PROCESS
 
     if cpus == -1:
-        cpus = (os.cpu_count() or 1) // 2
+        cpus = max((os.cpu_count() or 1) // 2, 1)
     elif cpus == 0:
         cpus = os.cpu_count() or 1
 
@@ -131,9 +132,12 @@ def get_cpus_count() -> int:
 T = TypeVar('T')
 
 
+@utd.expand_doc()
 def parallel_map(
     function: Callable[[int], T],
     invocations: int,
+    *,
+    max_cpus: int = 0,
 ) -> Iterable[T]:
     '''
     Execute ``function``, in parallel, ``invocations`` times. Each invocation is given the
@@ -142,11 +146,16 @@ def parallel_map(
     For our simple pipelines, only the main process is allowed to execute functions in parallel
     processes, that is, we do not support nested ``parallel_map`` calls.
 
-    If the current :py:func:`get_cpus_count` is one, just runs the function serially. Otherwise,
-    fork new processes to execute the function invocations (using ``multiprocessing.Pool.map``). The
-    downside is that this is slow. The upside is that each of these processes starts with a shared
-    memory copy(-on-write) of the full Python state, that is, all the inputs for the function are
-    available "for free".
+    This uses :py:func:`get_cpus_count` processes. If ``max_cpus`` (default: {max_cpus}) is not
+    zero, it further reduces the number of processes used: if it is ``-1`` then only half will
+    be used, to combat hyper-threading, otherwise at most the specified number will be used.
+
+    If this ends up using a single process, runs the function serially. Otherwise, fork new
+    processes to execute the function invocations (using ``multiprocessing.Pool.map``).
+
+    The downside is that this is slow. The upside is that each of these processes starts with a
+    shared memory copy(-on-write) of the full Python state, that is, all the inputs for the function
+    are available "for free".
 
     .. todo::
 
@@ -160,6 +169,12 @@ def parallel_map(
 
     global PROCESSES_COUNT
     PROCESSES_COUNT = min(CPUS_COUNT, invocations)
+    if max_cpus != 0:
+        if max_cpus == -1:
+            max_cpus = max((get_cpus_count() or 1) // 2, 1)
+        assert max_cpus > 0
+        PROCESSES_COUNT = min(PROCESSES_COUNT, max_cpus)
+
     if PROCESSES_COUNT == 1:
         return [function(index) for index in range(invocations)]
 

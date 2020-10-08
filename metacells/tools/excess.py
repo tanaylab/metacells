@@ -101,7 +101,7 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
             with sufficient data to be meaningful. We also ignore any genes which have exactly the
             same value in all cells of the metacell, regardless of their expression level.
 
-        1.3 Compute the cross-correlation between all the remaining genes and square it to obtain
+        1.3 Compute the cross-correlation between all the remaining genes, and square it to obtain
             the metacell's per-gene-per-gene R^2 data. Collect for each gene the ``top_gene_rank``
             value, which is the gene's top R^2 for this metacell.
 

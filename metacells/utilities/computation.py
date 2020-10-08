@@ -254,8 +254,15 @@ def corrcoef(
 
     .. todo::
 
-        The :py:func:`corrcoef` always uses the dense implementation. Need to investigate whether a
-        sparse implementation may be faster.
+        The :py:func:`corrcoef` always uses the dense implementation. Possibly a sparse
+        implementation might be faster.
+
+    .. todo::
+
+        The results of ``corrcoef`` are not replicable between runs if the matrix contains
+        non-integer values, because it uses numpy's ``matmul`` function, which produces slightly
+        different results depending on the number of CPUs used to compute the answer. There doesn't
+        seem to be a ``matmul_det`` variant which produces reproducible results.
 
     .. note::
 
@@ -267,6 +274,12 @@ def corrcoef(
         making a copy of the matrix, and doing the computations in double precision, which more than
         doubles our memory usage, and slows down the computation with no significant benefit to our
         final results.
+
+    .. note::
+
+        We save making copy of the matrix by subtracting the averages in-place and then adding them
+        back. This means that the matrix will be slightly perturbed, so computation done on it
+        before and after invoking this will give slightly different results.
     '''
     dense = utt.to_dense_matrix(matrix)
     layout = utt.matrix_layout(dense)

@@ -411,6 +411,9 @@ class SparseMatrix(Shaped):
     @abstractmethod
     def nonzero(self) -> Tuple[DenseVector, DenseVector]: ...
 
+    @abstractmethod
+    def copy(self: SP) -> SP: ...
+
     @staticmethod
     def am(data: Any) -> bool:
         return sp.issparse(data)

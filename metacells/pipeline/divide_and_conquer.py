@@ -5,6 +5,8 @@ Divide and Conquer
 
 import gc
 import logging
+import os
+import sys
 from re import Pattern
 from typing import (Any, Callable, Collection, Dict, List, NamedTuple,
                     Optional, Union)
@@ -21,12 +23,50 @@ import metacells.utilities as ut
 from .direct import compute_direct_metacells
 
 __all__ = [
+    'set_max_parallel_piles',
+    'get_max_parallel_piles',
     'divide_and_conquer_pipeline',
     'compute_divide_and_conquer_metacells',
 ]
 
 
 LOG = logging.getLogger(__name__)
+
+
+MAX_PARALLEL_PILES = 0
+
+
+def set_max_parallel_piles(max_cpus: int) -> None:
+    '''
+    Set the (maximal) number of piles to compute in parallel.
+
+    By default, we use all the available hardware threads. Override this by setting the
+    ``METACELLS_MAX_PARALLEL_PILES`` environment variable or by invoking this function from the main
+    thread.
+
+    A value of ``-1`` uses half of the available threads to combat hyper-threading, ``0`` (the
+    default) uses all the available threads, and otherwise the value is the number of threads to
+    use.
+
+    It may be useful to restrict the number of parallel piles to restrict the total amount of memory
+    used by the application. While this does not increase the total amount of CPU used by the
+    program, it will increase the total elapsed time due to the reduced parallelism.
+    '''
+    global MAX_PARALLEL_PILES
+    MAX_PARALLEL_PILES = max_cpus
+
+
+if not 'sphinx' in sys.argv[0]:
+    set_max_parallel_piles(int(os.environ.get('METACELLS_MAX_PARALLEL_PILES',
+                                              '0')))
+
+
+def get_max_parallel_piles() -> int:
+    '''
+    Return the maximal number of piles to compute in parallel.
+    '''
+    global MAX_PARALLEL_PILES
+    return MAX_PARALLEL_PILES
 
 
 class ResultAnnotation(NamedTuple):
@@ -1294,7 +1334,8 @@ def _run_parallel_piles(
 
     with ut.timed_step('.piles'):
         gc.collect()
-        return list(ut.parallel_map(_return_pile_results, piles_count))
+        return list(ut.parallel_map(_return_pile_results, piles_count,
+                                    max_cpus=get_max_parallel_piles()))
 
 
 LogValue = Optional[Callable[[Any], Optional[str]]]

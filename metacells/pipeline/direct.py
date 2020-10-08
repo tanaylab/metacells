@@ -152,17 +152,17 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        ``random_seed`` (default: {random_seed})
        to make this replicable.
 
-    1. If ``cells_similarity_log_data`` (default: {cells_similarity_log_data}), invoke
+    2. If ``cells_similarity_log_data`` (default: {cells_similarity_log_data}), invoke the
        :py:func:`metacells.preprocessing.common.get_log_matrix` function to compute the log (base 2)
-       of the data, using the
-       ``cells_similarity_log_normalization`` (default: {cells_similarity_log_normalization}).
+       of the data, using the ``cells_similarity_log_normalization`` (default:
+       {cells_similarity_log_normalization}).
 
-    2. Invoke :py:func:`metacells.tools.similarity.compute_obs_obs_similarity` to compute the
+    3. Invoke :py:func:`metacells.tools.similarity.compute_obs_obs_similarity` to compute the
        similarity between each pair of cells, using the
        ``cells_repeated_similarity`` (default: {cells_repeated_similarity})
        to compensate for the sparseness of the data.
 
-    3. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a
+    4. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a
        K-Nearest-Neighbors graph, using the
        ``knn_balanced_ranks_factor`` (default: {knn_balanced_ranks_factor}),
        ``knn_incoming_degree_factor`` (default: {knn_incoming_degree_factor})
@@ -171,7 +171,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        If ``knn_k`` (default: {knn_k}) is not specified, then it is
        chosen to be the mean number of cells required to reach the target metacell size.
 
-    4. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
+    5. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
        the candidate metacells, using the
        ``candidates_partition_method`` (default: {candidates_partition_method.__qualname__}),
        ``candidates_min_split_size_factor`` (default: {candidates_min_split_size_factor}),
@@ -183,7 +183,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        using the
        ``cell_sizes`` (default: {cell_sizes}).
 
-    5. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
+    6. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
        :py:func:`metacells.tools.deviants.find_deviant_cells` to remove deviants from the candidate
        metacells, using the
        ``deviants_min_gene_fold_factor`` (default: {deviants_min_gene_fold_factor}),
@@ -191,7 +191,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        and
        ``deviants_max_cell_fraction`` (default: {deviants_max_cell_fraction}).
 
-    6. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
+    7. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
        :py:func:`metacells.tools.dissolve.dissolve_metacells` to dissolve small unconvincing
        metacells, using the same
        ``target_metacell_size`` (default: {target_metacell_size}),
@@ -236,7 +236,6 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
             of = pp.get_log_matrix(fdata, base=2,
                                    normalization=cells_similarity_log_normalization).name
         else:
-            LOG.debug('  log: None')
             of = None
 
         tl.compute_obs_obs_similarity(fdata, of=of,

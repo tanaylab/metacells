@@ -5,6 +5,7 @@ Deviants
 
 import logging
 from typing import List, Optional, Tuple, Union
+from warnings import warn
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -176,7 +177,7 @@ def find_deviant_cells(
 
 
 @ut.timed_call('.collect_fold_factors')
-def _collect_fold_factors(
+def _collect_fold_factors(  # pylint: disable=too-many-statements
     *,
     data: ut.ProperMatrix,
     candidate_of_cells: ut.DenseVector,
@@ -207,6 +208,7 @@ def _collect_fold_factors(
 
         data_of_candidate = data[candidate_cell_indices, :].copy()
         assert ut.matrix_layout(data_of_candidate) == 'row_major'
+        assert data_of_candidate.shape == (candidate_cells_count, genes_count)
 
         totals_of_candidate_genes = \
             ut.sum_per(ut.to_layout(data_of_candidate, 'column_major'),
@@ -217,26 +219,82 @@ def _collect_fold_factors(
             ut.to_dense_vector(totals_of_candidate_genes
                                / np.sum(totals_of_candidate_genes))
 
-        candidates_data = data_of_candidate.data
-        candidates_indices = data_of_candidate.indices
-        candidates_indptr = data_of_candidate.indptr
+        if ut.SparseMatrix.am(data_of_candidate):
+            if data_of_candidate.nnz == 0:
+                list_of_fold_factors.append(data_of_candidate)
+                continue
 
-        extension_name = 'fold_factor_%s_t_%s_t_%s_t' \
-            % (candidates_data.dtype,
-               candidates_indices.dtype,
-               candidates_indptr.dtype)
-        extension = getattr(xt, extension_name)
+            candidates_data = data_of_candidate.data
+            candidates_indices = data_of_candidate.indices
+            candidates_indptr = data_of_candidate.indptr
 
-        with ut.timed_step('extensions.fold_factor'):
-            extension(candidates_data,
-                      candidates_indices,
-                      candidates_indptr,
-                      data_of_candidate.shape[1],
-                      min_gene_fold_factor,
-                      totals_of_candidate_cells,
-                      fractions_of_candidate_genes)
+            extension_name = 'fold_factor_compressed_%s_t_%s_t_%s_t' \
+                % (candidates_data.dtype,
+                   candidates_indices.dtype,
+                   candidates_indptr.dtype)
+            extension = getattr(xt, extension_name)
 
-        ut.eliminate_zeros(data_of_candidate)
+            with ut.timed_step('extensions.fold_factor_compressed'):
+                assert len(candidates_data) > 0
+                assert len(candidates_indices) > 0
+                assert len(candidates_indptr) > 0
+                assert isinstance(min_gene_fold_factor, (int, float))
+                assert len(totals_of_candidate_cells) > 0
+                assert len(fractions_of_candidate_genes) > 0
+                try:
+                    extension(candidates_data,
+                              candidates_indices,
+                              candidates_indptr,
+                              min_gene_fold_factor,
+                              totals_of_candidate_cells,
+                              fractions_of_candidate_genes)
+                except IndexError as exception:
+                    warn('Mysterious IndexError exception: %s' % exception)
+                    warn('Operation data:')
+                    warn('  candidates_data class: %s size: %s'
+                         % (candidates_data.__class__,
+                            len(candidates_data)))
+                    warn('  candidates_indices class: %s size: %s'
+                         % (candidates_indices.__class__,
+                            len(candidates_indices)))
+                    warn('  candidates_indptr class: %s size: %s'
+                         % (candidates_indptr.__class__,
+                            len(candidates_indptr)))
+                    warn('  min_gene_fold_factor class: %s value: %s'
+                         % (min_gene_fold_factor.__class__,
+                            min_gene_fold_factor))
+                    warn('  totals_of_candidate_cells class: %s size: %s'
+                         % (totals_of_candidate_cells.__class__,
+                            len(totals_of_candidate_cells)))
+                    warn('  fractions_of_candidate_genes class: %s size: %s'
+                         % (fractions_of_candidate_genes.__class__,
+                            len(fractions_of_candidate_genes)))
+                    warn('Retrying...')
+                    extension(candidates_data,
+                              candidates_indices,
+                              candidates_indptr,
+                              min_gene_fold_factor,
+                              totals_of_candidate_cells,
+                              fractions_of_candidate_genes)
+
+            ut.eliminate_zeros(data_of_candidate)
+
+        else:
+            extension_name = 'fold_factor_dense_%s_t' % data_of_candidate.dtype
+            extension = getattr(xt, extension_name)
+
+            with ut.timed_step('extensions.fold_factor_dense'):
+                extension(data_of_candidate,
+                          min_gene_fold_factor,
+                          totals_of_candidate_cells,
+                          fractions_of_candidate_genes)
+
+            if not ut.CompressedMatrix.am(data_of_candidate):
+                data_of_candidate = sparse.csr_matrix(data_of_candidate)
+            else:
+                ut.eliminate_zeros(data_of_candidate)
+            assert data_of_candidate.has_sorted_indices
+            assert data_of_candidate.has_canonical_format
 
         list_of_fold_factors.append(data_of_candidate)
 

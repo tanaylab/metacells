@@ -236,7 +236,6 @@ def _genes_similarity(
     repeated: bool,
 ) -> ut.DenseMatrix:
     of = ut.log_of(LOG, candidate_data, of, name='similarity of candidates')
-    LOG.debug('  repeated_similarity: %s', repeated)
     similarity = \
         compute_var_var_similarity(candidate_data,
                                    of=of,

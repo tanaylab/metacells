@@ -96,6 +96,7 @@ public:
     ConstArraySlice(const pybind11::array_t<T>& array, const char* const name)
       : ConstArraySlice(array.data(), array.size(), name) {
         FastAssertCompareWhat(array.ndim(), ==, 1, name);
+        FastAssertCompareWhat(array.size(), >, 0, name);
         FastAssertCompareWhat(array.data(1) - array.data(0), ==, 1, name);
     }
 
@@ -141,6 +142,7 @@ public:
     ArraySlice(pybind11::array_t<T>& array, const char* const name)
       : ArraySlice(array.mutable_data(), array.size(), name) {
         FastAssertCompareWhat(array.ndim(), ==, 1, name);
+        FastAssertCompareWhat(array.size(), >, 0, name);
         FastAssertCompareWhat(array.data(1) - array.data(0), ==, 1, name);
     }
 
@@ -173,6 +175,15 @@ public:
     operator ConstArraySlice<T>() const { return ConstArraySlice<T>(m_data, m_size, m_name); }
 };
 
+template<typename T>
+static size_t
+matrix_step(const pybind11::array_t<T>& array, const char* const name) {
+    FastAssertCompareWhat(array.ndim(), ==, 2, name);
+    FastAssertCompareWhat(array.shape(0), >, 0, name);
+    FastAssertCompareWhat(array.shape(1), >, 0, name);
+    return array.data(1, 0) - array.data(0, 0);
+}
+
 /// An immutable row-major slice of a matrix of type ``T``.
 template<typename T>
 class ConstMatrixSlice {
@@ -199,7 +210,7 @@ public:
       : ConstMatrixSlice(array.data(),
                          array.shape(0),
                          array.shape(1),
-                         array.data(1, 0) - array.data(0, 0),
+                         matrix_step(array, name),
                          name) {
         FastAssertCompareWhat(array.ndim(), ==, 2, name);
         FastAssertCompareWhat(array.data(0, 1) - array.data(0, 0), ==, 1, name);
@@ -244,7 +255,7 @@ public:
       : MatrixSlice(array.mutable_data(),
                     array.shape(0),
                     array.shape(1),
-                    array.data(1, 0) - array.data(0, 0),
+                    matrix_step(array, name),
                     name) {
         FastAssertCompareWhat(array.ndim(), ==, 2, name);
         FastAssertCompareWhat(array.data(0, 1) - array.data(0, 0), ==, 1, name);
@@ -1118,27 +1129,76 @@ rank_matrix(const pybind11::array_t<D>& input_matrix,
 }
 
 /// See the Python `metacell.tools.outlier_cells._collect_fold_factors` function.
+template<typename D>
+static void
+fold_factor_dense(pybind11::array_t<D>& data_array,
+                  const double min_gene_fold_factor,
+                  const pybind11::array_t<D>& total_of_rows_array,
+                  const pybind11::array_t<D>& fraction_of_columns_array) {
+    MatrixSlice<D> data(data_array, "data");
+    ConstArraySlice<D> total_of_rows(total_of_rows_array, "total_of_rows");
+    ConstArraySlice<D> fraction_of_columns(fraction_of_columns_array, "fraction_of_columns");
+
+    FastAssertCompare(total_of_rows.size(), ==, data.rows_count());
+    FastAssertCompare(fraction_of_columns.size(), ==, data.columns_count());
+
+    const size_t rows_count = data.rows_count();
+    const size_t columns_count = data.columns_count();
+    if (is_in_parallel) {
+        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
+            const auto row_total = total_of_rows[row_index];
+            auto row_data = data.get_row(row_index);
+            for (size_t column_index = 0; column_index < columns_count; ++column_index) {
+                const auto column_fraction = fraction_of_columns[column_index];
+                const auto expected = row_total * column_fraction;
+                auto& value = row_data[column_index];
+                value = log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE;
+                if (value < min_gene_fold_factor) {
+                    value = 0.0;
+                }
+            }
+        }
+    } else {
+#pragma omp parallel for schedule(guided)
+        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
+            const auto row_total = total_of_rows[row_index];
+            auto row_data = data.get_row(row_index);
+            for (size_t column_index = 0; column_index < columns_count; ++column_index) {
+                const auto column_fraction = fraction_of_columns[column_index];
+                const auto expected = row_total * column_fraction;
+                auto& value = row_data[column_index];
+                value = log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE;
+                if (value < min_gene_fold_factor) {
+                    value = 0.0;
+                }
+            }
+        }
+    }
+}
+
+/// See the Python `metacell.tools.outlier_cells._collect_fold_factors` function.
 template<typename D, typename I, typename P>
 static void
-fold_factor(pybind11::array_t<D>& data_array,
-            pybind11::array_t<I>& indices_array,
-            pybind11::array_t<P>& indptr_array,
-            const size_t elements_count,
-            const double min_gene_fold_factor,
-            const pybind11::array_t<D>& total_of_bands_array,
-            const pybind11::array_t<D>& fraction_of_elements_array) {
+fold_factor_compressed(pybind11::array_t<D>& data_array,
+                       pybind11::array_t<I>& indices_array,
+                       pybind11::array_t<P>& indptr_array,
+                       const double min_gene_fold_factor,
+                       const pybind11::array_t<D>& total_of_bands_array,
+                       const pybind11::array_t<D>& fraction_of_elements_array) {
+    ConstArraySlice<D> total_of_bands(total_of_bands_array, "total_of_bands");
+    ConstArraySlice<D> fraction_of_elements(fraction_of_elements_array, "fraction_of_elements");
+
+    const size_t bands_count = total_of_bands.size();
+    const size_t elements_count = fraction_of_elements.size();
+
     CompressedMatrix<D, I, P> data(ArraySlice<D>(data_array, "data"),
                                    ArraySlice<I>(indices_array, "indices"),
                                    ArraySlice<P>(indptr_array, "indptr"),
                                    elements_count,
                                    "data");
-    ConstArraySlice<D> total_of_bands(total_of_bands_array, "total_of_bands");
-    ConstArraySlice<D> fraction_of_elements(fraction_of_elements_array, "fraction_of_elements");
+    FastAssertCompare(data.bands_count(), ==, bands_count);
+    FastAssertCompare(data.elements_count(), ==, elements_count);
 
-    FastAssertCompare(total_of_bands.size(), ==, data.bands_count());
-    FastAssertCompare(fraction_of_elements.size(), ==, data.elements_count());
-
-    const size_t bands_count = data.bands_count();
     if (is_in_parallel) {
         for (size_t band_index = 0; band_index < bands_count; ++band_index) {
             const auto band_total = total_of_bands[band_index];
@@ -1188,7 +1248,10 @@ PYBIND11_MODULE(extensions, module) {
 
 #define REGISTER_D(D)                                                                        \
     module.def("shuffle_matrix_" #D, &metacells::shuffle_matrix<D>, "Shuffle matrix data."); \
-    module.def("rank_matrix_" #D, &metacells::rank_matrix<D>, "Rank of matrix data.");
+    module.def("rank_matrix_" #D, &metacells::rank_matrix<D>, "Rank of matrix data.");       \
+    module.def("fold_factor_dense_" #D,                                                      \
+               &metacells::fold_factor_dense<D>,                                             \
+               "Fold factors of dense data.");
 
 #define REGISTER_D_O(D, O)                          \
     module.def("downsample_array_" #D "_" #O,       \
@@ -1213,8 +1276,8 @@ PYBIND11_MODULE(extensions, module) {
     module.def("shuffle_compressed_" #D "_" #I "_" #P,       \
                &metacells::shuffle_compressed<D, I, P>,      \
                "Shuffle compressed data.");                  \
-    module.def("fold_factor_" #D "_" #I "_" #P,              \
-               &metacells::fold_factor<D, I, P>,             \
+    module.def("fold_factor_compressed_" #D "_" #I "_" #P,   \
+               &metacells::fold_factor_compressed<D, I, P>,  \
                "Fold factors of compressed data.");
 
     module.def("collect_outgoing",
