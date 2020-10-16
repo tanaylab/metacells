@@ -412,6 +412,9 @@ class SparseMatrix(Shaped):
     def nonzero(self) -> Tuple[DenseVector, DenseVector]: ...
 
     @abstractmethod
+    def mean(self: SP, *, axis: int) -> 'ProperVector': ...
+
+    @abstractmethod
     def copy(self: SP) -> SP: ...
 
     @staticmethod

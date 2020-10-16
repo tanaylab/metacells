@@ -36,6 +36,8 @@ __all__ = [
 
     'log_data',
 
+    'mean_per',
+    'nanmean_per',
     'max_per',
     'nanmax_per',
     'min_per',
@@ -594,6 +596,33 @@ def downsample_vector(
     with utm.timed_step('extensions.downsample_array'):
         utm.timed_parameters(elements=array.size, samples=samples)
         extension(array, output, samples, random_seed)
+
+
+@ utm.timed_call()
+def mean_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
+    '''
+    Compute the mean value ``per`` (``row`` or ``column``) of some ``matrix``.
+    '''
+    axis = utt.PER_OF_AXIS.index(per)
+
+    sparse = utt.SparseMatrix.maybe(matrix)
+    if sparse is not None:
+        return _reduce_matrix(sparse, per, lambda sparse: sparse.mean(axis=1 - axis))
+
+    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
+    return _reduce_matrix(dense, per, lambda dense: np.mean(dense, axis=1 - axis))
+
+
+@ utm.timed_call()
+def nanmean_per(matrix: utt.DenseMatrix, *, per: str) -> utt.DenseVector:
+    '''
+    Compute the mean value ``per`` (``row`` or ``column``) of some ``matrix``,
+    ignoring ``None`` values, if any.
+    '''
+    axis = utt.PER_OF_AXIS.index(per)
+
+    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
+    return _reduce_matrix(dense, per, lambda dense: np.nanmean(dense, axis=1 - axis))
 
 
 @ utm.timed_call()

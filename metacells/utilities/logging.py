@@ -270,8 +270,10 @@ def groups_description(groups: utt.Vector) -> str:
     '''
     groups = utt.to_dense_vector(groups)
     count = np.max(groups) + 1
-    return '%s groups with mean size %.2f' \
-        % (count, np.sum(groups >= 0) / max(count, 1))
+    return '%s groups with mean size %.2f and %s outliers' \
+        % (count,
+           np.sum(groups >= 0) / max(count, 1),
+           ratio_description(np.sum(groups < 0), groups.size))
 
 
 def mask_description(mask: utt.Vector) -> str:

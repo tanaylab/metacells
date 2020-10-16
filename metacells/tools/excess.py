@@ -84,7 +84,8 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
     for future reuse. Otherwise, discard it. In addition, ``gene_max_top_r2`` and
     ``gene_max_top_shuffled_r2`` will be stored for each variable in ``adata``, and if ``mdata`` was
-    specified, store ``top_r2`` and ``top_shuffled_r2`` per-variable-per-observation in it as well.
+    specified, store ``top_r2``, ``top_shuffled_r2`` ``inner_variance`` and
+    ``inner_normalized_variance`` per-variable-per-observation in it as well.
 
     **Computation Parameters**
 
@@ -154,6 +155,8 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
         excess_r2_per_gene_per_metacell = None
         top_r2_per_gene_per_metacell = None
         top_shuffled_r2_per_gene_per_metacell = None
+        variance_per_gene_per_metacell = None
+        normalized_variance_per_gene_per_metacell = None
         if mdata is not None:
             assert mdata.n_obs == metacells_count
             excess_r2_per_gene_per_metacell = \
@@ -162,6 +165,10 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
                 top_r2_per_gene_per_metacell = \
                     np.full(mdata.shape, None, dtype='float')
                 top_shuffled_r2_per_gene_per_metacell = \
+                    np.full(mdata.shape, None, dtype='float')
+                variance_per_gene_per_metacell = \
+                    np.full(mdata.shape, None, dtype='float')
+                normalized_variance_per_gene_per_metacell = \
                     np.full(mdata.shape, None, dtype='float')
 
         LOG.debug('  downsample_cell_quantile: %s',
@@ -184,7 +191,9 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
                                      mindex_of_genes=mindex_of_genes,
                                      excess_r2_per_gene_per_metacell=excess_r2_per_gene_per_metacell,
                                      top_r2_per_gene_per_metacell=top_r2_per_gene_per_metacell,
-                                     top_shuffled_r2_per_gene_per_metacell=top_shuffled_r2_per_gene_per_metacell)
+                                     top_shuffled_r2_per_gene_per_metacell=top_shuffled_r2_per_gene_per_metacell,
+                                     variance_per_gene_per_metacell=variance_per_gene_per_metacell,
+                                     normalized_variance_per_gene_per_metacell=normalized_variance_per_gene_per_metacell)
 
     if excess_r2_per_gene_per_metacell is not None:
         excess_r2_per_gene_per_metacell[excess_r2_per_gene_per_metacell < -5] = None
@@ -197,6 +206,12 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
             top_shuffled_r2_per_gene_per_metacell[top_shuffled_r2_per_gene_per_metacell < -5] = None
             ut.set_vo_data(mdata, 'top_shuffled_r2',
                            top_shuffled_r2_per_gene_per_metacell)
+        if variance_per_gene_per_metacell is not None:
+            ut.set_vo_data(mdata, 'inner_variance',
+                           variance_per_gene_per_metacell)
+        if normalized_variance_per_gene_per_metacell is not None:
+            ut.set_vo_data(mdata, 'inner_normalized_variance',
+                           normalized_variance_per_gene_per_metacell)
 
     max_excess_r2_per_gene[max_excess_r2_per_gene < -5] = None
 
@@ -249,12 +264,15 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements
     excess_r2_per_gene_per_metacell: Optional[ut.DenseMatrix],
     top_r2_per_gene_per_metacell: Optional[ut.DenseMatrix],
     top_shuffled_r2_per_gene_per_metacell: Optional[ut.DenseMatrix],
+    variance_per_gene_per_metacell: Optional[ut.DenseMatrix],
+    normalized_variance_per_gene_per_metacell: Optional[ut.DenseMatrix],
 ) -> None:
     LOG.debug('  - metacell: %s / %s', metacell_index, metacells_count)
     metacell_mask = metacell_of_cells == metacell_index
     assert ut.matrix_layout(data) == 'row_major'
     metacell_data = data[metacell_mask, :]
-    assert metacell_data.shape[0] > 0
+    cells_count = metacell_data.shape[0]
+    assert cells_count > 0
 
     total_per_cell = ut.sum_per(metacell_data, per='row')
     samples = round(np.quantile(total_per_cell, downsample_cell_quantile))
@@ -266,6 +284,7 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements
         ut.to_layout(downsampled_data_rows, layout='column_major')
     total_per_gene = \
         ut.to_dense_vector(ut.sum_per(downsampled_data_columns, per='column'))
+
     min_per_gene = \
         ut.to_dense_vector(ut.min_per(downsampled_data_columns, per='column'))
     max_per_gene = \
@@ -301,6 +320,37 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements
         max_top_r2_per_gene[correlated_genes_mask] = \
             np.maximum(max_top_r2_per_gene[correlated_genes_mask],
                        top_r2_per_correlated_gene)
+
+    if variance_per_gene_per_metacell is not None:
+        assert normalized_variance_per_gene_per_metacell is not None
+        assert correlated_data.shape == (cells_count, correlated_genes_count)
+
+        if ut.SparseMatrix.am(correlated_data):
+            correlated_squared_data = correlated_data.multiply(correlated_data)
+        else:
+            correlated_squared_data = correlated_data * correlated_data
+
+        correlated_total_squared_per_gene = \
+            ut.to_dense_vector(ut.sum_per(correlated_squared_data,
+                                          per='column'))
+
+        correlated_total_per_gene = total_per_gene[correlated_gene_indices]
+        correlated_variance_per_gene = \
+            np.square(correlated_total_per_gene).astype(float)
+        correlated_variance_per_gene /= -cells_count
+        correlated_variance_per_gene += correlated_total_squared_per_gene
+        correlated_variance_per_gene /= cells_count
+        variance_per_gene_per_metacell[metacell_index,
+                                       mindex_of_correlated_genes] = \
+            correlated_variance_per_gene
+
+        correlated_mean_per_gene = correlated_total_per_gene / cells_count
+        correlated_mean_per_gene[correlated_mean_per_gene <= 0] = 1
+        correlated_normalized_variance_per_gene = \
+            correlated_variance_per_gene / correlated_mean_per_gene
+        normalized_variance_per_gene_per_metacell[metacell_index,
+                                                  mindex_of_correlated_genes] = \
+            correlated_normalized_variance_per_gene
 
     shuffled_data = correlated_data.copy()
 
