@@ -47,6 +47,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
     candidates_partition_method: 'ut.PartitionMethod' = pr.candidates_partition_method,
     candidates_min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
+    candidates_min_metacell_cells: int = pr.min_metacell_cells,
     must_complete_cover: bool = False,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
@@ -54,6 +55,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
     dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
+    dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     random_seed: int = pr.random_seed,
     intermediate: bool = True,
@@ -105,11 +107,11 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
             A boolean mask of genes with "high" normalized variance, relative to other genes with a
             similar expression level.
 
-        ``forbidden`` (if ``intermediate``)
+        ``forbidden_gene`` (if ``intermediate``)
             A boolean mask of genes which are forbidden from being chosen as "feature" genes based
             on their name.
 
-        ``feature``
+        ``feature_gene``
             A boolean mask of the "feature" genes.
 
         ``gene_deviant_votes`` (if ``intermediate``)
@@ -175,7 +177,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        the candidate metacells, using the
        ``candidates_partition_method`` (default: {candidates_partition_method.__qualname__}),
        ``candidates_min_split_size_factor`` (default: {candidates_min_split_size_factor}),
-       ``candidates_max_merge_size_factor`` (default: {candidates_max_merge_size_factor})
+       ``candidates_max_merge_size_factor`` (default: {candidates_max_merge_size_factor}),
+       ``candidates_min_metacell_cells`` (default: {candidates_min_metacell_cells}),
        and
        ``random_seed`` (default: {random_seed})
        to make this replicable. This tries to build metacells of the
@@ -200,8 +203,9 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        and the
        ``dissolve_min_robust_size_factor`` (default: {dissolve_min_robust_size_factor}),
        ``dissolve_min_convincing_size_factor`` (default: {dissolve_min_convincing_size_factor}),
+       ``dissolve_min_convincing_gene_fold_factor`` (default: {dissolve_min_convincing_size_factor})
        and
-       ``dissolve_min_convincing_gene_fold_factor`` (default: {dissolve_min_convincing_size_factor}).
+       ``dissolve_min_metacell_cells`` (default: ``dissolve_min_metacell_cells``).
     '''
     fdata = \
         extract_feature_data(adata, of=of, tmp=True,
@@ -263,10 +267,12 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
 
             tl.compute_candidate_metacells(fdata,
                                            target_metacell_size=target_metacell_size,
+                                           must_complete_cover=must_complete_cover,
                                            cell_sizes=cell_sizes,
                                            partition_method=candidates_partition_method,
                                            min_split_size_factor=candidates_min_split_size_factor,
                                            max_merge_size_factor=candidates_max_merge_size_factor,
+                                           min_metacell_cells=candidates_min_metacell_cells,
                                            random_seed=random_seed)
 
         candidate_of_cells = ut.get_o_dense(fdata, 'candidate')
@@ -309,7 +315,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
                                   cell_sizes=cell_sizes,
                                   min_robust_size_factor=dissolve_min_robust_size_factor,
                                   min_convincing_size_factor=dissolve_min_convincing_size_factor,
-                                  min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor)
+                                  min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                                  min_metacell_cells=dissolve_min_metacell_cells)
 
     if intermediate:
         metacell_of_cells = ut.get_o_dense(adata, 'metacell')

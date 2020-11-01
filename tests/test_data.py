@@ -40,7 +40,8 @@ def _load(path: str) -> Tuple[AnnData, Dict[str, Any]]:
 def test_find_rare_gene_modules(path: str) -> None:
     adata, expected = _load(path)
 
-    mc.tl.find_rare_gene_modules(adata)
+    mc.tl.find_rare_gene_modules(adata,
+                                 **expected.get('find_rare_gene_modules', {}))
 
     actual_rare_gene_modules = [
         list(module_gene_names) for module_gene_names
@@ -57,12 +58,16 @@ def test_direct_pipeline(path: str) -> None:
 
     pdata = adata[range(6000), :].copy()
 
-    cdata = mc.pl.extract_clean_data(pdata, random_seed=123456,
-                                     **expected['clean_kwargs'])
+    mc.pl.analyze_clean_genes(pdata, random_seed=123456,
+                              **expected.get('analyze_clean_genes', {}))
+    mc.pl.pick_clean_genes(pdata)
+    mc.pl.analyze_clean_cells(pdata, **expected.get('analyze_clean_cells', {}))
+    mc.pl.pick_clean_cells(pdata)
+    cdata = mc.pl.extract_clean_data(pdata)
     assert cdata is not None
 
     mc.pl.compute_direct_metacells(cdata, random_seed=123456,
-                                   **expected['compute_kwargs'])
+                                   **expected.get('compute_direct_metacells', {}))
 
     mdata = mc.pl.collect_metacells(cdata)
 

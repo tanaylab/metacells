@@ -74,11 +74,11 @@ def extract_feature_data(
             A boolean mask of genes with "high" normalized variance, relative to other genes with a
             similar expression level.
 
-        ``forbidden``
+        ``forbidden_gene``
             A boolean mask of genes which are forbidden from being chosen as "feature" genes based
             on their name.
 
-        ``feature``
+        ``feature_gene``
             A boolean mask of the "feature" genes.
 
     **Computation Parameters**
@@ -105,7 +105,7 @@ def extract_feature_data(
     ut.log_pipeline_step(LOG, adata, 'extract_feature_data')
 
     with ut.focus_on(ut.get_vo_data, adata, of,
-                     intermediate=intermediate, keep='feature'):
+                     intermediate=intermediate, keep='feature_gene'):
         tl.downsample_cells(adata,
                             downsample_cell_quantile=downsample_cell_quantile,
                             random_seed=random_seed,
@@ -120,15 +120,15 @@ def extract_feature_data(
         if forbidden_gene_names is not None \
                 or forbidden_gene_patterns is not None:
             tl.find_named_genes(adata,
-                                to='forbidden',
+                                to='forbidden_gene',
                                 names=forbidden_gene_names,
                                 patterns=forbidden_gene_patterns)
 
         results = pp.filter_data(adata, name=name, tmp=tmp,
-                                 mask_var='feature',
-                                 masks=['high_fraction_gene',
-                                        'high_relative_variance_gene',
-                                        '~forbidden'])
+                                 mask_var='feature_gene',
+                                 var_masks=['high_fraction_gene',
+                                            'high_relative_variance_gene',
+                                            '~forbidden_gene'])
         if results is None:
             raise ValueError('Empty feature data, giving up')
 

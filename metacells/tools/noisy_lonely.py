@@ -115,8 +115,8 @@ def find_noisy_lonely_genes(
 
     results = pp.filter_data(bdata, name='noisy', tmp=True,
                              track_var='sampled_gene_index',
-                             masks=['high_fraction_gene',
-                                    'high_normalized_variance_gene'])
+                             var_masks=['high_fraction_gene',
+                                        'high_normalized_variance_gene'])
     assert results is not None
     ndata = results[0]
 

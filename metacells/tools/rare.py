@@ -37,7 +37,10 @@ def find_rare_gene_modules(
     similarity_of: Optional[str] = None,
     repeated_similarity: bool = pr.rare_repeated_similarity,
     genes_cluster_method: str = pr.rare_genes_cluster_method,
-    min_size_of_modules: int = pr.rare_min_size_of_modules,
+    min_genes_of_modules: int = pr.rare_min_genes_of_modules,
+    min_cells_of_modules: int = pr.rare_min_cells_of_modules,
+    target_metacell_size: int = pr.target_metacell_size,
+    min_modules_size_factor: float = pr.rare_min_modules_size_factor,
     min_module_correlation: float = pr.rare_min_module_correlation,
     min_cell_module_total: int = pr.rare_min_cell_module_total,
     inplace: bool = True,
@@ -105,7 +108,7 @@ def find_rare_gene_modules(
        (default: {genes_cluster_method}).
 
     4. Identify gene modules in the hierarchical clustering which contain at least
-       ``min_size_of_modules`` genes (default: {min_size_of_modules}), with an average gene-gene
+       ``min_genes_of_modules`` genes (default: {min_genes_of_modules}), with an average gene-gene
        cross-correlation of at least ``min_module_correlation`` (default:
        {min_module_correlation}).
 
@@ -113,10 +116,15 @@ def find_rare_gene_modules(
        (default: {min_cell_module_total}) from the module. In the very rare case a cell contains
        this much for multiple gene modules, associate it with the gene module which is most enriched
        (relative to the least enriched cell associated with the gene module). Gene modules with no
-       associated cells are discarded.
+       associated cells are discarded. Only accept modules with at least ``min_cells_of_modules``
+       (default: {min_cells_of_modules}) and whose total number of UMIs is at least
+       ``target_metacell_size`` (default: {target_metacell_size}) * ``min_modules_size_factor``
+       (default: {min_modules_size_factor}).
     '''
     level = ut.get_log_level(adata)
     LOG.log(level, 'find_rare_gene_modules...')
+    assert min_cells_of_modules > 0
+    assert min_genes_of_modules > 0
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
         cells_count = adata.n_obs
@@ -131,7 +139,7 @@ def find_rare_gene_modules(
                              of=of,
                              max_gene_cell_fraction=max_gene_cell_fraction,
                              min_gene_maximum=min_gene_maximum,
-                             min_size_of_modules=min_size_of_modules)
+                             min_genes_of_modules=min_genes_of_modules)
         if candidates is None:
             return _results(adata=adata,
                             level=level,
@@ -164,7 +172,7 @@ def find_rare_gene_modules(
                             combined_candidate_indices=combined_candidate_indices,
                             rare_module_of_genes=rare_module_of_genes,
                             rare_module_of_cells=rare_module_of_cells,
-                            min_size_of_modules=min_size_of_modules,
+                            min_genes_of_modules=min_genes_of_modules,
                             min_cell_module_total=min_cell_module_total)
         if len(gene_indices_of_modules) == 0:
             return _results(adata=adata,
@@ -175,9 +183,12 @@ def find_rare_gene_modules(
                             inplace=inplace)
 
         _compress_results(adata=adata,
+                          min_cells_of_modules=min_cells_of_modules,
+                          target_metacell_size=target_metacell_size,
+                          min_modules_size_factor=min_modules_size_factor,
                           gene_indices_of_modules=gene_indices_of_modules,
                           rare_module_of_genes=rare_module_of_genes,
-                          rare_module_of_cells=rare_module_of_genes,
+                          rare_module_of_cells=rare_module_of_cells,
                           list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules)
 
         return _results(adata=adata,
@@ -195,7 +206,7 @@ def _pick_candidates(
     of: Optional[str],
     max_gene_cell_fraction: float,
     min_gene_maximum: int,
-    min_size_of_modules: int,
+    min_genes_of_modules: int,
 ) -> Optional[Tuple[AnnData, ut.DenseVector]]:
     cells_count = adata.n_obs
 
@@ -218,7 +229,7 @@ def _pick_candidates(
 
     candidate_genes_count = candidate_genes_indices.size
     LOG.debug('  candidate_genes_count: %s', candidate_genes_count)
-    if candidate_genes_count < min_size_of_modules:
+    if candidate_genes_count < min_genes_of_modules:
         return None
 
     candidate_data = \
@@ -320,7 +331,7 @@ def _identify_cells(
     combined_candidate_indices: Iterable[List[int]],
     rare_module_of_genes: ut.DenseVector,
     rare_module_of_cells: ut.DenseVector,
-    min_size_of_modules: int,
+    min_genes_of_modules: int,
     min_cell_module_total: int,
 ) -> List[ut.DenseVector]:
     cells_count = adata.n_obs
@@ -329,12 +340,12 @@ def _identify_cells(
     candidate_umis = \
         ut.get_vo_data(candidate_data, of, layout='column_major')
 
-    LOG.debug('  min_size_of_modules: %s', min_size_of_modules)
+    LOG.debug('  min_genes_of_modules: %s', min_genes_of_modules)
     LOG.debug('  min_cell_module_total: %s', min_cell_module_total)
     total_umis_of_cells = pp.get_per_obs(adata, ut.sum_per).proper
 
     for module_candidate_indices in combined_candidate_indices:
-        if len(module_candidate_indices) < min_size_of_modules:
+        if len(module_candidate_indices) < min_genes_of_modules:
             continue
 
         total_umis_of_module_of_cells = \
@@ -385,17 +396,36 @@ def _identify_cells(
 def _compress_results(
     *,
     adata: AnnData,
+    min_cells_of_modules: int,
+    target_metacell_size: int,
+    min_modules_size_factor: float,
     gene_indices_of_modules: List[ut.DenseVector],
     rare_module_of_genes: ut.DenseVector,
     rare_module_of_cells: ut.DenseVector,
     list_of_names_of_genes_of_modules: List[ut.DenseVector],
 ) -> None:
+    LOG.debug('  target_metacell_size: %s', target_metacell_size)
+    LOG.debug('  min_modules_size_factor: %s', min_modules_size_factor)
+    min_umis_of_modules = target_metacell_size * min_modules_size_factor
+    LOG.debug('  min_umis_of_modules: %s', min_umis_of_modules)
+    LOG.debug('  min_cells_of_modules: %s', min_cells_of_modules)
+    total_umis_of_cells = pp.get_per_obs(adata, ut.sum_per).proper
+    cells_of_modules: List[int] = []
+    total_umis_of_modules: List[int] = []
     for raw_module_index, module_gene_indices \
             in enumerate(gene_indices_of_modules):
         module_cell_indices = \
             np.where(rare_module_of_cells == raw_module_index)[0]
-        if module_cell_indices.size == 0:
+        total_umis_of_module = np.sum(total_umis_of_cells[module_cell_indices])
+
+        if module_cell_indices.size < min_cells_of_modules \
+                or total_umis_of_module < min_umis_of_modules:
+            rare_module_of_cells[module_cell_indices] = -1
+            rare_module_of_genes[module_gene_indices] = -1
             continue
+
+        cells_of_modules.append(module_cell_indices.size)
+        total_umis_of_modules.append(total_umis_of_module)
 
         module_index = len(list_of_names_of_genes_of_modules)
 
@@ -407,14 +437,14 @@ def _compress_results(
             np.array(adata.var_names[module_gene_indices])
         list_of_names_of_genes_of_modules.append(names_of_genes_of_module)
 
-    assert len(list_of_names_of_genes_of_modules) > 0
-
     if LOG.isEnabledFor(logging.DEBUG):
         for module_index, names_of_genes_of_module \
                 in enumerate(list_of_names_of_genes_of_modules):
-            LOG.debug('  module: %s / %s genes: %s',
+            LOG.debug('  module: %s / %s cells: %s total UMIs: %d genes: %s',
                       module_index,
                       len(list_of_names_of_genes_of_modules),
+                      cells_of_modules[module_index],
+                      total_umis_of_modules[module_index],
                       ', '.join(names_of_genes_of_module))
 
 
@@ -427,15 +457,22 @@ def _results(
     list_of_names_of_genes_of_modules: List[ut.DenseVector],
     inplace: bool
 ) -> Optional[Tuple[pd.DataFrame, pd.DataFrame, ut.DenseVector]]:
+    assert np.max(rare_module_of_cells) \
+        == len(list_of_names_of_genes_of_modules) - 1
+    assert np.max(rare_module_of_genes) \
+        == len(list_of_names_of_genes_of_modules) - 1
+
     array_of_names_of_genes_of_modules = \
         np.array(list_of_names_of_genes_of_modules, dtype='object')
 
     if inplace:
         ut.set_m_data(adata, 'rare_gene_modules',
                       array_of_names_of_genes_of_modules)
-        ut.set_v_data(adata, 'genes_rare_gene_module', rare_module_of_genes)
+        ut.set_v_data(adata, 'genes_rare_gene_module', rare_module_of_genes,
+                      log_value=ut.groups_description)
         ut.set_v_data(adata, 'rare_gene', rare_module_of_genes >= 0)
-        ut.set_o_data(adata, 'cells_rare_gene_module', rare_module_of_cells)
+        ut.set_o_data(adata, 'cells_rare_gene_module', rare_module_of_cells,
+                      log_value=ut.groups_description)
         ut.set_o_data(adata, 'rare_cell', rare_module_of_cells >= 0)
         return None
 

@@ -33,6 +33,7 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
     deviants: Optional[Union[str, ut.Vector]] = 'cell_deviant_votes',
     target_metacell_size: int = pr.dissolve_target_metacell_size,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.dissolve_cell_sizes,
+    min_metacell_cells: int = pr.dissolve_min_metacell_cells,
     min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
     min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
@@ -70,18 +71,20 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
        the name of a per-observation (cell) annotation, or an explicit boolean mask of cells, or a
        or ``None`` if there are no deviant cells to mark.
 
-    2. We are trying to create metacells of size ``target_metacell_size``. Compute the sizes of the
+    2. Any metacell which has less cells than the ``min_metacell_cells`` is dissolved.
+
+    3. We are trying to create metacells of size ``target_metacell_size``. Compute the sizes of the
        resulting metacells by summing the ``cell_sizes`` (default: {cell_sizes}) If the cell sizes
        is a string that contains ``<of>``, it is expanded using the name of the ``of`` data. If it
        is ``None``, each has a size of one.
        These parameters are typically identical to these passed
        to :py:func:`metacells.tools.candidates.compute_candidate_metacells`.
 
-    3. If ``min_robust_size_factor` (default: {min_robust_size_factor}) is specified, then any
+    4. If ``min_robust_size_factor` (default: {min_robust_size_factor}) is specified, then any
        metacell whose total size is at least ``target_metacell_size * min_robust_size_factor`` is
        preserved.
 
-    3. If ``min_convincing_size_factor`` (default: {min_convincing_size_factor}) is
+    5. If ``min_convincing_size_factor`` (default: {min_convincing_size_factor}) is
        specified, then any remaining metacells whose size is at least ``target_metacell_size *
        min_convincing_size_factor`` are preserved, given they contain at least one gene whose fold
        factor (log2((actual + 1) / (expected + 1))) is at least ``min_convincing_gene_fold_factor``
@@ -89,7 +92,7 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
        metacells if there is at least one gene whose expression is significantly different from the
        mean of the population.
 
-    4 . Any remaining metacell is dissolved into "outlier" cells.
+    6 . Any remaining metacell is dissolved into "outlier" cells.
     '''
     of, level = ut.log_operation(LOG, adata, 'dissolve_metacells', of)
 
@@ -105,6 +108,8 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
         assert candidate_of_cells is not None
         raw_candidates_count = np.max(candidate_of_cells) + 1
         LOG.debug('  candidates: %s', raw_candidates_count)
+
+        LOG.debug('  min_metacell_cells: %d', min_metacell_cells)
 
         deviant_of_cells = \
             ut.get_vector_parameter_data(LOG, adata, deviants,
@@ -147,6 +152,7 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
                                        data=data,
                                        cell_sizes=cell_sizes,
                                        fraction_of_genes=fraction_of_genes,
+                                       min_metacell_cells=min_metacell_cells,
                                        min_robust_size=min_robust_size,
                                        min_convincing_size=min_convincing_size,
                                        min_convincing_gene_fold_factor=min_convincing_gene_fold_factor,
@@ -194,6 +200,7 @@ def _keep_candidate(
     data: ut.ProperMatrix,
     cell_sizes: Optional[ut.DenseVector],
     fraction_of_genes: ut.DenseVector,
+    min_metacell_cells: int,
     min_robust_size: Optional[float],
     min_convincing_size: Optional[float],
     min_convincing_gene_fold_factor: float,
@@ -206,6 +213,12 @@ def _keep_candidate(
         candidate_total_size = candidate_cell_indices.size
     else:
         candidate_total_size = np.sum(cell_sizes[candidate_cell_indices])
+
+    if candidate_cell_indices.size < min_metacell_cells:
+        LOG.debug('  - candidate: %s / %s cells: %s size: %d is: little',
+                  candidate_index, candidates_count,
+                  candidate_cell_indices.size, candidate_total_size)
+        return False
 
     if min_robust_size is not None \
             and candidate_total_size >= min_robust_size:

@@ -246,7 +246,7 @@ def _log_r2(values: Optional[ut.DenseVector]) -> str:
     return '%s <- %s' % (ut.mask_description(~np.isnan(values)), np.nanmean(values))
 
 
-def _collect_metacell_excess(  # pylint: disable=too-many-statements
+def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-branches
     metacell_index: int,
     metacells_count: int,
     *,
@@ -272,7 +272,9 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements
     assert ut.matrix_layout(data) == 'row_major'
     metacell_data = data[metacell_mask, :]
     cells_count = metacell_data.shape[0]
-    assert cells_count > 0
+    LOG.debug('    cells: %s', cells_count)
+    if cells_count < 2:
+        return
 
     total_per_cell = ut.sum_per(metacell_data, per='row')
     samples = round(np.quantile(total_per_cell, downsample_cell_quantile))
@@ -296,8 +298,10 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements
         LOG.debug('    correlate genes: %s',
                   ut.ratio_description(correlated_genes_count,
                                        correlated_genes_mask.size))
-    assert correlated_genes_count > top_gene_rank
-    correlated_gene_rank = correlated_genes_count - top_gene_rank - 1
+    if correlated_genes_count < 2:
+        return
+
+    correlated_gene_rank = max(correlated_genes_count - top_gene_rank - 1, 1)
 
     correlated_gene_indices = np.where(correlated_genes_mask)[0]
     mindex_of_correlated_genes = mindex_of_genes[correlated_gene_indices]
@@ -352,7 +356,12 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements
                                                   mindex_of_correlated_genes] = \
             correlated_normalized_variance_per_gene
 
-    shuffled_data = correlated_data.copy()
+    assert ut.matrix_layout(correlated_data) == 'column_major'
+    if ut.SparseMatrix.am(correlated_data):
+        shuffled_data = correlated_data.copy()
+    else:
+        shuffled_data = np.copy(correlated_data)
+    assert ut.matrix_layout(shuffled_data) == 'column_major'
 
     top_shuffled_r2_per_correlated_gene = \
         np.zeros(top_r2_per_correlated_gene.size)

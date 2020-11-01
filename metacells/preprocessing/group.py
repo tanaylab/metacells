@@ -81,6 +81,7 @@ def group_obs_data(
         summed_data, cell_counts = results
 
         gdata = AnnData(summed_data)
+        gdata.var_names = adata.var_names
 
         if name is not None:
             if name.startswith('.'):

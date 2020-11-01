@@ -99,11 +99,11 @@ GENE_ANNOTATIONS = [
                      default=0, dtype='int32', log_value=ut.mask_description),
     ResultAnnotation(name='high_relative_variance_gene', always=False,
                      default=0, dtype='int32', log_value=ut.mask_description),
-    ResultAnnotation(name='forbidden', always=False,
+    ResultAnnotation(name='forbidden_gene', always=False,
                      default=False, dtype='bool', log_value=None),
-    ResultAnnotation(name='pre_feature', always=False,
+    ResultAnnotation(name='pre_feature_gene', always=False,
                      default=0, dtype='int32', log_value=ut.mask_description),
-    ResultAnnotation(name='feature', always=True,
+    ResultAnnotation(name='feature_gene', always=True,
                      default=0, dtype='int32', log_value=ut.mask_description),
     ResultAnnotation(name='pre_gene_deviant_votes', always=False,
                      default=0, dtype='int32', log_value=ut.mask_description),
@@ -201,8 +201,8 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
         #: The per-gene data.
         #:
         #: This must cover all the genes of the "complete" (clean) data. It must contain a
-        #: ``feature`` column, and optionally the intermediate ``high_fraction_gene``,
-        #: ``high_relative_variance_gene``, ``forbidden`` and ``gene_deviant_votes`` columns.
+        #: ``feature_gene`` column, and optionally the intermediate ``high_fraction_gene``,
+        #: ``high_relative_variance_gene``, ``forbidden_gene`` and ``gene_deviant_votes`` columns.
         self.genes_frame = pd.DataFrame(index=range(adata.n_vars))
 
         for gene_annotation in GENE_ANNOTATIONS:
@@ -271,7 +271,7 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
 
             else:
                 if self.final_target == 'preliminary' \
-                        and gene_annotation.name != 'forbidden':
+                        and gene_annotation.name != 'forbidden_gene':
                     target_name = 'pre_' + gene_annotation.name
                 else:
                     target_name = gene_annotation.name
@@ -458,7 +458,9 @@ def divide_and_conquer_pipeline(
     rare_similarity_of: Optional[str] = None,
     rare_repeated_similarity: bool = pr.rare_repeated_similarity,
     rare_genes_cluster_method: str = pr.rare_genes_cluster_method,
-    rare_min_size_of_modules: int = pr.rare_min_size_of_modules,
+    rare_min_genes_of_modules: int = pr.rare_min_genes_of_modules,
+    rare_min_cells_of_modules: int = pr.rare_min_cells_of_modules,
+    rare_min_modules_size_factor: float = pr.rare_min_modules_size_factor,
     rare_min_module_correlation: float = pr.rare_min_module_correlation,
     rare_min_cell_module_total: int = pr.rare_min_cell_module_total,
     rare_dissolve_min_robust_size_factor: float = pr.rare_dissolve_min_robust_size_factor,
@@ -482,6 +484,7 @@ def divide_and_conquer_pipeline(
     candidates_partition_method: 'ut.PartitionMethod' = pr.candidates_partition_method,
     candidates_min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
+    candidates_min_metacell_cells: int = pr.candidates_min_metacell_cells,
     must_complete_cover: bool = False,
     max_outliers_levels: Optional[int] = pr.max_outliers_levels,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
@@ -490,6 +493,7 @@ def divide_and_conquer_pipeline(
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
     dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
+    dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     random_seed: int = pr.random_seed,
     intermediate: bool = True,
@@ -547,11 +551,11 @@ def divide_and_conquer_pipeline(
             other genes with a similar expression level when when computing the preliminary and
             final metacells. This is zero for non-"clean" genes.
 
-        ``forbidden`` (if ``intermediate``)
+        ``forbidden_gene`` (if ``intermediate``)
             A boolean mask of genes which are forbidden from being chosen as "feature" genes based
             on their name. This is ``False`` for non-"clean" genes.
 
-        ``pre_feature`` (if ``intermediate``), ``feature``
+        ``pre_feature_gene`` (if ``intermediate``), ``feature_gene``
             The number of times the gene was used as a feature when computing the preliminary and
             final metacells. If we end up directly computing the metacells, the preliminary value
             will be all-zero, and the final value will be one for feature genes, zero otherwise.
@@ -619,7 +623,9 @@ def divide_and_conquer_pipeline(
        ``rare_similarity_of`` (default: {rare_similarity_of}),
        ``rare_repeated_similarity`` (default: {rare_repeated_similarity}),
        ``rare_genes_cluster_method`` (default: {rare_genes_cluster_method}),
-       ``rare_min_size_of_modules`` (default: {rare_min_size_of_modules}),
+       ``rare_min_genes_of_modules`` (default: {rare_min_genes_of_modules}),
+       ``rare_min_cells_of_modules`` (default: {rare_min_cells_of_modules}),
+       ``rare_min_modules_size_factor`` (default: {rare_min_modules_size_factor}),
        ``rare_min_module_correlation`` (default: {rare_min_module_correlation}),
        and
        ``rare_min_cell_module_total`` (default: {rare_min_cell_module_total}).
@@ -662,7 +668,10 @@ def divide_and_conquer_pipeline(
                                   similarity_of=rare_similarity_of,
                                   repeated_similarity=rare_repeated_similarity,
                                   genes_cluster_method=rare_genes_cluster_method,
-                                  min_size_of_modules=rare_min_size_of_modules,
+                                  min_genes_of_modules=rare_min_genes_of_modules,
+                                  min_cells_of_modules=rare_min_cells_of_modules,
+                                  target_metacell_size=target_metacell_size,
+                                  min_modules_size_factor=rare_min_modules_size_factor,
                                   min_module_correlation=rare_min_module_correlation,
                                   min_cell_module_total=rare_min_cell_module_total,
                                   intermediate=intermediate)
@@ -691,6 +700,7 @@ def divide_and_conquer_pipeline(
                                     candidates_partition_method=candidates_partition_method,
                                     candidates_min_split_size_factor=candidates_min_split_size_factor,
                                     candidates_max_merge_size_factor=candidates_max_merge_size_factor,
+                                    candidates_min_metacell_cells=candidates_min_metacell_cells,
                                     must_complete_cover=False,
                                     deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
                                     deviants_max_gene_fraction=deviants_max_gene_fraction,
@@ -698,6 +708,7 @@ def divide_and_conquer_pipeline(
                                     dissolve_min_robust_size_factor=rare_dissolve_min_robust_size_factor,
                                     dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                                     dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                                    dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                     cell_sizes=cell_sizes,
                                     random_seed=random_seed,
                                     intermediate=intermediate)
@@ -749,6 +760,7 @@ def divide_and_conquer_pipeline(
                                          candidates_partition_method=candidates_partition_method,
                                          candidates_min_split_size_factor=candidates_min_split_size_factor,
                                          candidates_max_merge_size_factor=candidates_max_merge_size_factor,
+                                         candidates_min_metacell_cells=candidates_min_metacell_cells,
                                          must_complete_cover=must_complete_cover,
                                          max_outliers_levels=max_outliers_levels,
                                          deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
@@ -757,6 +769,7 @@ def divide_and_conquer_pipeline(
                                          dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                                          dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                                          dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                                         dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                          cell_sizes=cell_sizes,
                                          random_seed=random_seed,
                                          intermediate=intermediate)
@@ -795,6 +808,7 @@ def compute_divide_and_conquer_metacells(
     candidates_partition_method: 'ut.PartitionMethod' = pr.candidates_partition_method,
     candidates_min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
+    candidates_min_metacell_cells: int = pr.min_metacell_cells,
     must_complete_cover: bool = False,
     max_outliers_levels: Optional[int] = pr.max_outliers_levels,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
@@ -803,6 +817,7 @@ def compute_divide_and_conquer_metacells(
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
     dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
+    dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     random_seed: int = pr.random_seed,
     intermediate: bool = True,
@@ -852,11 +867,11 @@ def compute_divide_and_conquer_metacells(
             other genes with a similar expression level when when computing the preliminary and
             final metacells. This is zero for non-"clean" genes.
 
-        ``forbidden`` (if ``intermediate``)
+        ``forbidden_gene`` (if ``intermediate``)
             A boolean mask of genes which are forbidden from being chosen as "feature" genes based
             on their name. This is ``False`` for non-"clean" genes.
 
-        ``pre_feature`` (if ``intermediate``), ``feature``
+        ``pre_feature_gene`` (if ``intermediate``), ``feature_gene``
             The number of times the gene was used as a feature when computing the preliminary and
             final metacells. If we end up directly computing the metacells, the preliminary value
             will be all-zero, and the final value will be one for feature genes, zero otherwise.
@@ -968,6 +983,7 @@ def compute_divide_and_conquer_metacells(
                                      candidates_partition_method=candidates_partition_method,
                                      candidates_min_split_size_factor=candidates_min_split_size_factor,
                                      candidates_max_merge_size_factor=candidates_max_merge_size_factor,
+                                     candidates_min_metacell_cells=candidates_min_metacell_cells,
                                      must_complete_cover=must_complete_cover,
                                      deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
                                      deviants_max_gene_fraction=deviants_max_gene_fraction,
@@ -975,6 +991,7 @@ def compute_divide_and_conquer_metacells(
                                      dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                                      dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                                      dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                                     dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                      cell_sizes=cell_sizes,
                                      random_seed=random_seed,
                                      intermediate=intermediate)
@@ -1007,6 +1024,7 @@ def compute_divide_and_conquer_metacells(
                                  candidates_partition_method=candidates_partition_method,
                                  candidates_min_split_size_factor=candidates_min_split_size_factor,
                                  candidates_max_merge_size_factor=candidates_max_merge_size_factor,
+                                 candidates_min_metacell_cells=candidates_min_metacell_cells,
                                  must_complete_cover=True,
                                  max_outliers_levels=None,
                                  deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
@@ -1015,6 +1033,7 @@ def compute_divide_and_conquer_metacells(
                                  dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                                  dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                                  dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                                 dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                  cell_sizes=cell_sizes,
                                  random_seed=random_seed,
                                  intermediate=intermediate)
@@ -1048,6 +1067,7 @@ def compute_divide_and_conquer_metacells(
                                              candidates_partition_method=candidates_partition_method,
                                              candidates_min_split_size_factor=pile_min_split_size_factor,
                                              candidates_max_merge_size_factor=pile_max_merge_size_factor,
+                                             candidates_min_metacell_cells=candidates_min_metacell_cells,
                                              must_complete_cover=True,
                                              max_outliers_levels=None,
                                              deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
@@ -1056,6 +1076,7 @@ def compute_divide_and_conquer_metacells(
                                              dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                                              dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                                              dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                                             dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                              cell_sizes='grouped',
                                              random_seed=random_seed,
                                              intermediate=intermediate)
@@ -1091,6 +1112,7 @@ def compute_divide_and_conquer_metacells(
                                  candidates_partition_method=candidates_partition_method,
                                  candidates_min_split_size_factor=candidates_min_split_size_factor,
                                  candidates_max_merge_size_factor=candidates_max_merge_size_factor,
+                                 candidates_min_metacell_cells=candidates_min_metacell_cells,
                                  must_complete_cover=must_complete_cover,
                                  max_outliers_levels=max_outliers_levels,
                                  deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
@@ -1099,6 +1121,7 @@ def compute_divide_and_conquer_metacells(
                                  dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                                  dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                                  dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                                 dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                  cell_sizes=cell_sizes,
                                  random_seed=random_seed,
                                  intermediate=intermediate)
@@ -1130,6 +1153,7 @@ def _compute_piled_metacells(
     candidates_partition_method: 'ut.PartitionMethod',
     candidates_min_split_size_factor: Optional[float],
     candidates_max_merge_size_factor: Optional[float],
+    candidates_min_metacell_cells: int = pr.min_metacell_cells,
     must_complete_cover: bool,
     max_outliers_levels: Optional[int],
     deviants_min_gene_fold_factor: float,
@@ -1138,6 +1162,7 @@ def _compute_piled_metacells(
     dissolve_min_robust_size_factor: Optional[float],
     dissolve_min_convincing_size_factor: Optional[float],
     dissolve_min_convincing_gene_fold_factor: float,
+    dissolve_min_metacell_cells: int,
     cell_sizes: Optional[Union[str, ut.Vector]],
     random_seed: int,
     intermediate: bool,
@@ -1168,6 +1193,7 @@ def _compute_piled_metacells(
                             candidates_partition_method=candidates_partition_method,
                             candidates_min_split_size_factor=candidates_min_split_size_factor,
                             candidates_max_merge_size_factor=candidates_max_merge_size_factor,
+                            candidates_min_metacell_cells=candidates_min_metacell_cells,
                             must_complete_cover=must_complete_cover and piles_count == 1,
                             deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
                             deviants_max_gene_fraction=deviants_max_gene_fraction,
@@ -1175,6 +1201,7 @@ def _compute_piled_metacells(
                             dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                             dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                             dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                            dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                             cell_sizes=cell_sizes,
                             random_seed=random_seed,
                             intermediate=intermediate)
@@ -1234,6 +1261,7 @@ def _compute_piled_metacells(
                                              candidates_partition_method=candidates_partition_method,
                                              candidates_min_split_size_factor=candidates_min_split_size_factor,
                                              candidates_max_merge_size_factor=candidates_max_merge_size_factor,
+                                             candidates_min_metacell_cells=candidates_min_metacell_cells,
                                              must_complete_cover=must_complete_cover,
                                              max_outliers_levels=max_outliers_levels,
                                              deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
@@ -1242,6 +1270,7 @@ def _compute_piled_metacells(
                                              dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                                              dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                                              dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                                             dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                              cell_sizes=cell_sizes,
                                              random_seed=random_seed)
 
@@ -1277,6 +1306,7 @@ def _run_parallel_piles(
     candidates_partition_method: 'ut.PartitionMethod',
     candidates_min_split_size_factor: Optional[float],
     candidates_max_merge_size_factor: Optional[float],
+    candidates_min_metacell_cells: int,
     must_complete_cover: bool,
     deviants_min_gene_fold_factor: float,
     deviants_max_gene_fraction: Optional[float],
@@ -1284,6 +1314,7 @@ def _run_parallel_piles(
     dissolve_min_robust_size_factor: Optional[float],
     dissolve_min_convincing_size_factor: Optional[float],
     dissolve_min_convincing_gene_fold_factor: float,
+    dissolve_min_metacell_cells: int,
     cell_sizes: Optional[Union[str, ut.Vector]],
     random_seed: int,
     intermediate: bool,
@@ -1311,6 +1342,7 @@ def _run_parallel_piles(
                                  candidates_partition_method=candidates_partition_method,
                                  candidates_min_split_size_factor=candidates_min_split_size_factor,
                                  candidates_max_merge_size_factor=candidates_max_merge_size_factor,
+                                 candidates_min_metacell_cells=candidates_min_metacell_cells,
                                  must_complete_cover=must_complete_cover,
                                  deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
                                  deviants_max_gene_fraction=deviants_max_gene_fraction,
@@ -1318,6 +1350,7 @@ def _run_parallel_piles(
                                  dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
                                  dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
                                  dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                                 dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                  cell_sizes=cell_sizes,
                                  random_seed=random_seed)
         return SubsetResults(pdata,

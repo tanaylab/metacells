@@ -34,6 +34,8 @@ def compute_candidate_metacells(
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.candidates_cell_sizes,
     min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
+    min_metacell_cells: Optional[int] = pr.candidates_min_metacell_cells,
+    must_complete_cover: bool = False,
     random_seed: int = 0,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -81,18 +83,21 @@ def compute_candidate_metacells(
        partition method on each community whose size is at least ``target_metacell_size
        * min_split_size_factor``, to split it to into smaller communities.
 
-    4. If ``max_merge_size_factor`` (default: {max_merge_size_factor}) is specified, condense each
-       community whose size is at most ``target_metacell_size
-       * max_merge_size_factor`` into a single node (using the mean of the edge weights),
-       and re-run the partition method on the resulting graph (of just these condensed nodes) to
-       merge these communities into large ones.
+    4. If ``max_merge_size_factor`` (default: {max_merge_size_factor}) or ``min_metacell_cells``
+       (default: {min_metacell_cells}) are specified, condense each community whose size is at most
+       ``target_metacell_size * max_merge_size_factor`` or contains less cells than
+       ``min_metacell_cells`` into a single node (using the mean of the edge weights), and re-run
+       the partition method on the resulting graph (of just these condensed nodes) to merge these
+       communities into large ones.
 
     5. Repeat the above steps until no further progress can be made.
 
-    6. If the ``max_merge_size_factor`` was specified, arbitrarily combine the remaining communities
-       whose size is at most the ``target_metacell_size
-       * max_merge_size_factor`` into a single community using
-       :py:func:`metacells.utilities.computation.bin_pack`.
+    6. If the ``max_merge_size_factor`` or the ``min_metacell_cells`` were specified, arbitrarily
+       combine the remaining communities whose size is at most the ``target_metacell_size
+       * max_merge_size_factor`` or contain less than ``min_metacell_cells`` cells into a single
+       community using :py:func:`metacells.utilities.computation.bin_pack` and
+       :py:func:`metacells.utilities.computation.bin_fill`. This is done more aggressively if
+       ``must_complete_cover``.
 
     .. note::
 
@@ -142,6 +147,9 @@ def compute_candidate_metacells(
             floor(target_metacell_size * max_merge_size_factor) + 1
         LOG.debug('  min_metacell_size: %s', min_metacell_size)
 
+    if min_metacell_cells is not None:
+        LOG.debug('  min_metacell_cells: %s', min_metacell_cells)
+
     if min_split_size_factor is not None and max_merge_size_factor is not None:
         assert max_merge_size_factor < min_split_size_factor
         assert min_metacell_size is not None
@@ -155,6 +163,7 @@ def compute_candidate_metacells(
                                           target_comm_size=target_metacell_size,
                                           max_comm_size=max_metacell_size,
                                           min_comm_size=min_metacell_size,
+                                          min_comm_nodes=min_metacell_cells,
                                           random_seed=random_seed)
     if LOG.isEnabledFor(logging.DEBUG):
         LOG.debug('  communities: %s', np.max(community_of_cells) + 1)
@@ -164,9 +173,11 @@ def compute_candidate_metacells(
                             partition_method=partition_method,
                             edge_weights=edge_weights,
                             node_sizes=node_sizes,
+                            must_complete_cover=must_complete_cover,
                             target_comm_size=target_metacell_size,
                             max_comm_size=max_metacell_size,
                             min_comm_size=min_metacell_size,
+                            min_comm_nodes=min_metacell_cells,
                             random_seed=random_seed)
 
         improver.improve()
@@ -174,7 +185,16 @@ def compute_candidate_metacells(
         if min_metacell_size is not None:
             improver.pack()
 
+        if min_metacell_cells is not None:
+            improver.fill()
+
         community_of_cells = ut.compress_indices(improver.membership)
+
+    if LOG.isEnabledFor(logging.DEBUG):
+        LOG.debug('%s surprise: %s',
+                  ut.get_name(adata),
+                  ut.leiden_surprise_quality(edge_weights=edge_weights,
+                                             partition_of_nodes=community_of_cells))
 
     if inplace:
         ut.set_o_data(adata, 'candidate', community_of_cells,
@@ -187,7 +207,7 @@ def compute_candidate_metacells(
     return pd.Series(community_of_cells, index=adata.obs_names)
 
 
-@dataclass
+@dataclass  # pylint: disable=too-many-instance-attributes
 class Community:
     '''
     Metadata about a community.
@@ -196,11 +216,17 @@ class Community:
     #: The index identifying the community.
     index: int
 
+    #: The number of nodes in the community.
+    nodes: int
+
     #: The total size of the community (sum of the node sizes).
     size: int
 
     #: A boolean mask of all the nodes that belong to the community.
     mask: ut.DenseVector
+
+    #: By how much (if at all) does the community have fewer nodes than the minimum allowed.
+    too_few: int
 
     #: By how much (if at all) is the community smaller than the minimum allowed.
     too_small: int
@@ -225,8 +251,10 @@ class Improver:  # pylint: disable=too-many-instance-attributes
         edge_weights: ut.ProperMatrix,
         node_sizes: Optional[ut.DenseVector],
         target_comm_size: int,
+        must_complete_cover: bool,
         min_comm_size: Optional[int],
         max_comm_size: Optional[int],
+        min_comm_nodes: Optional[int],
         random_seed: int,
     ) -> None:
         #: The vector assigning a partition index to each node.
@@ -253,8 +281,14 @@ class Improver:  # pylint: disable=too-many-instance-attributes
         #: Merge communities smaller than this.
         self.min_comm_size = min_comm_size
 
+        #: Merge communities with less nodes than this.
+        self.min_comm_nodes = min_comm_nodes
+
         #: The list of communities.
         self.communities: List[Community] = []
+
+        #: The sum of the too-few penalties across all communities.
+        self.too_few = 0
 
         #: The sum of the too-small penalties across all communities.
         self.too_small = 0
@@ -264,6 +298,9 @@ class Improver:  # pylint: disable=too-many-instance-attributes
 
         #: The next unused community index.
         self.next_community_index = 0
+
+        #: Whether the metacell computation is required to cover all cells.
+        self.must_complete_cover = must_complete_cover
 
         self.add()
 
@@ -286,6 +323,14 @@ class Improver:  # pylint: disable=too-many-instance-attributes
 
             mask = self.membership == community_index
 
+            total_nodes = np.sum(mask)
+
+            if self.min_comm_nodes is not None and total_nodes < self.min_comm_nodes:
+                few = self.min_comm_nodes - total_nodes
+                self.too_few += few
+            else:
+                few = 0
+
             if self.node_sizes is None:
                 total_size = np.sum(mask)
             else:
@@ -304,7 +349,8 @@ class Improver:  # pylint: disable=too-many-instance-attributes
                 large = 0
 
             self.communities.append(Community(index=community_index,
-                                              size=total_size, mask=mask,
+                                              nodes=total_nodes, size=total_size,
+                                              mask=mask, too_few=few,
                                               too_small=small, too_large=large,
                                               monolithic=False))
 
@@ -314,8 +360,10 @@ class Improver:  # pylint: disable=too-many-instance-attributes
         '''
         community = self.communities[position]
         self.communities[position:position+1] = []
+        self.too_few -= community.too_few
         self.too_small -= community.too_small
         self.too_large -= community.too_large
+        assert self.too_few >= 0
         assert self.too_small >= 0
         assert self.too_large >= 0
 
@@ -325,13 +373,13 @@ class Improver:  # pylint: disable=too-many-instance-attributes
         Improve the communities by splitting and merging.
         '''
         if self.min_comm_size is not None:
-            while self.too_small > 0:
-                if not self.merge_small():
+            while self.too_few > 0 or self.too_small > 0:
+                if not self.merge_few_or_small():
                     break
 
-        penalty = self.too_small + self.too_large + 1
-        while self.too_small + self.too_large < penalty:
-            penalty = self.too_small + self.too_large
+        penalty = (self.too_few, self.too_small + self.too_large + 1)
+        while (self.too_few, self.too_small + self.too_large) < penalty:
+            penalty = (self.too_few, self.too_small + self.too_large)
 
             if self.max_comm_size is not None:
                 did_split = False
@@ -341,14 +389,14 @@ class Improver:  # pylint: disable=too-many-instance-attributes
                     did_split = True
 
                 if did_split and self.min_comm_size is not None:
-                    while self.too_small > 0:
-                        if not self.merge_small():
+                    while self.too_few > 0 or self.too_small > 0:
+                        if not self.merge_few_or_small():
                             break
 
-    @ut.timed_call('.merge_small')
-    def merge_small(self) -> bool:
+    @ut.timed_call('.merge_few_or_small')
+    def merge_few_or_small(self) -> bool:
         '''
-        Merge too-small communities.
+        Merge too-few or too-small communities.
         '''
         nodes_count = self.edge_weights.shape[0]
         merged_nodes_mask = np.zeros(nodes_count, dtype='bool')
@@ -358,7 +406,7 @@ class Improver:  # pylint: disable=too-many-instance-attributes
         size_of_merged_communities: List[int] = []
 
         for position, community in enumerate(self.communities):
-            if community.too_small == 0:
+            if community.too_few == 0 and community.too_small == 0:
                 continue
             merged_nodes_mask |= community.mask
             location_of_nodes[community.mask] = len(merged_communities)
@@ -401,6 +449,7 @@ class Improver:  # pylint: disable=too-many-instance-attributes
             self.membership[merged_community.mask] = \
                 merged_index + self.next_community_index
 
+        before_too_few = self.too_few
         before_too_small = self.too_small
         for position in reversed(position_of_merged_communities):
             self.remove(position)
@@ -409,14 +458,16 @@ class Improver:  # pylint: disable=too-many-instance-attributes
             np.max(merged_communities_membership) + 1
         self.add(merged_communities_count)
 
-        if self.too_small < before_too_small:
+        did_improve = \
+            (self.too_few, self.too_small) < (before_too_few, before_too_small)
+        if did_improve:
             LOG.debug('  merged %s too-small into %s larger communities',
                       len(merged_communities), merged_communities_count)
         else:
             LOG.debug('  could not merge %s too-small communities',
                       len(merged_communities))
 
-        return self.too_small < before_too_small
+        return did_improve
 
     @ut.timed_call('.split_large')
     def split_large(self) -> bool:
@@ -476,13 +527,17 @@ class Improver:  # pylint: disable=too-many-instance-attributes
         list_of_small_community_sizes: List[int] = []
         list_of_small_community_indices: List[int] = []
 
-        for community in self.communities:
-            if community.too_small == 0:
+        position = 0
+        while position < len(self.communities):
+            community = self.communities[position]
+            if community.too_small == 0 and community.too_few == 0:
+                position += 1
                 continue
             list_of_small_community_sizes.append(community.size)
             list_of_small_community_indices.append(community.index)
+            self.remove(position)
 
-        if len(list_of_small_community_sizes) == 0:
+        if len(list_of_small_community_indices) == 0:
             return
 
         small_community_sizes = np.array(list_of_small_community_sizes)
@@ -497,7 +552,70 @@ class Improver:  # pylint: disable=too-many-instance-attributes
             self.membership[self.membership == small_community_index] = \
                 merged_community_index
 
-        self.next_community_index += bins_count
-
         LOG.debug('  packed %s too-small communities into %s larger communities',
-                  len(list_of_small_community_sizes), bins_count)
+                  len(list_of_small_community_indices), bins_count)
+
+        self.add(bins_count)
+
+    @ut.timed_call('.fill')
+    def fill(self) -> None:
+        '''
+        Bin-fill too-few communities.
+        '''
+        assert self.min_comm_nodes is not None
+
+        list_of_few_community_nodes: List[int] = []
+        list_of_few_community_indices: List[int] = []
+
+        position = 0
+        total_nodes = 0
+        while position < len(self.communities):
+            community = self.communities[position]
+            if community.too_few == 0:
+                position += 1
+                continue
+            total_nodes += community.nodes
+            list_of_few_community_nodes.append(community.nodes)
+            list_of_few_community_indices.append(community.index)
+            self.remove(position)
+
+        if len(list_of_few_community_indices) == 0:
+            return
+
+        if self.must_complete_cover and total_nodes < self.min_comm_nodes:
+            candidates = \
+                sorted([(community.nodes, community.size,
+                         community_position, community.index)
+                        for (community_position, community)
+                        in enumerate(self.communities)
+                        if not community.too_few
+                        ])
+
+            positions: List[int] = []
+            for community_nodes, _, community_position, community_index in candidates:
+                positions.append(community_position)
+                total_nodes += community_nodes
+                list_of_few_community_nodes.append(community_nodes)
+                list_of_few_community_indices.append(community_index)
+                if total_nodes >= self.min_comm_nodes:
+                    break
+
+            for position in reversed(sorted(positions)):
+                self.remove(position)
+
+        few_community_nodes = np.array(list_of_few_community_nodes)
+        few_community_bins = \
+            ut.bin_fill(few_community_nodes, self.min_comm_nodes)
+
+        bins_count = np.max(few_community_bins) + 1
+
+        for few_community_index, community_bin \
+                in zip(list_of_few_community_indices, few_community_bins):
+            merged_community_index = self.next_community_index + community_bin
+            self.membership[self.membership == few_community_index] = \
+                merged_community_index
+
+        LOG.debug('  filled %s too-few communities into %s larger communities',
+                  len(list_of_few_community_indices), bins_count)
+
+        self.add(bins_count)

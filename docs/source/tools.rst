@@ -12,6 +12,9 @@ General Tools
 Filtering the Data
 ++++++++++++++++++
 
+.. automodule:: metacells.tools.mask
+    :members:
+
 .. automodule:: metacells.tools.properly_sampled
     :members:
 

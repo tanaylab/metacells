@@ -43,13 +43,13 @@ def collect_metacells(
     the focus) of the cells for each metacell, which contains the following annotations:
 
     Variable (Gene) Annotations
-        ``excluded`` (if ``intermediate``)
+        ``excluded_gene`` (if ``intermediate``)
             A mask of the genes which were excluded by name.
 
         ``clean_gene`` (if ``intermediate``)
             A boolean mask of the clean genes.
 
-        ``forbidden`` (if ``intermediate``)
+        ``forbidden_gene`` (if ``intermediate``)
             A boolean mask of genes which are forbidden from being chosen as "feature" genes based
             on their name. This is ``False`` for non-"clean" genes.
 
@@ -88,11 +88,11 @@ def collect_metacells(
         pp.group_obs_data(adata, of=of, groups='metacell', name=name, tmp=tmp)
     assert mdata is not None
 
-    for annotation_name, always in (('excluded', False),
+    for annotation_name, always in (('excluded_gene', False),
                                     ('clean_gene', False),
-                                    ('forbidden', False),
-                                    ('pre_feature', False),
-                                    ('feature', True)):
+                                    ('forbidden_gene', False),
+                                    ('pre_feature_gene', False),
+                                    ('feature_gene', True)):
         if not always and not intermediate:
             continue
         if annotation_name.startswith('pre_') and not ut.has_data(adata, annotation_name):

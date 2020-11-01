@@ -97,10 +97,22 @@ min_split_size_factor: float = 2.0
 min_robust_size_factor: float = 0.5
 
 #: The generic maximal group size factor, below which we should merge it. See
-#: :py:const:`pile_max_merge_size_factor`
+#: :py:const:`rare_min_modules_size_factor`,
+#: :py:const:`rare_dissolve_min_robust_size_factor`
+#: :py:const:`pile_max_merge_size_factor`,
+#: :py:const:`candidates_max_merge_size_factor`,
 #: and
-#: :py:const:`candidates_max_merge_size_factor`.
+#: :py:const:`dissolve_min_convincing_size_factor`.
 max_merge_size_factor: float = 0.25
+
+#: The minimal number of cells in a metacell, below which we would merge it. See
+#: :py:const:`rare_min_cells_of_modules`,
+#: :py:func:`candidates_min_metacell_cells`,
+#: :py:func:`dissolve_min_metacell_cells`,
+#: :py:func:`metacells.tools.candidates.compute_candidate_metacells`
+#: and
+#: :py:func:`metacells.tools.dissolve.dissolve_metacells`.
+min_metacell_cells: int = 12
 
 #: The minimal size factor of a pile, above which we can split it. See
 #: :py:const:`min_split_size_factor`,
@@ -129,12 +141,20 @@ pile_max_merge_size_factor: float = max_merge_size_factor
 #: :py:func:`metacells.tools.properly_sampled.find_properly_sampled_cells`
 #: and
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
-properly_sampled_min_cell_total: int = 800
+#:
+#: .. note::
+#:
+#:    There's no "reasonable" default value here. This must be tailored to the data.
+properly_sampled_min_cell_total: Optional[int] = None
 
 #: The maximal total value for a cell to be considered "properly sampled". See
 #: :py:func:`metacells.tools.properly_sampled.find_properly_sampled_cells`
 #: and
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
+#:
+#: .. note::
+#:
+#:    There's no "reasonable" default value here. This must be tailored to the data.
 properly_sampled_max_cell_total: Optional[int] = None
 
 #: The minimal total value for a gene to be considered "properly sampled". See
@@ -142,6 +162,17 @@ properly_sampled_max_cell_total: Optional[int] = None
 #: and
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
 properly_sampled_min_gene_total: int = 1
+
+#: The maximal fraction of excluded gene UMIs from a cell for it to be considered
+#: "properly_sampled". See
+#: :py:func:`metacells.tools.properly_sampled.find_properly_sampled_cells`
+#: and
+#: :py:func:`metacells.pipeline.clean.extract_clean_data`.
+#:
+#: .. note::
+#:
+#:    There's no "reasonable" default value here. This must be tailored to the data.
+properly_sampled_max_excluded_genes_fraction: Optional[float] = None
 
 #: The number of randomly selected cells to use for computing "noisy lonely" genes. See
 #: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes`
@@ -208,7 +239,22 @@ rare_genes_cluster_method: str = 'ward'
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-rare_min_size_of_modules: int = 4
+rare_min_genes_of_modules: int = 4
+
+#: The minimal number of cells in a rare gene module. See
+#: :py:const:`min_metacell_cells`,
+#: :py:func:`metacells.tools.rare.find_rare_gene_modules`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+rare_min_cells_of_modules: int = min_metacell_cells
+
+#: The minimal total UMIs of all the cells in a rare gene module (as a fraction
+#: of the :py:const:`target_metacell_size`). See
+#: :py:const:`max_merge_size_factor`,
+#: :py:func:`metacells.tools.rare.find_rare_gene_modules`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+rare_min_modules_size_factor: float = max_merge_size_factor
 
 #: The minimal average correlation between the genes in a rare gene module. See
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
@@ -366,6 +412,12 @@ candidates_min_split_size_factor: float = min_split_size_factor
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 candidates_max_merge_size_factor: float = max_merge_size_factor
 
+#: The minimal number of cells in a metacell, below which we would merge it. See
+#: :py:const:`min_metacell_cells`
+#: and
+#: :py:func:`metacells.tools.candidates.compute_candidate_metacells`.
+candidates_min_metacell_cells: int = min_metacell_cells
+
 #: The maximal number of times to recursively collect and attempt to group outliers when computing
 #: the final metacells in the divide and conquer algorithm. See
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
@@ -433,6 +485,12 @@ dissolve_cell_sizes: Union[str, utt.Vector] = cell_sizes
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 dissolve_min_robust_size_factor: float = min_robust_size_factor
+
+#: The minimal number of cells in a metacell, below which we would dissolve it. See
+#: :py:const:`min_metacell_cells`
+#: and
+#: :py:func:`metacells.tools.dissolve.dissolve_metacells`.
+dissolve_min_metacell_cells: int = min_metacell_cells
 
 #: The minimal size factor for a metacell to be considered "robust" when grouping rare gene module
 #: cells. See

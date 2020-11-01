@@ -17,6 +17,7 @@ __all__ = [
     'PartitionMethod',
     'leiden_surprise',
     'leiden_bounded_surprise',
+    'leiden_surprise_quality',
 ]
 
 
@@ -41,6 +42,9 @@ try:
     #: ``min_comm_size``
     #:    An optional minimal community size to compute. May be ignored by the function.
     #:
+    #: ``min_comm_nodes``
+    #:    An optional minimal number of nodes in each community. May be ignored by the function.
+    #:
     #: ``max_comm_size``
     #:    An optional maximal community size to compute. May be ignored by the function.
     #:
@@ -62,6 +66,8 @@ try:
                                                 'max_comm_size'),
                                 DefaultNamedArg(Optional[int],
                                                 'min_comm_size'),
+                                DefaultNamedArg(Optional[int],
+                                                'min_comm_nodes'),
                                 DefaultNamedArg(int, 'random_seed')],
                                utt.DenseVector]
 
@@ -76,6 +82,7 @@ def leiden_surprise(
     target_comm_size: Optional[int] = None,  # pylint: disable=unused-argument
     max_comm_size: Optional[int] = None,  # pylint: disable=unused-argument
     min_comm_size: Optional[int] = None,  # pylint: disable=unused-argument
+    min_comm_nodes: Optional[int] = None,  # pylint: disable=unused-argument
     random_seed: int = 0,
 ) -> utt.DenseVector:
     '''
@@ -98,6 +105,7 @@ def leiden_bounded_surprise(
     target_comm_size: Optional[int] = None,  # pylint: disable=unused-argument
     max_comm_size: Optional[int] = None,
     min_comm_size: Optional[int] = None,  # pylint: disable=unused-argument
+    min_comm_nodes: Optional[int] = None,  # pylint: disable=unused-argument
     random_seed: int = 0,
 ) -> utt.DenseVector:
     '''
@@ -120,6 +128,25 @@ def leiden_bounded_surprise(
     partition = la.find_partition(graph, la.SurpriseVertexPartition, **kwargs)
     membership = np.array(partition.membership)
     return utc.compress_indices(membership)
+
+
+def leiden_surprise_quality(
+    *,
+    edge_weights: utt.ProperMatrix,
+    partition_of_nodes: utt.DenseVector
+) -> float:
+    '''
+    Return the quality score for a partition of nodes using the
+    the ``SurpriseVertexPartition`` goal function.
+    '''
+    mask = partition_of_nodes[partition_of_nodes >= 0]
+    partition_of_nodes = partition_of_nodes[mask]
+    edge_weights = edge_weights[mask, :][:, mask]
+
+    graph, _weights_array = _build_igraph(edge_weights)
+
+    partition = la.SurpriseVertexPartition(graph, partition_of_nodes)
+    return partition.quality()
 
 
 def _build_igraph(edge_weights: utt.Matrix) -> Tuple[ig.Graph, utt.DenseVector]:

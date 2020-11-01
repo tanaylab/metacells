@@ -56,6 +56,7 @@ __all__ = [
     'patterns_matches',
     'compress_indices',
     'bin_pack',
+    'bin_fill',
     'sum_groups',
     'shuffle_matrix',
 ]
@@ -481,13 +482,23 @@ def _downsample_dense_matrix(
     assert results_count == matrix.shape[0]
     assert elements_count == matrix.shape[1]
 
-    extension_name = \
-        'downsample_matrix_%s_t_%s_t' % (matrix.dtype, output.dtype)
-    extension = getattr(xt, extension_name)
-    with utm.timed_step('extensions.downsample_dense_matrix'):
-        utm.timed_parameters(results=results_count,
-                             elements=elements_count, samples=samples)
-        extension(matrix, output, samples, random_seed)
+    if results_count == 1:
+        input_array = utt.to_dense_vector(matrix, copy=None)
+        output_array = utt.to_dense_vector(output, copy=None)
+        extension_name = 'downsample_array_%s_t_%s_t' \
+            % (input_array.dtype, output_array.dtype)
+        extension = getattr(xt, extension_name)
+        with utm.timed_step('extensions.downsample_array'):
+            utm.timed_parameters(elements=input_array.size, samples=samples)
+            extension(input_array, output_array, samples, random_seed)
+    else:
+        extension_name = \
+            'downsample_matrix_%s_t_%s_t' % (matrix.dtype, output.dtype)
+        extension = getattr(xt, extension_name)
+        with utm.timed_step('extensions.downsample_dense_matrix'):
+            utm.timed_parameters(results=results_count,
+                                 elements=elements_count, samples=samples)
+            extension(matrix, output, samples, random_seed)
 
     if per == 'column':
         output = np.transpose(output)
@@ -583,11 +594,12 @@ def downsample_vector(
     times. Randomly select the desired number of samples from this set (without repetition), and
     store in the output the number of times each index was chosen.
     '''
-    array = utt.to_proper_vector(vector)
 
     if output is None:
+        array = utt.to_dense_vector(vector, copy=None)
         output = array
     else:
+        array = utt.to_dense_vector(vector)
         assert output.shape == array.shape
 
     extension_name = 'downsample_array_%s_t_%s_t' % (array.dtype, output.dtype)
@@ -958,7 +970,7 @@ def compress_indices(indices: utt.Vector) -> utt.DenseVector:
 def bin_pack(element_sizes: utt.Vector, max_bin_size: float) -> utt.DenseVector:
     '''
     Given a vector of ``element_sizes`` return a vector containing the bin number for each element,
-    such that the total size of each bin is up to and as close to the the ``max_bin_size``.
+    such that the total size of each bin is up to and as close to the ``max_bin_size``.
 
     This uses the first-fit decreasing algorithm for finding an initial solution and then moves
     elements around to minimize the l2 norm of the wasted space in each bin.
@@ -988,9 +1000,13 @@ def bin_pack(element_sizes: utt.Vector, max_bin_size: float) -> utt.DenseVector:
         did_improve = False
         for element_index in descending_size_indices:
             element_size = element_sizes[element_index]
+            if element_size > max_bin_size:
+                continue
+
             current_bin_index = bin_of_elements[element_index]
 
             current_bin_space = max_bin_size - size_of_bins[current_bin_index]
+            assert current_bin_space >= 0
             remove_loss = \
                 (element_size + current_bin_space) ** 2 - current_bin_space ** 2
 
@@ -1006,6 +1022,99 @@ def bin_pack(element_sizes: utt.Vector, max_bin_size: float) -> utt.DenseVector:
                     current_bin_index = bin_of_elements[element_index] = bin_index
                     size_of_bins[bin_index] += element_size
                     remove_loss = insert_gain
+                    did_improve = True
+
+    utm.timed_parameters(elements=element_sizes.size, bins=len(size_of_bins))
+    return bin_of_elements
+
+
+@utm.timed_call()
+def bin_fill(  # pylint: disable=too-many-statements,too-many-branches
+    element_sizes:
+    utt.Vector, min_bin_size: float
+) -> utt.DenseVector:
+    '''
+    Given a vector of ``element_sizes`` return a vector containing the bin number for each element,
+    such that the total size of each bin is at most and as close to the ``min_bin_size``.
+
+    This uses the first-fit decreasing algorithm for finding an initial solution and then moves
+    elements around to minimize the l2 norm of the wasted space in each bin.
+    '''
+    total_size = np.sum(utt.to_dense_vector(element_sizes))
+    assert min_bin_size > 0
+
+    size_of_bins = [0.0]
+    max_bins_count = int(total_size // min_bin_size) + 1
+    while min(size_of_bins) < min_bin_size:
+        max_bins_count -= 1
+        if max_bins_count < 2:
+            return np.zeros(element_sizes.size, dtype='int')
+
+        size_of_bins = []
+        element_sizes = utt.to_dense_vector(element_sizes)
+        descending_size_indices = np.argsort(element_sizes)[::-1]
+        bin_of_elements = np.empty(element_sizes.size, dtype='int')
+
+        for element_index in descending_size_indices:
+            element_size = element_sizes[element_index]
+
+            assigned = False
+            for bin_index in range(len(size_of_bins)):  # pylint: disable=consider-using-enumerate
+                if size_of_bins[bin_index] + element_size <= min_bin_size:
+                    bin_of_elements[element_index] = bin_index
+                    size_of_bins[bin_index] += element_size
+                    assigned = True
+                    break
+
+            if assigned:
+                continue
+
+            if len(size_of_bins) < max_bins_count:
+                bin_of_elements[element_index] = len(size_of_bins)
+                size_of_bins.append(element_size)
+                continue
+
+            best_bin_index = -1
+            best_bin_waste = -1
+            for bin_index in range(len(size_of_bins)):  # pylint: disable=consider-using-enumerate
+                bin_waste = size_of_bins[bin_index] - \
+                    min_bin_size + element_size
+                assert bin_waste > 0
+                if best_bin_index < 0 or bin_waste < best_bin_waste:
+                    best_bin_index = bin_index
+                    best_bin_waste = bin_waste
+
+            assert best_bin_index >= 0
+            assert best_bin_waste > 0
+            bin_of_elements[element_index] = best_bin_index
+            size_of_bins[best_bin_index] += element_size
+
+    did_improve = True
+    while did_improve:
+        did_improve = False
+        for element_index in descending_size_indices:
+            element_size = element_sizes[element_index]
+            current_bin_index = bin_of_elements[element_index]
+            current_bin_waste = size_of_bins[current_bin_index] - min_bin_size
+            assert current_bin_waste >= 0
+
+            if current_bin_waste < element_size:
+                continue
+
+            remove_gain = \
+                current_bin_waste ** 2 - \
+                (current_bin_waste - element_size) ** 2
+
+            for bin_index in range(len(size_of_bins)):  # pylint: disable=consider-using-enumerate
+                if bin_index == current_bin_index:
+                    continue
+                bin_waste = size_of_bins[bin_index] - min_bin_size
+                insert_loss = (bin_waste + element_size) ** 2 - bin_waste ** 2
+                if insert_loss < remove_gain:
+                    size_of_bins[current_bin_index] -= element_size
+                    current_bin_index = bin_of_elements[element_index] = bin_index
+                    size_of_bins[bin_index] += element_size
+                    remove_gain = insert_loss
                     did_improve = True
 
     utm.timed_parameters(elements=element_sizes.size, bins=len(size_of_bins))
