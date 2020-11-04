@@ -539,3 +539,7 @@ excess_top_gene_rank: int = 5
 #: The number of times to shuffle the genes for averaging the baseline technical R^2 for each
 #: gene. See :py:func:`metacells.tools.excess.compute_excess_r2`.
 excess_shuffles_count: int = 10
+
+#: The number of most-distinct genes to collect for each cell. See
+#: :py:func:`metacells.tools.distinct.find_distinct_genes`.
+distinct_genes_count: int = 20

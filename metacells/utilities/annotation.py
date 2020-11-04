@@ -1011,7 +1011,7 @@ def get_oa_data(
     (row-major / csr) or by-variable (column-major / csc). If also ``inplace``, this is cached in an
     additional "hidden" annotation whose name is suffixed (e.g. ``...:__row_major__``).
     '''
-    return _get_layout_data(adata, 'oa', adata.obsp,
+    return _get_layout_data(adata, 'oa', adata.obsm,
                             shape=(adata.n_obs, 0),
                             name=name, compute=compute,
                             inplace=inplace, layout=layout)

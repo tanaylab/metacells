@@ -1239,6 +1239,119 @@ fold_factor_compressed(pybind11::array_t<D>& data_array,
     }
 }
 
+static void
+collect_distinct_abs_folds(ArraySlice<int32_t> gene_indices,
+                           ArraySlice<float32_t> gene_folds,
+                           ConstArraySlice<float64_t> fold_in_cell) {
+    tmp_indices.resize(fold_in_cell.size());
+    std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
+
+    std::nth_element(tmp_indices.begin(),
+                     tmp_indices.begin() + gene_indices.size(),
+                     tmp_indices.end(),
+                     [&](const size_t left_gene_index, const size_t right_gene_index) {
+                         const auto left_value = fold_in_cell[left_gene_index];
+                         const auto right_value = fold_in_cell[right_gene_index];
+                         return abs(left_value) > abs(right_value);
+                     });
+
+    std::sort(tmp_indices.begin(),
+              tmp_indices.begin() + gene_indices.size(),
+              [&](const size_t left_gene_index, const size_t right_gene_index) {
+                  const auto left_value = fold_in_cell[left_gene_index];
+                  const auto right_value = fold_in_cell[right_gene_index];
+                  return abs(left_value) > abs(right_value);
+              });
+
+    for (size_t position = 0; position < gene_indices.size(); ++position) {
+        size_t gene_index = tmp_indices[position];
+        gene_indices[position] = gene_index;
+        gene_folds[position] = fold_in_cell[gene_index];
+    }
+}
+
+static void
+collect_distinct_high_folds(ArraySlice<int32_t> gene_indices,
+                            ArraySlice<float32_t> gene_folds,
+                            ConstArraySlice<float64_t> fold_in_cell) {
+    tmp_indices.resize(fold_in_cell.size());
+    std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
+
+    std::nth_element(tmp_indices.begin(),
+                     tmp_indices.begin() + gene_indices.size(),
+                     tmp_indices.end(),
+                     [&](const size_t left_gene_index, const size_t right_gene_index) {
+                         const auto left_value = fold_in_cell[left_gene_index];
+                         const auto right_value = fold_in_cell[right_gene_index];
+                         return left_value > right_value;
+                     });
+
+    std::sort(tmp_indices.begin(),
+              tmp_indices.begin() + gene_indices.size(),
+              [&](const size_t left_gene_index, const size_t right_gene_index) {
+                  const auto left_value = fold_in_cell[left_gene_index];
+                  const auto right_value = fold_in_cell[right_gene_index];
+                  return left_value > right_value;
+              });
+
+    for (size_t position = 0; position < gene_indices.size(); ++position) {
+        size_t gene_index = tmp_indices[position];
+        gene_indices[position] = gene_index;
+        gene_folds[position] = fold_in_cell[gene_index];
+    }
+}
+
+static void
+top_distinct(pybind11::array_t<int32_t>& gene_indices_array,
+             pybind11::array_t<float32_t>& gene_folds_array,
+             const pybind11::array_t<float64_t>& fold_in_cells_array,
+             bool consider_low_folds) {
+    MatrixSlice<float32_t> gene_folds(gene_folds_array, "gene_folds");
+    MatrixSlice<int32_t> gene_indices(gene_indices_array, "gene_indices");
+    ConstMatrixSlice<float64_t> fold_in_cells(fold_in_cells_array, "fold_in_cells");
+
+    size_t cells_count = fold_in_cells.rows_count();
+    size_t genes_count = fold_in_cells.columns_count();
+    size_t distinct_count = gene_indices.columns_count();
+
+    FastAssertCompare(distinct_count, <, genes_count);
+    FastAssertCompare(gene_indices.rows_count(), ==, cells_count);
+    FastAssertCompare(gene_folds.rows_count(), ==, cells_count);
+    FastAssertCompare(gene_folds.columns_count(), ==, distinct_count);
+
+    if (is_in_parallel) {
+        if (consider_low_folds) {
+            for (size_t cell_index = 0; cell_index < cells_count; ++cell_index) {
+                collect_distinct_abs_folds(gene_indices.get_row(cell_index),
+                                           gene_folds.get_row(cell_index),
+                                           fold_in_cells.get_row(cell_index));
+            }
+        } else {
+            for (size_t cell_index = 0; cell_index < cells_count; ++cell_index) {
+                collect_distinct_high_folds(gene_indices.get_row(cell_index),
+                                            gene_folds.get_row(cell_index),
+                                            fold_in_cells.get_row(cell_index));
+            }
+        }
+    } else {
+        if (consider_low_folds) {
+#pragma omp parallel for schedule(guided)
+            for (size_t cell_index = 0; cell_index < cells_count; ++cell_index) {
+                collect_distinct_abs_folds(gene_indices.get_row(cell_index),
+                                           gene_folds.get_row(cell_index),
+                                           fold_in_cells.get_row(cell_index));
+            }
+        } else {
+#pragma omp parallel for schedule(guided)
+            for (size_t cell_index = 0; cell_index < cells_count; ++cell_index) {
+                collect_distinct_high_folds(gene_indices.get_row(cell_index),
+                                            gene_folds.get_row(cell_index),
+                                            fold_in_cells.get_row(cell_index));
+            }
+        }
+    }
+}
+
 }  // namespace metacells
 
 PYBIND11_MODULE(extensions, module) {
@@ -1285,6 +1398,7 @@ PYBIND11_MODULE(extensions, module) {
                "Collect the topmost outgoing edges.");
 
     module.def("collect_pruned", &metacells::collect_pruned, "Collect the topmost pruned edges.");
+    module.def("top_distinct", &metacells::top_distinct, "Collect the topmost distinct genes.");
 
     REGISTER_D(float32_t)
     REGISTER_D(float64_t)

@@ -59,3 +59,6 @@ Evaluating the Metacells
 
 .. automodule:: metacells.tools.excess
     :members:
+
+.. automodule:: metacells.tools.distinct
+    :members:

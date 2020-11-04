@@ -14,6 +14,7 @@ from .apply import *
 from .candidates import *
 from .deviants import *
 from .dissolve import *
+from .distinct import *
 from .downsample import *
 from .excess import *
 from .high import *
