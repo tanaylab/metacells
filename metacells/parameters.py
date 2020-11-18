@@ -510,9 +510,20 @@ rare_dissolve_min_robust_size_factor: float = max_merge_size_factor
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-dissolve_min_convincing_size_factor: float = max_merge_size_factor
+dissolve_min_convincing_size_factor: Optional[float] = max_merge_size_factor
 
-#: The minimal fold factor of a gene in a metacell to make it "convincing". See
+#: The minimal size factor for a metacell to be kept if it is "convincing" when grouping rare gene
+#: module cells. See
+#: :py:const:`max_merge_size_factor`
+#: :py:func:`metacells.tools.dissolve.dissolve_metacells`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+rare_dissolve_min_convincing_size_factor: Optional[float] = None
+
+#: The minimal fold factor of a gene in a metacell to make it "convincing" when grouping rate gene
+#: module cells. See
 #: :py:const:`significant_gene_fold_factor`,
 #: :py:func:`metacells.tools.dissolve.dissolve_metacells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,

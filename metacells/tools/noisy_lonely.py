@@ -133,9 +133,9 @@ def find_noisy_lonely_genes(
         np.fill_diagonal(gene_gene_similarity, -1)
 
         assert ut.matrix_layout(gene_gene_similarity) == 'row_major'
-        max_similiraity_of_genes = ut.sum_per(gene_gene_similarity, per='row')
+        max_similarity_of_genes = ut.max_per(gene_gene_similarity, per='row')
 
-        lonely_genes_mask = max_similiraity_of_genes < max_gene_similarity
+        lonely_genes_mask = max_similarity_of_genes < max_gene_similarity
         base_index_of_genes = ut.get_v_dense(ndata, 'sampled_gene_index')
         lonely_genes_indices = base_index_of_genes[lonely_genes_mask]
 

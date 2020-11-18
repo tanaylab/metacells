@@ -708,9 +708,10 @@ def get_proper_matrix(
     passed through :py:func:`metacells.utilities.typing.to_proper_matrix`
     ensuring it is a :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
-    return utt.to_proper_matrix(get_data(adata, name, per=per, compute=compute,
-                                         inplace=inplace, infocus=infocus,
-                                         layout=layout))
+    data = get_data(adata, name, per=per, compute=compute,
+                    inplace=inplace, infocus=infocus, layout=layout)
+    assert utt.is_layout(data, layout)
+    return utt.to_proper_matrix(data, default_layout=layout)
 
 
 @utm.timed_call()
@@ -942,7 +943,8 @@ def get_oo_proper(
     :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
     return utt.to_proper_matrix(get_oo_data(adata, name, compute=compute,
-                                            inplace=inplace, layout=layout))
+                                            inplace=inplace, layout=layout),
+                                default_layout=layout)
 
 
 @utm.timed_call()
@@ -986,7 +988,8 @@ def get_vv_proper(
     :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
     return utt.to_proper_matrix(get_vv_data(adata, name, compute=compute,
-                                            inplace=inplace, layout=layout))
+                                            inplace=inplace, layout=layout),
+                                default_layout=layout)
 
 
 @utm.timed_call()
@@ -1030,7 +1033,8 @@ def get_oa_proper(
     :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
     return utt.to_proper_matrix(get_oa_data(adata, name, compute=compute,
-                                            inplace=inplace, layout=layout))
+                                            inplace=inplace, layout=layout),
+                                default_layout=layout)
 
 
 @utm.timed_call()
@@ -1074,7 +1078,8 @@ def get_va_proper(
     :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
     return utt.to_proper_matrix(get_va_data(adata, name, compute=compute,
-                                            inplace=inplace, layout=layout))
+                                            inplace=inplace, layout=layout),
+                                default_layout=layout)
 
 
 @utm.timed_call()
@@ -1136,7 +1141,8 @@ def get_vo_proper(
     :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
     return utt.to_proper_matrix(get_vo_data(adata, name, compute=compute,
-                                            inplace=inplace, layout=layout))
+                                            inplace=inplace, layout=layout),
+                                default_layout=layout)
 
 
 def _get_layout_data(
@@ -1164,6 +1170,7 @@ def _get_layout_data(
     layout_name = '%s:__%s__' % (name, layout)
     data = adata.layers.get(layout_name)
     if data is not None:
+        assert utt.matrix_layout(data) == layout
         return data
 
     data = get_base_data()
@@ -1175,6 +1182,7 @@ def _get_layout_data(
         if not utt.frozen(data):
             utt.freeze(data)
         _log_set_data(adata, 'vo', name, layout)
+        assert utt.is_layout(data, layout)
         annotations[layout_name] = data
 
     return data

@@ -101,13 +101,13 @@ class NamedMatrix(NamedShaped):
     def proper(  # type: ignore # pylint: disable=arguments-differ
         self,
         *,
-        layout: str = 'row_major'
+        default_layout: str = 'row_major'
     ) -> utt.ProperMatrix:
         '''
         Access the :py:const:`metacells.utilities.typing.ProperMatrix` data
         using :py:func:`metacells.utilities.typing.to_proper_matrix`.
         '''
-        return utt.to_proper_matrix(self.matrix, layout=layout)
+        return utt.to_proper_matrix(self.matrix, default_layout=default_layout)
 
     @staticmethod
     def be(named: NamedShaped) -> 'NamedMatrix':

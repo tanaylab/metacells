@@ -196,19 +196,23 @@ def analyze_clean_cells(
     '''
     ut.log_pipeline_step(LOG, adata, 'analyze_clean_cells')
 
+    excluded_data: Optional[AnnData] = None
     if properly_sampled_max_excluded_genes_fraction is not None:
         excluded_genes = pp.filter_data(adata, name='dirty_genes', tmp=True,
                                         var_masks=['~clean_gene'])
-        assert excluded_genes is not None
-        excluded_data: Optional[AnnData] = excluded_genes[0]
+        if excluded_genes is not None:
+            excluded_data = excluded_genes[0]
+
+    if excluded_genes is None:
+        max_excluded_genes_fraction = None
     else:
-        excluded_data = None
+        max_excluded_genes_fraction = properly_sampled_max_excluded_genes_fraction
 
     tl.find_properly_sampled_cells(adata, of=of,
                                    min_cell_total=properly_sampled_min_cell_total,
                                    max_cell_total=properly_sampled_max_cell_total,
                                    excluded_data=excluded_data,
-                                   max_excluded_genes_fraction=properly_sampled_max_excluded_genes_fraction)
+                                   max_excluded_genes_fraction=max_excluded_genes_fraction)
 
 
 CLEAN_CELLS_MASKS = ['properly_sampled_cell']

@@ -463,7 +463,9 @@ def divide_and_conquer_pipeline(
     rare_min_modules_size_factor: float = pr.rare_min_modules_size_factor,
     rare_min_module_correlation: float = pr.rare_min_module_correlation,
     rare_min_cell_module_total: int = pr.rare_min_cell_module_total,
-    rare_dissolve_min_robust_size_factor: float = pr.rare_dissolve_min_robust_size_factor,
+    rare_dissolve_min_robust_size_factor: Optional[float] = pr.rare_dissolve_min_robust_size_factor,
+    rare_dissolve_min_convincing_size_factor: Optional[float] = pr.rare_dissolve_min_convincing_size_factor,
+    rare_dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
     feature_downsample_cell_quantile: float = pr.feature_downsample_cell_quantile,
     feature_min_gene_fraction: float = pr.feature_min_gene_fraction,
     feature_min_gene_relative_variance: float = pr.feature_min_gene_relative_variance,
@@ -632,10 +634,13 @@ def divide_and_conquer_pipeline(
 
     2. For each detected rare gene module, collect all cells that express the module, and invoke
        :py:func:`metacells.pipeline.direct.compute_direct_metacells` to compute metacells for them,
-       using the rest of the parameters. Here we use a lower
-       ``rare_dissolve_min_robust_size_factor`` (default: {rare_dissolve_min_robust_size_factor})
-       because even "weak" metacells detected here are known be relatively "convincing" based on
-       them being different from the overall population.
+       using the rest of the parameters. Here we allow using a lower
+       ``rare_dissolve_min_robust_size_factor`` (default: {rare_dissolve_min_robust_size_factor}),
+       ``rare_dissolve_min_convincing_size_factor`` (default:
+       {rare_dissolve_min_convincing_size_factor}) and ``rare_dissolve_min_convincing_size_factor``
+       (default: {rare_dissolve_min_convincing_size_factor}) because even "weak" metacells detected
+       here are known be relatively "convincing" based on them being different from the overall
+       population.
 
        .. todo::
 
@@ -706,8 +711,8 @@ def divide_and_conquer_pipeline(
                                     deviants_max_gene_fraction=deviants_max_gene_fraction,
                                     deviants_max_cell_fraction=deviants_max_cell_fraction,
                                     dissolve_min_robust_size_factor=rare_dissolve_min_robust_size_factor,
-                                    dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
-                                    dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                                    dissolve_min_convincing_size_factor=rare_dissolve_min_convincing_size_factor,
+                                    dissolve_min_convincing_gene_fold_factor=rare_dissolve_min_convincing_gene_fold_factor,
                                     dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                     cell_sizes=cell_sizes,
                                     random_seed=random_seed,

@@ -46,6 +46,8 @@ __all__ = [
     'sum_per',
     'sum_squared_per',
     'rank_per',
+    'quantile_per',
+    'nanquantile_per',
 
     'bincount_vector',
 
@@ -120,7 +122,8 @@ def to_layout(
     '''
     assert layout in utt.LAYOUT_OF_AXIS
 
-    proper, dense, compressed = utt.to_proper_matrices(matrix, layout=layout)
+    proper, dense, compressed = \
+        utt.to_proper_matrices(matrix, default_layout=layout)
 
     if utt.is_layout(proper, layout):
         return proper
@@ -560,8 +563,8 @@ def _downsample_compressed_matrix(
     return output
 
 
-@ utm.timed_call()
-@ utd.expand_doc(data_types=','.join(['``%s``' % data_type for data_type in utt.CPP_DATA_TYPES]))
+@utm.timed_call()
+@utd.expand_doc(data_types=','.join(['``%s``' % data_type for data_type in utt.CPP_DATA_TYPES]))
 def downsample_vector(
     vector: utt.Vector,
     samples: int,
@@ -610,7 +613,7 @@ def downsample_vector(
         extension(array, output, samples, random_seed)
 
 
-@ utm.timed_call()
+@utm.timed_call()
 def mean_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     '''
     Compute the mean value ``per`` (``row`` or ``column``) of some ``matrix``.
@@ -625,7 +628,7 @@ def mean_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     return _reduce_matrix(dense, per, lambda dense: np.mean(dense, axis=1 - axis))
 
 
-@ utm.timed_call()
+@utm.timed_call()
 def nanmean_per(matrix: utt.DenseMatrix, *, per: str) -> utt.DenseVector:
     '''
     Compute the mean value ``per`` (``row`` or ``column``) of some ``matrix``,
@@ -637,7 +640,7 @@ def nanmean_per(matrix: utt.DenseMatrix, *, per: str) -> utt.DenseVector:
     return _reduce_matrix(dense, per, lambda dense: np.nanmean(dense, axis=1 - axis))
 
 
-@ utm.timed_call()
+@utm.timed_call()
 def max_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     '''
     Compute the maximal value ``per`` (``row`` or ``column``) of some ``matrix``.
@@ -652,7 +655,7 @@ def max_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     return _reduce_matrix(dense, per, lambda dense: np.max(dense, axis=1 - axis))
 
 
-@ utm.timed_call()
+@utm.timed_call()
 def nanmax_per(matrix: utt.DenseMatrix, *, per: str) -> utt.DenseVector:
     '''
     Compute the maximal value ``per`` (``row`` or ``column``) of some ``matrix``,
@@ -664,7 +667,7 @@ def nanmax_per(matrix: utt.DenseMatrix, *, per: str) -> utt.DenseVector:
     return _reduce_matrix(dense, per, lambda dense: np.nanmax(dense, axis=1 - axis))
 
 
-@ utm.timed_call()
+@utm.timed_call()
 def min_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     '''
     Compute the minimal value ``per`` (``row`` or ``column``) of some ``matrix``.
@@ -679,7 +682,7 @@ def min_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     return _reduce_matrix(dense, per, lambda dense: np.min(dense, axis=1 - axis))
 
 
-@ utm.timed_call()
+@utm.timed_call()
 def nanmin_per(matrix: utt.DenseMatrix, *, per: str) -> utt.DenseVector:
     '''
     Compute the minimal value ``per`` (``row`` or ``column``) of some ``matrix``,
@@ -695,7 +698,7 @@ def nanmin_per(matrix: utt.DenseMatrix, *, per: str) -> utt.DenseVector:
     return _reduce_matrix(dense, per, lambda dense: np.nanmin(dense, axis=1 - axis))
 
 
-@ utm.timed_call()
+@utm.timed_call()
 def nnz_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     '''
     Compute the number of non-zero values ``per`` (``row`` or ``column``) of some ``matrix``.
@@ -710,7 +713,7 @@ def nnz_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     return _reduce_matrix(dense, per, lambda dense: np.count_nonzero(dense, axis=1 - axis))
 
 
-@ utm.timed_call()
+@utm.timed_call()
 def sum_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     '''
     Compute the total of the values ``per`` (``row`` or ``column``) of some ``matrix``.
@@ -725,7 +728,7 @@ def sum_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     return _reduce_matrix(dense, per, lambda dense: np.sum(dense, axis=1 - axis))
 
 
-@ utm.timed_call()
+@utm.timed_call()
 def sum_squared_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
     '''
     Compute the total of the squared values ``per`` (``row`` or ``column``) of some ``matrix``.
@@ -750,7 +753,7 @@ def sum_squared_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
                           lambda dense: np.square(dense).sum(axis=1 - axis))
 
 
-@ utm.timed_call()
+@utm.timed_call()
 def rank_per(matrix: utt.DenseMatrix, rank: int, *, per: Optional[str]) -> utt.DenseVector:
     '''
     Get the ``rank`` element ``per`` (``row`` or ``column``) of some ``matrix``.
@@ -778,6 +781,53 @@ def rank_per(matrix: utt.DenseMatrix, rank: int, *, per: Optional[str]) -> utt.D
     return output
 
 
+@utm.timed_call()
+def quantile_per(matrix: utt.DenseMatrix, quantile: float, *, per: Optional[str]) -> utt.DenseVector:
+    '''
+    Get the ``quantile`` element ``per`` (``row`` or ``column``) of some ``matrix``.
+
+    If ``per`` (default: {per}) is ``None``, the matrix must be square and is assumed to be
+    symmetric, so the most efficient direction is used based on the matrix layout. Otherwise it must
+    be one of ``row`` or ``column``, and the matrix must be in the appropriate layout (row-major for
+    ranking data in each row, column-major for ranking data in each column).
+    '''
+    assert 0 <= quantile <= 1
+
+    if per is None:
+        layout = utt.matrix_layout(matrix)
+        assert layout is not None
+        per = layout[:-6]
+
+    axis = 1 - utt.PER_OF_AXIS.index(per)
+
+    assert utt.matrix_layout(matrix) == per + '_major'
+    return np.nanquantile(matrix, quantile, axis)
+
+
+@utm.timed_call()
+def nanquantile_per(matrix: utt.DenseMatrix, quantile: float, *, per: Optional[str]) -> utt.DenseVector:
+    '''
+    Get the ``quantile`` element ``per`` (``row`` or ``column``) of some ``matrix``, ignoring
+    ``None`` values.
+
+    If ``per`` (default: {per}) is ``None``, the matrix must be square and is assumed to be
+    symmetric, so the most efficient direction is used based on the matrix layout. Otherwise it must
+    be one of ``row`` or ``column``, and the matrix must be in the appropriate layout (row-major for
+    ranking data in each row, column-major for ranking data in each column).
+    '''
+    assert 0 <= quantile <= 1
+
+    if per is None:
+        layout = utt.matrix_layout(matrix)
+        assert layout is not None
+        per = layout[:-6]
+
+    axis = 1 - utt.PER_OF_AXIS.index(per)
+
+    assert utt.is_layout(matrix, per + '_major')
+    return np.nanquantile(matrix, quantile, axis)
+
+
 M = TypeVar('M', bound=utt.Matrix)
 
 
@@ -795,7 +845,7 @@ def _reduce_matrix(
         elements_count: float = matrix.shape[axis]
     else:
         _, dense, compressed = utt.to_proper_matrices(matrix,
-                                                      layout=utt.LAYOUT_OF_AXIS[axis])
+                                                      default_layout=utt.LAYOUT_OF_AXIS[axis])
 
         if dense is not None:
             elements_count = dense.shape[axis]
@@ -834,7 +884,7 @@ def _reduce_matrix(
         return utt.to_dense_vector(reducer(matrix))
 
 
-@ utm.timed_call()
+@utm.timed_call()
 def bincount_vector(
     vector: utt.Vector,
     *,
@@ -858,8 +908,8 @@ ROLLING_FUNCTIONS = {
 }
 
 
-@ utd.expand_doc(functions=', '.join(['``%s``' % function for function in ROLLING_FUNCTIONS]))
-@ utm.timed_call()
+@utd.expand_doc(functions=', '.join(['``%s``' % function for function in ROLLING_FUNCTIONS]))
+@utm.timed_call()
 def sliding_window_function(
     vector: utt.Vector,
     *,
@@ -1213,7 +1263,8 @@ def shuffle_matrix(
     axis = utt.PER_OF_AXIS.index(per)
     layout = utt.LAYOUT_OF_AXIS[axis]
 
-    _, dense, compressed = utt.to_proper_matrices(matrix, layout=layout)
+    _, dense, compressed = \
+        utt.to_proper_matrices(matrix, default_layout=layout)
 
     if compressed is not None:
         assert utt.matrix_layout(compressed) == layout

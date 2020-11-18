@@ -541,18 +541,19 @@ def to_proper(
     shaped: Shaped,
     *,
     ndim: Optional[int] = None,
-    layout: str = 'row_major'
+    default_layout: Optional[str] = 'row_major'
 ) -> ProperShaped:
     '''
     Given some ``shaped`` data, access the properly-formatted data within it.
 
     If ``ndim`` (default: {ndim}) is specified, insist this is the number of dimensions.
 
-    If the data is in some strange sparse format, use ``layout`` (default: {layout}) to decide
-    whether to return it in ``row_major`` (csr) or ``column_major`` (csc) layout. Otherwise, this is
-    ignored.
+    If the data is in some strange sparse format, use ``default_layout`` (default: {default_layout})
+    to decide whether to return it in ``row_major`` (csr) or ``column_major`` (csc) layout.
+    Otherwise, this is ignored.
     '''
-    assert layout in LAYOUT_OF_AXIS
+    if default_layout is not None:
+        assert default_layout in LAYOUT_OF_AXIS
 
     if isinstance(shaped, (pd.Series, pd.DataFrame)):
         shaped = shaped.values
@@ -563,16 +564,16 @@ def to_proper(
     if sparse is not None:
         compressed = CompressedMatrix.maybe(sparse)
         if compressed is None:
-            if layout == 'row_major':
-                with utm.timed_step('sparse.tocsr'):
-                    compressed = sparse.tocsr()
-                    utm.timed_parameters(results=compressed.shape[0],
-                                         elements=compressed.nnz / compressed.shape[0])
-            else:
+            if default_layout == 'column_major':
                 with utm.timed_step('sparse.tocsc'):
                     compressed = sparse.tocsc()
                     utm.timed_parameters(results=compressed.shape[1],
                                          elements=compressed.nnz / compressed.shape[1])
+            else:
+                with utm.timed_step('sparse.tocsr'):
+                    compressed = sparse.tocsr()
+                    utm.timed_parameters(results=compressed.shape[0],
+                                         elements=compressed.nnz / compressed.shape[0])
         return compressed
 
     if isinstance(shaped, np.matrix) or not isinstance(shaped, np.ndarray):
@@ -586,11 +587,11 @@ def to_proper(
     return shaped
 
 
-def to_proper_matrix(matrix: Matrix, *, layout: str = 'row_major') -> ProperMatrix:
+def to_proper_matrix(matrix: Matrix, *, default_layout: Optional[str] = 'row_major') -> ProperMatrix:
     '''
     Same as :py:func:`to_proper` but also ensures the result is a :py:const:`ProperMatrix`.
     '''
-    return to_proper(matrix, ndim=2, layout=layout)  # type: ignore
+    return to_proper(matrix, ndim=2, default_layout=default_layout)  # type: ignore
 
 
 def to_proper_vector(vector: Vector) -> ProperVector:
@@ -603,13 +604,13 @@ def to_proper_vector(vector: Vector) -> ProperVector:
 def to_proper_matrices(
     matrix: Matrix,
     *,
-    layout: str = 'row_major'
+    default_layout: Optional[str] = 'row_major'
 ) -> Tuple[ProperMatrix, Optional[DenseMatrix], Optional[CompressedMatrix]]:
     '''
     Given some matrix, return the properly-formatted data within it using
     :py:func:`to_proper_matrix`, which may be either dense or compressed (sparse).
     '''
-    proper = to_proper_matrix(matrix, layout=layout)
+    proper = to_proper_matrix(matrix, default_layout=default_layout)
     dense = DenseMatrix.maybe(proper)
     compressed = CompressedMatrix.maybe(proper)
     assert (dense is not None) or (compressed is not None)
@@ -777,10 +778,13 @@ LAYOUT_OF_AXIS = ('row_major', 'column_major')
 PER_OF_AXIS = ('row', 'column')
 
 
-def is_layout(matrix: Matrix, layout: str) -> bool:
+def is_layout(matrix: Matrix, layout: Optional[str]) -> bool:
     '''
     Test whether the ``layout`` of the ``matrix`` is one of ``column_major`` or ``row_major``.
     '''
+    if layout is None:
+        return True
+
     sparse = SparseMatrix.maybe(matrix)
     if sparse is not None:
         return sparse.getformat() == SPARSE_FAST_FORMAT[layout]

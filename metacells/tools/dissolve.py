@@ -109,7 +109,7 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
         raw_candidates_count = np.max(candidate_of_cells) + 1
         LOG.debug('  candidates: %s', raw_candidates_count)
 
-        LOG.debug('  min_metacell_cells: %d', min_metacell_cells)
+        LOG.debug('  min_metacell_cells: %s', min_metacell_cells)
 
         deviant_of_cells = \
             ut.get_vector_parameter_data(LOG, adata, deviants,
@@ -124,43 +124,42 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
         candidate_of_cells = ut.compress_indices(candidate_of_cells)
         candidates_count = np.max(candidate_of_cells) + 1
 
-        LOG.debug('  target_metacell_size: %d', target_metacell_size)
+        LOG.debug('  target_metacell_size: %s', target_metacell_size)
         fraction_of_genes = pp.get_fraction_per_var(adata).proper
 
         if min_robust_size_factor is None:
             min_robust_size = None
         else:
             min_robust_size = target_metacell_size * min_robust_size_factor
-            LOG.debug('  min_robust_size: %d', min_robust_size)
+        LOG.debug('  min_robust_size: %s', min_robust_size)
 
         if min_convincing_size_factor is None:
             min_convincing_size = None
         else:
             min_convincing_size = \
                 target_metacell_size * min_convincing_size_factor
-            LOG.debug('  min_convincing_size: %d', min_convincing_size)
+        LOG.debug('  min_convincing_size: %s', min_convincing_size)
+        if min_convincing_size_factor is not None:
             LOG.debug('  min_convincing_gene_fold_factor: %s',
                       min_convincing_gene_fold_factor)
 
-        if min_robust_size is not None and min_convincing_size is not None:
-            did_dissolve = False
-
-            for candidate_index in range(candidates_count):
-                candidate_cell_indices = \
-                    np.where(candidate_of_cells == candidate_index)[0]
-                if not _keep_candidate(adata, candidate_index,
-                                       data=data,
-                                       cell_sizes=cell_sizes,
-                                       fraction_of_genes=fraction_of_genes,
-                                       min_metacell_cells=min_metacell_cells,
-                                       min_robust_size=min_robust_size,
-                                       min_convincing_size=min_convincing_size,
-                                       min_convincing_gene_fold_factor=min_convincing_gene_fold_factor,
-                                       candidates_count=candidates_count,
-                                       candidate_cell_indices=candidate_cell_indices):
-                    dissolved_of_cells[candidate_cell_indices] = True
-                    candidate_of_cells[candidate_cell_indices] = -1
-                    did_dissolve = True
+        did_dissolve = False
+        for candidate_index in range(candidates_count):
+            candidate_cell_indices = \
+                np.where(candidate_of_cells == candidate_index)[0]
+            if not _keep_candidate(adata, candidate_index,
+                                   data=data,
+                                   cell_sizes=cell_sizes,
+                                   fraction_of_genes=fraction_of_genes,
+                                   min_metacell_cells=min_metacell_cells,
+                                   min_robust_size=min_robust_size,
+                                   min_convincing_size=min_convincing_size,
+                                   min_convincing_gene_fold_factor=min_convincing_gene_fold_factor,
+                                   candidates_count=candidates_count,
+                                   candidate_cell_indices=candidate_cell_indices):
+                dissolved_of_cells[candidate_cell_indices] = True
+                candidate_of_cells[candidate_cell_indices] = -1
+                did_dissolve = True
 
     if did_dissolve:
         metacell_of_cells = ut.compress_indices(candidate_of_cells)
@@ -215,26 +214,26 @@ def _keep_candidate(
         candidate_total_size = np.sum(cell_sizes[candidate_cell_indices])
 
     if candidate_cell_indices.size < min_metacell_cells:
-        LOG.debug('  - candidate: %s / %s cells: %s size: %d is: little',
+        LOG.debug('  - candidate: %s / %s cells: %s size: %s is: little',
                   candidate_index, candidates_count,
                   candidate_cell_indices.size, candidate_total_size)
         return False
 
     if min_robust_size is not None \
             and candidate_total_size >= min_robust_size:
-        LOG.debug('  - candidate: %s / %s cells: %s size: %d is: robust',
+        LOG.debug('  - candidate: %s / %s cells: %s size: %s is: robust',
                   candidate_index, candidates_count,
                   candidate_cell_indices.size, candidate_total_size)
         return True
 
     if min_convincing_size is None:
-        LOG.debug('  - candidate: %s / %s cells: %s size: %d is: accepted',
+        LOG.debug('  - candidate: %s / %s cells: %s size: %s is: accepted',
                   candidate_index, candidates_count,
                   candidate_cell_indices.size, candidate_total_size)
         return True
 
     if candidate_total_size < min_convincing_size:
-        LOG.debug('  - candidate: %s / %s cells: %s size: %d is: unconvincing',
+        LOG.debug('  - candidate: %s / %s cells: %s size: %s is: unconvincing',
                   candidate_index, candidates_count,
                   candidate_cell_indices.size, candidate_total_size)
         return False
@@ -256,7 +255,7 @@ def _keep_candidate(
         convincing_gene_indices = \
             np.where(convincing_genes_mask)[0]
         if keep_candidate:
-            LOG.debug('  - candidate: %s / %s cells: %s size: %d is: convincing because %s',
+            LOG.debug('  - candidate: %s / %s cells: %s size: %s is: convincing because %s',
                       candidate_index, candidates_count,
                       candidate_cell_indices.size,
                       candidate_total_size,
@@ -265,7 +264,7 @@ def _keep_candidate(
                                  in zip(adata.var_names[convincing_gene_indices],
                                         candidate_data_of_genes[convincing_gene_indices])]))
         else:
-            LOG.debug('  - candidate: %s / %s cells: %s size: %d is: not convincing',
+            LOG.debug('  - candidate: %s / %s cells: %s size: %s is: not convincing',
                       candidate_index, candidates_count,
                       candidate_cell_indices.size, candidate_total_size)
 

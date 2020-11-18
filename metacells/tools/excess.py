@@ -7,7 +7,6 @@ import logging
 from typing import Optional, Union
 
 import numpy as np  # type: ignore
-import pandas as pd  # type: ignore
 from anndata import AnnData
 
 import metacells.parameters as pr
@@ -23,7 +22,7 @@ LOG = logging.getLogger(__name__)
 
 @ut.timed_call()
 @ut.expand_doc()
-def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
+def compute_excess_r2(
     adata: AnnData,
     of: Optional[str] = None,
     *,
@@ -33,11 +32,9 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
     top_gene_rank: int = pr.excess_top_gene_rank,
     shuffles_count: int = pr.excess_shuffles_count,
     random_seed: int = pr.random_seed,
-    inplace: bool = True,
     intermediate: bool = True,
-    mdata: Optional[AnnData] = None,
-    mindices: Optional[Union[str, ut.Vector]] = None,
-) -> Optional[ut.PandasSeries]:
+    mdata: AnnData,
+) -> None:
     '''
     Compute the excess gene-gene coefficient of determination (R^2) for the metacells based ``of``
     some data.
@@ -64,63 +61,71 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
     A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
     are cells and the variables are genes.
 
+    In addition, ``mdata`` is assumed to have one observation for each metacell, and use the same
+    genes as ``adata``.
+
     **Returns**
 
-    Variable (Gene) Annotations
+    Sets the following in ``mdata`` (with ``None`` values for "insignificant" genes, see below):
 
-        ``gene_max_excess_r2``
-            For each gene, the maximal difference (across all metacells, every other gene) between
-            the R^2 coefficient of determination of the two genes, and the shuffled coefficient of
-            determination of the two genes (see below).
+    Per-Variable Per-Observation (Gene-Cell) Annotations
 
-    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
-    ``None``. Otherwise this is returned as a pandas series (indexed by the gene names).
+        ``top_r2``
+            For each gene and metacell, the top-``top_gene_rank`` R^2 coefficient of determination
+            between the gene and any other gene.
 
-    If ``mdata`` is specified, it is assumed to have one observation for each metacell, and use the
-    same genes as ``adata`` (if it doesn't, specify ``mindices`` to the name of an annotation or a
-    vector that maps each ``adata`` gene index to a ``mdata`` gene index). The ``excess_r2`` for
-    each metacell will be stored there as a per-variable-per-observation annotation (layer).
+        ``top_shuffled_r2``
+            For each gene and metacell, the top-``top_gene_rank`` R^2 coefficient of determination
+            between the gene and any other gene, when shuffling the genes between the cells in the
+            metacell (this is averaged over multiple shuffles).
+
+        ``excess_r2``
+            For each gene and metacell, the difference between the ``top_r2`` and the
+            ``top_shuffled_r2``, that is, the excess R^2 coefficient of determination between the
+
+            R^2 coefficient of determination between the genes. Note that ``excess_r2 != top_r2
+            - top_shuffled_r2`` because the top difference is different than the difference of the
+            top values.
+
+        ``inner_variance``
+            For each gene and metacell, the variance of the gene in the metacell.
+
+        ``inner_normalized_variance``
+            For each gene and metacell, the normalized variance (variance over mean) of the
+            gene in the metacell.
 
     If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it. In addition, ``gene_max_top_r2`` and
-    ``gene_max_top_shuffled_r2`` will be stored for each variable in ``adata``, and if ``mdata`` was
-    specified, store ``top_r2``, ``top_shuffled_r2`` ``inner_variance`` and
-    ``inner_normalized_variance`` per-variable-per-observation in it as well.
+    for future reuse.
 
     **Computation Parameters**
 
-    1. For each metacell:
+    For each metacell:
 
-        1.1. Downsample the cells so their total number of UMIs would be the
-             ``downsample_cell_quantile`` (default: {downsample_cell_quantile}). That is, if
-             ``downsample_cell_quantile`` is 0.1, then 90% of the cells would have more UMIs than
-             the target number of samples and will be downsampled; 10% of the cells would have too
-             few UMIs and will be left unchanged.
+    1. Downsample the cells so their total number of UMIs would be the
+       ``downsample_cell_quantile`` (default: {downsample_cell_quantile}). That is, if
+       ``downsample_cell_quantile`` is 0.1, then 90% of the cells would have more UMIs than
+       the target number of samples and will be downsampled; 10% of the cells would have too
+       few UMIs and will be left unchanged.
 
-        1.2 Ignore all genes whose total data in the metacell (in the downsampled data) is below the
-            ``min_gene_total`` (default: {min_gene_total}). This ensures we only correlate genes
-            with sufficient data to be meaningful. We also ignore any genes which have exactly the
-            same value in all cells of the metacell, regardless of their expression level.
+    2 Ignore all genes whose total data in the metacell (in the downsampled data) is below the
+      ``min_gene_total`` (default: {min_gene_total}). This ensures we only correlate genes
+      with sufficient data to be meaningful. We also ignore any genes which have exactly the
+      same value in all cells of the metacell, regardless of their expression level.
 
-        1.3 Compute the cross-correlation between all the remaining genes, and square it to obtain
-            the metacell's per-gene-per-gene R^2 data. Collect for each gene the ``top_gene_rank``
-            value, which is the gene's top R^2 for this metacell.
+    3 Compute the cross-correlation between all the remaining genes, and square it to obtain
+      the metacell's per-gene-per-gene R^2 data. Collect for each gene the ``top_gene_rank``
+      value, which is the gene's top R^2 for this metacell.
 
-        1.4 Randomly shuffle the remaining gene expressions between the cells of each metacells
-            using the ``random_seed``, re-compute the cross-correlation and square it into the
-            metacell's per-gene-per-gene shuffled R^2 data. Collect for each gene the
-            ``top_gene_rank`` value. Repeat this ``shuffles_count`` times and use the average as the
-            gene's top shuffled R^2 for this metacell.
+    4 Randomly shuffle the remaining gene expressions between the cells of each metacells
+      using the ``random_seed``, re-compute the cross-correlation and square it into the
+      metacell's per-gene-per-gene shuffled R^2 data. Collect for each gene the
+      ``top_gene_rank`` value. Repeat this ``shuffles_count`` times and use the average as the
+      gene's top shuffled R^2 for this metacell.
 
-        1.5 The difference, for each gene, between the gene's top R^2, and the gene's (averaged) top
-            shuffled R^2, is the gene's excess R^2 for this metacell.
-
-    2. Collect, for each gene, the maximal excess R^2 across all metacells into
-       ``gene_max_excess_r2``. If ``intermediate``, also compute the global ``gene_max_top_r2`` and
-       ``gene_max_top_shuffled_r2``. Note
-       that ``gene_max_excess_r2 != gene_max_top_r2 - gene_max_top_shuffled_r2``.
+    5 The difference, for each gene, between the gene's top R^2, and the gene's (averaged) top
+      shuffled R^2, is the gene's excess R^2 for this metacell.
     '''
-    of, level = ut.log_operation(LOG, adata, 'compute_excess_r2', of)
+    of, _ = ut.log_operation(LOG, adata, 'compute_excess_r2', of)
     assert shuffles_count > 0
 
     with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major',
@@ -135,41 +140,19 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
         metacells_count = np.max(metacell_of_cells) + 1
         assert metacells_count > 0
 
-        if mdata is not None:
-            LOG.debug('  mdata: %s', ut.get_name(mdata) or '<adata>')
-            mindex_of_genes = \
-                ut.get_vector_parameter_data(LOG, adata, mindices,
-                                             per='v', name='mindices',
-                                             default='same')
-        if mindex_of_genes is None:
-            mindex_of_genes = np.arange(adata.n_vars)
+        LOG.debug('  mdata: %s', ut.get_name(mdata) or '<adata>')
 
-        max_excess_r2_per_gene = np.full(adata.n_vars, -10, dtype='float')
-        max_top_r2_per_gene = None
-        max_top_shuffled_r2_per_gene = None
-        if intermediate:
-            max_top_r2_per_gene = np.full(adata.n_vars, -10, dtype='float')
-            max_top_shuffled_r2_per_gene = \
-                np.full(adata.n_vars, -10, dtype='float')
-
-        excess_r2_per_gene_per_metacell = None
-        top_r2_per_gene_per_metacell = None
-        top_shuffled_r2_per_gene_per_metacell = None
-        variance_per_gene_per_metacell = None
-        normalized_variance_per_gene_per_metacell = None
-        if mdata is not None:
-            assert mdata.n_obs == metacells_count
-            excess_r2_per_gene_per_metacell = \
-                np.full(mdata.shape, None, dtype='float')
-            if intermediate:
-                top_r2_per_gene_per_metacell = \
-                    np.full(mdata.shape, None, dtype='float')
-                top_shuffled_r2_per_gene_per_metacell = \
-                    np.full(mdata.shape, None, dtype='float')
-                variance_per_gene_per_metacell = \
-                    np.full(mdata.shape, None, dtype='float')
-                normalized_variance_per_gene_per_metacell = \
-                    np.full(mdata.shape, None, dtype='float')
+        assert mdata.n_obs == metacells_count
+        top_r2_per_gene_per_metacell = \
+            np.full(mdata.shape, None, dtype='float')
+        top_shuffled_r2_per_gene_per_metacell = \
+            np.full(mdata.shape, None, dtype='float')
+        excess_r2_per_gene_per_metacell = \
+            np.full(mdata.shape, None, dtype='float')
+        variance_per_gene_per_metacell = \
+            np.full(mdata.shape, None, dtype='float')
+        normalized_variance_per_gene_per_metacell = \
+            np.full(mdata.shape, None, dtype='float')
 
         LOG.debug('  downsample_cell_quantile: %s',
                   downsample_cell_quantile)
@@ -185,60 +168,22 @@ def compute_excess_r2(  # pylint: disable=too-many-branches,too-many-statements
                                      shuffles_count=shuffles_count,
                                      top_gene_rank=top_gene_rank,
                                      min_gene_total=min_gene_total,
-                                     max_excess_r2_per_gene=max_excess_r2_per_gene,
-                                     max_top_r2_per_gene=max_top_r2_per_gene,
-                                     max_top_shuffled_r2_per_gene=max_top_shuffled_r2_per_gene,
-                                     mindex_of_genes=mindex_of_genes,
                                      excess_r2_per_gene_per_metacell=excess_r2_per_gene_per_metacell,
                                      top_r2_per_gene_per_metacell=top_r2_per_gene_per_metacell,
                                      top_shuffled_r2_per_gene_per_metacell=top_shuffled_r2_per_gene_per_metacell,
                                      variance_per_gene_per_metacell=variance_per_gene_per_metacell,
                                      normalized_variance_per_gene_per_metacell=normalized_variance_per_gene_per_metacell)
 
-    if excess_r2_per_gene_per_metacell is not None:
-        excess_r2_per_gene_per_metacell[excess_r2_per_gene_per_metacell < -5] = None
-        assert mdata is not None
-        ut.set_vo_data(mdata, 'excess_r2', excess_r2_per_gene_per_metacell)
-        if top_r2_per_gene_per_metacell is not None:
-            top_r2_per_gene_per_metacell[top_r2_per_gene_per_metacell < -5] = None
-            ut.set_vo_data(mdata, 'top_r2', top_r2_per_gene_per_metacell)
-        if top_shuffled_r2_per_gene_per_metacell is not None:
-            top_shuffled_r2_per_gene_per_metacell[top_shuffled_r2_per_gene_per_metacell < -5] = None
-            ut.set_vo_data(mdata, 'top_shuffled_r2',
-                           top_shuffled_r2_per_gene_per_metacell)
-        if variance_per_gene_per_metacell is not None:
-            ut.set_vo_data(mdata, 'inner_variance',
-                           variance_per_gene_per_metacell)
-        if normalized_variance_per_gene_per_metacell is not None:
-            ut.set_vo_data(mdata, 'inner_normalized_variance',
-                           normalized_variance_per_gene_per_metacell)
-
-    max_excess_r2_per_gene[max_excess_r2_per_gene < -5] = None
-
-    if inplace:
-        ut.set_v_data(adata, 'gene_max_excess_r2',
-                      max_excess_r2_per_gene, log_value=_log_r2)
-        if max_top_r2_per_gene is not None:
-            max_top_r2_per_gene[max_top_r2_per_gene < -5] = None
-            ut.set_v_data(adata, 'gene_max_top_r2',
-                          max_top_r2_per_gene, log_value=_log_r2)
-        if max_top_shuffled_r2_per_gene is not None:
-            max_top_shuffled_r2_per_gene[max_top_shuffled_r2_per_gene < -5] = None
-            ut.set_v_data(adata, 'gene_max_top_shuffled_r2',
-                          max_top_shuffled_r2_per_gene, log_value=_log_r2)
-        return None
-
-    if LOG.isEnabledFor(level):
-        LOG.log(level, '  gene_max_excess_r2: %s',
-                _log_r2(max_excess_r2_per_gene))
-        if max_top_r2_per_gene is not None:
-            LOG.log(level, '  gene_max_top_r2: %s',
-                    _log_r2(max_top_r2_per_gene))
-        if max_top_shuffled_r2_per_gene is not None:
-            LOG.log(level, '  gene_max_top_shuffled_r2: %s',
-                    _log_r2(max_top_shuffled_r2_per_gene))
-
-    return pd.DataSeries(max_excess_r2_per_gene, index=adata.var_names)
+    ut.set_vo_data(mdata, 'excess_r2', excess_r2_per_gene_per_metacell)
+    top_r2_per_gene_per_metacell[top_r2_per_gene_per_metacell < -5] = None
+    ut.set_vo_data(mdata, 'top_r2', top_r2_per_gene_per_metacell)
+    top_shuffled_r2_per_gene_per_metacell[top_shuffled_r2_per_gene_per_metacell < -5] = None
+    ut.set_vo_data(mdata, 'top_shuffled_r2',
+                   top_shuffled_r2_per_gene_per_metacell)
+    ut.set_vo_data(mdata, 'inner_variance',
+                   variance_per_gene_per_metacell)
+    ut.set_vo_data(mdata, 'inner_normalized_variance',
+                   normalized_variance_per_gene_per_metacell)
 
 
 def _log_r2(values: Optional[ut.DenseVector]) -> str:
@@ -246,7 +191,7 @@ def _log_r2(values: Optional[ut.DenseVector]) -> str:
     return '%s <- %s' % (ut.mask_description(~np.isnan(values)), np.nanmean(values))
 
 
-def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-branches
+def _collect_metacell_excess(  # pylint: disable=too-many-statements
     metacell_index: int,
     metacells_count: int,
     *,
@@ -257,15 +202,11 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
     shuffles_count: int,
     min_gene_total: float,
     top_gene_rank: int,
-    max_excess_r2_per_gene: ut.DenseVector,
-    max_top_r2_per_gene: Optional[ut.DenseVector],
-    max_top_shuffled_r2_per_gene: Optional[ut.DenseVector],
-    mindex_of_genes: ut.DenseVector,
-    excess_r2_per_gene_per_metacell: Optional[ut.DenseMatrix],
-    top_r2_per_gene_per_metacell: Optional[ut.DenseMatrix],
-    top_shuffled_r2_per_gene_per_metacell: Optional[ut.DenseMatrix],
-    variance_per_gene_per_metacell: Optional[ut.DenseMatrix],
-    normalized_variance_per_gene_per_metacell: Optional[ut.DenseMatrix],
+    excess_r2_per_gene_per_metacell: ut.DenseMatrix,
+    top_r2_per_gene_per_metacell: ut.DenseMatrix,
+    top_shuffled_r2_per_gene_per_metacell: ut.DenseMatrix,
+    variance_per_gene_per_metacell: ut.DenseMatrix,
+    normalized_variance_per_gene_per_metacell: ut.DenseMatrix,
 ) -> None:
     LOG.debug('  - metacell: %s / %s', metacell_index, metacells_count)
     metacell_mask = metacell_of_cells == metacell_index
@@ -296,15 +237,13 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
     correlated_genes_count = np.sum(correlated_genes_mask)
     if LOG.isEnabledFor(logging.DEBUG):
         LOG.debug('    correlate genes: %s',
-                  ut.ratio_description(correlated_genes_count,
-                                       correlated_genes_mask.size))
+                  ut.mask_description(correlated_genes_mask))
     if correlated_genes_count < 2:
         return
 
     correlated_gene_rank = max(correlated_genes_count - top_gene_rank - 1, 1)
 
     correlated_gene_indices = np.where(correlated_genes_mask)[0]
-    mindex_of_correlated_genes = mindex_of_genes[correlated_gene_indices]
     correlated_data = downsampled_data_columns[:, correlated_gene_indices]
     assert ut.matrix_layout(correlated_data) == 'column_major'
 
@@ -315,46 +254,38 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
     top_r2_per_correlated_gene = \
         ut.rank_per(metacell_r2, per=None, rank=correlated_gene_rank)
 
-    if top_r2_per_gene_per_metacell is not None:
-        top_r2_per_gene_per_metacell[metacell_index,
-                                     mindex_of_correlated_genes] = \
-            top_r2_per_correlated_gene
+    top_r2_per_gene_per_metacell[metacell_index,
+                                 correlated_gene_indices] = \
+        top_r2_per_correlated_gene
 
-    if max_top_r2_per_gene is not None:
-        max_top_r2_per_gene[correlated_genes_mask] = \
-            np.maximum(max_top_r2_per_gene[correlated_genes_mask],
-                       top_r2_per_correlated_gene)
+    assert normalized_variance_per_gene_per_metacell is not None
+    assert correlated_data.shape == (cells_count, correlated_genes_count)
 
-    if variance_per_gene_per_metacell is not None:
-        assert normalized_variance_per_gene_per_metacell is not None
-        assert correlated_data.shape == (cells_count, correlated_genes_count)
+    if ut.SparseMatrix.am(correlated_data):
+        correlated_squared_data = correlated_data.multiply(correlated_data)
+    else:
+        correlated_squared_data = correlated_data * correlated_data
 
-        if ut.SparseMatrix.am(correlated_data):
-            correlated_squared_data = correlated_data.multiply(correlated_data)
-        else:
-            correlated_squared_data = correlated_data * correlated_data
+    correlated_total_squared_per_gene = \
+        ut.to_dense_vector(ut.sum_per(correlated_squared_data,
+                                      per='column'))
 
-        correlated_total_squared_per_gene = \
-            ut.to_dense_vector(ut.sum_per(correlated_squared_data,
-                                          per='column'))
+    correlated_total_per_gene = total_per_gene[correlated_gene_indices]
+    correlated_variance_per_gene = \
+        np.square(correlated_total_per_gene).astype(float)
+    correlated_variance_per_gene /= -cells_count
+    correlated_variance_per_gene += correlated_total_squared_per_gene
+    correlated_variance_per_gene /= cells_count
+    variance_per_gene_per_metacell[metacell_index, correlated_gene_indices] = \
+        correlated_variance_per_gene
 
-        correlated_total_per_gene = total_per_gene[correlated_gene_indices]
-        correlated_variance_per_gene = \
-            np.square(correlated_total_per_gene).astype(float)
-        correlated_variance_per_gene /= -cells_count
-        correlated_variance_per_gene += correlated_total_squared_per_gene
-        correlated_variance_per_gene /= cells_count
-        variance_per_gene_per_metacell[metacell_index,
-                                       mindex_of_correlated_genes] = \
-            correlated_variance_per_gene
-
-        correlated_mean_per_gene = correlated_total_per_gene / cells_count
-        correlated_mean_per_gene[correlated_mean_per_gene <= 0] = 1
-        correlated_normalized_variance_per_gene = \
-            correlated_variance_per_gene / correlated_mean_per_gene
-        normalized_variance_per_gene_per_metacell[metacell_index,
-                                                  mindex_of_correlated_genes] = \
-            correlated_normalized_variance_per_gene
+    correlated_mean_per_gene = correlated_total_per_gene / cells_count
+    correlated_mean_per_gene[correlated_mean_per_gene <= 0] = 1
+    correlated_normalized_variance_per_gene = \
+        correlated_variance_per_gene / correlated_mean_per_gene
+    normalized_variance_per_gene_per_metacell[metacell_index,
+                                              correlated_gene_indices] = \
+        correlated_normalized_variance_per_gene
 
     assert ut.matrix_layout(correlated_data) == 'column_major'
     if ut.SparseMatrix.am(correlated_data):
@@ -388,23 +319,12 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
 
         top_shuffled_r2_per_correlated_gene /= shuffles_count
 
-    if top_shuffled_r2_per_gene_per_metacell is not None:
-        top_shuffled_r2_per_gene_per_metacell[metacell_index,
-                                              mindex_of_correlated_genes] = \
-            top_shuffled_r2_per_correlated_gene
-
-    if max_top_shuffled_r2_per_gene is not None:
-        max_top_shuffled_r2_per_gene[correlated_genes_mask] = \
-            np.maximum(max_top_shuffled_r2_per_gene[correlated_genes_mask],
-                       top_shuffled_r2_per_correlated_gene)
+    top_shuffled_r2_per_gene_per_metacell[metacell_index,
+                                          correlated_gene_indices] = \
+        top_shuffled_r2_per_correlated_gene
 
     excess_r2_per_correlated_gene = \
         top_r2_per_correlated_gene - top_shuffled_r2_per_correlated_gene
 
-    if excess_r2_per_gene_per_metacell is not None:
-        excess_r2_per_gene_per_metacell[metacell_index, mindex_of_correlated_genes] = \
-            excess_r2_per_correlated_gene
-
-    max_excess_r2_per_gene[correlated_genes_mask] = \
-        np.maximum(max_excess_r2_per_gene[correlated_genes_mask],
-                   excess_r2_per_correlated_gene)
+    excess_r2_per_gene_per_metacell[metacell_index, correlated_gene_indices] = \
+        excess_r2_per_correlated_gene
