@@ -22,6 +22,7 @@ from .knn_graph import *
 from .mask import *
 from .named import *
 from .noisy_lonely import *
+from .project import *
 from .properly_sampled import *
 from .rare import *
 from .similarity import *

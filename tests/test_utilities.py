@@ -127,6 +127,11 @@ def test_bincount_vector() -> None:
     assert np.all(numpy_bincount == metacells_bincount)
 
 
+def test_most_frequent_vector() -> None:
+    array = np.array(['a', 'b', 'a', 'c'])
+    assert ut.most_frequent(array) == 'a'
+
+
 def test_freeze_dense() -> None:
     array = np.arange(10)
 

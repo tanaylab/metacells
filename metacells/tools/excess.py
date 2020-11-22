@@ -4,7 +4,7 @@ Excess R^2
 '''
 
 import logging
-from typing import Optional, Union
+from typing import Any, List, Optional, Set, TypeVar, Union
 
 import numpy as np  # type: ignore
 from anndata import AnnData
@@ -13,11 +13,170 @@ import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
+    'compute_type_compatible_sizes',
     'compute_excess_r2',
 ]
 
 
 LOG = logging.getLogger(__name__)
+
+
+T = TypeVar('T')
+
+
+@ut.timed_call()
+@ut.expand_doc()
+def compute_type_compatible_sizes(
+    adatas: List[AnnData],
+    *,
+    size: str = 'grouped',
+    kind: str = 'type',
+) -> None:
+    '''
+    Given multiple annotated data of groups, compute a "compatible" sizes for each one to
+    allow for consistent excess R^2 and inner normalized variance comparison.
+
+    Since excess R^2 and inner normalized variance quality measures are sensitive to the group
+    (metacell) sizes, it is useful to artifically shrink the groups so the sizes will be similar
+    between the compared data sets. Assuming each group (metacell) has a type annotation, for each
+    such type, we give each one a "compatible" size (less than or equal to its actual size) so that
+    using this reduced size will give us comparable measures between all the data sets.
+
+    The "compatible" sizes are chosen such that the density distributions of the sizes in all data
+    sets would be as similar to each other as possible.
+
+    **Input**
+
+    Several annotated ``adatas`` where each observation is a group. Should contain per-observation
+    ``size`` annotation (default: {size}) and ``kind`` annotation (default: {kind}).
+
+    **Returns**
+
+    Sets the following in each ``adata``:
+
+    Per-Observation (group) Annotations:
+
+        ``compatible_size``
+            The number of grouped cells in the group to use for computing excess R^2 and inner
+            normalized variance.
+
+    **Computation**
+
+    1. For each type, sort the groups (metacells) in increasing number of grouped observations (cells).
+
+    2. Consider the maximal quantile (rank) of the next smallest group (metacell) in each data set.
+
+    3. Compute the minimal number of grouped observations in all the metacells whose quantile is up
+       to this maximal quantile.
+
+    4. Use this as the "compatible" size for all these metacells, and remove them from consideration.
+
+    5. Loop until all metacells are assigned a "compatible" size.
+    '''
+    level = max(ut.get_log_level(adata) for adata in adatas)
+    LOG.log(level, 'compute_compatible_sizes ...')
+
+    if len(adatas) == 1:
+        ut.set_o_data(adatas[0], 'compatible_size',
+                      ut.get_o_data(adatas[0], size))
+        return
+
+    metacell_sizes_of_data = \
+        [ut.to_dense_vector(ut.get_o_data(adata, size)) for adata in adatas]
+    metacell_types_of_data = \
+        [ut.to_dense_vector(ut.get_o_data(adata, kind)) for adata in adatas]
+
+    unique_types: Set[Any] = set()
+    for metacell_types in metacell_types_of_data:
+        unique_types.update(metacell_types)
+
+    compatible_size_of_data = [np.full(adata.n_obs, -1) for adata in adatas]
+
+    for metacell_type in unique_types:
+        sorted_metacell_indices_of_data = \
+            [np.argsort(metacell_sizes)[metacell_types == metacell_type]
+             for metacell_sizes, metacell_types
+             in zip(metacell_sizes_of_data, metacell_types_of_data)]
+
+        metacells_count_of_data = \
+            [len(sorted_metacell_indices)
+             for sorted_metacell_indices
+             in sorted_metacell_indices_of_data]
+
+        def _for_each(value_of_data: List[T]) -> List[T]:
+            return [value
+                    for metacells_count, value
+                    in zip(metacells_count_of_data, value_of_data)
+                    if metacells_count > 0]
+
+        metacells_count_of_each = _for_each(metacells_count_of_data)
+        if len(metacells_count_of_each) == 0:
+            continue
+
+        sorted_metacell_indices_of_each = \
+            _for_each(sorted_metacell_indices_of_data)
+        metacell_sizes_of_each = _for_each(metacell_sizes_of_data)
+        compatible_size_of_each = _for_each(compatible_size_of_data)
+
+        if len(metacells_count_of_each) == 1:
+            compatible_size_of_each[0][sorted_metacell_indices_of_each[0]] = \
+                metacell_sizes_of_each[0][sorted_metacell_indices_of_each[0]]
+
+        metacell_quantile_of_each = \
+            [(np.arange(len(sorted_metacell_indices)) + 1) / len(sorted_metacell_indices)
+             for sorted_metacell_indices
+             in sorted_metacell_indices_of_each]
+
+        next_position_of_each = np.full(len(metacell_quantile_of_each), 0)
+
+        while True:
+            next_quantile_of_each = \
+                [metacell_quantile[next_position]
+                 for metacell_quantile, next_position
+                 in zip(metacell_quantile_of_each, next_position_of_each)]
+
+            next_quantile = max(next_quantile_of_each)
+
+            last_position_of_each = next_position_of_each
+
+            next_position_of_each = \
+                [np.sum(metacell_quantile <= next_quantile)
+                 for metacell_quantile
+                 in metacell_quantile_of_each]
+
+            positions_of_each = \
+                [range(last_position, next_position)
+                 for last_position, next_position
+                 in zip(last_position_of_each, next_position_of_each)]
+
+            sizes_of_each = \
+                [metacell_sizes[sorted_metacell_indices[positions]]
+                 for metacell_sizes, sorted_metacell_indices, positions
+                 in zip(metacell_sizes_of_each, sorted_metacell_indices_of_each, positions_of_each)]
+
+            min_size_of_each = \
+                [np.min(sizes)
+                 for sizes, positions
+                 in zip(sizes_of_each, positions_of_each)]
+
+            min_size = min(min_size_of_each)
+
+            for sorted_metacell_indices, positions, compatible_size \
+                    in zip(sorted_metacell_indices_of_each, positions_of_each, compatible_size_of_each):
+                compatible_size[sorted_metacell_indices[positions]] = min_size
+
+            is_done_of_each = [next_position == metacells_count
+                               for next_position, metacells_count
+                               in zip(next_position_of_each, metacells_count_of_each)]
+
+            if all(is_done_of_each):
+                break
+
+            assert not any(is_done_of_each)
+
+    for adata, compatible_size in zip(adatas, compatible_size_of_data):
+        assert np.min(compatible_size) > 0
+        ut.set_o_data(adata, 'compatible_size', compatible_size)
 
 
 @ut.timed_call()
@@ -27,6 +186,7 @@ def compute_excess_r2(
     of: Optional[str] = None,
     *,
     metacells: Union[str, ut.Vector] = 'metacell',
+    compatible_size: Optional[str] = 'compatible_size',
     downsample_cell_quantile: float = pr.excess_downsample_cell_quantile,
     min_gene_total: float = pr.excess_min_gene_total,
     top_gene_rank: int = pr.excess_top_gene_rank,
@@ -101,28 +261,33 @@ def compute_excess_r2(
 
     For each metacell:
 
-    1. Downsample the cells so their total number of UMIs would be the
+    1. If ``compatible_size`` (default: {compatible_size}) is specified, it should be an
+       integer per-observation annotation of the metacells, whose value is at most the
+       number of grouped cells in the metacell. Pick a random subset of the cells of
+       this size. If ``compatible_size`` is ``None``, use all the cells of the metacell.
+
+    2. Downsample the cells so their total number of UMIs would be the
        ``downsample_cell_quantile`` (default: {downsample_cell_quantile}). That is, if
        ``downsample_cell_quantile`` is 0.1, then 90% of the cells would have more UMIs than
        the target number of samples and will be downsampled; 10% of the cells would have too
        few UMIs and will be left unchanged.
 
-    2 Ignore all genes whose total data in the metacell (in the downsampled data) is below the
+    3 Ignore all genes whose total data in the metacell (in the downsampled data) is below the
       ``min_gene_total`` (default: {min_gene_total}). This ensures we only correlate genes
       with sufficient data to be meaningful. We also ignore any genes which have exactly the
       same value in all cells of the metacell, regardless of their expression level.
 
-    3 Compute the cross-correlation between all the remaining genes, and square it to obtain
+    4 Compute the cross-correlation between all the remaining genes, and square it to obtain
       the metacell's per-gene-per-gene R^2 data. Collect for each gene the ``top_gene_rank``
       value, which is the gene's top R^2 for this metacell.
 
-    4 Randomly shuffle the remaining gene expressions between the cells of each metacells
+    5 Randomly shuffle the remaining gene expressions between the cells of each metacells
       using the ``random_seed``, re-compute the cross-correlation and square it into the
       metacell's per-gene-per-gene shuffled R^2 data. Collect for each gene the
       ``top_gene_rank`` value. Repeat this ``shuffles_count`` times and use the average as the
       gene's top shuffled R^2 for this metacell.
 
-    5 The difference, for each gene, between the gene's top R^2, and the gene's (averaged) top
+    6 The difference, for each gene, between the gene's top R^2, and the gene's (averaged) top
       shuffled R^2, is the gene's excess R^2 for this metacell.
     '''
     of, _ = ut.log_operation(LOG, adata, 'compute_excess_r2', of)
@@ -142,6 +307,12 @@ def compute_excess_r2(
 
         LOG.debug('  mdata: %s', ut.get_name(mdata) or '<adata>')
 
+        if compatible_size is not None:
+            compatible_size_of_metacells: Optional[ut.DenseVector] = \
+                ut.to_proper_vector(ut.get_o_data(mdata, compatible_size))
+        else:
+            compatible_size_of_metacells = None
+
         assert mdata.n_obs == metacells_count
         top_r2_per_gene_per_metacell = \
             np.full(mdata.shape, None, dtype='float')
@@ -160,7 +331,13 @@ def compute_excess_r2(
         LOG.debug('  top_gene_rank: %s', top_gene_rank)
 
         for metacell_index in range(metacells_count):
+            if compatible_size_of_metacells is not None:
+                compatible_size_of_metacell = compatible_size_of_metacells[metacell_index]
+            else:
+                compatible_size_of_metacell = None
+
             _collect_metacell_excess(metacell_index, metacells_count,
+                                     compatible_size=compatible_size_of_metacell,
                                      metacell_of_cells=metacell_of_cells,
                                      data=data,
                                      downsample_cell_quantile=downsample_cell_quantile,
@@ -191,10 +368,11 @@ def _log_r2(values: Optional[ut.DenseVector]) -> str:
     return '%s <- %s' % (ut.mask_description(~np.isnan(values)), np.nanmean(values))
 
 
-def _collect_metacell_excess(  # pylint: disable=too-many-statements
+def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-branches
     metacell_index: int,
     metacells_count: int,
     *,
+    compatible_size: Optional[int],
     metacell_of_cells: ut.DenseVector,
     data: ut.ProperMatrix,
     downsample_cell_quantile: float,
@@ -209,13 +387,30 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements
     normalized_variance_per_gene_per_metacell: ut.DenseMatrix,
 ) -> None:
     LOG.debug('  - metacell: %s / %s', metacell_index, metacells_count)
+    LOG.debug('    random_seed: %s', random_seed)
+
     metacell_mask = metacell_of_cells == metacell_index
-    assert ut.matrix_layout(data) == 'row_major'
-    metacell_data = data[metacell_mask, :]
-    cells_count = metacell_data.shape[0]
-    LOG.debug('    cells: %s', cells_count)
+    metacell_indices = np.where(metacell_mask)[0]
+
+    if compatible_size is None:
+        LOG.debug('    cells: %s', len(metacell_indices))
+    else:
+        assert 0 < compatible_size <= len(metacell_indices)
+        if compatible_size < len(metacell_indices):
+            np.random.seed(random_seed)
+            LOG.debug('    cells: %s / %s', compatible_size,
+                      len(metacell_indices))
+            metacell_indices = np.random.choice(metacell_indices,
+                                                size=compatible_size,
+                                                replace=False)
+            assert len(metacell_indices) == compatible_size
+
+    cells_count = len(metacell_indices)
     if cells_count < 2:
         return
+
+    assert ut.matrix_layout(data) == 'row_major'
+    metacell_data = data[metacell_indices, :]
 
     total_per_cell = ut.sum_per(metacell_data, per='row')
     samples = round(np.quantile(total_per_cell, downsample_cell_quantile))
@@ -298,7 +493,6 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements
         np.zeros(top_r2_per_correlated_gene.size)
 
     with ut.timed_step('.shuffle'):
-        LOG.debug('    random_seed: %s', random_seed)
         for shuffle_index in range(shuffles_count):
             if random_seed == 0:
                 shuffle_seed = 0

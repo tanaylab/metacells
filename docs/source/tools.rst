@@ -9,6 +9,9 @@ General Tools
 .. automodule:: metacells.tools.apply
     :members:
 
+.. automodule:: metacells.tools.project
+    :members:
+
 Filtering the Data
 ++++++++++++++++++
 

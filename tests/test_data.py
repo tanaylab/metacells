@@ -71,7 +71,8 @@ def test_direct_pipeline(path: str) -> None:
 
     mdata = mc.pl.collect_metacells(cdata)
 
-    mc.tl.compute_excess_r2(cdata, random_seed=123456, mdata=mdata)
+    mc.tl.compute_excess_r2(cdata, random_seed=123456,
+                            compatible_size=None, mdata=mdata)
 
     assert np.allclose(expected['gene_max_top_r2'],
                        np.nanmean(mc.pp.get_per_var(mdata, mc.ut.nanmax_per,  # type: ignore

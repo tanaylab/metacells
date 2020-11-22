@@ -14,7 +14,7 @@ analysis pipeline.
 
 import re
 from re import Pattern
-from typing import (Callable, Collection, List, Optional, Tuple, TypeVar,
+from typing import (Any, Callable, Collection, List, Optional, Tuple, TypeVar,
                     Union, overload)
 from warnings import warn
 
@@ -50,6 +50,7 @@ __all__ = [
     'nanquantile_per',
 
     'bincount_vector',
+    'most_frequent',
 
     'downsample_matrix',
     'downsample_vector',
@@ -898,6 +899,22 @@ def bincount_vector(
     result = np.bincount(array, minlength=minlength)
     utm.timed_parameters(size=array.size, bins=result.size)
     return result
+
+
+@utm.timed_call()
+def most_frequent(
+    vector: utt.Vector
+) -> Any:
+    '''
+    Return the most frequent value in a vactor.
+
+    This only
+    '''
+    unique, positions = \
+        np.unique(utt.to_proper_vector(vector), return_inverse=True)
+    counts = np.bincount(positions)
+    maxpos = np.argmax(counts)
+    return unique[maxpos]
 
 
 ROLLING_FUNCTIONS = {
