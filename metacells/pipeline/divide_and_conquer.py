@@ -462,7 +462,9 @@ def divide_and_conquer_pipeline(
     rare_min_cells_of_modules: int = pr.rare_min_cells_of_modules,
     rare_min_modules_size_factor: float = pr.rare_min_modules_size_factor,
     rare_min_module_correlation: float = pr.rare_min_module_correlation,
+    rare_min_related_gene_fold_factor: float = pr.rare_min_related_gene_fold_factor,
     rare_min_cell_module_total: int = pr.rare_min_cell_module_total,
+    rare_max_cells_of_random_pile: int = pr.rare_max_cells_of_random_pile,
     rare_dissolve_min_robust_size_factor: Optional[float] = pr.rare_dissolve_min_robust_size_factor,
     rare_dissolve_min_convincing_size_factor: Optional[float] = pr.rare_dissolve_min_convincing_size_factor,
     rare_dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
@@ -488,7 +490,7 @@ def divide_and_conquer_pipeline(
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
     candidates_min_metacell_cells: int = pr.candidates_min_metacell_cells,
     must_complete_cover: bool = False,
-    max_outliers_levels: Optional[int] = pr.max_outliers_levels,
+    final_max_outliers_levels: Optional[int] = pr.final_max_outliers_levels,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     deviants_max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
@@ -537,9 +539,9 @@ def divide_and_conquer_pipeline(
             (probabilities).
 
     Variable (Gene) Annotations
-        ``genes_rare_gene_module``
-            The index of the rare gene module each gene belongs to, or ``-1`` in the common case it
-            does not belong to any rare genes module.
+        ``genes_rare_gene_modules``
+            The indices of the rare gene module(s) each gene belongs to, where every non-zero bit
+            indicates the gene participates in the matching rare gene module.
 
         ``rare_genes``
             A boolean mask for the genes in any of the rare gene modules.
@@ -620,6 +622,7 @@ def divide_and_conquer_pipeline(
 
     1. Invoke :py:func:`metacells.tools.rare.find_rare_gene_modules` to isolate cells expressing
        rare gene modules, using the
+       ``forbidden_gene_names``, ``forbidden_gene_patterns``,
        ``rare_max_gene_cell_fraction`` (default: {rare_max_gene_cell_fraction}),
        ``rare_min_gene_maximum`` (default: {rare_min_gene_maximum}),
        ``rare_similarity_of`` (default: {rare_similarity_of}),
@@ -629,6 +632,8 @@ def divide_and_conquer_pipeline(
        ``rare_min_cells_of_modules`` (default: {rare_min_cells_of_modules}),
        ``rare_min_modules_size_factor`` (default: {rare_min_modules_size_factor}),
        ``rare_min_module_correlation`` (default: {rare_min_module_correlation}),
+       ``rare_min_related_gene_fold_factor`` (default: {rare_min_related_gene_fold_factor})
+       ``rare_max_cells_of_random_pile`` (default: {rare_max_cells_of_random_pile})
        and
        ``rare_min_cell_module_total`` (default: {rare_min_cell_module_total}).
 
@@ -668,6 +673,8 @@ def divide_and_conquer_pipeline(
 
     with ut.timed_step('.rare'):
         tl.find_rare_gene_modules(adata, of=of,
+                                  forbidden_gene_names=forbidden_gene_names,
+                                  forbidden_gene_patterns=forbidden_gene_patterns,
                                   max_gene_cell_fraction=rare_max_gene_cell_fraction,
                                   min_gene_maximum=rare_min_gene_maximum,
                                   similarity_of=rare_similarity_of,
@@ -678,6 +685,9 @@ def divide_and_conquer_pipeline(
                                   target_metacell_size=target_metacell_size,
                                   min_modules_size_factor=rare_min_modules_size_factor,
                                   min_module_correlation=rare_min_module_correlation,
+                                  min_related_gene_fold_factor=rare_min_related_gene_fold_factor,
+                                  target_pile_size=target_pile_size,
+                                  max_cells_of_random_pile=rare_max_cells_of_random_pile,
                                   min_cell_module_total=rare_min_cell_module_total,
                                   intermediate=intermediate)
 
@@ -767,7 +777,7 @@ def divide_and_conquer_pipeline(
                                          candidates_max_merge_size_factor=candidates_max_merge_size_factor,
                                          candidates_min_metacell_cells=candidates_min_metacell_cells,
                                          must_complete_cover=must_complete_cover,
-                                         max_outliers_levels=max_outliers_levels,
+                                         final_max_outliers_levels=final_max_outliers_levels,
                                          deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
                                          deviants_max_gene_fraction=deviants_max_gene_fraction,
                                          deviants_max_cell_fraction=deviants_max_cell_fraction,
@@ -815,7 +825,7 @@ def compute_divide_and_conquer_metacells(
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
     candidates_min_metacell_cells: int = pr.min_metacell_cells,
     must_complete_cover: bool = False,
-    max_outliers_levels: Optional[int] = pr.max_outliers_levels,
+    final_max_outliers_levels: Optional[int] = pr.final_max_outliers_levels,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     deviants_max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
@@ -953,10 +963,8 @@ def compute_divide_and_conquer_metacells(
        {pile_max_merge_size_factor}), so control over the pile size (number of cells) is separate
        from control over the metacell size (number of UMIs).
 
-    5. Compute the final metacells using the preliminary metacell piles. Since these piles contain
-       "similar" cells, we aim for higher-quality metacells by using a more aggressive
-       ``final_deviants_max_cell_fraction`` (default: {final_deviants_max_cell_fraction}), and using
-       ``max_outliers_levels`` to prevent forcing outlier cells to be placed in low-quality
+    5. Compute the final metacells using the preliminary metacell piles, using using
+       ``final_max_outliers_levels`` to prevent forcing outlier cells to be placed in low-quality
        metacells.
     '''
     ut.log_pipeline_step(LOG, adata, 'compute_divide_and_conquer_metacells')
@@ -1031,7 +1039,7 @@ def compute_divide_and_conquer_metacells(
                                  candidates_max_merge_size_factor=candidates_max_merge_size_factor,
                                  candidates_min_metacell_cells=candidates_min_metacell_cells,
                                  must_complete_cover=True,
-                                 max_outliers_levels=None,
+                                 final_max_outliers_levels=None,
                                  deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
                                  deviants_max_gene_fraction=deviants_max_gene_fraction,
                                  deviants_max_cell_fraction=deviants_max_cell_fraction,
@@ -1074,7 +1082,7 @@ def compute_divide_and_conquer_metacells(
                                              candidates_max_merge_size_factor=pile_max_merge_size_factor,
                                              candidates_min_metacell_cells=candidates_min_metacell_cells,
                                              must_complete_cover=True,
-                                             max_outliers_levels=None,
+                                             final_max_outliers_levels=None,
                                              deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
                                              deviants_max_gene_fraction=deviants_max_gene_fraction,
                                              deviants_max_cell_fraction=deviants_max_cell_fraction,
@@ -1119,7 +1127,7 @@ def compute_divide_and_conquer_metacells(
                                  candidates_max_merge_size_factor=candidates_max_merge_size_factor,
                                  candidates_min_metacell_cells=candidates_min_metacell_cells,
                                  must_complete_cover=must_complete_cover,
-                                 max_outliers_levels=max_outliers_levels,
+                                 final_max_outliers_levels=final_max_outliers_levels,
                                  deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
                                  deviants_max_gene_fraction=deviants_max_gene_fraction,
                                  deviants_max_cell_fraction=deviants_max_cell_fraction,
@@ -1160,7 +1168,7 @@ def _compute_piled_metacells(
     candidates_max_merge_size_factor: Optional[float],
     candidates_min_metacell_cells: int = pr.min_metacell_cells,
     must_complete_cover: bool,
-    max_outliers_levels: Optional[int],
+    final_max_outliers_levels: Optional[int],
     deviants_min_gene_fold_factor: float,
     deviants_max_gene_fraction: Optional[float],
     deviants_max_cell_fraction: Optional[float],
@@ -1234,13 +1242,13 @@ def _compute_piled_metacells(
     if piles_count == 1 \
         or not np.any(outlier_of_cells) \
         or (not must_complete_cover
-            and max_outliers_levels is not None
-            and max_outliers_levels <= 0):
+            and final_max_outliers_levels is not None
+            and final_max_outliers_levels <= 0):
         return
 
     with ut.timed_step('.outliers'):
-        if max_outliers_levels is not None:
-            max_outliers_levels = max_outliers_levels - 1
+        if final_max_outliers_levels is not None:
+            final_max_outliers_levels = final_max_outliers_levels - 1
         name = '.%s.outliers' % phase
         odata = ut.slice(adata, obs=outlier_of_cells, name=name, tmp=True,
                          track_obs='complete_cell_index')
@@ -1268,7 +1276,7 @@ def _compute_piled_metacells(
                                              candidates_max_merge_size_factor=candidates_max_merge_size_factor,
                                              candidates_min_metacell_cells=candidates_min_metacell_cells,
                                              must_complete_cover=must_complete_cover,
-                                             max_outliers_levels=max_outliers_levels,
+                                             final_max_outliers_levels=final_max_outliers_levels,
                                              deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
                                              deviants_max_gene_fraction=deviants_max_gene_fraction,
                                              deviants_max_cell_fraction=deviants_max_cell_fraction,

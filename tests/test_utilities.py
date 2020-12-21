@@ -9,6 +9,7 @@ from typing import Any, List
 import numpy as np  # type: ignore
 from scipy import sparse  # type: ignore
 from scipy import stats
+from sklearn.metrics import roc_auc_score  # type: ignore
 
 import metacells.utilities as ut
 
@@ -114,6 +115,32 @@ def test_downsample_matrix() -> None:
     assert result.shape == matrix.shape
     new_row_sums = ut.sum_per(result, per='row')
     assert np.all(new_row_sums == min_sum)
+
+
+def test_matrix_rows_auroc() -> None:
+    np.random.seed(123456)
+
+    signal = np.random.rand(100)
+    zero_mask = signal < 1 / 3
+    one_mask = signal > 2 / 3
+    signal[zero_mask] = 0
+
+    dense = np.random.rand(20, 100)
+    dense[:, zero_mask] = 0
+    for index in range(20):
+        dense[index, :] *= index / 10
+        dense[index, :] += signal
+
+    builtin_rows_auroc = \
+        np.array([roc_auc_score(one_mask, dense[index, :])
+                  for index in range(20)])
+
+    dense_rows_auroc = ut.matrix_rows_auroc(dense, one_mask)
+    assert np.allclose(dense_rows_auroc, builtin_rows_auroc)
+
+    compressed = sparse.csr_matrix(dense)
+    sparse_rows_auroc = ut.matrix_rows_auroc(compressed, one_mask)
+    assert np.allclose(sparse_rows_auroc, builtin_rows_auroc)
 
 
 def test_bincount_vector() -> None:

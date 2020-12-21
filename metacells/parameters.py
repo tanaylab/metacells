@@ -45,7 +45,7 @@ significant_gene_fold_factor: float = 3.0
 #: The generic minimal value (number of UMIs) we can say is "significant" given the technical noise.
 #: See
 #: py:const:`rare_min_gene_maximum`,
-#: py:const:`rare_min_cell_module_total`
+#: py:const:`rare_min_cell_module_total`,
 #: and
 #: py:const:`cells_similarity_log_normalization`.
 significant_value: int = 7
@@ -68,7 +68,6 @@ target_pile_size: int = 10000
 
 #: The generic target total metacell size. See
 #: :py:const:`candidates_target_metacell_size`,
-#: :py:const:`dissolve_target_metacell_size`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
@@ -98,7 +97,6 @@ min_robust_size_factor: float = 0.5
 
 #: The generic maximal group size factor, below which we should merge it. See
 #: :py:const:`rare_min_modules_size_factor`,
-#: :py:const:`rare_dissolve_min_robust_size_factor`
 #: :py:const:`pile_max_merge_size_factor`,
 #: :py:const:`candidates_max_merge_size_factor`,
 #: and
@@ -248,6 +246,14 @@ rare_min_genes_of_modules: int = 4
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 rare_min_cells_of_modules: int = min_metacell_cells
 
+#: The maximal mean number of cells in a random pile for a rare gene module to be considered rare.
+#: See
+#: :py:const:`min_metacell_cells`,
+#: :py:func:`metacells.tools.rare.find_rare_gene_modules`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+rare_max_cells_of_random_pile: int = min_metacell_cells * 4
+
 #: The minimal total UMIs of all the cells in a rare gene module (as a fraction
 #: of the :py:const:`target_metacell_size`). See
 #: :py:const:`max_merge_size_factor`,
@@ -265,13 +271,19 @@ rare_min_modules_size_factor: float = max_merge_size_factor
 #: which applies to the maximal correlation between some pairs of genes.
 rare_min_module_correlation: float = 0.1
 
-#: The minimal total value of the genes of a rare gene module for considering a cell as
-#: expressing it. See
-#: :py:const:`significant_value`,
+#: The minimal fold factor between rare cells and the rest of the population for a gene to be
+#: considered related to the rare gene module. See
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-rare_min_cell_module_total: int = significant_value
+rare_min_related_gene_fold_factor: float = 7
+
+#: The minimal number of UMIs of a rare gene module in a cell to be considered as expressing the
+#: rare behavior. See
+#: :py:func:`metacells.tools.rare.find_rare_gene_modules`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+rare_min_cell_module_total: int = int((significant_value + 1) / 2)
 
 #: The quantile of the cells total size to use for downsampling the cells for computing
 #: "feature" genes. See
@@ -423,7 +435,7 @@ candidates_min_metacell_cells: int = min_metacell_cells
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`.
-max_outliers_levels: Optional[int] = 1
+final_max_outliers_levels: Optional[int] = 1
 
 #: The minimal fold factor for a gene to indicate a cell is "deviant". See
 #: :py:const:`significant_gene_fold_factor`,
@@ -443,30 +455,12 @@ deviants_min_gene_fold_factor: float = significant_gene_fold_factor
 deviants_max_gene_fraction: float = 0.03
 
 #: The maximal fraction of cells to mark as "deviants". See
-#: :py:const:`final_deviants_max_cell_fraction`,
 #: :py:func:`metacells.tools.deviants.find_deviant_cells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 deviants_max_cell_fraction: Optional[float] = 0.25
-
-#: The maximal fraction of cells to mark as "deviants" when computing the final metacells in divide
-#: and conquer algorithm. See
-#: :py:const:`deviants_max_cell_fraction`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
-#: and
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-final_deviants_max_cell_fraction: Optional[float] = None
-
-#: The target total metacell size for dissolving too-small metacells. See
-#: :py:const:`target_metacell_size`
-#: :py:func:`metacells.tools.dissolve.dissolve_metacells`,
-#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
-#: and
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-dissolve_target_metacell_size: int = target_metacell_size
 
 #: The size of each cell for for dissolving too-small metacells. See
 #: :py:const:`cell_sizes`,

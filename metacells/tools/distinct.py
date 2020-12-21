@@ -171,36 +171,32 @@ def find_distinct_genes(
 def compute_subset_distinct_genes(
     adata: AnnData,
     *,
+    of: Optional[str] = None,
     to: Optional[str] = None,
-    distinct_fold: str = 'distinct_fold',
+    normalize: Optional[Union[bool, str, ut.DenseVector]] = False,
     subset: Union[str, ut.DenseVector],
-    included_fold_quantile: float = 0,
-    excluded_fold_quantile: float = 1,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
     Given a subset of the observations (cells), compute for each gene how distinct it is
     in the subset compared to the overall population.
 
-    This is the difference between the gene's fold factor within the subset to its fold factor in
-    the complement set. For example, for some gene, if the subset contains observations which are
-    distinct from the population, but the complement set also contains observations which are
-    distinct from the population, then this gene doesn't really distinguish the subset from its
-    complement set. The quantile parameters control how strong this effect is; by default, we take
-    the minimal fold factor and subtract the maximal fold factor in the complement set, which might
-    be too strict.
+    This is the area-under-curve of the receiver operating characteristic (AUROC) for the gene,
+    that is, the probability that a randomly selected observation (cell) in the subset will
+    have a higher value ``of`` some data than a randomly selected observation (cell) outside
+    the subset.
 
     **Input**
 
     A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
-    are (mata)cells and the variables are genes, including a per-observation-per-variable annotated
-    data named ``distinct_fold``, e.g. as computed by :py:func:`compute_distinct_folds`.
+    are (mata)cells and the variables are genes.
 
     **Returns**
 
     Variable (Gene) Annotations
         ``to``
-            Store the fold factor of the gene in the subset as opposed to the overall population.
+            Store the distinctiveness of the gene in the subset as opposed to the rest of the
+            population.
 
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. This requires ``to`` to be specified. Otherwise this is returned as a pandas series
@@ -208,44 +204,46 @@ def compute_subset_distinct_genes(
 
     **Computation Parameters**
 
-    1. Fetch the previously computed per-observation-per-variable `distinct_fold`` annotation
-       (default: {distinct_fold}).
+    1. Use the ``subset`` to assign a boolean label to each observation (cell). The ``subset`` can
+       be a vector of integer observation names, or a boolean mask, or the string name of a
+       per-observation annotation containing the boolean mask.
 
-    2. Split the data to the ``subset`` (either the name of a boolean mask, per-observation
-       annotation, or a boolean mask vector, or a vector of observation indices) and its
-       complement set.
+    2. If ``normalize`` (default: {normalize}) is ``False``, use the data as-is.
+       If it is ``True``, divide the data by the sum of each observation (cell).
+       If it is a string, it should be the name of a per-observation annotation to use.
+       Otherwise, it should be a vector of the scale factor for each observation (cell).
 
-    3. For each gene, compute the ``included_fold_quantile`` (default: {included_fold_quantile})
-       of the fold factors of the gene in the cells in the subset and the ``excluded_fold_quantile``
-       (default: {excluded_fold_quantile}) of the fold factors of the genes in the cells in the
-       complement set.
-
-    4. The difference between the two is the excess fold factor for the gene for the subset.
+    3. Compute the AUROC for each gene for the scaled data based on this mask.
     '''
-    ut.log_operation(LOG, adata, 'find_subset_distinct_genes')
+    ut.log_operation(LOG, adata, 'compute_subset_distinct_genes')
 
     if isinstance(subset, str):
         subset = ut.to_proper_vector(ut.get_o_data(adata, subset))
 
     if subset.dtype != 'bool':
-        mask: ut.DenseVector = np.full(False, adata.n_obs)
+        mask: ut.DenseVector = np.full(adata.n_obs, False)
         mask[subset] = True
         subset = mask
 
-    complement = ~subset
+    scale_of_cells: Optional[ut.DenseVector] = None
+    if isinstance(normalize, bool):
+        if normalize:
+            scale_of_cells = pp.get_per_obs(adata, ut.sum_per, of).proper
+    elif isinstance(normalize, str):
+        scale_of_cells = ut.to_dense_vector(ut.get_o_data(adata, normalize))
+    elif normalize is not None:
+        scale_of_cells = normalize.astype('float32')
 
-    fold_in_cells = ut.get_vo_data(adata, distinct_fold, layout='row_major')
-    fold_in_subset = fold_in_cells[subset, :]
-    fold_in_complement = fold_in_cells[complement, :]
-    quantile_in_subset = \
-        np.quantile(fold_in_subset, included_fold_quantile, axis=0)
-    quantile_in_complement = \
-        np.quantile(fold_in_complement, excluded_fold_quantile, axis=0)
-    subset_distinct_fold = quantile_in_subset - quantile_in_complement
+    if scale_of_cells is not None:
+        assert scale_of_cells.size == adata.n_obs
+
+    matrix = ut.get_vo_data(adata, of, layout='column_major').transpose()
+
+    distinct_of_genes = ut.matrix_rows_auroc(matrix, subset, scale_of_cells)
 
     if inplace:
         assert to is not None
-        ut.set_v_data(adata, to, subset_distinct_fold)
+        ut.set_v_data(adata, to, distinct_of_genes)
         return None
 
-    return pd.Series(subset_distinct_fold, index=adata.var_names)
+    return pd.Series(distinct_of_genes, index=adata.var_names)

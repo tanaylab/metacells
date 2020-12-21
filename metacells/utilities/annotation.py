@@ -120,6 +120,7 @@ from typing import (Any, Callable, Collection, Dict, Iterable, Iterator, List,
                     Union)
 from warnings import warn
 
+import anndata as ad
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
 from anndata import AnnData
@@ -1170,14 +1171,20 @@ def _get_layout_data(
     layout_name = '%s:__%s__' % (name, layout)
     data = adata.layers.get(layout_name)
     if data is not None:
-        assert utt.matrix_layout(data) == layout
-        return data
+        # TODO: assert utt.matrix_layout(data) == layout
+        if utt.matrix_layout(data) == layout:
+            return data
+        warn('%s %s layout is actually: %s'
+             % (get_name(adata, 'adata'),
+                layout_name,
+                utt.matrix_layout(data)))
 
     data = get_base_data()
     if utt.matrix_layout(data) == layout:
         return data
 
     data = utc.to_layout(data, layout=layout)
+    assert utt.matrix_layout(data) == layout
     if inplace:
         if not utt.frozen(data):
             utt.freeze(data)
@@ -1201,14 +1208,14 @@ def _get_shaped_data(
     assert '__' not in name
 
     if per == 'vo' and name == get_x_name(adata):
-        data = adata.X
-        if not utt.frozen(data):  # type: ignore
-            utt.freeze(data)  # type: ignore
+        data = _fix_data(adata.X)
+        if not utt.frozen(data):
+            utt.freeze(data)
         return data
 
     if (isinstance(annotations, pd.DataFrame) and name in annotations.columns) \
             or name in annotations:
-        data = annotations[name]
+        data = _fix_data(annotations[name])
         if not utt.frozen(data):
             utt.freeze(data)
         return data
@@ -1230,6 +1237,12 @@ def _get_shaped_data(
         _log_set_data(adata, per, name, data)
         annotations[name] = data
 
+    return data
+
+
+def _fix_data(data: Any) -> Any:
+    if isinstance(data, ad._core.sparse_dataset.SparseDataset):  # pylint: disable=protected-access
+        return data.value
     return data
 
 

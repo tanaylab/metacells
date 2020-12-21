@@ -55,6 +55,8 @@ __all__ = [
     'downsample_matrix',
     'downsample_vector',
 
+    'matrix_rows_auroc',
+
     'sliding_window_function',
     'patterns_matches',
     'compress_indices',
@@ -612,6 +614,58 @@ def downsample_vector(
     with utm.timed_step('extensions.downsample_array'):
         utm.timed_parameters(elements=array.size, samples=samples)
         extension(array, output, samples, random_seed)
+
+
+@utm.timed_call()
+def matrix_rows_auroc(
+    matrix: utt.Matrix,
+    columns_subset: utt.DenseVector,
+    columns_scale: Optional[utt.DenseVector] = None,
+) -> utt.Vector:
+    '''
+    Given a matrix and a subset of the columns, return a vector containing for each row the area
+    under the receiver operating characteristic (AUROC) for the row, that is, the probability that a
+    random column in the subset would have a higher value in this row than a random column outside
+    the subset.
+
+    If ``columns_scale`` is specified, the data is divided by this scale before computing the AUROC.
+    '''
+    proper, dense, compressed = utt.to_proper_matrices(matrix)
+    rows_count, columns_count = proper.shape
+
+    columns_subset = utt.to_dense_vector(columns_subset)
+    assert columns_subset.size == columns_count
+
+    if columns_scale is None:
+        columns_scale = np.full(columns_count, 1.0, dtype='float32')
+    else:
+        columns_scale = columns_scale.astype('float32')
+        assert columns_scale.size == columns_count
+
+    rows_auroc = np.empty(rows_count, dtype='float64')
+
+    if columns_subset.dtype != 'bool':
+        mask: utt.DenseVector = np.full(columns_count, False)
+        mask[columns_subset] = True
+        columns_subset = mask
+
+    if dense is not None:
+        extension_name = 'auroc_dense_matrix_%s_t' % matrix.dtype
+        extension = getattr(xt, extension_name)
+        extension(dense, columns_subset, columns_scale, rows_auroc)
+    else:
+        assert compressed is not None
+        assert compressed.has_sorted_indices
+        extension_name = \
+            'auroc_compressed_matrix_%s_t_%s_t_%s_t' \
+            % (compressed.data.dtype,
+               compressed.indices.dtype,
+               compressed.indptr.dtype)
+        extension = getattr(xt, extension_name)
+        extension(compressed.data, compressed.indices, compressed.indptr,
+                  columns_count, columns_subset, columns_scale, rows_auroc)
+
+    return rows_auroc
 
 
 @utm.timed_call()

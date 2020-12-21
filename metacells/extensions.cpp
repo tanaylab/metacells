@@ -476,7 +476,8 @@ random_sample(ArraySlice<size_t> tree, ssize_t random) {
 
 static thread_local std::vector<size_t> tmp_positions;
 static thread_local std::vector<size_t> tmp_indices;
-static thread_local std::vector<float64_t> tmp_data;
+static thread_local std::vector<float64_t> tmp_data_one;
+static thread_local std::vector<float64_t> tmp_data_two;
 static thread_local std::vector<size_t> tmp_tree;
 
 template<typename D, typename O>
@@ -760,7 +761,7 @@ sort_band(const size_t band_index, CompressedMatrix<D, I, P>& matrix) {
               });
 
     tmp_indices.resize(tmp_positions.size());
-    tmp_data.resize(tmp_positions.size());
+    tmp_data_one.resize(tmp_positions.size());
 
 #ifdef __INTEL_COMPILER
 #    pragma simd
@@ -769,11 +770,11 @@ sort_band(const size_t band_index, CompressedMatrix<D, I, P>& matrix) {
     for (size_t location = 0; location < tmp_size; ++location) {
         size_t position = tmp_positions[location];
         tmp_indices[location] = band_indices[position];
-        tmp_data[location] = band_data[position];
+        tmp_data_one[location] = band_data[position];
     }
 
     std::copy(tmp_indices.begin(), tmp_indices.end(), band_indices.begin());
-    std::copy(tmp_data.begin(), tmp_data.end(), band_data.begin());
+    std::copy(tmp_data_one.begin(), tmp_data_one.end(), band_data.begin());
 }
 
 /// See the Python `metacell.utilities.computation._relayout_compressed` function.
@@ -1352,6 +1353,200 @@ top_distinct(pybind11::array_t<int32_t>& gene_indices_array,
     }
 }
 
+static float64_t
+auroc_data(std::vector<float64_t>& in_values,
+           std::vector<float64_t>& out_values,
+           const size_t zeros_count) {
+    std::sort(in_values.rbegin(), in_values.rend());
+    std::sort(out_values.rbegin(), out_values.rend());
+
+    const size_t in_size = in_values.size();
+    const size_t out_size = out_values.size();
+    const size_t total_out_size = out_size + zeros_count;
+
+    if (in_size == 0) {
+        FastAssertCompare(total_out_size, >, 0);
+        return 0.0;
+    }
+
+    if (out_size == 0) {
+        FastAssertCompare(total_out_size, >, 0);
+        return 1.0;
+    }
+
+    const float64_t in_scale = 1.0 / in_size;
+    const float64_t out_scale = 1.0 / total_out_size;
+
+    size_t in_count = 0;
+    size_t out_count = 0;
+
+    size_t in_index = 0;
+    size_t out_index = 0;
+
+    float64_t area = 0;
+
+    do {
+        float64_t value = std::max(in_values[in_index], out_values[out_index]);
+        while (in_index < in_size && in_values[in_index] >= value)
+            ++in_index;
+        while (out_index < out_size && out_values[out_index] >= value)
+            ++out_index;
+        area += (out_index - out_count) * out_scale * (in_index + in_count) * in_scale / 2;
+        in_count = in_index;
+        out_count = out_index;
+    } while (in_count < in_size && out_count < out_size);
+
+    area += (total_out_size - out_count) * out_scale * (in_count + in_size) * in_scale / 2;
+
+    return area;
+}
+
+template<typename D>
+static float64_t
+auroc_dense_vector(const ConstArraySlice<D>& values,
+                   const ConstArraySlice<bool>& labels,
+                   const ConstArraySlice<float32_t>& scales) {
+    const size_t size = labels.size();
+    FastAssertCompare(values.size(), ==, size);
+
+    tmp_data_one.reserve(size);
+    tmp_data_two.reserve(size);
+
+    tmp_data_one.resize(0);
+    tmp_data_two.resize(0);
+
+    for (size_t index = 0; index < size; ++index) {
+        const auto value = values[index] / scales[index];
+        if (labels[index]) {
+            tmp_data_one.push_back(value);
+        } else {
+            tmp_data_two.push_back(value);
+        }
+    }
+
+    return auroc_data(tmp_data_one, tmp_data_two, 0);
+}
+
+template<typename D>
+static void
+auroc_dense_matrix(const pybind11::array_t<D>& values_array,
+                   const pybind11::array_t<bool>& column_labels_array,
+                   const pybind11::array_t<float32_t>& column_scales_array,
+                   pybind11::array_t<float64_t>& aurocs_array) {
+    ConstMatrixSlice<D> values(values_array, "values");
+    ConstArraySlice<bool> column_labels(column_labels_array, "column_labels");
+    ConstArraySlice<float32_t> column_scales(column_scales_array, "column_scales");
+    ArraySlice<float64_t> row_aurocs(aurocs_array, "row_aurocs");
+
+    const size_t columns_count = values.columns_count();
+    const size_t rows_count = values.rows_count();
+
+    FastAssertCompare(column_labels.size(), ==, columns_count);
+    FastAssertCompare(row_aurocs.size(), ==, rows_count);
+
+    if (is_in_parallel) {
+        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
+            row_aurocs[row_index] =
+                auroc_dense_vector(values.get_row(row_index), column_labels, column_scales);
+        }
+    } else {
+#pragma omp parallel for schedule(guided)
+        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
+            row_aurocs[row_index] =
+                auroc_dense_vector(values.get_row(row_index), column_labels, column_scales);
+        }
+    }
+}
+
+template<typename D, typename I>
+static float64_t
+auroc_compressed_vector(const ConstArraySlice<D>& values,
+                        const ConstArraySlice<I>& indices,
+                        const ConstArraySlice<bool>& labels,
+                        const ConstArraySlice<float32_t>& scales) {
+    const size_t size = labels.size();
+    const size_t nnz_count = values.size();
+    FastAssertCompare(nnz_count, <=, size);
+
+    tmp_data_one.reserve(size);
+    tmp_data_two.reserve(size);
+
+    tmp_data_one.resize(0);
+    tmp_data_two.resize(0);
+
+    size_t prev_index = 0;
+    for (size_t position = 0; position < nnz_count; ++position) {
+        size_t index = size_t(indices[position]);
+        auto value = values[position] / scales[index];
+
+        FastAssertCompare(prev_index, <=, index);
+        while (prev_index < index) {
+            if (labels[prev_index]) {
+                tmp_data_one.push_back(0.0);
+            }
+            ++prev_index;
+        }
+
+        if (labels[index]) {
+            tmp_data_one.push_back(value);
+        } else {
+            tmp_data_two.push_back(value);
+        }
+
+        FastAssertCompare(prev_index, ==, index);
+        ++prev_index;
+    }
+
+    FastAssertCompare(prev_index, <=, size);
+    while (prev_index < size) {
+        if (labels[prev_index]) {
+            tmp_data_one.push_back(0.0);
+        }
+        ++prev_index;
+    }
+
+    FastAssertCompare(prev_index, ==, size);
+    return auroc_data(tmp_data_one, tmp_data_two, size - nnz_count);
+}
+
+template<typename D, typename I, typename P>
+static void
+auroc_compressed_matrix(const pybind11::array_t<D>& values_data_array,
+                        const pybind11::array_t<I>& values_indices_array,
+                        const pybind11::array_t<P>& values_indptr_array,
+                        size_t elements_count,
+                        const pybind11::array_t<bool>& element_labels_array,
+                        const pybind11::array_t<float32_t>& element_scales_array,
+                        pybind11::array_t<float64_t>& band_aurocs_array) {
+    ConstCompressedMatrix<D, I, P> values(ConstArraySlice<D>(values_data_array, "values_data"),
+                                          ConstArraySlice<I>(values_indices_array,
+                                                             "values_indices"),
+                                          ConstArraySlice<P>(values_indptr_array, "values_indptr"),
+                                          elements_count,
+                                          "values");
+    ConstArraySlice<bool> element_labels(element_labels_array, "element_labels");
+    ConstArraySlice<float32_t> element_scales(element_scales_array, "element_scales");
+    ArraySlice<float64_t> band_aurocs(band_aurocs_array, "band_aurocs");
+
+    size_t bands_count = values.bands_count();
+    if (is_in_parallel) {
+        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
+            band_aurocs[band_index] = auroc_compressed_vector(values.get_band_data(band_index),
+                                                              values.get_band_indices(band_index),
+                                                              element_labels,
+                                                              element_scales);
+        }
+    } else {
+#pragma omp parallel for schedule(guided)
+        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
+            band_aurocs[band_index] = auroc_compressed_vector(values.get_band_data(band_index),
+                                                              values.get_band_indices(band_index),
+                                                              element_labels,
+                                                              element_scales);
+        }
+    }
+}
+
 }  // namespace metacells
 
 PYBIND11_MODULE(extensions, module) {
@@ -1364,7 +1559,10 @@ PYBIND11_MODULE(extensions, module) {
     module.def("rank_matrix_" #D, &metacells::rank_matrix<D>, "Rank of matrix data.");       \
     module.def("fold_factor_dense_" #D,                                                      \
                &metacells::fold_factor_dense<D>,                                             \
-               "Fold factors of dense data.");
+               "Fold factors of dense data.");                                               \
+    module.def("auroc_dense_matrix_" #D,                                                     \
+               &metacells::auroc_dense_matrix<D>,                                            \
+               "AUROC for dense matrix.");
 
 #define REGISTER_D_O(D, O)                          \
     module.def("downsample_array_" #D "_" #O,       \
@@ -1391,7 +1589,10 @@ PYBIND11_MODULE(extensions, module) {
                "Shuffle compressed data.");                  \
     module.def("fold_factor_compressed_" #D "_" #I "_" #P,   \
                &metacells::fold_factor_compressed<D, I, P>,  \
-               "Fold factors of compressed data.");
+               "Fold factors of compressed data.");          \
+    module.def("auroc_compressed_matrix_" #D "_" #I "_" #P,  \
+               &metacells::auroc_compressed_matrix<D, I, P>, \
+               "AUROC for compressed matrix.");
 
     module.def("collect_outgoing",
                &metacells::collect_outgoing,
