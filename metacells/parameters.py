@@ -337,7 +337,7 @@ cells_similarity_log_normalization: float = 1/significant_value
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-cells_repeated_similarity: bool = True
+cells_repeated_similarity: bool = False
 
 #: The target K for building the K-Nearest-Neighbors graph. See
 #: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
