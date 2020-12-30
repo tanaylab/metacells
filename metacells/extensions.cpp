@@ -1547,6 +1547,82 @@ auroc_compressed_matrix(const pybind11::array_t<D>& values_data_array,
     }
 }
 
+template<typename D>
+static float32_t
+logistics_dense_vectors(ConstArraySlice<D> left,
+                        ConstArraySlice<D> right,
+                        const float64_t location,
+                        const float64_t scale) {
+    FastAssertCompare(right.size(), ==, left.size());
+
+    const size_t size = left.size();
+
+    float64_t result = 0;
+
+    for (size_t index = 0; index < size; ++index) {
+        float64_t diff = fabs(left[index] - right[index]);
+        result += 1 / (1 + exp(scale * (location - diff)));
+    }
+
+    return float32_t(result / size);
+}
+
+template<typename D>
+static void
+logistics_dense_matrix(const pybind11::array_t<D>& values_array,
+                       pybind11::array_t<float32_t>& logistics_array,
+                       const float64_t location,
+                       const float64_t scale) {
+    ConstMatrixSlice<D> values(values_array, "values");
+    MatrixSlice<float32_t> logistics(logistics_array, "logistics");
+
+    const size_t rows_count = values.rows_count();
+
+    FastAssertCompare(logistics.columns_count(), ==, rows_count);
+    FastAssertCompare(logistics.rows_count(), ==, rows_count);
+
+    const size_t iterations_count = (rows_count * (rows_count - 1)) / 2;
+
+    for (size_t entry_index = 0; entry_index < rows_count; ++entry_index) {
+        logistics.get_row(entry_index)[entry_index] = 0;
+    }
+
+    if (is_in_parallel) {
+        for (size_t iteration_index = 0; iteration_index < iterations_count; ++iteration_index) {
+            size_t some_index = iteration_index / (rows_count - 1);
+            size_t other_index = iteration_index % (rows_count - 1);
+            if (other_index < rows_count - 1 - some_index) {
+                some_index = rows_count - 1 - some_index;
+            } else {
+                other_index = rows_count - 2 - other_index;
+            }
+            float logistic = logistics_dense_vectors(values.get_row(some_index),
+                                                     values.get_row(other_index),
+                                                     location,
+                                                     scale);
+            logistics.get_row(some_index)[other_index] = logistic;
+            logistics.get_row(other_index)[some_index] = logistic;
+        }
+    } else {
+#pragma omp parallel for schedule(guided)
+        for (size_t iteration_index = 0; iteration_index < iterations_count; ++iteration_index) {
+            size_t some_index = iteration_index / (rows_count - 1);
+            size_t other_index = iteration_index % (rows_count - 1);
+            if (other_index < rows_count - 1 - some_index) {
+                some_index = rows_count - 1 - some_index;
+            } else {
+                other_index = rows_count - 2 - other_index;
+            }
+            float logistic = logistics_dense_vectors(values.get_row(some_index),
+                                                     values.get_row(other_index),
+                                                     location,
+                                                     scale);
+            logistics.get_row(some_index)[other_index] = logistic;
+            logistics.get_row(other_index)[some_index] = logistic;
+        }
+    }
+}
+
 }  // namespace metacells
 
 PYBIND11_MODULE(extensions, module) {
@@ -1562,7 +1638,10 @@ PYBIND11_MODULE(extensions, module) {
                "Fold factors of dense data.");                                               \
     module.def("auroc_dense_matrix_" #D,                                                     \
                &metacells::auroc_dense_matrix<D>,                                            \
-               "AUROC for dense matrix.");
+               "AUROC for dense matrix.");                                                   \
+    module.def("logistics_dense_matrix_" #D,                                                 \
+               &metacells::logistics_dense_matrix<D>,                                        \
+               "Logistics distances for dense matrix.");
 
 #define REGISTER_D_O(D, O)                          \
     module.def("downsample_array_" #D "_" #O,       \

@@ -44,6 +44,24 @@ def test_corrcoef() -> None:
     assert np.allclose(dense_correlation, numpy_correlation, atol=1e-6)
 
 
+def test_logistics() -> None:
+    matrix = np.array([[0, 0, 0, 0, 0, 0],
+                       [1, 1, 1, 1, 1, 1],
+                       [0, 0, 0, 1, 1, 1]], dtype='float64')
+    same_value = 1 / (1 + np.exp(-5 * (0 - 0.8)))
+    diff_value = 1 / (1 + np.exp(-5 * (1 - 0.8)))
+    results = ut.logistics(matrix)
+    assert np.allclose(results[0, 0], 0)
+    assert np.allclose(results[1, 1], 0)
+    assert np.allclose(results[2, 2], 0)
+    assert np.allclose(results[0, 1], diff_value)
+    assert np.allclose(results[1, 0], diff_value)
+    assert np.allclose(results[0, 2], (diff_value + same_value) / 2)
+    assert np.allclose(results[2, 0], (diff_value + same_value) / 2)
+    assert np.allclose(results[1, 2], (diff_value + same_value) / 2)
+    assert np.allclose(results[2, 1], (diff_value + same_value) / 2)
+
+
 def test_relayout_matrix() -> None:
     rvs = stats.poisson(10, loc=10).rvs
     csr_matrix = sparse.random(20, 20, format='csr',

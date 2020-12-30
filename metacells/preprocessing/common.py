@@ -54,6 +54,9 @@ __all__ = [
 
     'get_obs_obs_correlation',
     'get_var_var_correlation',
+
+    'get_obs_obs_logistics',
+    'get_var_var_logistics',
 ]
 
 
@@ -1031,6 +1034,114 @@ def get_var_var_correlation(
         assert of is not None
         matrix = uta.get_proper_matrix(adata, of, layout=matrix_layout)
         return utc.corrcoef(matrix, per=per)
+
+    return _derive_2d_data(adata, per_of=per_of, of=of, per_to='vv', to=to,
+                           compute=compute, inplace=inplace, layout=layout)
+
+
+@utm.timed_call()
+@utd.expand_doc()
+def get_obs_obs_logistics(
+    adata: AnnData,
+    of: Optional[str] = None,
+    *,
+    per: Optional[str] = None,
+    location: float = 0.8,
+    scale: float = 5,
+    inplace: bool = True,
+    layout: Optional[str] = None,
+) -> NamedMatrix:
+    '''
+    Compute the logistic function between observations (cells) ``of`` some data (by default, the
+    focus).
+
+    This computes, for each pair of observations, the mean of
+    ``1/(1+exp(-scale*(abs(x-y)-location)))`` of each of the variables. Typically this is applied
+    to the log of the raw data.
+
+    If ``per`` (default: {per}) is specified, the data must be per-observation-per-observation, and
+    this controls what to compare. If it is ``None``, such data is assumed to be symmetric, so the
+    most efficient direction is chosen based on the data's layout.
+
+    If ``layout`` (default: {layout}) is specified, it forces the layout of the returned data.
+
+    Use the ``<of>|obs_obs_logistics`` or ``<of>|obs_obs_logistics``
+    per-observation-per-observation (cell) data if it exists. Otherwise, compute it, and if
+    ``inplace`` (default: {inplace}) store it for future reuse.
+
+    Returns the matrix and its name.
+    '''
+    per_of, of = _per_of(adata, of, ['vo', 'oo'])
+
+    to = of + '|obs_obs_logistics'
+
+    if per_of == 'vo':
+        assert per is None
+        per = 'row'
+
+    if per is None:
+        matrix_layout = None
+    else:
+        matrix_layout = per + '_major'
+
+    @utm.timed_call('.compute')
+    def compute() -> utt.Matrix:
+        assert of is not None
+        matrix = uta.get_proper_matrix(adata, of, layout=matrix_layout)
+        return utc.logistics(matrix, location=location, scale=scale, per=per)
+
+    return _derive_2d_data(adata, per_of=per_of, of=of, per_to='oo', to=to,
+                           compute=compute, inplace=inplace, layout=layout)
+
+
+@utm.timed_call()
+@utd.expand_doc()
+def get_var_var_logistics(
+    adata: AnnData,
+    of: Optional[str] = None,
+    *,
+    per: Optional[str] = None,
+    location: float = 0.8,
+    scale: float = 5,
+    inplace: bool = True,
+    layout: Optional[str] = None,
+) -> NamedMatrix:
+    '''
+    Compute logistics function between variables (genes) ``of`` some data (by default, the focus).
+
+    This computes, for each pair of variables, the mean of
+    ``1/(1+exp(-scale*(abs(x-y)-location)))`` of each of the observations. Typically this is applied
+    to the log of the raw data.
+
+    If ``per`` (default: {per}) is specified, the data must be per-variable-per-variable, and this
+    controls what to compare. If it is ``None``, such data is assumed to be symmetric, so the most
+    efficient direction is chosen based on the data's layout.
+
+    If ``layout`` (default: {layout}) is specified, it forces the layout of the returned data.
+
+    Use the ``<of>|var_var_logistics`` per-variable-per-variable (gene) data if it exists.
+    Otherwise, compute it, and if ``inplace`` (default: {inplace}), store it for future reuse.
+
+    Returns the matrix and its name.
+    '''
+    per_of, of = _per_of(adata, of, ['vo', 'vv'])
+
+    to = of + '|obs_obs_logistics'
+
+    if per_of == 'vo':
+        assert per is None
+        per = 'column'
+
+    if per is None:
+        matrix_layout = None
+    else:
+        matrix_layout = per + '_major'
+
+    @utm.timed_call('.compute')
+    def compute() -> utt.Matrix:
+        assert of is not None
+        matrix = uta.get_proper_matrix(adata, of, layout=matrix_layout)
+        return utc.logistics(matrix, location=location, scale=scale, per=per)
 
     return _derive_2d_data(adata, per_of=per_of, of=of, per_to='vv', to=to,
                            compute=compute, inplace=inplace, layout=layout)

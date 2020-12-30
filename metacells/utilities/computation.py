@@ -33,6 +33,7 @@ __all__ = [
     'sort_compressed_indices',
 
     'corrcoef',
+    'logistics',
 
     'log_data',
 
@@ -330,6 +331,65 @@ def corrcoef(
 
     if is_frozen:
         utt.freeze(dense)
+    return result
+
+
+@utm.timed_call()
+@utd.expand_doc()
+def logistics(
+    matrix: utt.Matrix,
+    *,
+    location: float = 0.8,
+    scale: float = 5,
+    per: Optional[str] = 'row',
+) -> utt.DenseMatrix:
+    '''
+    Compute a similarity matrix, similar to for ``np.corrcoef``, but uses the logistics function.
+
+    This computes, for each pair of vectors, the mean of ``1/(1+exp(-scale*(abs(x-y)-location)))``
+    of each of the elements. Typically this is applied to the log of the raw data.
+
+    If ``per`` (default: {per}) is ``None``, the matrix must be square and is assumed to be
+    symmetric, so the most efficient direction is used based on the matrix layout. Otherwise it must
+    be one of ``row`` or ``column``.
+
+    .. todo::
+
+        The :py:func:`logistics` always uses the dense implementation. Possibly a sparse
+        implementation might be faster.
+
+    .. note::
+
+        The result is always dense, as even for sparse data, the result is rarely exactly zero.
+    '''
+    dense = utt.to_dense_matrix(matrix)
+    layout = utt.matrix_layout(dense)
+
+    if per is None:
+        assert dense.shape[0] == dense.shape[1]
+        if layout is None:
+            per = 'row'
+        else:
+            per = utt.PER_OF_AXIS[utt.LAYOUT_OF_AXIS.index(layout)]
+
+    axis = utt.PER_OF_AXIS.index(per)
+    fast_layout = utt.LAYOUT_OF_AXIS[axis]
+    if layout != fast_layout:
+        correlating_dense_input_matrix_of_inefficient_format = \
+            'logistics of %ss of a matrix with inefficient strides: %s' \
+            % (per, dense.strides)
+        warn(correlating_dense_input_matrix_of_inefficient_format)
+
+    utm.timed_parameters(results=dense.shape[axis],
+                         elements=dense.shape[1 - axis])
+
+    if per == 'column':
+        dense = dense.T
+
+    extension_name = 'logistics_dense_matrix_%s_t' % dense.dtype
+    result = np.empty((dense.shape[0], dense.shape[0]), dtype='float32')
+    extension = getattr(xt, extension_name)
+    extension(dense, result, location, scale)
     return result
 
 
