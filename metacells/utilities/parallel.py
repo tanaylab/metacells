@@ -111,9 +111,9 @@ def set_cpus_count(cpus: int) -> None:
     global CPUS_COUNT
     CPUS_COUNT = cpus
 
-    LOG.debug('cpus_count: %s', CPUS_COUNT)
+    LOG.debug('CPUS_COUNT: %s', CPUS_COUNT)
     threadpool_limits(limits=CPUS_COUNT)
-    xt.in_parallel(CPUS_COUNT < 2)
+    xt.set_threads_count(CPUS_COUNT)
 
 
 if not 'sphinx' in sys.argv[0]:
@@ -190,13 +190,11 @@ def parallel_map(
     IS_MAIN_PROCESS = None
     try:
         utm.flush()
-        xt.in_parallel(True)
         with utm.timed_step('parallel_map'):
             utm.timed_parameters(index=MAP_INDEX, processes=PROCESSES_COUNT)
             with Pool(PROCESSES_COUNT) as pool:
                 return pool.map(_invocation, range(invocations))
     finally:
-        xt.in_parallel(False)
         IS_MAIN_PROCESS = True
         PARALLEL_FUNCTION = None
 
@@ -213,8 +211,6 @@ def _invocation(index: int) -> Any:
             PROCESS_INDEX = NEXT_PROCESS_INDEX.value
             NEXT_PROCESS_INDEX.value += 1
 
-        utm.in_parallel_map(MAP_INDEX, PROCESS_INDEX)
-
         current_thread().name = '#%s.%s' % (MAP_INDEX, PROCESS_INDEX)
 
         global CPUS_COUNT
@@ -227,6 +223,7 @@ def _invocation(index: int) -> Any:
         assert CPUS_COUNT > 0
         LOG.debug('CPUS_COUNT: %s', CPUS_COUNT)
         threadpool_limits(limits=CPUS_COUNT)
+        xt.set_threads_count(CPUS_COUNT)
 
     assert PARALLEL_FUNCTION is not None
     return PARALLEL_FUNCTION(index)

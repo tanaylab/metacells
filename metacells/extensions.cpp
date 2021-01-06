@@ -42,6 +42,7 @@
 #include <atomic>
 #include <cmath>
 #include <random>
+#include <thread>
 
 typedef float float32_t;
 typedef double float64_t;
@@ -388,12 +389,55 @@ public:
     }
 };
 
-/// Whether we are running inside a sub-process.
-static bool is_in_parallel = false;
+/// How many parallel threads to use.
+static size_t threads_count = 1;
 
 static void
-in_parallel(bool new_is_in_parallel) {
-    is_in_parallel = new_is_in_parallel;
+set_threads_count(size_t count) {
+    threads_count = count;
+}
+
+static std::atomic<size_t> next_loop_index;
+static size_t loop_size;
+
+const void
+worker(std::function<void(size_t)> parallel_body) {
+    for (size_t index = next_loop_index++; index < loop_size; index = next_loop_index++) {
+        parallel_body(index);
+    }
+}
+
+static void
+parallel_loop(const size_t size,
+              std::function<void(size_t)> parallel_body,
+              std::function<void(size_t)> serial_body) {
+    size_t used_threads_count = std::min(threads_count, size);
+
+    if (used_threads_count < 2) {
+        for (size_t index = 0; index < size; ++index) {
+            serial_body(index);
+        }
+        return;
+    }
+
+    next_loop_index = 0;
+    loop_size = size;
+
+    std::vector<std::thread> used_threads;
+    used_threads.reserve(used_threads_count);
+
+    while (next_loop_index < loop_size && used_threads.size() < used_threads_count) {
+        used_threads.emplace_back(worker, parallel_body);
+    }
+
+    for (auto& thread : used_threads) {
+        thread.join();
+    }
+}
+
+static void
+parallel_loop(const size_t size, std::function<void(size_t)> parallel_body) {
+    parallel_loop(size, parallel_body, parallel_body);
 }
 
 template<typename T>
@@ -546,26 +590,10 @@ downsample_matrix(const pybind11::array_t<D>& input_matrix,
     ConstMatrixSlice<D> input{ input_matrix, "input_matrix" };
     MatrixSlice<O> output{ output_array, "output_array" };
 
-    const size_t rows_count = input.rows_count();
-
-    if (is_in_parallel) {
-        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
-            int slice_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
-            downsample_slice(input.get_row(row_index),
-                             output.get_row(row_index),
-                             samples,
-                             slice_seed);
-        }
-    } else {
-#pragma omp parallel for schedule(guided)
-        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
-            int slice_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
-            downsample_slice(input.get_row(row_index),
-                             output.get_row(row_index),
-                             samples,
-                             slice_seed);
-        }
-    }
+    parallel_loop(input.rows_count(), [&](size_t row_index) {
+        int slice_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
+        downsample_slice(input.get_row(row_index), output.get_row(row_index), samples, slice_seed);
+    });
 }
 
 template<typename D, typename P, typename O>
@@ -599,20 +627,10 @@ downsample_compressed(const pybind11::array_t<D>& input_data_array,
     ConstArraySlice<P> input_indptr{ input_indptr_array, "input_indptr_array" };
     ArraySlice<O> output{ output_array, "output_array" };
 
-    const size_t bands_count = input_indptr.size() - 1;
-
-    if (is_in_parallel) {
-        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
-            int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
-            downsample_band(band_index, input_data, input_indptr, output, samples, band_seed);
-        }
-    } else {
-#pragma omp parallel for schedule(guided)
-        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
-            int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
-            downsample_band(band_index, input_data, input_indptr, output, samples, band_seed);
-        }
-    }
+    parallel_loop(input_indptr.size() - 1, [&](size_t band_index) {
+        int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
+        downsample_band(band_index, input_data, input_indptr, output, samples, band_seed);
+    });
 }
 
 template<typename D, typename I, typename P>
@@ -712,32 +730,25 @@ collect_compressed(const pybind11::array_t<D>& input_data_array,
     FastAssertCompare(output_indices.size(), ==, input_indices.size());
     FastAssertCompare(output_indptr[output_indptr.size() - 1], <=, output_data.size());
 
-    const size_t input_bands_count = input_indptr.size() - 1;
-
-    if (is_in_parallel) {
-        for (size_t input_band_index = 0; input_band_index < input_bands_count;
-             ++input_band_index) {
-            serial_collect_compressed_band(input_band_index,
-                                           input_data,
-                                           input_indices,
-                                           input_indptr,
-                                           output_data,
-                                           output_indices,
-                                           output_indptr);
-        }
-    } else {
-#pragma omp parallel for schedule(guided)
-        for (size_t input_band_index = 0; input_band_index < input_bands_count;
-             ++input_band_index) {
-            parallel_collect_compressed_band(input_band_index,
-                                             input_data,
-                                             input_indices,
-                                             input_indptr,
-                                             output_data,
-                                             output_indices,
-                                             output_indptr);
-        }
-    }
+    parallel_loop(input_indptr.size() - 1,
+                  [&](size_t input_band_index) {
+                      parallel_collect_compressed_band(input_band_index,
+                                                       input_data,
+                                                       input_indices,
+                                                       input_indptr,
+                                                       output_data,
+                                                       output_indices,
+                                                       output_indptr);
+                  },
+                  [&](size_t input_band_index) {
+                      serial_collect_compressed_band(input_band_index,
+                                                     input_data,
+                                                     input_indices,
+                                                     input_indptr,
+                                                     output_data,
+                                                     output_indices,
+                                                     output_indptr);
+                  });
 }
 
 template<typename D, typename I, typename P>
@@ -792,18 +803,7 @@ sort_compressed_indices(pybind11::array_t<D>& data_array,
                                      elements_count,
                                      "compressed");
 
-    const size_t bands_count = matrix.bands_count();
-
-    if (is_in_parallel) {
-        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
-            sort_band(band_index, matrix);
-        }
-    } else {
-#pragma omp parallel for schedule(guided)
-        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
-            sort_band(band_index, matrix);
-        }
-    }
+    parallel_loop(matrix.bands_count(), [&](size_t band_index) { sort_band(band_index, matrix); });
 }
 
 static void
@@ -885,24 +885,9 @@ collect_outgoing(const size_t degree,
     FastAssertCompare(output_indices.size(), ==, degree * size);
     FastAssertCompare(output_ranks.size(), ==, degree * size);
 
-    if (is_in_parallel) {
-        for (size_t row_index = 0; row_index < size; ++row_index) {
-            collect_outgoing_row(row_index,
-                                 degree,
-                                 similarity_matrix,
-                                 output_indices,
-                                 output_ranks);
-        }
-    } else {
-#pragma omp parallel for schedule(guided)
-        for (size_t row_index = 0; row_index < size; ++row_index) {
-            collect_outgoing_row(row_index,
-                                 degree,
-                                 similarity_matrix,
-                                 output_indices,
-                                 output_ranks);
-        }
-    }
+    parallel_loop(size, [&](size_t row_index) {
+        collect_outgoing_row(row_index, degree, similarity_matrix, output_indices, output_ranks);
+    });
 }
 
 static void
@@ -990,26 +975,14 @@ collect_pruned(const size_t pruned_degree,
         output_pruned_indptr[band_index + 1] = start_position;
     }
 
-    if (is_in_parallel) {
-        for (size_t band_index = 0; band_index < size; ++band_index) {
-            prune_band(band_index,
-                       pruned_degree,
-                       input_pruned_ranks,
-                       output_pruned_ranks,
-                       output_pruned_indices,
-                       output_pruned_indptr);
-        }
-    } else {
-#pragma omp parallel for schedule(guided)
-        for (size_t band_index = 0; band_index < size; ++band_index) {
-            prune_band(band_index,
-                       pruned_degree,
-                       input_pruned_ranks,
-                       output_pruned_ranks,
-                       output_pruned_indices,
-                       output_pruned_indptr);
-        }
-    }
+    parallel_loop(size, [&](size_t band_index) {
+        prune_band(band_index,
+                   pruned_degree,
+                   input_pruned_ranks,
+                   output_pruned_ranks,
+                   output_pruned_indices,
+                   output_pruned_indptr);
+    });
 }
 
 template<typename D, typename I, typename P>
@@ -1041,20 +1014,10 @@ shuffle_compressed(pybind11::array_t<D>& data_array,
                                      elements_count,
                                      "compressed");
 
-    const size_t bands_count = matrix.bands_count();
-
-    if (is_in_parallel) {
-        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
-            int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
-            shuffle_band(band_index, matrix, band_seed);
-        }
-    } else {
-#pragma omp parallel for schedule(guided)
-        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
-            int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
-            shuffle_band(band_index, matrix, band_seed);
-        }
-    }
+    parallel_loop(matrix.bands_count(), [&](size_t band_index) {
+        int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
+        shuffle_band(band_index, matrix, band_seed);
+    });
 }
 
 template<typename D>
@@ -1071,20 +1034,10 @@ static void
 shuffle_matrix(pybind11::array_t<D>& matrix_array, const int random_seed) {
     MatrixSlice<D> matrix(matrix_array, "matrix");
 
-    const size_t rows_count = matrix.rows_count();
-
-    if (is_in_parallel) {
-        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
-            int row_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
-            shuffle_row(row_index, matrix, row_seed);
-        }
-    } else {
-#pragma omp parallel for schedule(guided)
-        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
-            int row_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
-            shuffle_row(row_index, matrix, row_seed);
-        }
-    }
+    parallel_loop(matrix.rows_count(), [&](size_t row_index) {
+        int row_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
+        shuffle_row(row_index, matrix, row_seed);
+    });
 }
 
 template<typename D>
@@ -1117,16 +1070,8 @@ rank_matrix(const pybind11::array_t<D>& input_matrix,
     FastAssertCompare(rows_count, ==, output_array.size());
     FastAssertCompare(rank, <, input.columns_count());
 
-    if (is_in_parallel) {
-        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
-            output[row_index] = rank_row(row_index, input, rank);
-        }
-    } else {
-#pragma omp parallel for schedule(guided)
-        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
-            output[row_index] = rank_row(row_index, input, rank);
-        }
-    }
+    parallel_loop(rows_count,
+                  [&](size_t row_index) { output[row_index] = rank_row(row_index, input, rank); });
 }
 
 /// See the Python `metacell.tools.outlier_cells._collect_fold_factors` function.
@@ -1145,36 +1090,19 @@ fold_factor_dense(pybind11::array_t<D>& data_array,
 
     const size_t rows_count = data.rows_count();
     const size_t columns_count = data.columns_count();
-    if (is_in_parallel) {
-        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
-            const auto row_total = total_of_rows[row_index];
-            auto row_data = data.get_row(row_index);
-            for (size_t column_index = 0; column_index < columns_count; ++column_index) {
-                const auto column_fraction = fraction_of_columns[column_index];
-                const auto expected = row_total * column_fraction;
-                auto& value = row_data[column_index];
-                value = log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE;
-                if (value < min_gene_fold_factor) {
-                    value = 0.0;
-                }
+    parallel_loop(rows_count, [&](size_t row_index) {
+        const auto row_total = total_of_rows[row_index];
+        auto row_data = data.get_row(row_index);
+        for (size_t column_index = 0; column_index < columns_count; ++column_index) {
+            const auto column_fraction = fraction_of_columns[column_index];
+            const auto expected = row_total * column_fraction;
+            auto& value = row_data[column_index];
+            value = log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE;
+            if (value < min_gene_fold_factor) {
+                value = 0.0;
             }
         }
-    } else {
-#pragma omp parallel for schedule(guided)
-        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
-            const auto row_total = total_of_rows[row_index];
-            auto row_data = data.get_row(row_index);
-            for (size_t column_index = 0; column_index < columns_count; ++column_index) {
-                const auto column_fraction = fraction_of_columns[column_index];
-                const auto expected = row_total * column_fraction;
-                auto& value = row_data[column_index];
-                value = log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE;
-                if (value < min_gene_fold_factor) {
-                    value = 0.0;
-                }
-            }
-        }
-    }
+    });
 }
 
 /// See the Python `metacell.tools.outlier_cells._collect_fold_factors` function.
@@ -1200,44 +1128,23 @@ fold_factor_compressed(pybind11::array_t<D>& data_array,
     FastAssertCompare(data.bands_count(), ==, bands_count);
     FastAssertCompare(data.elements_count(), ==, elements_count);
 
-    if (is_in_parallel) {
-        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
-            const auto band_total = total_of_bands[band_index];
-            auto band_indices = data.get_band_indices(band_index);
-            auto band_data = data.get_band_data(band_index);
+    parallel_loop(bands_count, [&](size_t band_index) {
+        const auto band_total = total_of_bands[band_index];
+        auto band_indices = data.get_band_indices(band_index);
+        auto band_data = data.get_band_data(band_index);
 
-            const size_t band_elements_count = band_indices.size();
-            for (size_t position = 0; position < band_elements_count; ++position) {
-                const auto element_index = band_indices[position];
-                const auto element_fraction = fraction_of_elements[element_index];
-                const auto expected = band_total * element_fraction;
-                auto& value = band_data[position];
-                value = log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE;
-                if (value < min_gene_fold_factor) {
-                    value = 0.0;
-                }
+        const size_t band_elements_count = band_indices.size();
+        for (size_t position = 0; position < band_elements_count; ++position) {
+            const auto element_index = band_indices[position];
+            const auto element_fraction = fraction_of_elements[element_index];
+            const auto expected = band_total * element_fraction;
+            auto& value = band_data[position];
+            value = log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE;
+            if (value < min_gene_fold_factor) {
+                value = 0.0;
             }
         }
-    } else {
-#pragma omp parallel for schedule(guided)
-        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
-            const auto band_total = total_of_bands[band_index];
-            auto band_indices = data.get_band_indices(band_index);
-            auto band_data = data.get_band_data(band_index);
-
-            const size_t band_elements_count = band_indices.size();
-            for (size_t position = 0; position < band_elements_count; ++position) {
-                const auto element_index = band_indices[position];
-                const auto element_fraction = fraction_of_elements[element_index];
-                const auto expected = band_total * element_fraction;
-                auto& value = band_data[position];
-                value = log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE;
-                if (value < min_gene_fold_factor) {
-                    value = 0.0;
-                }
-            }
-        }
-    }
+    });
 }
 
 static void
@@ -1320,36 +1227,18 @@ top_distinct(pybind11::array_t<int32_t>& gene_indices_array,
     FastAssertCompare(gene_folds.rows_count(), ==, cells_count);
     FastAssertCompare(gene_folds.columns_count(), ==, distinct_count);
 
-    if (is_in_parallel) {
-        if (consider_low_folds) {
-            for (size_t cell_index = 0; cell_index < cells_count; ++cell_index) {
-                collect_distinct_abs_folds(gene_indices.get_row(cell_index),
-                                           gene_folds.get_row(cell_index),
-                                           fold_in_cells.get_row(cell_index));
-            }
-        } else {
-            for (size_t cell_index = 0; cell_index < cells_count; ++cell_index) {
-                collect_distinct_high_folds(gene_indices.get_row(cell_index),
-                                            gene_folds.get_row(cell_index),
-                                            fold_in_cells.get_row(cell_index));
-            }
-        }
+    if (consider_low_folds) {
+        parallel_loop(cells_count, [&](size_t cell_index) {
+            collect_distinct_abs_folds(gene_indices.get_row(cell_index),
+                                       gene_folds.get_row(cell_index),
+                                       fold_in_cells.get_row(cell_index));
+        });
     } else {
-        if (consider_low_folds) {
-#pragma omp parallel for schedule(guided)
-            for (size_t cell_index = 0; cell_index < cells_count; ++cell_index) {
-                collect_distinct_abs_folds(gene_indices.get_row(cell_index),
-                                           gene_folds.get_row(cell_index),
-                                           fold_in_cells.get_row(cell_index));
-            }
-        } else {
-#pragma omp parallel for schedule(guided)
-            for (size_t cell_index = 0; cell_index < cells_count; ++cell_index) {
-                collect_distinct_high_folds(gene_indices.get_row(cell_index),
-                                            gene_folds.get_row(cell_index),
-                                            fold_in_cells.get_row(cell_index));
-            }
-        }
+        parallel_loop(cells_count, [&](size_t cell_index) {
+            collect_distinct_high_folds(gene_indices.get_row(cell_index),
+                                        gene_folds.get_row(cell_index),
+                                        fold_in_cells.get_row(cell_index));
+        });
     }
 }
 
@@ -1444,18 +1333,10 @@ auroc_dense_matrix(const pybind11::array_t<D>& values_array,
     FastAssertCompare(column_labels.size(), ==, columns_count);
     FastAssertCompare(row_aurocs.size(), ==, rows_count);
 
-    if (is_in_parallel) {
-        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
-            row_aurocs[row_index] =
-                auroc_dense_vector(values.get_row(row_index), column_labels, column_scales);
-        }
-    } else {
-#pragma omp parallel for schedule(guided)
-        for (size_t row_index = 0; row_index < rows_count; ++row_index) {
-            row_aurocs[row_index] =
-                auroc_dense_vector(values.get_row(row_index), column_labels, column_scales);
-        }
-    }
+    parallel_loop(rows_count, [&](size_t row_index) {
+        row_aurocs[row_index] =
+            auroc_dense_vector(values.get_row(row_index), column_labels, column_scales);
+    });
 }
 
 template<typename D, typename I>
@@ -1528,23 +1409,12 @@ auroc_compressed_matrix(const pybind11::array_t<D>& values_data_array,
     ConstArraySlice<float32_t> element_scales(element_scales_array, "element_scales");
     ArraySlice<float64_t> band_aurocs(band_aurocs_array, "band_aurocs");
 
-    size_t bands_count = values.bands_count();
-    if (is_in_parallel) {
-        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
-            band_aurocs[band_index] = auroc_compressed_vector(values.get_band_data(band_index),
-                                                              values.get_band_indices(band_index),
-                                                              element_labels,
-                                                              element_scales);
-        }
-    } else {
-#pragma omp parallel for schedule(guided)
-        for (size_t band_index = 0; band_index < bands_count; ++band_index) {
-            band_aurocs[band_index] = auroc_compressed_vector(values.get_band_data(band_index),
-                                                              values.get_band_indices(band_index),
-                                                              element_labels,
-                                                              element_scales);
-        }
-    }
+    parallel_loop(values.bands_count(), [&](size_t band_index) {
+        band_aurocs[band_index] = auroc_compressed_vector(values.get_band_data(band_index),
+                                                          values.get_band_indices(band_index),
+                                                          element_labels,
+                                                          element_scales);
+    });
 }
 
 template<typename D>
@@ -1587,40 +1457,21 @@ logistics_dense_matrix(const pybind11::array_t<D>& values_array,
         logistics.get_row(entry_index)[entry_index] = 0;
     }
 
-    if (is_in_parallel) {
-        for (size_t iteration_index = 0; iteration_index < iterations_count; ++iteration_index) {
-            size_t some_index = iteration_index / (rows_count - 1);
-            size_t other_index = iteration_index % (rows_count - 1);
-            if (other_index < rows_count - 1 - some_index) {
-                some_index = rows_count - 1 - some_index;
-            } else {
-                other_index = rows_count - 2 - other_index;
-            }
-            float logistic = logistics_dense_vectors(values.get_row(some_index),
-                                                     values.get_row(other_index),
-                                                     location,
-                                                     scale);
-            logistics.get_row(some_index)[other_index] = logistic;
-            logistics.get_row(other_index)[some_index] = logistic;
+    parallel_loop(iterations_count, [&](size_t iteration_index) {
+        size_t some_index = iteration_index / (rows_count - 1);
+        size_t other_index = iteration_index % (rows_count - 1);
+        if (other_index < rows_count - 1 - some_index) {
+            some_index = rows_count - 1 - some_index;
+        } else {
+            other_index = rows_count - 2 - other_index;
         }
-    } else {
-#pragma omp parallel for schedule(guided)
-        for (size_t iteration_index = 0; iteration_index < iterations_count; ++iteration_index) {
-            size_t some_index = iteration_index / (rows_count - 1);
-            size_t other_index = iteration_index % (rows_count - 1);
-            if (other_index < rows_count - 1 - some_index) {
-                some_index = rows_count - 1 - some_index;
-            } else {
-                other_index = rows_count - 2 - other_index;
-            }
-            float logistic = logistics_dense_vectors(values.get_row(some_index),
-                                                     values.get_row(other_index),
-                                                     location,
-                                                     scale);
-            logistics.get_row(some_index)[other_index] = logistic;
-            logistics.get_row(other_index)[some_index] = logistic;
-        }
-    }
+        float logistic = logistics_dense_vectors(values.get_row(some_index),
+                                                 values.get_row(other_index),
+                                                 location,
+                                                 scale);
+        logistics.get_row(some_index)[other_index] = logistic;
+        logistics.get_row(other_index)[some_index] = logistic;
+    });
 }
 
 }  // namespace metacells
@@ -1628,7 +1479,9 @@ logistics_dense_matrix(const pybind11::array_t<D>& values_array,
 PYBIND11_MODULE(extensions, module) {
     module.doc() = "C++ extensions to support the metacells package.";
 
-    module.def("in_parallel", &metacells::in_parallel, "Specify if running inside a sub-process.");
+    module.def("set_threads_count",
+               &metacells::set_threads_count,
+               "Specify the number of parallel threads.");
 
 #define REGISTER_D(D)                                                                        \
     module.def("shuffle_matrix_" #D, &metacells::shuffle_matrix<D>, "Shuffle matrix data."); \

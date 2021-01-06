@@ -1757,6 +1757,16 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
                 texts.append(' size ')
                 texts.append(str(value.size))
 
+#       if hasattr(value, 'ndim'):
+#           if value.ndim == 2:
+#               value = utt.to_dense_matrix(value).astype('float64')
+#               checksum = np.sum(np.sum(value * (1+np.arange(value.shape[1])), axis=1) * (1+np.arange(value.shape[0])))
+#           else:
+#               value = utt.to_proper_vector(value).astype('float64')
+#               checksum = np.sum(value * (1+np.arange(len(value))))
+#           texts.append(' checksum ')
+#           texts.append(str(checksum))
+
     finally:
         text = ''.join(texts)
         if text != '  ':
