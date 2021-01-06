@@ -121,6 +121,7 @@ def project_obs_to_group(
 
     property_of_obs = ut.get_o_data(adata, property_name)
     group_of_obs = ut.get_o_data(adata, group)
+    assert gdata.n_obs == (np.max(group_of_obs) + 1)
     property_of_group = \
         np.array([method(property_of_obs[group_of_obs == group])
                   for group in range(gdata.n_obs)])

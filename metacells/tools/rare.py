@@ -17,6 +17,7 @@ import metacells.parameters as pr
 import metacells.preprocessing as pp
 import metacells.utilities as ut
 
+from .named import find_named_genes
 from .similarity import compute_var_var_similarity
 
 __all__ = [
@@ -149,19 +150,14 @@ def find_rare_gene_modules(
     assert min_genes_of_modules > 0
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        forbidden_genes_series = \
-            pd.Series(np.zeros(adata.n_vars, dtype='bool'),
-                      index=adata.var_names)
-        if forbidden_gene_names is not None:
-            forbidden_genes_series[forbidden_gene_names] = True
-        if forbidden_gene_patterns is not None:
-            forbidden_genes_series[ut.patterns_matches(forbidden_gene_patterns,
-                                                       adata.var_names)] = True
-
-        allowed_genes_mask = ~forbidden_genes_series.values
+        forbidden_genes_mask = \
+            find_named_genes(adata, names=forbidden_gene_names,
+                             patterns=forbidden_gene_patterns)
+        assert forbidden_genes_mask is not None
 
         LOG.debug('  genes forbidden by name: %s',
-                  np.sum(forbidden_genes_series.values))
+                  np.sum(forbidden_genes_mask.values))
+        allowed_genes_mask = ~forbidden_genes_mask.values
 
         rare_module_of_cells = np.full(adata.n_obs, -1, dtype='int32')
         list_of_names_of_genes_of_modules: List[ut.DenseVector] = []

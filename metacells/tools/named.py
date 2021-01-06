@@ -46,26 +46,18 @@ def find_named_genes(
     '''
     _, level = ut.log_operation(LOG, adata, 'find_named_genes')
 
-    assert names is not None or patterns is not None
-
     if names is None:
-        names_mask = None
+        names_mask = np.zeros(adata.n_vars, dtype='bool')
     else:
         names_set = set(names)
         names_mask = np.array([name in names_set for name in adata.var_names])
 
     if patterns is None:
-        patterns_mask = None
+        patterns_mask = np.zeros(adata.n_vars, dtype='bool')
     else:
         patterns_mask = ut.patterns_matches(patterns, adata.var_names)
 
-    if names_mask is None:
-        assert patterns_mask is not None
-        genes_mask = patterns_mask
-    elif patterns_mask is None:
-        genes_mask = names_mask
-    else:
-        genes_mask = names_mask & patterns_mask
+    genes_mask = names_mask & patterns_mask
 
     if invert:
         genes_mask = ~genes_mask

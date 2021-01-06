@@ -59,6 +59,26 @@ significant_value: int = 7
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
 downsample_cell_quantile: float = 0.05
 
+#: The method to use to compute similarities. See
+#: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
+#: and
+#: :py:func:`metacells.tools.similarity.compute_var_var_similarity`.
+similarity_method: str = 'pearson'
+
+#: The default location for the logistics function. See
+#: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
+#: :py:func:`metacells.tools.similarity.compute_var_var_similarity`.
+#: and
+#: :py:func:`metacells.utilities.computation.logistics`.
+logistics_location: float = 0.8
+
+#: The default scale for the logistics function. See
+#: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
+#: :py:func:`metacells.tools.similarity.compute_var_var_similarity`.
+#: and
+#: :py:func:`metacells.utilities.computation.logistics`.
+logistics_scale: float = 0.5
+
 #: The generic target number of observations (cells) in a pile, allowing us to
 #: directly compute groups (metacells) for it. See
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
@@ -221,7 +241,7 @@ rare_max_gene_cell_fraction: float = 1e-3
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 rare_min_gene_maximum: int = significant_value
 
-#: Whether to compute repeated gene-gene similarity for computing the rare gene modules. See
+#: Whether to compute repeated gene-gene pearson similarity for computing the rare gene modules. See
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
@@ -331,13 +351,18 @@ cells_similarity_log_data: bool = True
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 cells_similarity_log_normalization: float = 1/significant_value
 
-#: Whether to compute repeated cell-cell similarity for directly computing the metacells. See
+#: The method to use to compute cell-cell similarity. See
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
-#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-cells_repeated_similarity: bool = False
+cells_similarity_method: str = similarity_method
+
+#: The method to use to compute group-group similarity. See
+#: :py:const:`cells_similarity_method`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+groups_similarity_method: str = similarity_method
 
 #: The target K for building the K-Nearest-Neighbors graph. See
 #: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,

@@ -534,6 +534,8 @@ def get_fraction_of_var_per_obs(
     adata: AnnData,
     of: Optional[str] = None,
     *,
+    sum_per_obs: Optional[utt.Vector] = None,  # pylint: disable=unused-argument
+    sum_per_obs_name: Optional[str] = None,
     inplace: bool = True,
     infocus: bool = False,
     layout: Optional[str] = None,
@@ -548,9 +550,11 @@ def get_fraction_of_var_per_obs(
         This is probably the version you want: here, the sum of fraction of the genes in a cell is
         1. See :py:func:`get_fraction_of_obs_per_var` for the other way around.
 
+    If ``sum_per_obs`` is specified, it is used instead of the ``sum_per_obs`` of the data.
+
     If ``inplace`` (default: {inplace}, the data will be stored in ``<of>|fraction_of_var_per_obs``
-    for future reuse, and will also store the intermediate ``<of>|sum_per_obs`` per-observation
-    (cell) data.
+    for future reuse, and will also store the intermediate ``<of>|sum_per_obs_<sum_per_obs_name>``
+    per-observation (cell) data.
 
     If ``infocus`` (default: {infocus}, implies ``inplace``), also makes the result the new focus.
 
@@ -564,13 +568,20 @@ def get_fraction_of_var_per_obs(
     '''
     _, of = _per_of(adata, of, ['vo'])
     to = of + '|fraction_of_var_per_obs'
+    if sum_per_obs_name is not None:
+        to = to + '_by_' + sum_per_obs_name
 
     @utm.timed_call('.compute')
     def compute() -> utt.Matrix:
         assert of is not None
         matrix = uta.get_proper_matrix(adata, of, layout='row_major')
-        sum_per_obs = \
-            get_per_obs(adata, utc.sum_per, of, inplace=inplace).proper
+
+        nonlocal sum_per_obs
+        if sum_per_obs is None:
+            sum_per_obs = \
+                get_per_obs(adata, utc.sum_per, of, inplace=inplace).proper
+        else:
+            sum_per_obs = utt.to_proper_vector(sum_per_obs)
 
         zeros_mask = sum_per_obs == 0
         tmp = np.reciprocal(sum_per_obs, where=~zeros_mask)
@@ -595,6 +606,8 @@ def get_fraction_of_obs_per_var(
     adata: AnnData,
     of: Optional[str] = None,
     *,
+    sum_per_var: Optional[utt.Vector] = None,  # pylint: disable=unused-argument
+    sum_per_var_name: Optional[str] = None,
     inplace: bool = True,
     infocus: bool = False,
     layout: Optional[str] = None,
@@ -609,9 +622,11 @@ def get_fraction_of_obs_per_var(
         This is probably not the version you want: here, the sum of fractions of the cells in each
         gene is 1. See :py:func:`get_fraction_of_var_per_obs` for the other way around.
 
+    If ``sum_per_var`` is specified, it is used instead of the ``sum_per_var`` of the data.
+
     If ``inplace`` (default: {inplace}), the data will be stored in ``<of>|fraction_of_obs_per_var``
-    for future reuse, and will also store the intermediate ``<of>|sum_per_var`` per-variable (gene)
-    data.
+    for future reuse, and will also store the intermediate ``<of>|sum_per_var_<sum_per_var_name>``
+    per-variable (gene) data.
 
     If ``infocus`` (default: {infocus}, implies ``inplace``), also makes the result the new focus.
 
@@ -625,13 +640,20 @@ def get_fraction_of_obs_per_var(
     '''
     _, of = _per_of(adata, of, ['vo'])
     to = of + '|fraction_of_obs_per_var'
+    if sum_per_var_name is not None:
+        to = to + '_by_' + sum_per_var_name
 
     @utm.timed_call('.compute')
     def compute() -> utt.Matrix:
         assert of is not None
         matrix = uta.get_proper_matrix(adata, of, layout='column_major')
-        sum_per_var = \
-            get_per_var(adata, utc.sum_per, of, inplace=inplace).proper
+
+        nonlocal sum_per_var
+        if sum_per_var is None:
+            sum_per_var = \
+                get_per_var(adata, utc.sum_per, of, inplace=inplace).proper
+        else:
+            sum_per_var = utt.to_proper_vector(sum_per_var)
 
         zeros_mask = sum_per_var == 0
         tmp = np.reciprocal(sum_per_var, where=~zeros_mask)
@@ -1065,15 +1087,15 @@ def get_obs_obs_logistics(
 
     If ``layout`` (default: {layout}) is specified, it forces the layout of the returned data.
 
-    Use the ``<of>|obs_obs_logistics`` or ``<of>|obs_obs_logistics``
-    per-observation-per-observation (cell) data if it exists. Otherwise, compute it, and if
-    ``inplace`` (default: {inplace}) store it for future reuse.
+    Use the ``<of>|obs_obs_logistics_location_<location>_scale_<scale>`` or
+    ``<of>|obs_obs_logistics`` per-observation-per-observation (cell) data if it exists. Otherwise,
+    compute it, and if ``inplace`` (default: {inplace}) store it for future reuse.
 
     Returns the matrix and its name.
     '''
     per_of, of = _per_of(adata, of, ['vo', 'oo'])
 
-    to = of + '|obs_obs_logistics'
+    to = of + '|obs_obs_logistics_location_%s_scale_%s' % (location, scale)
 
     if per_of == 'vo':
         assert per is None
@@ -1119,14 +1141,15 @@ def get_var_var_logistics(
 
     If ``layout`` (default: {layout}) is specified, it forces the layout of the returned data.
 
-    Use the ``<of>|var_var_logistics`` per-variable-per-variable (gene) data if it exists.
-    Otherwise, compute it, and if ``inplace`` (default: {inplace}), store it for future reuse.
+    Use the ``<of>|var_var_logistics_location_<location>_scale_<scale>`` per-variable-per-variable
+    (gene) data if it exists. Otherwise, compute it, and if ``inplace`` (default: {inplace}), store
+    it for future reuse.
 
     Returns the matrix and its name.
     '''
     per_of, of = _per_of(adata, of, ['vo', 'vv'])
 
-    to = of + '|obs_obs_logistics'
+    to = of + '|var_var_logistics_location_%s_scale_%s' % (location, scale)
 
     if per_of == 'vo':
         assert per is None

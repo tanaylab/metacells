@@ -38,7 +38,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
     forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_log_normalization: float = pr.cells_similarity_log_normalization,
-    cells_repeated_similarity: bool = pr.cells_repeated_similarity,
+    cells_similarity_method: str = pr.cells_similarity_method,
     target_metacell_size: int = pr.target_metacell_size,
     knn_k: Optional[int] = pr.knn_k,
     knn_balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
@@ -161,8 +161,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
 
     3. Invoke :py:func:`metacells.tools.similarity.compute_obs_obs_similarity` to compute the
        similarity between each pair of cells, using the
-       ``cells_repeated_similarity`` (default: {cells_repeated_similarity})
-       to compensate for the sparseness of the data.
+       ``cells_similarity_method`` (default: {cells_similarity_method}).
 
     4. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a
        K-Nearest-Neighbors graph, using the
@@ -207,6 +206,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        and
        ``dissolve_min_metacell_cells`` (default: ``dissolve_min_metacell_cells``).
     '''
+    total_per_cell = pp.get_per_obs(adata, ut.sum_per, of=of).proper
+
     fdata = \
         extract_feature_data(adata, of=of, tmp=True,
                              downsample_cell_quantile=feature_downsample_cell_quantile,
@@ -226,6 +227,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
         focus = ut.get_focus_name(fdata)
         if isinstance(cell_sizes, str):
             cell_sizes = cell_sizes.replace('<of>', focus)
+            LOG.debug('  cell_sizes: %s', cell_sizes)
 
         if cell_sizes == focus + '|sum_per_obs' and cell_sizes not in adata.obs:
             pp.get_per_obs(adata, ut.sum_per, of=focus)
@@ -234,52 +236,57 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
             ut.get_vector_parameter_data(LOG, adata, cell_sizes,
                                          indent='', per='o', name='cell_sizes')
 
-        if cells_similarity_log_data:
-            LOG.debug('  log of: %s base: 2 normalization: 1/%s',
-                      focus, 1/cells_similarity_log_normalization)
-            of = pp.get_log_matrix(fdata, base=2,
-                                   normalization=cells_similarity_log_normalization).name
-        else:
-            of = None
-
-        tl.compute_obs_obs_similarity(fdata, of=of,
-                                      repeated=cells_repeated_similarity)
-
-        if knn_k is None:
-            if cell_sizes is None:
-                total_cell_sizes = fdata.n_obs
+        of_fractions = \
+            pp.get_fraction_of_var_per_obs(fdata,
+                                           sum_per_obs=total_per_cell,
+                                           sum_per_obs_name='total').name
+        with ut.focus_on(ut.get_vo_data, fdata, of_fractions, intermediate=intermediate):
+            if cells_similarity_log_data:
+                LOG.debug('  log of: %s base: 2 normalization: 1/%s',
+                          focus, 1/cells_similarity_log_normalization)
+                of = pp.get_log_matrix(fdata, base=2,
+                                       normalization=cells_similarity_log_normalization).name
             else:
-                total_cell_sizes = np.sum(cell_sizes)
-            knn_k = round(total_cell_sizes / target_metacell_size)
+                of = None
 
-        LOG.debug('  knn_k: %s', knn_k)
-        if knn_k == 0:
-            LOG.debug('  too small, try a single metacell')
-            ut.set_o_data(fdata, 'candidate',
-                          np.full(fdata.n_obs, 0, dtype='int32'),
-                          log_value=lambda _: '* <- 0')
-        else:
-            tl.compute_obs_obs_knn_graph(fdata,
-                                         k=knn_k,
-                                         balanced_ranks_factor=knn_balanced_ranks_factor,
-                                         incoming_degree_factor=knn_incoming_degree_factor,
-                                         outgoing_degree_factor=knn_outgoing_degree_factor)
+            tl.compute_obs_obs_similarity(fdata, of=of,
+                                          method=cells_similarity_method)
 
-            tl.compute_candidate_metacells(fdata,
-                                           target_metacell_size=target_metacell_size,
-                                           must_complete_cover=must_complete_cover,
-                                           cell_sizes=cell_sizes,
-                                           partition_method=candidates_partition_method,
-                                           min_split_size_factor=candidates_min_split_size_factor,
-                                           max_merge_size_factor=candidates_max_merge_size_factor,
-                                           min_metacell_cells=candidates_min_metacell_cells,
-                                           random_seed=random_seed)
+            if knn_k is None:
+                if cell_sizes is None:
+                    total_cell_sizes = fdata.n_obs
+                else:
+                    total_cell_sizes = np.sum(cell_sizes)
+                knn_k = round(total_cell_sizes / target_metacell_size)
 
-        candidate_of_cells = ut.get_o_dense(fdata, 'candidate')
+            LOG.debug('  knn_k: %s', knn_k)
+            if knn_k == 0:
+                LOG.debug('  too small, try a single metacell')
+                ut.set_o_data(fdata, 'candidate',
+                              np.full(fdata.n_obs, 0, dtype='int32'),
+                              log_value=lambda _: '* <- 0')
+            else:
+                tl.compute_obs_obs_knn_graph(fdata,
+                                             k=knn_k,
+                                             balanced_ranks_factor=knn_balanced_ranks_factor,
+                                             incoming_degree_factor=knn_incoming_degree_factor,
+                                             outgoing_degree_factor=knn_outgoing_degree_factor)
 
-        if intermediate:
-            ut.set_o_data(adata, 'candidate', candidate_of_cells,
-                          log_value=ut.groups_description)
+                tl.compute_candidate_metacells(fdata,
+                                               target_metacell_size=target_metacell_size,
+                                               must_complete_cover=must_complete_cover,
+                                               cell_sizes=cell_sizes,
+                                               partition_method=candidates_partition_method,
+                                               min_split_size_factor=candidates_min_split_size_factor,
+                                               max_merge_size_factor=candidates_max_merge_size_factor,
+                                               min_metacell_cells=candidates_min_metacell_cells,
+                                               random_seed=random_seed)
+
+            candidate_of_cells = ut.get_o_dense(fdata, 'candidate')
+
+            if intermediate:
+                ut.set_o_data(adata, 'candidate', candidate_of_cells,
+                              log_value=ut.groups_description)
 
     if must_complete_cover:
         assert np.min(candidate_of_cells) == 0

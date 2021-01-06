@@ -35,6 +35,7 @@ def extract_feature_data(
     min_gene_relative_variance: float = pr.feature_min_gene_relative_variance,
     forbidden_gene_names: Optional[Collection[str]] = None,
     forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    extract_downsampled: bool = True,
     random_seed: int = 0,
     intermediate: bool = True,
 ) -> Optional[AnnData]:
@@ -100,9 +101,14 @@ def extract_feature_data(
        This is stored in an intermediate per-variable (gene) ``forbidden_genes`` boolean mask.
 
     5. Invoke :py:func:`metacells.preprocessing.filter.filter_data` to slice just the selected
-       "feature" genes using the ``name`` (default: {name}) and ``tmp`` (default: {tmp}).
+       "feature" genes using the ``name`` (default: {name}) and ``tmp`` (default: {tmp}). If
+       ``extract_downsampled`` (default: {extract_downsampled}), slice the downsampled data,
+       otherwise, slice the original data.
     '''
     ut.log_pipeline_step(LOG, adata, 'extract_feature_data')
+
+    if of is None:
+        of = ut.get_focus_name(adata)
 
     with ut.focus_on(ut.get_vo_data, adata, of,
                      intermediate=intermediate, keep='feature_gene'):
@@ -124,16 +130,18 @@ def extract_feature_data(
                                 names=forbidden_gene_names,
                                 patterns=forbidden_gene_patterns)
 
+        if not extract_downsampled:
+            ut.get_vo_data(adata, of, infocus=True)
+
         results = pp.filter_data(adata, name=name, tmp=tmp,
                                  mask_var='feature_gene',
                                  var_masks=['high_fraction_gene',
                                             'high_relative_variance_gene',
                                             '~forbidden_gene'])
+
         if results is None:
             raise ValueError('Empty feature data, giving up')
 
     fdata = results[0]
-
-    ut.get_vo_data(fdata, ut.get_focus_name(adata), infocus=True)
-
+    ut.get_vo_data(fdata, of, infocus=True)
     return fdata
