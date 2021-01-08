@@ -52,6 +52,7 @@ __all__ = [
 
     'bincount_vector',
     'most_frequent',
+    'fraction_of_grouped',
 
     'downsample_matrix',
     'downsample_vector',
@@ -1021,14 +1022,24 @@ def most_frequent(
 ) -> Any:
     '''
     Return the most frequent value in a vactor.
-
-    This only
     '''
     unique, positions = \
         np.unique(utt.to_proper_vector(vector), return_inverse=True)
     counts = np.bincount(positions)
     maxpos = np.argmax(counts)
     return unique[maxpos]
+
+
+@utm.timed_call()
+def fraction_of_grouped(
+    value: Any
+) -> Callable[[utt.Vector], Any]:
+    '''
+    Return a function that returns the fraction of the grouped values equal to a specific value.
+    '''
+    def compute(vector: utt.Vector) -> Any:
+        return np.sum(utt.to_proper_vector(vector) == value) / len(vector)
+    return compute
 
 
 ROLLING_FUNCTIONS = {

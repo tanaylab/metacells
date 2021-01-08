@@ -57,7 +57,7 @@ def find_named_genes(
     else:
         patterns_mask = ut.patterns_matches(patterns, adata.var_names)
 
-    genes_mask = names_mask & patterns_mask
+    genes_mask = names_mask | patterns_mask
 
     if invert:
         genes_mask = ~genes_mask
