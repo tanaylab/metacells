@@ -573,3 +573,23 @@ excess_shuffles_count: int = 10
 #: The number of most-distinct genes to collect for each cell. See
 #: :py:func:`metacells.tools.distinct.find_distinct_genes`.
 distinct_genes_count: int = 20
+
+#: The minimal UMAP point distance. Note this is zero under the assumption we'll be specifying a
+#: :py:const:`cover_fraction`. See :py:func:`metacells.tools.layout.umap_by_distances`.
+umap_min_dist: float = 0.0
+
+#: The UMAP KNN graph degree. See :py:func:`metacells.tools.layout.umap_by_distances`.
+umap_k: int = 15
+
+#: The fraction of the UMAP plot area to cover with points. See
+#: :py:func:`metacells.utilities.computation.cover_diameter`,
+#: :py:func:`metacells.utilities.computation.cover_coordinates`
+#: and
+#: :py:func:`metacells.tools.layout.umap_by_distances`,
+cover_fraction: float = 1/3.0
+
+#: The noise to add to the UMAP plot area. See
+#: :py:func:`metacells.utilities.computation.cover_coordinates`
+#: and
+#: :py:func:`metacells.tools.layout.umap_by_distances`,
+noise_fraction: float = 0.1

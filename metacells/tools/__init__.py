@@ -19,6 +19,7 @@ from .downsample import *
 from .excess import *
 from .high import *
 from .knn_graph import *
+from .layout import *
 from .mask import *
 from .named import *
 from .noisy_lonely import *

@@ -16,7 +16,7 @@ import re
 from re import Pattern
 from typing import (Any, Callable, Collection, List, Optional, Tuple, TypeVar,
                     Union, overload)
-from warnings import warn
+from warnings import catch_warnings, filterwarnings, warn
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -50,6 +50,15 @@ __all__ = [
     'quantile_per',
     'nanquantile_per',
 
+    'sum_matrix',
+    'nnz_matrix',
+    'mean_matrix',
+    'max_matrix',
+    'min_matrix',
+    'nanmean_matrix',
+    'nanmax_matrix',
+    'nanmin_matrix',
+
     'bincount_vector',
     'most_frequent',
     'fraction_of_grouped',
@@ -66,6 +75,9 @@ __all__ = [
     'bin_fill',
     'sum_groups',
     'shuffle_matrix',
+
+    'cover_diameter',
+    'cover_coordinates',
 ]
 
 
@@ -694,9 +706,6 @@ def matrix_rows_auroc(
     proper, dense, compressed = utt.to_proper_matrices(matrix)
     rows_count, columns_count = proper.shape
 
-    columns_subset = utt.to_dense_vector(columns_subset)
-    assert columns_subset.size == columns_count
-
     if columns_scale is None:
         columns_scale = np.full(columns_count, 1.0, dtype='float32')
     else:
@@ -705,7 +714,10 @@ def matrix_rows_auroc(
 
     rows_auroc = np.empty(rows_count, dtype='float64')
 
-    if columns_subset.dtype != 'bool':
+    columns_subset = utt.to_dense_vector(columns_subset)
+    if columns_subset.dtype == 'bool':
+        assert columns_subset.size == columns_count
+    else:
         mask: utt.DenseVector = np.full(columns_count, False)
         mask[columns_subset] = True
         columns_subset = mask
@@ -753,7 +765,11 @@ def nanmean_per(matrix: utt.DenseMatrix, *, per: str) -> utt.DenseVector:
     axis = utt.PER_OF_AXIS.index(per)
 
     dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
-    return _reduce_matrix(dense, per, lambda dense: np.nanmean(dense, axis=1 - axis))
+
+    with catch_warnings():
+        filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
+
+        return _reduce_matrix(dense, per, lambda dense: np.nanmean(dense, axis=1 - axis))
 
 
 @utm.timed_call()
@@ -780,7 +796,10 @@ def nanmax_per(matrix: utt.DenseMatrix, *, per: str) -> utt.DenseVector:
     axis = utt.PER_OF_AXIS.index(per)
 
     dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
-    return _reduce_matrix(dense, per, lambda dense: np.nanmax(dense, axis=1 - axis))
+    with catch_warnings():
+        filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
+
+        return _reduce_matrix(dense, per, lambda dense: np.nanmax(dense, axis=1 - axis))
 
 
 @utm.timed_call()
@@ -804,14 +823,17 @@ def nanmin_per(matrix: utt.DenseMatrix, *, per: str) -> utt.DenseVector:
     Compute the minimal value ``per`` (``row`` or ``column``) of some ``matrix``,
     ignoring ``None`` values, if any.
     '''
-    axis = utt.PER_OF_AXIS.index(per)
+    with catch_warnings():
+        filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
 
-    sparse = utt.SparseMatrix.maybe(matrix)
-    if sparse is not None:
-        return _reduce_matrix(sparse, per, lambda sparse: sparse.nanmin(axis=1 - axis))
+        axis = utt.PER_OF_AXIS.index(per)
 
-    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
-    return _reduce_matrix(dense, per, lambda dense: np.nanmin(dense, axis=1 - axis))
+        sparse = utt.SparseMatrix.maybe(matrix)
+        if sparse is not None:
+            return _reduce_matrix(sparse, per, lambda sparse: sparse.nanmin(axis=1 - axis))
+
+        dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
+        return _reduce_matrix(dense, per, lambda dense: np.nanmin(dense, axis=1 - axis))
 
 
 @utm.timed_call()
@@ -942,6 +964,96 @@ def nanquantile_per(matrix: utt.DenseMatrix, quantile: float, *, per: Optional[s
 
     assert utt.is_layout(matrix, per + '_major')
     return np.nanquantile(matrix, quantile, axis)
+
+
+@utm.timed_call()
+def sum_matrix(matrix: utt.Matrix) -> Any:
+    '''
+    Compute the sum of all values in a matrix.
+    '''
+    return np.sum(matrix)
+
+
+@utm.timed_call()
+def nnz_matrix(matrix: utt.Matrix) -> Any:
+    '''
+    Compute the number of non-zero entries in a matrix.
+
+    If this is a sparse matrix, this counts the number of structural non-zeros.
+    '''
+    sparse = utt.SparseMatrix.maybe(matrix)
+    if sparse is not None:
+        return sparse.nnz
+    return np.sum(matrix != 0)
+
+
+@utm.timed_call()
+def mean_matrix(matrix: utt.Matrix) -> Any:
+    '''
+    Compute the sum of all values in a matrix.
+    '''
+    return np.mean(matrix)
+
+
+@utm.timed_call()
+def max_matrix(matrix: utt.Matrix) -> Any:
+    '''
+    Compute the maximum of all values in a matrix.
+    '''
+    return np.max(matrix)
+
+
+@utm.timed_call()
+def min_matrix(matrix: utt.Matrix) -> Any:
+    '''
+    Compute the minimum of all values in a matrix.
+    '''
+    return np.min(matrix)
+
+
+@utm.timed_call()
+def nanmean_matrix(matrix: utt.Matrix) -> Any:
+    '''
+    Compute the sum of all non-NaN values in a matrix.
+    '''
+    with catch_warnings():
+        filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
+
+        _, dense, compressed = utt.to_proper_matrices(matrix)
+        if compressed is not None:
+            return np.nansum(compressed.data) / (compressed.shape[0] * compressed.shape[1])
+        assert dense is not None
+        return np.nanmean(dense)
+
+
+@utm.timed_call()
+def nanmax_matrix(matrix: utt.Matrix) -> Any:
+    '''
+    Compute the maximum of all non-NaN values in a matrix.
+    '''
+    with catch_warnings():
+        filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
+
+        _, dense, compressed = utt.to_proper_matrices(matrix)
+        if compressed is not None:
+            return np.nanmax(dense)
+        assert dense is not None
+        return np.nanmax(dense)
+
+
+@utm.timed_call()
+def nanmin_matrix(matrix: utt.Matrix) -> Any:
+    '''
+    Compute the minimum of all non-NaN values in a matrix.
+    '''
+    with catch_warnings():
+        filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
+
+        _, dense, compressed = utt.to_proper_matrices(matrix)
+        if compressed is not None:
+            return np.nanmin(dense)
+        assert dense is not None
+        return np.nanmin(dense)
 
 
 M = TypeVar('M', bound=utt.Matrix)
@@ -1426,3 +1538,49 @@ def shuffle_matrix(
         extension_name = 'shuffle_matrix_%s_t' % dense.dtype
         extension = getattr(xt, extension_name)
         extension(dense, random_seed)
+
+
+@utm.timed_call()
+def cover_diameter(*, points_count: int, area: float, cover_fraction: float) -> float:
+    '''
+    Return the diameter to give to each point so that the total area of ``points_count``
+    will be a ``cover_fraction`` of the total ``area``.
+    '''
+    return xt.cover_diameter(points_count, area, cover_fraction)
+
+
+@utm.timed_call()
+@utd.expand_doc()
+def cover_coordinates(
+    x_coordinates: utt.Vector,
+    y_coordinates: utt.Vector,
+    *,
+    cover_fraction: float = 1/3,
+    noise_fraction: float = 1.0,
+    random_seed: int = 0,
+) -> Tuple[utt.DenseVector, utt.DenseVector]:
+    '''
+    Given x/y coordinates of points, move them so that the total area covered by them is
+    ``cover_fraction`` (default: {cover_fraction}) of the total area of their bounding box,
+    assuming each has the diameter of their minimal distance. The
+    points are jiggled around by the ``noise_fraction`` of their minimal distance using the
+    ``random_seed`` (default: {random_seed}).
+
+    Returns new x/y coordinates vectors.
+    '''
+    points_count = len(x_coordinates)
+    assert x_coordinates.dtype == y_coordinates.dtype
+    x_coordinates = utt.to_dense_vector(x_coordinates, copy=True)
+    y_coordinates = utt.to_dense_vector(y_coordinates, copy=True)
+    spaced_x_coordinates = \
+        np.full(points_count, -0.1, dtype=x_coordinates.dtype)
+    spaced_y_coordinates = \
+        np.full(points_count, -0.2, dtype=y_coordinates.dtype)
+
+    extension_name = 'cover_coordinates_%s_t' % x_coordinates.dtype
+    extension = getattr(xt, extension_name)
+    extension(x_coordinates, y_coordinates,
+              spaced_x_coordinates, spaced_y_coordinates,
+              cover_fraction, noise_fraction, random_seed)
+
+    return spaced_x_coordinates, spaced_y_coordinates

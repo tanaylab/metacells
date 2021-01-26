@@ -287,6 +287,9 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
             if intermediate:
                 ut.set_o_data(adata, 'candidate', candidate_of_cells,
                               log_value=ut.groups_description)
+                outgoing_weights = \
+                    ut.get_oo_data(fdata, 'obs_outgoing_weights')
+                ut.set_oo_data(adata, 'obs_outgoing_weights', outgoing_weights)
 
     if must_complete_cover:
         assert np.min(candidate_of_cells) == 0

@@ -15,6 +15,7 @@ __all__ = [
     'project_group_to_obs',
     'project_obs_to_obs',
     'project_obs_to_group',
+    'project_obs_obs_to_group_group',
 ]
 
 
@@ -103,11 +104,11 @@ def project_obs_to_group(
     '''
     Project the value of a property from per-observation data to per-group data.
 
-    The input annotated ``adata`` is expected to contain a per-observation (group) annotation named
+    The input annotated ``adata`` is expected to contain a per-observation (cell) annotation named
     ``property_name`` and also a per-observation annotation named ``group`` which identifies the
     group each observation (cell) belongs to, which must be an integer.
 
-    This will generate a new per-observation (cell) annotation in ``gdata``, named
+    This will generate a new per-observation (group) annotation in ``gdata``, named
     ``to_property_name`` (by default, the same as ``property_name``), containing the aggregated
     value of the property of all the observations (cells) that belong to the group.
 
@@ -126,3 +127,55 @@ def project_obs_to_group(
         np.array([method(property_of_obs[group_of_obs == group])
                   for group in range(gdata.n_obs)])
     ut.set_o_data(gdata, to_property_name, property_of_group)
+
+
+@ut.timed_call()
+def project_obs_obs_to_group_group(
+    *,
+    adata: AnnData,
+    gdata: AnnData,
+    group: str,
+    property_name: str,
+    to_property_name: Optional[str] = None,
+    method: Callable[[ut.Matrix], Any] = ut.nanmean_matrix,
+) -> None:
+    '''
+    Project the value of a property from per-observation-per-observation data to per-group-per-group
+    data.
+
+    The input annotated ``adata`` is expected to contain a per-observation-per-observation (cell)
+    annotation named ``property_name`` and also a per-observation annotation named ``group`` which
+    identifies the group each observation (cell) belongs to, which must be an integer.
+
+    This will generate a new per-observation-per-observation (group) annotation in ``gdata``, named
+    ``to_property_name`` (by default, the same as ``property_name``), containing the aggregated
+    value of the property of all the observations (cells) that belong to the group.
+
+    The aggregation method (by default, :py:func:`metacells.utilities.computation.nanmean_matrix`)
+    is any function taking a matrix of values and returning a single value.
+    '''
+    ut.log_operation(LOG, adata, 'project_obs_obs_to_group_group')
+
+    if to_property_name is None:
+        to_property_name = property_name
+
+    property_of_obs_obs = \
+        ut.to_proper_matrix(ut.get_oo_data(adata, property_name))
+    group_of_obs = ut.get_o_data(adata, group)
+    assert gdata.n_obs == (np.max(group_of_obs) + 1)
+    property_of_group_group = \
+        np.empty((gdata.n_obs, gdata.n_obs), dtype=property_of_obs_obs.dtype)
+
+    # TODO: This is a slow implementation.
+    for row_group in range(gdata.n_obs):
+        row_cells = np.where(group_of_obs == row_group)[0]
+        assert len(row_cells) > 0
+
+        for column_group in range(gdata.n_obs):
+            column_cells = np.where(group_of_obs == column_group)[0]
+            assert len(column_cells) > 0
+
+            property_of_group_group[row_group, column_group] = \
+                method(property_of_obs_obs[row_cells, :][:, column_cells])
+
+    ut.set_oo_data(gdata, to_property_name, property_of_group_group)

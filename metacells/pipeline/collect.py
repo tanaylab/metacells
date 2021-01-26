@@ -97,7 +97,7 @@ def collect_metacells(
             continue
         if not ut.has_data(adata, annotation_name) \
                 and (annotation_name.startswith('pre_')
-                     or annotation_name == 'excluded_gene'):
+                     or annotation_name in ('excluded_gene', 'clean_gene')):
             continue
         value_per_gene = ut.get_v_dense(adata, annotation_name)
         ut.set_v_data(mdata, annotation_name, value_per_gene,

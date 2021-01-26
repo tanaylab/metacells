@@ -46,8 +46,9 @@ def expand_doc(**kwargs: Any) -> Callable[[CALLABLE], CALLABLE]:
         try:
             expanded_doc = function.__doc__.format_map(kwargs)
         except KeyError as exception:
-            raise KeyError('missing key %s in expand_doc documentation for the function %s.%s'
-                           % (exception, function.__module__, function.__qualname__))
+            raise KeyError(f'missing key {exception} '  # pylint: disable=raise-missing-from
+                           f'in expand_doc documentation for the function '
+                           f'{function.__module__}.{function.__qualname__}')
 
         if expanded_doc == function.__doc__:
             expand_doc_had_no_effect = \
