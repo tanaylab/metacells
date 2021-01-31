@@ -560,7 +560,7 @@ excess_downsample_cell_quantile: float = downsample_cell_quantile
 
 #: The minimal total value of a gene in a metacell to allow computing "excess" R^2 for it. See
 #: :py:func:`metacells.tools.excess.compute_excess_r2`.
-excess_min_gene_total: float = 10
+excess_min_gene_total: int = 40
 
 #: The rank of the "top" gene-gene similarity to use for computing "excess" R^2 for each gene.
 #: See :py:func:`metacells.tools.excess.compute_excess_r2`.

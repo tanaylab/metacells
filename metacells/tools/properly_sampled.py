@@ -79,7 +79,7 @@ def find_properly_sampled_cells(
     assert (max_excluded_genes_fraction is None) == (excluded_data is None)
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        total_of_cells = pp.get_per_obs(adata, ut.sum_per).proper
+        total_of_cells = pp.get_per_obs(adata, ut.sum_per).dense
         cells_mask = np.full(adata.n_obs, True, dtype='bool')
 
         if min_cell_total is not None:
@@ -96,7 +96,7 @@ def find_properly_sampled_cells(
             LOG.debug('  max_excluded_genes_fraction: %s',
                       max_excluded_genes_fraction)
             excluded_of_cells = \
-                pp.get_per_obs(excluded_data, ut.sum_per).proper
+                pp.get_per_obs(excluded_data, ut.sum_per).dense
             if np.min(total_of_cells) == 0:
                 total_of_cells = np.copy(total_of_cells)
                 total_of_cells[total_of_cells == 0] = 1
@@ -160,7 +160,7 @@ def find_properly_sampled_genes(
     of, level = ut.log_operation(LOG, adata, 'find_properly_sampled_genes', of)
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        total_of_genes = pp.get_per_var(adata, ut.sum_per).proper
+        total_of_genes = pp.get_per_var(adata, ut.sum_per).dense
         LOG.debug('  min_gene_total: %s', min_gene_total)
         genes_mask = total_of_genes >= min_gene_total
 

@@ -117,7 +117,7 @@ def compute_candidate_metacells(
     of, level = ut.log_operation(LOG, adata, 'compute_candidate_metacells',
                                  of, 'obs_outgoing_weights')
 
-    edge_weights = ut.get_oo_data(adata, of)
+    edge_weights = ut.get_oo_proper(adata, of)
     edge_weights = ut.to_layout(edge_weights, 'row_major')
     assert edge_weights.shape[0] == edge_weights.shape[1]
 

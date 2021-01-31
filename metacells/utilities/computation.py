@@ -187,7 +187,7 @@ def relayout_compressed(matrix: utt.CompressedMatrix) -> utt.CompressedMatrix:
             compressed = compressed.tocsc()
         else:
             compressed = compressed.tocsr()
-        compressed.sort_indices()
+        utt.sort_indices(compressed)
 
     else:
         _output_elements_count = matrix_bands_count = compressed.shape[axis]
@@ -406,14 +406,17 @@ def logistics(
     return result
 
 
+S = TypeVar('S', bound='utt.AnyShaped')
+
+
 @utm.timed_call()
 @utd.expand_doc()
-def log_data(
-    shaped: utt.Shaped,
+def log_data(  # pylint: disable=too-many-branches
+    shaped: S,
     *,
     base: Optional[float] = None,
     normalization: float = 0,
-) -> utt.DenseShaped:
+) -> S:
     '''
     Return the log of the values in the ``shaped`` data.
 
@@ -434,7 +437,11 @@ def log_data(
 
         The result is always dense, as even for sparse data, the log is rarely zero.
     '''
-    dense = utt.to_dense(shaped, copy=True)
+    dense: utt.DenseShaped
+    if shaped.ndim == 1:
+        dense = utt.to_dense_vector(shaped, copy=True)
+    else:
+        dense = utt.to_dense_matrix(shaped, copy=True)  # type: ignore
 
     if normalization > 0:
         dense += normalization
@@ -469,7 +476,7 @@ def log_data(
     if normalization < 0:
         dense[~where] += normalization
 
-    return dense
+    return dense  # type: ignore
 
 
 @utm.timed_call()
@@ -631,10 +638,7 @@ def _downsample_compressed_matrix(
                   output.data, samples, random_seed)
 
     if eliminate_zeros:
-        with utm.timed_step('sparse.eliminate_zeros'):
-            utm.timed_parameters(before=output.nnz)
-            output.eliminate_zeros()
-            utm.timed_parameters(after=output.nnz)
+        utt.eliminate_zeros(output)
 
     return output
 
@@ -694,7 +698,7 @@ def matrix_rows_auroc(
     matrix: utt.Matrix,
     columns_subset: utt.DenseVector,
     columns_scale: Optional[utt.DenseVector] = None,
-) -> utt.Vector:
+) -> utt.DenseVector:
     '''
     Given a matrix and a subset of the columns, return a vector containing for each row the area
     under the receiver operating characteristic (AUROC) for the row, that is, the probability that a
@@ -1121,10 +1125,9 @@ def bincount_vector(
     '''
     Drop-in replacement for ``np.bincount``, which is timed and also works on pandas data.
     '''
-    proper = utt.to_proper_vector(vector)
-    array = utt.DenseVector.be(proper)
-    result = np.bincount(array, minlength=minlength)
-    utm.timed_parameters(size=array.size, bins=result.size)
+    dense = utt.to_dense_vector(vector)
+    result = np.bincount(dense, minlength=minlength)
+    utm.timed_parameters(size=dense.size, bins=result.size)
     return result
 
 
@@ -1136,7 +1139,7 @@ def most_frequent(
     Return the most frequent value in a vactor.
     '''
     unique, positions = \
-        np.unique(utt.to_proper_vector(vector), return_inverse=True)
+        np.unique(utt.to_dense_vector(vector), return_inverse=True)
     counts = np.bincount(positions)
     maxpos = np.argmax(counts)
     return unique[maxpos]
@@ -1150,7 +1153,7 @@ def fraction_of_grouped(
     Return a function that returns the fraction of the grouped values equal to a specific value.
     '''
     def compute(vector: utt.Vector) -> Any:
-        return np.sum(utt.to_proper_vector(vector) == value) / len(vector)
+        return np.sum(utt.to_dense_vector(vector) == value) / len(vector)
     return compute
 
 
@@ -1186,24 +1189,23 @@ def sliding_window_function(
         The window size must be an odd positive integer. If an even value is specified, it is
         automatically increased by one.
     """
-    proper = utt.to_proper_vector(vector)
-    array = utt.DenseVector.be(proper)
+    dense = utt.to_dense_vector(vector)
 
     if window_size % 2 == 0:
         window_size += 1
 
     utm.timed_parameters(function=function,
-                         size=array.size,
+                         size=dense.size,
                          window=window_size)
 
     half_window_size = (window_size - 1) // 2
 
     if order_by is not None:
-        assert array.size == order_by.size
+        assert dense.size == order_by.size
         order_indices = np.argsort(order_by)
         reverse_order_indices = np.argsort(order_indices)
     else:
-        reverse_order_indices = order_indices = np.arange(array.size)
+        reverse_order_indices = order_indices = np.arange(dense.size)
 
     min_index = order_indices[0]
     max_index = order_indices[-1]
@@ -1214,13 +1216,13 @@ def sliding_window_function(
         np.repeat(max_index, half_window_size),
     ])
 
-    extended_series = pd.Series(array[extended_order_indices])
+    extended_series = pd.Series(dense[extended_order_indices])
     rolling_windows = extended_series.rolling(window_size)
 
     compute = ROLLING_FUNCTIONS[function]
     computed = compute(rolling_windows).values
     reordered = computed[window_size - 1:]
-    assert reordered.size == array.size
+    assert reordered.size == dense.size
 
     if order_by is not None:
         reordered = reordered[reverse_order_indices]
@@ -1431,7 +1433,7 @@ def sum_groups(
     groups: utt.Vector,
     *,
     per: str
-) -> Optional[Tuple[utt.Matrix, utt.Vector]]:
+) -> Optional[Tuple[utt.Matrix, utt.DenseVector]]:
     '''
     Given a ``matrix``, and a vector of ``groups`` ``per`` row or column, return a matrix with a row
     or column per group, containing the sum of the groups rows or columns, and a vector of sizes

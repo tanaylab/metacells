@@ -1,4 +1,4 @@
-''')
+'''Proper)
 Annotation
 ----------
 
@@ -145,9 +145,8 @@ __all__ = [
     'safe_slicing_derived',
 
     'get_data',
-    'get_proper',
     'get_proper_matrix',
-    'get_proper_vector',
+    'get_dense_vector',
     'get_vector_parameter_data',
     'has_data',
     'data_per',
@@ -165,8 +164,9 @@ __all__ = [
     'get_oa_proper',
     'get_va_data',
     'get_va_proper',
-
     'get_vo_data',
+    'get_vo_proper',
+
     'all_data',
     'del_data',
     'focus_on',
@@ -227,15 +227,17 @@ def setup(
     X = adata.X
     if not utt.frozen(X):  # type: ignore
         utt.freeze(X)  # type: ignore
+    X = utt.Shaped.be(X)
     assert X is not None
-    assert utt.Shaped.be(X).ndim == 2
+    assert X.ndim == 2
     assert '__x__' not in adata.uns_keys()
     assert '|' not in x_name
 
-    if utt.SparseMatrix.am(X):
-        if not X.has_sorted_indices:
+    compressed = utt.CompressedMatrix.maybe(X)
+    if compressed is not None:
+        if not compressed.has_sorted_indices:
             warn('%s does not have sorted indices' % (name or 'adata'))
-        if not X.has_canonical_format:
+        if not compressed.has_canonical_format:
             warn('%s does not have canonical format' % (name or 'adata'))
 
     if tmp:
@@ -674,26 +676,6 @@ def get_data(  # pylint: disable=too-many-return-statements
 
 
 @utm.timed_call()
-def get_proper(
-    adata: AnnData,
-    name: Optional[str] = None,
-    *,
-    per: Optional[str] = None,
-    compute: Optional[Callable[[], Any]] = None,
-    inplace: bool = True,
-    infocus: bool = False,
-    layout: Optional[str] = None,
-) -> utt.ProperShaped:
-    '''
-    Same as :py:func:`get_data`, except that the returned data is
-    passed through :py:func:`metacells.utilities.typing.to_proper`.
-    '''
-    return utt.to_proper(get_data(adata, name, per=per, compute=compute,
-                                  inplace=inplace, infocus=infocus,
-                                  layout=layout))
-
-
-@utm.timed_call()
 def get_proper_matrix(
     adata: AnnData,
     name: Optional[str] = None,
@@ -716,7 +698,7 @@ def get_proper_matrix(
 
 
 @utm.timed_call()
-def get_proper_vector(
+def get_dense_vector(
     adata: AnnData,
     name: Optional[str] = None,
     *,
@@ -724,14 +706,14 @@ def get_proper_vector(
     compute: Optional[Callable[[], Any]] = None,
     inplace: bool = True,
     infocus: bool = False,
-) -> utt.ProperVector:
+) -> utt.DenseVector:
     '''
     Same as :py:func:`get_data`, except that the returned data is
-    passed through :py:func:`metacells.utilities.typing.to_proper_vector`
-    ensuring it is a :py:const:`metacells.utilities.typing.ProperVector`.
+    passed through :py:func:`metacells.utilities.typing.to_dense_vector`
+    ensuring it is a :py:const:`metacells.utilities.typing.DenseVector`.
     '''
-    return utt.to_proper_vector(get_data(adata, name, per=per, compute=compute,
-                                         inplace=inplace, infocus=infocus))
+    return utt.to_dense_vector(get_data(adata, name, per=per, compute=compute,
+                                        inplace=inplace, infocus=infocus))
 
 
 def has_data(
@@ -938,7 +920,7 @@ def get_oo_proper(
     compute: Optional[Callable[[], utt.Matrix]] = None,
     inplace: bool = True,
     layout: Optional[str] = None,
-) -> utt.Matrix:
+) -> utt.ProperMatrix:
     '''
     Same as :py:func:`get_oo_data` but returns a numpy
     :py:const:`metacells.utilities.typing.ProperMatrix`.
@@ -983,7 +965,7 @@ def get_vv_proper(
     compute: Optional[Callable[[], utt.Matrix]] = None,
     inplace: bool = True,
     layout: Optional[str] = None,
-) -> utt.Matrix:
+) -> utt.ProperMatrix:
     '''
     Same as :py:func:`get_vv_data` but returns a numpy
     :py:const:`metacells.utilities.typing.ProperMatrix`.
@@ -1028,7 +1010,7 @@ def get_oa_proper(
     compute: Optional[Callable[[], utt.Matrix]] = None,
     inplace: bool = True,
     layout: Optional[str] = None,
-) -> utt.Matrix:
+) -> utt.ProperMatrix:
     '''
     Same as :py:func:`get_oa_data` but returns a numpy
     :py:const:`metacells.utilities.typing.ProperMatrix`.
@@ -1073,7 +1055,7 @@ def get_va_proper(
     compute: Optional[Callable[[], utt.Matrix]] = None,
     inplace: bool = True,
     layout: Optional[str] = None,
-) -> utt.Matrix:
+) -> utt.ProperMatrix:
     '''
     Same as :py:func:`get_va_data` but returns a numpy
     :py:const:`metacells.utilities.typing.ProperMatrix`.
@@ -1131,12 +1113,12 @@ def get_vo_data(
 
 def get_vo_proper(
     adata: AnnData,
-    name: str,
+    name: Optional[str] = None,
     *,
     compute: Optional[Callable[[], utt.Matrix]] = None,
     inplace: bool = True,
     layout: Optional[str] = None,
-) -> utt.Matrix:
+) -> utt.ProperMatrix:
     '''
     Same as :py:func:`get_vo_data` but returns a numpy
     :py:const:`metacells.utilities.typing.ProperMatrix`.
@@ -1513,7 +1495,7 @@ def set_m_data(
 def set_o_data(
     adata: AnnData,
     name: str,
-    data: utt.Vector,
+    data: utt.DenseVector,
     log_value: Optional[Callable[[Any], Optional[str]]] = None,
 ) -> Any:
     '''
@@ -1535,7 +1517,7 @@ def set_o_data(
 def set_v_data(
     adata: AnnData,
     name: str,
-    data: utt.Vector,
+    data: utt.DenseVector,
     log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
@@ -1556,7 +1538,7 @@ def set_v_data(
 def set_oo_data(
     adata: AnnData,
     name: str,
-    data: utt.Matrix,
+    data: utt.ProperMatrix,
     log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
@@ -1577,7 +1559,7 @@ def set_oo_data(
 def set_vv_data(
     adata: AnnData,
     name: str,
-    data: utt.Matrix,
+    data: utt.ProperMatrix,
     log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
@@ -1598,7 +1580,7 @@ def set_vv_data(
 def set_oa_data(
     adata: AnnData,
     name: str,
-    data: utt.Matrix,
+    data: utt.ProperMatrix,
     log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
@@ -1619,7 +1601,7 @@ def set_oa_data(
 def set_va_data(
     adata: AnnData,
     name: str,
-    data: utt.Matrix,
+    data: utt.ProperMatrix,
     log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
@@ -1641,7 +1623,7 @@ def set_va_data(
 def set_vo_data(
     adata: AnnData,
     name: str,
-    data: utt.Matrix,
+    data: utt.ProperMatrix,
     *,
     log_value: Optional[Callable[[Any], Optional[str]]] = None,
     infocus: bool = False,

@@ -75,14 +75,6 @@ class NamedShaped(NamedTuple):
     #: The actual :py:const:`metacells.utilities.typing.Shaped` data.
     shaped: utt.Shaped
 
-    @property
-    def proper(self) -> utt.ProperShaped:
-        '''
-        Access the :py:const:`metacells.utilities.typing.ProperShaped` data
-        using :py:func:`metacells.utilities.typing.to_proper`.
-        '''
-        return utt.to_proper(self.shaped)
-
 
 NS = TypeVar('NS', bound=NamedShaped)
 
@@ -101,16 +93,12 @@ class NamedMatrix(NamedShaped):
         return shaped  # type: ignore
 
     @property
-    def proper(  # type: ignore # pylint: disable=arguments-differ
-        self,
-        *,
-        default_layout: str = 'row_major'
-    ) -> utt.ProperMatrix:
+    def proper(self) -> utt.ProperMatrix:
         '''
         Access the :py:const:`metacells.utilities.typing.ProperMatrix` data
         using :py:func:`metacells.utilities.typing.to_proper_matrix`.
         '''
-        return utt.to_proper_matrix(self.matrix, default_layout=default_layout)
+        return utt.to_proper_matrix(self.matrix)
 
     @staticmethod
     def be(named: NamedShaped) -> 'NamedMatrix':
@@ -135,12 +123,12 @@ class NamedVector(NamedShaped):
         return shaped  # type: ignore
 
     @property
-    def proper(self) -> utt.ProperVector:
+    def dense(self) -> utt.DenseVector:
         '''
-        Access the :py:const:`metacells.utilities.typing.ProperVector` data
-        using :py:func:`metacells.utilities.typing.to_proper_vector`.
+        Access the :py:const:`metacells.utilities.typing.DenseVector` data
+        using :py:func:`metacells.utilities.typing.to_dense_vector`.
         '''
-        return utt.to_proper_vector(self.vector)
+        return utt.to_dense_vector(self.vector)
 
     @staticmethod
     def be(named: NamedShaped) -> 'NamedVector':
@@ -151,7 +139,7 @@ class NamedVector(NamedShaped):
         return NamedVector(name=named.name, shaped=named.shaped)
 
 
-S = TypeVar('S', bound=utt.Shaped)
+S = TypeVar('S', bound=utt.AnyShaped)
 
 
 @utm.timed_call()
@@ -202,8 +190,13 @@ def get_derived(
     @utm.timed_call('.' + to)
     def compute() -> utt.Shaped:
         assert of is not None
-        return derive(uta.get_proper(adata,  # type: ignore
-                                     of, layout=of_layout))
+        shaped = uta.get_data(adata, of, layout=of_layout)
+        if shaped.ndim == 2:
+            shaped = utt.to_proper_matrix(shaped, default_layout=of_layout)
+        else:
+            assert of_layout is None
+            shaped = utt.to_dense_vector(shaped)
+        return derive(shaped)
 
     return _derive_data(NamedShaped, adata, of=of, per_to=per_of, to=to,
                         slicing_mask=slicing_mask, compute=compute,
@@ -294,7 +287,7 @@ def get_log(
     else:
         to = 'log_%s_normalization_%s' % (base or 'e', normalization)
 
-    def derive(data: utt.Shaped) -> utt.Shaped:
+    def derive(data: S) -> S:
         return utc.log_data(data, base=base, normalization=normalization)
 
     return get_derived(adata, derive, of, to=to,
@@ -481,7 +474,7 @@ def get_per_obs(
     to = '%s|%s_per_obs' % (of, to or reducer.__qualname__.replace('_per', ''))
 
     @utm.timed_call('.' + to)
-    def compute() -> utt.Vector:
+    def compute() -> utt.DenseVector:
         assert of is not None
         matrix = uta.get_proper_matrix(adata, of, layout='row_major')
         return utt.to_dense_vector(reducer(matrix, per='row'))
@@ -519,7 +512,7 @@ def get_per_var(
     to = '%s|%s_per_var' % (of, to or reducer.__qualname__.replace('_per', ''))
 
     @utm.timed_call('.' + to)
-    def compute() -> utt.Vector:
+    def compute() -> utt.DenseVector:
         assert of is not None
         matrix = uta.get_proper_matrix(adata, of, layout='column_major')
         return utt.to_dense_vector(reducer(matrix, per='column'))
@@ -579,9 +572,9 @@ def get_fraction_of_var_per_obs(
         nonlocal sum_per_obs
         if sum_per_obs is None:
             sum_per_obs = \
-                get_per_obs(adata, utc.sum_per, of, inplace=inplace).proper
+                get_per_obs(adata, utc.sum_per, of, inplace=inplace).dense
         else:
-            sum_per_obs = utt.to_proper_vector(sum_per_obs)
+            sum_per_obs = utt.to_dense_vector(sum_per_obs)
 
         zeros_mask = sum_per_obs == 0
         tmp = np.reciprocal(sum_per_obs, where=~zeros_mask)
@@ -651,9 +644,9 @@ def get_fraction_of_obs_per_var(
         nonlocal sum_per_var
         if sum_per_var is None:
             sum_per_var = \
-                get_per_var(adata, utc.sum_per, of, inplace=inplace).proper
+                get_per_var(adata, utc.sum_per, of, inplace=inplace).dense
         else:
-            sum_per_var = utt.to_proper_vector(sum_per_var)
+            sum_per_var = utt.to_dense_vector(sum_per_var)
 
         zeros_mask = sum_per_var == 0
         tmp = np.reciprocal(sum_per_var, where=~zeros_mask)
@@ -695,9 +688,9 @@ def get_mean_per_obs(
     to = of + '|mean_per_obs'
 
     @utm.timed_call('.compute')
-    def compute() -> utt.Vector:
+    def compute() -> utt.DenseVector:
         sum_per_obs = \
-            get_per_obs(adata, utc.sum_per, of, inplace=inplace).proper
+            get_per_obs(adata, utc.sum_per, of, inplace=inplace).dense
         return sum_per_obs / adata.n_vars
 
     return _derive_1d_data(adata, per_of=per_of, of=of, per_to='o', to=to,
@@ -727,9 +720,9 @@ def get_mean_per_var(
     to = of + '|mean_per_var'
 
     @utm.timed_call('.compute')
-    def compute() -> utt.Vector:
+    def compute() -> utt.DenseVector:
         sum_per_var = \
-            get_per_var(adata, utc.sum_per, of, inplace=inplace).proper
+            get_per_var(adata, utc.sum_per, of, inplace=inplace).dense
         return sum_per_var / adata.n_obs
 
     return _derive_1d_data(adata, per_of=per_of, of=of, per_to='v', to=to,
@@ -760,9 +753,9 @@ def get_fraction_per_obs(
     to = of + '|fraction_per_obs'
 
     @utm.timed_call('.compute')
-    def compute() -> utt.Vector:
+    def compute() -> utt.DenseVector:
         sum_per_obs = \
-            get_per_obs(adata, utc.sum_per, of, inplace=inplace).proper
+            get_per_obs(adata, utc.sum_per, of, inplace=inplace).dense
         return sum_per_obs / sum_per_obs.sum()
 
     return _derive_1d_data(adata, per_of=per_of, of=of, per_to='o', to=to,
@@ -793,9 +786,9 @@ def get_fraction_per_var(
     to = of + '|fraction_per_var'
 
     @utm.timed_call('.compute')
-    def compute() -> utt.Vector:
+    def compute() -> utt.DenseVector:
         sum_per_var = \
-            get_per_var(adata, utc.sum_per, of, inplace=inplace).proper
+            get_per_var(adata, utc.sum_per, of, inplace=inplace).dense
         return sum_per_var / sum_per_var.sum()
 
     return _derive_1d_data(adata, per_of=per_of, of=of, per_to='v', to=to,
@@ -824,12 +817,12 @@ def get_variance_per_obs(
     to = of + '|variance_per_obs'
 
     @utm.timed_call('.compute')
-    def compute() -> utt.Vector:
+    def compute() -> utt.DenseVector:
         sum_per_obs = \
-            get_per_obs(adata, utc.sum_per, of, inplace=inplace).proper
+            get_per_obs(adata, utc.sum_per, of, inplace=inplace).dense
         sum_squared_per_obs = \
             get_per_obs(adata, utc.sum_squared_per,
-                        of, inplace=inplace).proper
+                        of, inplace=inplace).dense
         result = np.square(sum_per_obs).astype(float)
         result /= -adata.n_vars
         result += sum_squared_per_obs
@@ -862,12 +855,12 @@ def get_variance_per_var(
     to = of + '|variance_per_var'
 
     @utm.timed_call('.compute')
-    def compute() -> utt.Vector:
+    def compute() -> utt.DenseVector:
         sum_per_var = \
-            get_per_var(adata, utc.sum_per, of, inplace=inplace).proper
+            get_per_var(adata, utc.sum_per, of, inplace=inplace).dense
         sum_squared_per_var = \
             get_per_var(adata, utc.sum_squared_per,
-                        of, inplace=inplace).proper
+                        of, inplace=inplace).dense
         result = np.square(sum_per_var).astype(float)
         result /= -adata.n_obs
         result += sum_squared_per_var
@@ -901,11 +894,11 @@ def get_normalized_variance_per_var(
     to = of + '|normalized_variance_per_var'
 
     @utm.timed_call('.compute')
-    def compute() -> utt.Vector:
+    def compute() -> utt.DenseVector:
         variance_per_var = \
-            get_variance_per_var(adata, of, inplace=inplace).proper
+            get_variance_per_var(adata, of, inplace=inplace).dense
         mean_per_var = \
-            get_mean_per_var(adata, of, inplace=inplace).proper
+            get_mean_per_var(adata, of, inplace=inplace).dense
         zeros_mask = mean_per_var == 0
 
         result = np.reciprocal(mean_per_var, where=~zeros_mask)
@@ -952,10 +945,10 @@ def get_relative_variance_per_var(
     to = '%s|relative_variance_by_%s_per_var' % (of, window_size)
 
     @utm.timed_call('.compute')
-    def compute() -> utt.Vector:
+    def compute() -> utt.DenseVector:
         normalized_variance_per_var = \
-            get_normalized_variance_per_var(adata, of, inplace=inplace).proper
-        mean_per_var = get_mean_per_var(adata, of, inplace=inplace).proper
+            get_normalized_variance_per_var(adata, of, inplace=inplace).dense
+        mean_per_var = get_mean_per_var(adata, of, inplace=inplace).dense
         median_variance_per_var = utc.sliding_window_function(normalized_variance_per_var,
                                                               function='median',
                                                               window_size=window_size,
@@ -1243,7 +1236,7 @@ def _derive_1d_data(
     of: str,
     per_to: str,
     to: str,
-    compute: Callable[[], utt.Vector],
+    compute: Callable[[], utt.DenseVector],
     inplace: bool,
 ) -> NamedVector:
     if per_to[0] == per_of[0] == per_of[1]:

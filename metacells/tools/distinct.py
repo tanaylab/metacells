@@ -76,8 +76,8 @@ def compute_distinct_folds(
 
     with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major',
                      intermediate=intermediate) as data:
-        total_umis_of_cells = pp.get_per_obs(adata, ut.sum_per).proper
-        total_umis_of_genes = pp.get_per_var(adata, ut.sum_per).proper
+        total_umis_of_cells = pp.get_per_obs(adata, ut.sum_per).dense
+        total_umis_of_genes = pp.get_per_var(adata, ut.sum_per).dense
 
         fractions_of_genes_in_data = total_umis_of_genes / \
             np.sum(total_umis_of_genes)
@@ -152,7 +152,7 @@ def find_distinct_genes(
     distinct_gene_folds = \
         np.empty((adata.n_obs, distinct_genes_count), dtype='float32')
 
-    fold_in_cells = ut.get_vo_data(adata, distinct_fold, layout='row_major')
+    fold_in_cells = ut.get_vo_proper(adata, distinct_fold, layout='row_major')
     xt.top_distinct(distinct_gene_indices, distinct_gene_folds,
                     fold_in_cells, False)
 
@@ -218,7 +218,7 @@ def compute_subset_distinct_genes(
     ut.log_operation(LOG, adata, 'compute_subset_distinct_genes')
 
     if isinstance(subset, str):
-        subset = ut.to_proper_vector(ut.get_o_data(adata, subset))
+        subset = ut.get_o_dense(adata, subset)
 
     if subset.dtype != 'bool':
         mask: ut.DenseVector = np.full(adata.n_obs, False)
@@ -228,16 +228,16 @@ def compute_subset_distinct_genes(
     scale_of_cells: Optional[ut.DenseVector] = None
     if isinstance(normalize, bool):
         if normalize:
-            scale_of_cells = pp.get_per_obs(adata, ut.sum_per, of).proper
+            scale_of_cells = pp.get_per_obs(adata, ut.sum_per, of).dense
     elif isinstance(normalize, str):
-        scale_of_cells = ut.to_dense_vector(ut.get_o_data(adata, normalize))
+        scale_of_cells = ut.get_o_dense(adata, normalize)
     elif normalize is not None:
         scale_of_cells = normalize.astype('float32')
 
     if scale_of_cells is not None:
         assert scale_of_cells.size == adata.n_obs
 
-    matrix = ut.get_vo_data(adata, of, layout='column_major').transpose()
+    matrix = ut.get_vo_proper(adata, of, layout='column_major').transpose()
 
     distinct_of_genes = ut.matrix_rows_auroc(matrix, subset, scale_of_cells)
 

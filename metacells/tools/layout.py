@@ -57,7 +57,7 @@ def umap_by_distances(
     '''
     ut.log_operation(LOG, adata, 'umap_by_distances')
 
-    distances_matrix = ut.get_oo_data(adata, distances)
+    distances_matrix = ut.get_oo_proper(adata, distances)
 
     # UMAP implementation dies when given a dense matrix.
     distances_csr = sp.csr_matrix(distances_matrix)
@@ -72,7 +72,7 @@ def umap_by_distances(
     except ValueError:
         # UMAP implementation doesn't know how to handle too few edges.
         # However, it considers structural zeros as real edges.
-        distances_matrix += 1.0  # type: ignore
+        distances_matrix = distances_matrix + 1.0  # type: ignore
         np.fill_diagonal(distances_matrix, 0.0)
         distances_csr = sp.csr_matrix(distances_matrix)
         distances_csr.data -= 1.0
@@ -145,8 +145,8 @@ def spread_coordinates(
     assert 0 < cover_fraction < 1
     assert noise_fraction >= 0
 
-    x_coordinates = ut.get_o_data(adata, f'{prefix}_x')
-    y_coordinates = ut.get_o_data(adata, f'{prefix}_y')
+    x_coordinates = ut.get_o_dense(adata, f'{prefix}_x')
+    y_coordinates = ut.get_o_dense(adata, f'{prefix}_y')
 
     x_coordinates, y_coordinates = ut.cover_coordinates(x_coordinates, y_coordinates,
                                                         cover_fraction=cover_fraction,

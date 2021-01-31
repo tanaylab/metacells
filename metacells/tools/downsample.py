@@ -82,7 +82,7 @@ def downsample_cells(
         ut.log_operation(LOG, adata, 'downsample_cells', of)
 
     with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        total_per_cell = pp.get_per_obs(adata, ut.sum_per).proper
+        total_per_cell = pp.get_per_obs(adata, ut.sum_per).dense
 
         LOG.debug('  downsample_cell_quantile: %s',
                   downsample_cell_quantile)
@@ -96,7 +96,7 @@ def downsample_cells(
 
     if inplace or infocus:
         ut.set_vo_data(adata, downsampled.name,
-                       downsampled.matrix, infocus=infocus)
+                       downsampled.proper, infocus=infocus)
         return None
 
     if ut.SparseMatrix.am(downsampled.matrix):

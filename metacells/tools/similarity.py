@@ -187,9 +187,9 @@ def _compute_elements_similarity(  # pylint: disable=too-many-branches
     if inplace:
         to = elements + '_similarity'
         if elements == 'obs':
-            ut.set_oo_data(adata, to, similarity.matrix)
+            ut.set_oo_data(adata, to, similarity.proper)
         else:
-            ut.set_vv_data(adata, to, similarity.matrix)
+            ut.set_vv_data(adata, to, similarity.proper)
         return None
 
     if elements == 'obs':
@@ -197,4 +197,4 @@ def _compute_elements_similarity(  # pylint: disable=too-many-branches
     else:
         names = adata.var_names
 
-    return pd.DataFrame(similarity.matrix, index=names, columns=names)
+    return pd.DataFrame(similarity.proper, index=names, columns=names)

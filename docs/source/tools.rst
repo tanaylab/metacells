@@ -65,3 +65,9 @@ Evaluating the Metacells
 
 .. automodule:: metacells.tools.distinct
     :members:
+
+Visualizing the Metacells
++++++++++++++++++++++++++
+
+.. automodule:: metacells.tools.layout
+    :members:

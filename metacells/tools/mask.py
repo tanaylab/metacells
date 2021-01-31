@@ -77,7 +77,7 @@ def combine_masks(  # pylint: disable=too-many-branches
                              'is not per-observation or per-variable'
                              % mask_name)
 
-        mask = ut.get_proper_vector(adata, mask_name)
+        mask = ut.get_dense_vector(adata, mask_name)
         if mask.dtype != 'bool':
             raise ValueError('the data: %s is not a boolean mask')
 

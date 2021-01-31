@@ -78,13 +78,11 @@ def compute_type_compatible_sizes(
 
     if len(adatas) == 1:
         ut.set_o_data(adatas[0], 'compatible_size',
-                      ut.get_o_data(adatas[0], size))
+                      ut.get_o_dense(adatas[0], size))
         return
 
-    metacell_sizes_of_data = \
-        [ut.to_dense_vector(ut.get_o_data(adata, size)) for adata in adatas]
-    metacell_types_of_data = \
-        [ut.to_dense_vector(ut.get_o_data(adata, kind)) for adata in adatas]
+    metacell_sizes_of_data = [ut.get_o_dense(adata, size) for adata in adatas]
+    metacell_types_of_data = [ut.get_o_dense(adata, kind) for adata in adatas]
 
     unique_types: Set[Any] = set()
     for metacell_types in metacell_types_of_data:
@@ -188,7 +186,7 @@ def compute_excess_r2(
     metacells: Union[str, ut.Vector] = 'metacell',
     compatible_size: Optional[str] = 'compatible_size',
     downsample_cell_quantile: float = pr.excess_downsample_cell_quantile,
-    min_gene_total: float = pr.excess_min_gene_total,
+    min_gene_total: int = pr.excess_min_gene_total,
     top_gene_rank: int = pr.excess_top_gene_rank,
     shuffles_count: int = pr.excess_shuffles_count,
     random_seed: int = pr.random_seed,
@@ -309,7 +307,7 @@ def compute_excess_r2(
 
         if compatible_size is not None:
             compatible_size_of_metacells: Optional[ut.DenseVector] = \
-                ut.to_proper_vector(ut.get_o_data(mdata, compatible_size))
+                ut.get_o_dense(mdata, compatible_size)
         else:
             compatible_size_of_metacells = None
 
@@ -386,7 +384,9 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
     variance_per_gene_per_metacell: ut.DenseMatrix,
     normalized_variance_per_gene_per_metacell: ut.DenseMatrix,
 ) -> None:
-    LOG.debug('  - metacell: %s / %s', metacell_index, metacells_count)
+    LOG.debug('  - metacell: %s / %s (%.2f%%)',
+              metacell_index, metacells_count,
+              metacell_index * 100 / metacells_count)
     LOG.debug('    random_seed: %s', random_seed)
 
     metacell_mask = metacell_of_cells == metacell_index

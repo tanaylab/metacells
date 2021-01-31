@@ -93,7 +93,7 @@ def filter_data(  # pylint: disable=dangerous-default-value
             tl.combine_masks(adata, obs_masks, invert=invert_obs, to=mask_obs)
         if obs_mask is None:
             assert mask_obs is not None
-            obs_mask = ut.to_proper_vector(ut.get_o_data(adata, mask_obs))
+            obs_mask = ut.get_o_dense(adata, mask_obs)
 
     if len(var_masks) == 0:
         var_mask = np.full(adata.n_vars, True, dtype='bool')
@@ -104,7 +104,7 @@ def filter_data(  # pylint: disable=dangerous-default-value
             tl.combine_masks(adata, var_masks, invert=invert_var, to=mask_var)
         if var_mask is None:
             assert mask_var is not None
-            var_mask = ut.to_proper_vector(ut.get_v_data(adata, mask_var))
+            var_mask = ut.get_v_dense(adata, mask_var)
 
     if not np.any(obs_mask) or not np.any(var_mask):
         return None

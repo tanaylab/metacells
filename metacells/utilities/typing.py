@@ -29,27 +29,26 @@ to leverage ``mypy`` to catch errors such as applying a numpy operation on a spa
 
 To put some order in this chaos, the following concepts are used:
 
-* :py:const:`Shaped` is any 1d or 2d data in any format we can work with. :py:const:`Matrix` is any
-  2d data, and :py:const:`Vector` is any 1d data.
+* :py:const:`AnyShaped` is any 1d or 2d data in any format we can work with. :py:const:`Matrix` is
+  any 2d data, and :py:const:`Vector` is any 1d data.
 
-* We support many data types that we can't directly operate on: :py:class:`SparseMatrix` comes to
-  mind, but also :py:class:`PandasSeries`, :py:class:`PandasFrame` and :py:class:`NumpyMatrix` have
-  strange quirks when it comes to directly operating on them. We therefore introduce the concept of
-  "proper" types, which we can safely work on, as in :py:const:`ProperShaped`,
-  :py:const:`ProperMatrix` and :py:const:`ProperVector` which we can obtain by using using
-  :py:func:`to_proper`, :py:func:`to_proper_matrix` :py:func:`to_proper_matrices` and
-  :py:func:`to_proper_vector`.
+* For 2D data, we allow multiple data types that we can't directly operate on:
+  most :py:class:`SparseMatrix` layouts, :py:class:`PandasFrame` and :py:class:`NumpyMatrix` have
+  strange quirks when it comes to directly operating on them and should be avoided, while CSR and
+  CSC :py:class:`CompressedMatrix` sparse matrices and properly-laid-out 2D numpy arrays
+  :py:class:`DenseMatrix` are in general well-behaved. We therefore introduce the concept of
+  :py:const:`ImproperMatrix` and :py:const:`ProperMatrix` types, and provide functions that
+  manipulate whether the "proper" data is in row-major or column-major order.
 
-* We provide type aliases to distinguish (proper) dense data from (proper) sparse using
-  :py:const:`DenseShaped`, :py:const:`DenseMatrix`, :py:const:`DenseVector`. The proper
-  sparse data is :py:const:`CompressedMatrix`.
-
-* In general, avoid using the type names that start with ``_``.
+* For 1D data, we just distinguish between :py:class:`PandasSeries` and 1D numpy
+  :py:class:`DenseVector` arrays, as these are the only types we allow. In theory we could have also
+  allowed for sparse vectors but mercifully these are very uncommon so we can just ignore them.
 '''
 
 from abc import abstractmethod
-from typing import (Any, Iterable, Optional, Sized, Tuple, Type, TypeVar,
-                    Union, overload)
+from contextlib import contextmanager
+from typing import (Any, Iterable, Iterator, Optional, Sized, Tuple, Type,
+                    TypeVar, Union, overload)
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -61,37 +60,34 @@ import metacells.utilities.timing as utm
 __all__ = [
     'CPP_DATA_TYPES',
 
+    'Shaped',
+    'AnyShaped',
+    'ProperShaped',
+    'ImproperShaped',
+    'NumpyShaped',
+    'DenseShaped',
 
     'Matrix',
     'ProperMatrix',
-    'DenseMatrix',
-    'CompressedMatrix',
     'ImproperMatrix',
+    'DenseMatrix',
     'SparseMatrix',
+    'CompressedMatrix',
     'NumpyMatrix',
     'PandasFrame',
 
     'Vector',
-    'ProperVector',
-    'DenseVector',
-    'ImproperVector',
     'PandasSeries',
+    'DenseVector',
 
-    'Shaped',
-    'ProperShaped',
-    'DenseShaped',
-
-    'to_proper',
     'to_proper_matrix',
     'to_proper_matrices',
-    'to_proper_vector',
-    'canonize',
 
     'frozen',
     'freeze',
     'unfreeze',
+    'unfrozen',
 
-    'to_dense',
     'to_dense_matrix',
     'to_dense_vector',
 
@@ -112,6 +108,8 @@ __all__ = [
 
     'is_canonical',
     'eliminate_zeros',
+    'sort_indices',
+    'sum_duplicates',
 ]
 
 
@@ -128,7 +126,7 @@ S = TypeVar('S', bound='Shaped')
 
 class Shaped:
     '''
-    A ``mypy`` type for any shaped (1- or 2-dimensional) data.
+    A ``mypy`` type for any shaped (1- or 2-dimensional, proper or improper) data.
     '''
     ndim: int
     shape: Union[Tuple[int, int], Tuple[int]]
@@ -147,18 +145,27 @@ class Shaped:
 
     @staticmethod
     def am(data: Any) -> bool:
+        '''
+        Check whether the ``data`` is ``Shaped``.
+        '''
         return isinstance(data, (np.ndarray, pd.DataFrame, pd.Series)) \
             or sp.issparse(data)
 
     @classmethod
     def be(cls: Type[S], data: Any, name: str = 'data') -> S:
+        '''
+        Return the ``data`` in the particular ``cls`` format.
+        '''
         if not cls.am(data):
-            raise ValueError('%s: %s is not %s'
+            raise ValueError('%s: %s is not  %s'
                              % (name, data.__class__, cls.__name__))
         return data
 
     @classmethod
     def maybe(cls: Type[S], data: Any) -> Optional[S]:
+        '''
+        Return the ``data`` in the particular ``cls`` format, if it already is of that class.
+        '''
         if not cls.am(data):
             return None
         return data
@@ -299,7 +306,7 @@ class NumpyShaped(Shaped):
 
 class NumpyMatrix(NumpyShaped):
     '''
-    A ``mypy`` type for numpy matrix data.
+    A ``mypy`` type for numpy ``matrix`` data. Avoid using if at all possible.
     '''
     shape: Tuple[int, int]
     strides: Tuple[int, int]
@@ -412,7 +419,7 @@ class SparseMatrix(Shaped):
     def nonzero(self) -> Tuple[DenseVector, DenseVector]: ...
 
     @abstractmethod
-    def mean(self: SP, *, axis: int) -> 'ProperVector': ...
+    def mean(self: SP, *, axis: int) -> 'DenseVector': ...
 
     @abstractmethod
     def copy(self: SP) -> SP: ...
@@ -424,7 +431,7 @@ class SparseMatrix(Shaped):
 
 class CompressedMatrix(SparseMatrix):
     '''
-    A ``mypy`` type for sparse csr/csc 2-dimensional data.
+    A ``mypy`` type for sparse CSR/CSC 2-dimensional data.
     '''
     indices: DenseVector
     indptr: DenseVector
@@ -502,65 +509,53 @@ ImproperMatrix = Union[NumpyMatrix, PandasFrame, SparseMatrix]
 Matrix = Union[ProperMatrix, ImproperMatrix]
 
 
-#: A ``mypy`` type for "proper" 2-dimensional data.
-#:
-#: "Proper" data allows for direct processing without having
-#: to mess with its formatting.
-ProperVector = DenseVector
-
-
-#: A ``mypy`` type for "improper" 1-dimensional data.
-#:
-#: "Improper" data contains "proper" data somewhere inside it.
-ImproperVector = PandasSeries
-
-
 #: A ``mypy`` type for any 1-dimensional data.
 #:
 #: .. todo::
 #:
 #:    Is there any need for ``SparseVector``?
-Vector = Union[ProperVector, ImproperVector]
+Vector = Union[DenseVector, PandasSeries]
 
+#: A "proper" 1- or 2-dimensional data.
+ProperShaped = Union[ProperMatrix, DenseVector]
 
-#: A ``mypy`` type for any (proper) dense data.
-#:
-#: Dense data has a simple one-entry-per-element representation.
-DenseShaped = Union[DenseMatrix, DenseVector]
+#: An "improper" 1- or 2- dimensional data.
+ImproperShaped = Union[ImproperMatrix, PandasSeries]
 
+#: Shaped data of any of the types we can deal with.
+AnyShaped = Union[ProperShaped, ImproperShaped]
 
-#: A ``mypy`` type for any "proper" 1- or 2-dimensional data.
-#:
-#: "Proper" data allows for direct processing without having
-#: to mess with its formatting.
-ProperShaped = Union[ProperVector, ProperMatrix]
+#: Dense 1- or 2-dimensional data.
+DenseShaped = Union[DenseVector, DenseMatrix]
 
 
 @utd.expand_doc()
-def to_proper(
-    shaped: Shaped,
+def to_proper_matrix(
+    matrix: Matrix,
     *,
-    ndim: Optional[int] = None,
     default_layout: Optional[str] = 'row_major'
-) -> ProperShaped:
+) -> ProperMatrix:
     '''
-    Given some ``shaped`` data, access the properly-formatted data within it.
-
-    If ``ndim`` (default: {ndim}) is specified, insist this is the number of dimensions.
+    Given some 2D ``matrix``, return in in a :py:const:`ProperMatrix` format.
 
     If the data is in some strange sparse format, use ``default_layout`` (default: {default_layout})
-    to decide whether to return it in ``row_major`` (csr) or ``column_major`` (csc) layout.
+    to decide whether to return it in ``row_major`` (CSR) or ``column_major`` (CSC) layout.
     Otherwise, this is ignored.
     '''
+    if matrix.ndim != 2:
+        raise \
+            ValueError(f'data is {matrix.ndim}-dimensional, '
+                       'expected 2-dimensional')
+
     if default_layout is not None:
         assert default_layout in LAYOUT_OF_AXIS
 
-    if isinstance(shaped, (pd.Series, pd.DataFrame)):
-        shaped = shaped.values
-        if isinstance(shaped, pd.core.arrays.categorical.Categorical):
-            shaped = np.array(shaped)
+    if isinstance(matrix, pd.DataFrame):
+        matrix = matrix.values
+        if isinstance(matrix, pd.core.arrays.categorical.Categorical):
+            matrix = np.array(matrix)
 
-    sparse = SparseMatrix.maybe(shaped)
+    sparse = SparseMatrix.maybe(matrix)
     if sparse is not None:
         compressed = CompressedMatrix.maybe(sparse)
         if compressed is None:
@@ -576,29 +571,11 @@ def to_proper(
                                          elements=compressed.nnz / compressed.shape[0])
         return compressed
 
-    if isinstance(shaped, np.matrix) or not isinstance(shaped, np.ndarray):
-        shaped = np.asarray(shaped)
-    assert isinstance(shaped, np.ndarray)
+    if isinstance(matrix, np.matrix) or not isinstance(matrix, np.ndarray):
+        matrix = np.asarray(matrix)
+    assert isinstance(matrix, np.ndarray)
 
-    if ndim is not None and shaped.ndim != ndim:
-        raise ValueError('data is %s-dimensional, expected %s-dimensional'
-                         % (shaped.ndim, ndim))
-
-    return shaped
-
-
-def to_proper_matrix(matrix: Matrix, *, default_layout: Optional[str] = 'row_major') -> ProperMatrix:
-    '''
-    Same as :py:func:`to_proper` but also ensures the result is a :py:const:`ProperMatrix`.
-    '''
-    return to_proper(matrix, ndim=2, default_layout=default_layout)  # type: ignore
-
-
-def to_proper_vector(vector: Vector) -> ProperVector:
-    '''
-    Same as :py:func:`to_proper` but also ensures the result is a :py:const:`ProperVector`.
-    '''
-    return to_proper(vector, ndim=1)  # type: ignore
+    return matrix
 
 
 def to_proper_matrices(
@@ -618,106 +595,102 @@ def to_proper_matrices(
     return (proper, dense, compressed)
 
 
-@utm.timed_call()
-def canonize(matrix: Matrix) -> None:
-    '''
-    If the ``matrix`` is sparse, ensure it is in "canonical format", which makes most operations on
-    it much more efficient.
-
-    Otherwise, keep the matrix as-is.
-    '''
-    compressed = CompressedMatrix.maybe(matrix)
-    if compressed is not None:
-        is_frozen = frozen(compressed)
-        try:
-            unfreeze(compressed)
-            compressed.sum_duplicates()
-        finally:
-            if is_frozen:
-                freeze(compressed)
-
-
-def frozen(shaped: Shaped) -> bool:
+def frozen(shaped: Union[ProperShaped, PandasFrame, PandasSeries]) -> bool:
     '''
     Test whether the ``shaped`` data is protected against future modification.
     '''
-    proper = to_proper(shaped)
-
-    numpy = NumpyShaped.maybe(proper)
-    if numpy is not None:
-        return not numpy.flags.writeable
-
-    compressed = CompressedMatrix.maybe(proper)
+    compressed = CompressedMatrix.maybe(shaped)
     if compressed is not None:
         assert compressed.indices.flags.writeable \
             == compressed.indptr.flags.writeable \
             == compressed.data.flags.writeable
         return not compressed.data.flags.writeable
 
+    if isinstance(shaped, (pd.DataFrame, pd.Series)):
+        shaped = shaped.values
+
+    numpy = NumpyShaped.maybe(shaped)
+    if numpy is not None:
+        return not numpy.flags.writeable
+
     raise NotImplementedError('frozen of %s' % shaped.__class__)
 
 
-def freeze(shaped: Shaped) -> None:
+def freeze(shaped: Union[ProperShaped, PandasFrame, PandasSeries]) -> None:
     '''
     Protect the ``shaped`` data against future modification.
     '''
-    proper = to_proper(shaped)
-
-    numpy = NumpyShaped.maybe(proper)
-    if numpy is not None:
-        numpy.setflags(write=False)
-        return
-
-    compressed = CompressedMatrix.maybe(proper)
+    compressed = CompressedMatrix.maybe(shaped)
     if compressed is not None:
         compressed.indices.setflags(write=False)
         compressed.indptr.setflags(write=False)
         compressed.data.setflags(write=False)
         return
 
+    if isinstance(shaped, (pd.DataFrame, pd.Series)):
+        shaped = shaped.values
+
+    numpy = NumpyShaped.maybe(shaped)
+    if numpy is not None:
+        numpy.setflags(write=False)
+        return
+
     raise NotImplementedError('freeze of %s' % shaped.__class__)
 
 
-def unfreeze(shaped: Shaped) -> None:
+def unfreeze(shaped: Union[ProperShaped, PandasFrame, PandasSeries]) -> None:
     '''
     Permit future modification of some ``shaped`` data.
     '''
-    proper = to_proper(shaped)
-
-    numpy = NumpyShaped.maybe(proper)
-    if numpy is not None:
-        numpy.setflags(write=True)
-        return
-
-    compressed = CompressedMatrix.maybe(proper)
+    compressed = CompressedMatrix.maybe(shaped)
     if compressed is not None:
         compressed.indices.setflags(write=True)
         compressed.indptr.setflags(write=True)
         compressed.data.setflags(write=True)
         return
 
+    if isinstance(shaped, (pd.DataFrame, pd.Series)):
+        shaped = shaped.values
+
+    numpy = NumpyShaped.maybe(shaped)
+    if numpy is not None:
+        numpy.setflags(write=True)
+        return
+
     raise NotImplementedError('unfreeze of %s' % shaped.__class__)
 
 
-@utd.expand_doc()
-def to_dense(
-    shaped: Shaped,
-    *,
-    ndim: Optional[int] = None,
-    copy: Optional[bool] = False
-) -> DenseShaped:
+@contextmanager
+def unfrozen(proper: ProperShaped) -> Iterator[None]:
     '''
-    Convert some (possibly sparse) ``shaped`` data to an (full dense size) 1/2-dimensional numpy
-    array.
+    Execute some in-place modification, temporarily unfreezing the ``proper`` shaped data.
+    '''
+    is_frozen = frozen(proper)
+    if is_frozen:
+        unfreeze(proper)
 
-    If ``ndim`` (default: {ndim}) is specified, insist this is the number of dimensions.
+    try:
+        yield
+
+    finally:
+        if is_frozen:
+            freeze(proper)
+
+
+@utd.expand_doc()
+def to_dense_matrix(
+    matrix: Matrix,
+    *,
+    default_layout: Optional[str] = 'row_major',
+    copy: Optional[bool] = False
+) -> DenseMatrix:
+    '''
+    Convert some (possibly improper) ``matrix`` data to a dense 2-dimensional numpy array.
 
     If ``copy`` (default: {copy}), a copy of the data is returned even if it is already a numpy
     array. If ``copy`` is ``None``, always returns the data without copying (fails on sparse data).
     '''
-    proper = to_proper(shaped, ndim=ndim)
-
-    sparse = SparseMatrix.maybe(shaped)
+    sparse = SparseMatrix.maybe(matrix)
     if sparse is not None:
         assert copy is not None
         with utm.timed_step('sparse.toarray'):
@@ -728,38 +701,43 @@ def to_dense(
                 utm.timed_parameters(size=sparse.shape[0])
             return sparse.toarray()
 
-    dense = NumpyShaped.be(proper)
-    if copy:
-        return np.copy(dense)
+    dense = \
+        DenseMatrix.be(to_proper_matrix(matrix, default_layout=default_layout))
 
-    return dense  # type: ignore
+    if copy and id(dense) == id(matrix):
+        dense = np.copy(dense)
 
-
-@utd.expand_doc()
-def to_dense_matrix(matrix: Matrix, *, copy: Optional[bool] = False) -> DenseMatrix:
-    '''
-    Convert some (possibly sparse) data to an (full dense size) 2-dimensional array.
-
-    If ``copy`` (default: {copy}), a copy of the data is returned even if it is already a 2d numpy
-    array. If ``copy`` is ``None``, always returns the data without copying (fails on sparse data).
-    '''
-    return to_dense(matrix, copy=copy)  # type: ignore
+    return DenseMatrix.be(dense)
 
 
 @utd.expand_doc()
 def to_dense_vector(shaped: Shaped, *, copy: Optional[bool] = False) -> DenseVector:
     '''
-    Convert some (possibly sparse) data to an (full dense size) 1-dimensional array.
+    Convert some (possibly improper) data to a dense 1-dimensional numpy array.
 
     This will convert a matrix where one of the dimensions has size one to a flat array.
 
     If ``copy`` (default: {copy}), a copy of the data is returned even if it is already a 1d numpy
     array. If ``copy`` is ``None``, always returns the data without copying (fails on sparse data).
     '''
-    dense = to_dense(shaped, copy=copy)
-    vector = np.reshape(dense, -1)
-    assert vector.ndim == 1
-    return vector
+    if shaped.ndim == 2:
+        assert shaped.shape[0] == 1 or shaped.shape[1] == 1  # type: ignore
+        dense: DenseVector = to_dense_matrix(shaped, copy=copy)  # type: ignore
+        dense = np.reshape(dense, -1)
+
+    else:
+        assert shaped.ndim == 1
+        if isinstance(shaped, pd.Series):
+            dense = DenseVector.be(shaped.values)
+            if isinstance(dense, pd.core.arrays.categorical.Categorical):
+                dense = np.array(dense)
+        else:
+            dense = DenseVector.be(shaped)
+
+    if copy and id(dense) == id(shaped):
+        dense = np.copy(dense)
+
+    return DenseVector.be(dense)
 
 
 #: Which flag indicates efficient 2D dense matrix layout.
@@ -843,8 +821,7 @@ def is_contiguous(vector: Vector) -> bool:
 
     This is only ``True`` for a dense vector.
     '''
-    proper = to_proper_vector(vector)
-    dense = DenseVector.be(proper)
+    dense = to_dense_vector(vector)
     return dense.flags.c_contiguous and dense.flags.f_contiguous
 
 
@@ -855,14 +832,13 @@ def to_contiguous(vector: Vector, *, copy: bool = False) -> DenseVector:
     If ``copy`` (default: {copy}), a copy of the vector is returned even if it is already a
     contiguous numpy array.
     '''
-    proper = to_proper_vector(vector)
-    dense = DenseVector.be(proper)
+    dense = to_dense_vector(vector)
     if copy or not dense.flags.c_contiguous or not dense.flags.f_contiguous:
         dense = np.copy(dense)
     return dense
 
 
-def is_canonical(shaped: Shaped) -> bool:
+def is_canonical(shaped: Shaped) -> bool:  # pylint: disable=too-many-return-statements
     '''
     Return whether the data is in proper canonical format.
 
@@ -875,7 +851,7 @@ def is_canonical(shaped: Shaped) -> bool:
     In general, we'd like all the data stored in the annotated data to be canonical.
     '''
     if shaped.ndim == 1:
-        return is_contiguous(to_proper_vector(shaped))  # type: ignore
+        return is_contiguous(shaped)  # type: ignore
 
     sparse = SparseMatrix.maybe(shaped)
     if sparse is None:
@@ -894,7 +870,10 @@ def is_canonical(shaped: Shaped) -> bool:
 
     compressed = CompressedMatrix.maybe(sparse)
     if compressed is not None:
-        assert compressed.indptr[-1] == compressed.data.size
+        return compressed.indptr[-1] == compressed.data.size \
+            and is_canonical(compressed.indptr) \
+            and is_canonical(compressed.data) \
+            and is_canonical(compressed.indices)
 
     return True
 
@@ -904,13 +883,29 @@ def eliminate_zeros(compressed: CompressedMatrix) -> None:
     '''
     Eliminate zeros in a compressed matrix.
     '''
-    is_frozen = frozen(compressed)
-    if is_frozen:
-        unfreeze(compressed)
+    with unfrozen(compressed):
+        utm.timed_parameters(before=compressed.nnz)
+        compressed.eliminate_zeros()
+        utm.timed_parameters(after=compressed.nnz)
 
-    utm.timed_parameters(before=compressed.nnz)
-    compressed.eliminate_zeros()
-    utm.timed_parameters(after=compressed.nnz)
 
-    if is_frozen:
-        freeze(compressed)
+@utm.timed_call('sparse.sort_indices')
+def sort_indices(compressed: CompressedMatrix) -> None:
+    '''
+    Ensure the indices are sorted in each row/column.
+    '''
+    with unfrozen(compressed):
+        utm.timed_parameters(before=compressed.nnz)
+        compressed.sort_indices()
+        utm.timed_parameters(after=compressed.nnz)
+
+
+@utm.timed_call('sparse.sum_duplicates')
+def sum_duplicates(compressed: CompressedMatrix) -> None:
+    '''
+    Eliminate duplicates in a compressed matrix.
+    '''
+    with unfrozen(compressed):
+        utm.timed_parameters(before=compressed.nnz)
+        compressed.sum_duplicates()
+        utm.timed_parameters(after=compressed.nnz)

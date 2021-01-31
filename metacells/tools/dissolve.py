@@ -125,7 +125,7 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
         candidates_count = np.max(candidate_of_cells) + 1
 
         LOG.debug('  target_metacell_size: %s', target_metacell_size)
-        fraction_of_genes = pp.get_fraction_per_var(adata).proper
+        fraction_of_genes = pp.get_fraction_per_var(adata).dense
 
         if min_robust_size_factor is None:
             min_robust_size = None

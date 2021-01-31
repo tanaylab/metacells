@@ -206,7 +206,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        and
        ``dissolve_min_metacell_cells`` (default: ``dissolve_min_metacell_cells``).
     '''
-    total_per_cell = pp.get_per_obs(adata, ut.sum_per, of=of).proper
+    total_per_cell = pp.get_per_obs(adata, ut.sum_per, of=of).dense
 
     fdata = \
         extract_feature_data(adata, of=of, tmp=True,
@@ -288,7 +288,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
                 ut.set_o_data(adata, 'candidate', candidate_of_cells,
                               log_value=ut.groups_description)
                 outgoing_weights = \
-                    ut.get_oo_data(fdata, 'obs_outgoing_weights')
+                    ut.get_oo_proper(fdata, 'obs_outgoing_weights')
                 ut.set_oo_data(adata, 'obs_outgoing_weights', outgoing_weights)
 
     if must_complete_cover:

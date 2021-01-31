@@ -18,11 +18,11 @@ def test_mean() -> None:
     adata = AnnData(matrix)
     ut.setup(adata, x_name='test')
 
-    metacells_mean_per_row = pp.get_mean_per_obs(adata).proper
+    metacells_mean_per_row = pp.get_mean_per_obs(adata).dense
     numpy_mean_per_row = matrix.mean(axis=1)
     assert np.allclose(metacells_mean_per_row, numpy_mean_per_row)
 
-    metacells_mean_per_column = pp.get_mean_per_var(adata).proper
+    metacells_mean_per_column = pp.get_mean_per_var(adata).dense
     numpy_mean_per_column = matrix.mean(axis=0)
     assert np.allclose(metacells_mean_per_column, numpy_mean_per_column)
 
@@ -32,11 +32,11 @@ def test_variance() -> None:
     adata = AnnData(matrix)
     ut.setup(adata, x_name='test')
 
-    metacells_variance_per_row = pp.get_variance_per_obs(adata).proper
+    metacells_variance_per_row = pp.get_variance_per_obs(adata).dense
     numpy_variance_per_row = matrix.var(axis=1)
     assert np.allclose(metacells_variance_per_row, numpy_variance_per_row)
 
-    metacells_variance_per_column = pp.get_variance_per_var(adata).proper
+    metacells_variance_per_column = pp.get_variance_per_var(adata).dense
     numpy_variance_per_column = matrix.var(axis=0)
     assert np.allclose(metacells_variance_per_column,
                        numpy_variance_per_column)
@@ -51,7 +51,7 @@ def test_focus_on() -> None:
     ut.setup(adata, x_name='test')
     assert ut.get_focus_name(adata) == 'test'
 
-    with ut.focus_on(pp.get_log, adata, normalization=1) as log_data:
+    with ut.focus_on(pp.get_log_matrix, adata, normalization=1) as log_data:
         outer_focus = 'test|log_e_normalization_1'
         assert ut.get_focus_name(adata) == outer_focus
         assert id(log_data.proper) == id(adata.layers[outer_focus])
@@ -92,48 +92,48 @@ def _test_annotations(full_matrix: ut.Matrix) -> None:
     adata = AnnData(full_matrix)
     ut.setup(adata, x_name='test')
 
-    assert np.allclose(pp.get_per_obs(adata, ut.nnz_per).proper,
+    assert np.allclose(pp.get_per_obs(adata, ut.nnz_per).dense,
                        np.array([2, 3]))
-    assert np.allclose(pp.get_per_var(adata, ut.nnz_per).proper,
+    assert np.allclose(pp.get_per_var(adata, ut.nnz_per).dense,
                        np.array([1, 2, 2]))
 
-    assert np.allclose(pp.get_per_obs(adata, ut.sum_per).proper,
+    assert np.allclose(pp.get_per_obs(adata, ut.sum_per).dense,
                        np.array([3, 12]))
-    assert np.allclose(pp.get_per_var(adata, ut.sum_per).proper,
+    assert np.allclose(pp.get_per_var(adata, ut.sum_per).dense,
                        np.array([3, 5, 7]))
 
-    assert np.allclose(pp.get_per_obs(adata, ut.max_per).proper,
+    assert np.allclose(pp.get_per_obs(adata, ut.max_per).dense,
                        np.array([2, 5]))
-    assert np.allclose(pp.get_per_var(adata, ut.max_per).proper,
+    assert np.allclose(pp.get_per_var(adata, ut.max_per).dense,
                        np.array([3, 4, 5]))
 
-    assert np.allclose(pp.get_per_obs(adata, ut.min_per).proper,
+    assert np.allclose(pp.get_per_obs(adata, ut.min_per).dense,
                        np.array([0, 3]))
-    assert np.allclose(pp.get_per_var(adata, ut.min_per).proper,
+    assert np.allclose(pp.get_per_var(adata, ut.min_per).dense,
                        np.array([0, 1, 2]))
 
-    assert np.allclose(pp.get_per_obs(adata, ut.sum_squared_per).proper,
+    assert np.allclose(pp.get_per_obs(adata, ut.sum_squared_per).dense,
                        np.array([5, 50]))
-    assert np.allclose(pp.get_per_var(adata, ut.sum_squared_per).proper,
+    assert np.allclose(pp.get_per_var(adata, ut.sum_squared_per).dense,
                        np.array([9, 17, 29]))
 
-    assert np.allclose(pp.get_fraction_per_obs(adata).proper,
+    assert np.allclose(pp.get_fraction_per_obs(adata).dense,
                        np.array([3/15, 12/15]))
-    assert np.allclose(pp.get_fraction_per_var(adata).proper,
+    assert np.allclose(pp.get_fraction_per_var(adata).dense,
                        np.array([3/15, 5/15, 7/15]))
 
-    assert np.allclose(pp.get_mean_per_obs(adata).proper,
+    assert np.allclose(pp.get_mean_per_obs(adata).dense,
                        np.array([3/3, 12/3]))
-    assert np.allclose(pp.get_mean_per_var(adata).proper,
+    assert np.allclose(pp.get_mean_per_var(adata).dense,
                        np.array([3/2, 5/2, 7/2]))
 
-    assert np.allclose(pp.get_variance_per_obs(adata).proper,
+    assert np.allclose(pp.get_variance_per_obs(adata).dense,
                        np.array([5/3 - (3/3)**2, 50/3 - (12/3)**2]))
 
-    assert np.allclose(pp.get_variance_per_var(adata).proper,
+    assert np.allclose(pp.get_variance_per_var(adata).dense,
                        np.array([9/2 - (3/2)**2, 17/2 - (5/2)**2, 29/2 - (7/2)**2]))
 
-    assert np.allclose(pp.get_normalized_variance_per_var(adata).proper,
+    assert np.allclose(pp.get_normalized_variance_per_var(adata).dense,
                        np.log2(np.array([(9/2 - (3/2)**2) / (3/2),
                                          (17/2 - (5/2)**2) / (5/2),
                                          (29/2 - (7/2)**2) / (7/2)])))

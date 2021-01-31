@@ -121,7 +121,7 @@ def find_deviant_cells(
         assert candidate_of_cells is not None
         assert candidate_of_cells.size == cells_count
 
-        totals_of_cells = pp.get_per_obs(adata, ut.sum_per).proper
+        totals_of_cells = pp.get_per_obs(adata, ut.sum_per).dense
         assert totals_of_cells.size == cells_count
 
         LOG.debug('  min_gene_fold_factor: %s', min_gene_fold_factor)
