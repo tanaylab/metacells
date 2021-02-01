@@ -32,6 +32,7 @@ autosectionlabel_prefix_document = True
 nitpicky = True
 nitpick_ignore = [
     ('py:class', 'anndata._core.anndata.AnnData'),
+    ('py:class', 'BS'),
     ('py:class', 'CALLABLE'),
     ('py:class', 'concurrent.futures.thread.ThreadPoolExecutor'),
     ('py:class', 'ImproperMatrix'),
@@ -45,9 +46,9 @@ nitpick_ignore = [
     ('py:class', 'ProperMatrix'),
     ('py:class', 're.Pattern'),
     ('py:class', 'S'),
-    ('py:class', 'T'),
     ('py:class', 'scipy.sparse.base.spmatrix'),
     ('py:class', 'StepTiming'),
+    ('py:class', 'T'),
     ('py:class', 'utt.CompressedMatrix'),
     ('py:class', 'utt.DenseMatrix'),
     ('py:class', 'utt.ImproperMatrix'),

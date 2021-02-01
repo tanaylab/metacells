@@ -406,7 +406,7 @@ def logistics(
     return result
 
 
-S = TypeVar('S', bound='utt.AnyShaped')
+S = TypeVar('S', bound='utt.Shaped')
 
 
 @utm.timed_call()

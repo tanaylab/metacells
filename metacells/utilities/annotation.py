@@ -227,7 +227,7 @@ def setup(
     X = adata.X
     if not utt.frozen(X):  # type: ignore
         utt.freeze(X)  # type: ignore
-    X = utt.Shaped.be(X)
+    X = utt.BaseShaped.be(X)
     assert X is not None
     assert X.ndim == 2
     assert '__x__' not in adata.uns_keys()
@@ -370,7 +370,7 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     assert x_name not in adata.layers
     assert has_data(adata, focus)
 
-    shaped = utt.Shaped.maybe(obs)
+    shaped: Optional[utt.Shaped] = utt.BaseShaped.maybe(obs)  # type: ignore
     if shaped is None:
         if obs is None:
             obs = range(adata.n_obs)
@@ -384,7 +384,7 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
             assert obs.size > 0
             will_slice_obs = obs.size != adata.n_obs
 
-    shaped = utt.Shaped.maybe(vars)
+    shaped = utt.BaseShaped.maybe(vars)  # type: ignore
     if shaped is None:
         if vars is None:
             vars = range(adata.n_vars)

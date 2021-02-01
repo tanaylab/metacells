@@ -139,7 +139,7 @@ class NamedVector(NamedShaped):
         return NamedVector(name=named.name, shaped=named.shaped)
 
 
-S = TypeVar('S', bound=utt.AnyShaped)
+S = TypeVar('S', bound=utt.Shaped)
 
 
 @utm.timed_call()
@@ -1272,4 +1272,4 @@ def _derive_data(
     data = uta.get_data(adata, to, per=per_to, compute=compute,
                         inplace=inplace, infocus=infocus, layout=layout)
 
-    return cls(name=to, shaped=utt.Shaped.be(data))
+    return cls(name=to, shaped=utt.BaseShaped.be(data))  # type: ignore

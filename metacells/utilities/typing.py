@@ -29,7 +29,7 @@ to leverage ``mypy`` to catch errors such as applying a numpy operation on a spa
 
 To put some order in this chaos, the following concepts are used:
 
-* :py:const:`AnyShaped` is any 1d or 2d data in any format we can work with. :py:const:`Matrix` is
+* :py:const:`Shaped` is any 1d or 2d data in any format we can work with. :py:const:`Matrix` is
   any 2d data, and :py:const:`Vector` is any 1d data.
 
 * For 2D data, we allow multiple data types that we can't directly operate on:
@@ -61,7 +61,7 @@ __all__ = [
     'CPP_DATA_TYPES',
 
     'Shaped',
-    'AnyShaped',
+    'BaseShaped',
     'ProperShaped',
     'ImproperShaped',
     'NumpyShaped',
@@ -117,14 +117,14 @@ __all__ = [
 CPP_DATA_TYPES = ['float32', 'float64', 'int32', 'int64', 'uint32', 'uint64']
 
 
-S = TypeVar('S', bound='Shaped')
+BS = TypeVar('BS', bound='BaseShaped')
 
 
 # pylint: disable=missing-function-docstring
 # pylint: disable=abstract-method
 
 
-class Shaped:
+class BaseShaped:
     '''
     A ``mypy`` type for any shaped (1- or 2-dimensional, proper or improper) data.
     '''
@@ -141,7 +141,7 @@ class Shaped:
     def __setitem__(self, key: Any, value: Any) -> Any: ...
 
     @abstractmethod
-    def transpose(self: S) -> S: ...
+    def transpose(self: BS) -> BS: ...
 
     @staticmethod
     def am(data: Any) -> bool:
@@ -152,7 +152,7 @@ class Shaped:
             or sp.issparse(data)
 
     @classmethod
-    def be(cls: Type[S], data: Any, name: str = 'data') -> S:
+    def be(cls: Type[BS], data: Any, name: str = 'data') -> BS:
         '''
         Return the ``data`` in the particular ``cls`` format.
         '''
@@ -162,7 +162,7 @@ class Shaped:
         return data
 
     @classmethod
-    def maybe(cls: Type[S], data: Any) -> Optional[S]:
+    def maybe(cls: Type[BS], data: Any) -> Optional[BS]:
         '''
         Return the ``data`` in the particular ``cls`` format, if it already is of that class.
         '''
@@ -171,7 +171,7 @@ class Shaped:
         return data
 
 
-class NumpyShaped(Shaped):
+class NumpyShaped(BaseShaped):
     '''
     A ``mypy`` type for numpy 1- or 2-dimensional data.
     '''
@@ -182,122 +182,125 @@ class NumpyShaped(Shaped):
     def setflags(self, write: bool = False) -> None: ...
 
     @abstractmethod
-    def __lt__(self: S,  # type: ignore
-               value: Union['NumpyShaped', float, int]) -> S: ...
+    def __lt__(self: BS,  # type: ignore
+               value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __le__(self: S,  # type: ignore
-               value: Union['NumpyShaped', float, int]) -> S: ...
+    def __le__(self: BS,  # type: ignore
+               value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __eq__(self: S,  # type: ignore
-               value: Union['NumpyShaped', float, int]) -> S: ...
+    def __eq__(self: BS,  # type: ignore
+               value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __ne__(self: S,  # type: ignore
-               value: Union['NumpyShaped', float, int]) -> S: ...
+    def __ne__(self: BS,  # type: ignore
+               value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __ge__(self: S,  # type: ignore
-               value: Union['NumpyShaped', float, int]) -> S: ...
+    def __ge__(self: BS,  # type: ignore
+               value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __gt__(self: S,  # type: ignore
-               value: Union['NumpyShaped', float, int]) -> S: ...
+    def __gt__(self: BS,  # type: ignore
+               value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __add__(self: S, value: Union['NumpyShaped', float, int]) -> S: ...
+    def __add__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __iadd__(self: S, value: Union[S, float, int]) -> S: ...
+    def __iadd__(self: BS, value: Union[BS, float, int]) -> BS: ...
 
     @abstractmethod
-    def __sub__(self: S, value: Union['NumpyShaped', float, int]) -> S: ...
+    def __sub__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __isub__(self: S, value: Union[S, float, int]) -> S: ...
+    def __isub__(self: BS, value: Union[BS, float, int]) -> BS: ...
 
     @abstractmethod
-    def __mul__(self: S, value: Union['NumpyShaped', float, int]) -> S: ...
+    def __mul__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __imul__(self: S, value: Union[S, float, int]) -> S: ...
+    def __imul__(self: BS, value: Union[BS, float, int]) -> BS: ...
 
     @abstractmethod
     def __matmul__(self, value: 'NumpyShaped') -> 'NumpyShaped': ...
 
     @abstractmethod
-    def __imatmul__(self, value: S) -> 'NumpyShaped': ...
+    def __imatmul__(self, value: BS) -> 'NumpyShaped': ...
 
     @abstractmethod
-    def __truediv__(self: S, value: Union['NumpyShaped', float, int]) -> S: ...
+    def __truediv__(self: BS,
+                    value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __itruediv__(self: S, value: Union[S, float, int]) -> S: ...
+    def __itruediv__(self: BS, value: Union[BS, float, int]) -> BS: ...
 
     @abstractmethod
-    def __floordiv__(self: S,
-                     value: Union['NumpyShaped', float, int]) -> S: ...
+    def __floordiv__(self: BS,
+                     value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __ifloordiv__(self: S, value: Union[S, float, int]) -> S: ...
+    def __ifloordiv__(self: BS, value: Union[BS, float, int]) -> BS: ...
 
     @abstractmethod
-    def __mod__(self: S, value: Union['NumpyShaped', float, int]) -> S: ...
+    def __mod__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __imod__(self: S, value: Union[S, float, int]) -> S: ...
+    def __imod__(self: BS, value: Union[BS, float, int]) -> BS: ...
 
     @abstractmethod
-    def __pow__(self: S, value: Union['NumpyShaped', float, int]) -> S: ...
+    def __pow__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __ipow__(self: S, value: Union[S, float, int]) -> S: ...
+    def __ipow__(self: BS, value: Union[BS, float, int]) -> BS: ...
 
     @abstractmethod
-    def __lshift__(self: S, value: Union['NumpyShaped', float, int]) -> S: ...
+    def __lshift__(self: BS,
+                   value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __ilshift__(self: S, value: Union[S, float, int]) -> S: ...
+    def __ilshift__(self: BS, value: Union[BS, float, int]) -> BS: ...
 
     @abstractmethod
-    def __rshift__(self: S, value: Union['NumpyShaped', float, int]) -> S: ...
+    def __rshift__(self: BS,
+                   value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __irshift__(self: S, value: Union[S, float, int]) -> S: ...
+    def __irshift__(self: BS, value: Union[BS, float, int]) -> BS: ...
 
     @abstractmethod
-    def __and__(self: S, value: Union['NumpyShaped', float, int]) -> S: ...
+    def __and__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __iand__(self: S, value: Union[S, float, int]) -> S: ...
+    def __iand__(self: BS, value: Union[BS, float, int]) -> BS: ...
 
     @abstractmethod
-    def __xor__(self: S, value: Union['NumpyShaped', float, int]) -> S: ...
+    def __xor__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __ixor__(self: S, value: Union[S, float, int]) -> S: ...
+    def __ixor__(self: BS, value: Union[BS, float, int]) -> BS: ...
 
     @abstractmethod
-    def __or__(self: S, value: Union['NumpyShaped', float, int]) -> S: ...
+    def __or__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
 
     @abstractmethod
-    def __ior__(self: S, value: Union[S, float, int]) -> S: ...
+    def __ior__(self: BS, value: Union[BS, float, int]) -> BS: ...
 
     @abstractmethod
-    def __neg__(self: S) -> S: ...
+    def __neg__(self: BS) -> BS: ...
 
     @abstractmethod
-    def __pos__(self: S) -> S: ...
+    def __pos__(self: BS) -> BS: ...
 
     @abstractmethod
-    def __abs__(self: S) -> S: ...
+    def __abs__(self: BS) -> BS: ...
 
     @abstractmethod
-    def __invert__(self: S) -> S: ...
+    def __invert__(self: BS) -> BS: ...
 
     @abstractmethod
-    def astype(self: S, typ: str) -> S: ...
+    def astype(self: BS, typ: str) -> BS: ...
 
     @staticmethod
     def am(data: Any) -> bool:
@@ -363,7 +366,7 @@ class DenseMatrix(NumpyShaped):
 SP = TypeVar('SP', bound='SparseMatrix')
 
 
-class SparseMatrix(Shaped):
+class SparseMatrix(BaseShaped):
     '''
     A ``mypy`` type for sparse 2-dimensional data.
     '''
@@ -377,7 +380,7 @@ class SparseMatrix(Shaped):
     def toarray(self) -> DenseMatrix: ...
 
     @abstractmethod
-    def multiply(self: SP, other: Shaped) -> SP: ...
+    def multiply(self: SP, other: BaseShaped) -> SP: ...
 
     @abstractmethod
     def getcol(self: SP, index: int) -> SP: ...
@@ -453,14 +456,14 @@ class CompressedMatrix(SparseMatrix):
         return SparseMatrix.am(data) and data.getformat() in ('csr', 'csc')
 
 
-class PandasIndex(Shaped):
+class PandasIndex(BaseShaped):
     '''
     A ``mypy`` type for a pandas index.
     '''
     values: DenseVector
 
 
-class PandasFrame(Shaped):
+class PandasFrame(BaseShaped):
     '''
     A ``mypy`` type for pandas 2-dimensional data.
     '''
@@ -474,7 +477,7 @@ class PandasFrame(Shaped):
         return isinstance(data, pd.DataFrame)
 
 
-class PandasSeries(Shaped, Sized):
+class PandasSeries(BaseShaped, Sized):
     '''
     A ``mypy`` type for pandas 1-dimensional data.
     '''
@@ -523,7 +526,7 @@ ProperShaped = Union[ProperMatrix, DenseVector]
 ImproperShaped = Union[ImproperMatrix, PandasSeries]
 
 #: Shaped data of any of the types we can deal with.
-AnyShaped = Union[ProperShaped, ImproperShaped]
+Shaped = Union[ProperShaped, ImproperShaped]
 
 #: Dense 1- or 2-dimensional data.
 DenseShaped = Union[DenseVector, DenseMatrix]
