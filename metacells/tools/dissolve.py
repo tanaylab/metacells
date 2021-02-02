@@ -11,7 +11,6 @@ import pandas as pd  # type: ignore
 from anndata import AnnData
 
 import metacells.parameters as pr
-import metacells.preprocessing as pp
 import metacells.utilities as ut
 
 __all__ = [
@@ -38,7 +37,6 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
     min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
     inplace: bool = True,
-    intermediate: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
     Dissolve too-small metacells based ``of`` some data (by default, the focus).
@@ -56,14 +54,11 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
             particular order. Cells with no metacell assignment are given a metacell index of
             ``-1``.
 
-        ``dissolved`` (if ``intermediate``)
+        ``dissolved``
             A boolean mask of the cells which were in a dissolved metacell.
 
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas data frame (indexed by the observation names).
-
-    If ``intermediate`` (default: {intermediate}), also keep all all the intermediate data (e.g.
-    sums) for future reuse. Otherwise, discard it.
 
     **Computation Parameters**
 
@@ -98,68 +93,66 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
 
     dissolved_of_cells = np.zeros(adata.n_obs, dtype='bool')
 
-    with ut.focus_on(ut.get_vo_data, adata, of,
-                     layout='row_major', intermediate=intermediate) as data:
+    candidate_of_cells = \
+        ut.get_vector_parameter_data(LOG, adata, candidates,
+                                     per='o', name='candidates')
+    candidate_of_cells = np.copy(candidate_of_cells)
+    assert candidate_of_cells is not None
+    raw_candidates_count = np.max(candidate_of_cells) + 1
+    LOG.debug('  candidates: %s', raw_candidates_count)
 
-        candidate_of_cells = \
-            ut.get_vector_parameter_data(LOG, adata, candidates,
-                                         per='o', name='candidates')
-        candidate_of_cells = np.copy(candidate_of_cells)
-        assert candidate_of_cells is not None
-        raw_candidates_count = np.max(candidate_of_cells) + 1
-        LOG.debug('  candidates: %s', raw_candidates_count)
+    LOG.debug('  min_metacell_cells: %s', min_metacell_cells)
 
-        LOG.debug('  min_metacell_cells: %s', min_metacell_cells)
+    deviant_of_cells = \
+        ut.get_vector_parameter_data(LOG, adata, deviants,
+                                     per='o', name='deviants')
 
-        deviant_of_cells = \
-            ut.get_vector_parameter_data(LOG, adata, deviants,
-                                         per='o', name='deviants')
+    cell_sizes = \
+        ut.get_vector_parameter_data(LOG, adata, cell_sizes,
+                                     per='o', name='cell_sizes')
 
-        cell_sizes = \
-            ut.get_vector_parameter_data(LOG, adata, cell_sizes,
-                                         per='o', name='cell_sizes')
+    if deviant_of_cells is not None:
+        candidate_of_cells[deviant_of_cells > 0] = -1
+    candidate_of_cells = ut.compress_indices(candidate_of_cells)
+    candidates_count = np.max(candidate_of_cells) + 1
 
-        if deviant_of_cells is not None:
-            candidate_of_cells[deviant_of_cells > 0] = -1
-        candidate_of_cells = ut.compress_indices(candidate_of_cells)
-        candidates_count = np.max(candidate_of_cells) + 1
+    LOG.debug('  target_metacell_size: %s', target_metacell_size)
+    data = ut.get_vo_proper(adata, of, layout='column_major')
+    fraction_of_genes = ut.fraction_per(data, per='column')
 
-        LOG.debug('  target_metacell_size: %s', target_metacell_size)
-        fraction_of_genes = pp.get_fraction_per_var(adata).dense
+    if min_robust_size_factor is None:
+        min_robust_size = None
+    else:
+        min_robust_size = target_metacell_size * min_robust_size_factor
+    LOG.debug('  min_robust_size: %s', min_robust_size)
 
-        if min_robust_size_factor is None:
-            min_robust_size = None
-        else:
-            min_robust_size = target_metacell_size * min_robust_size_factor
-        LOG.debug('  min_robust_size: %s', min_robust_size)
+    if min_convincing_size_factor is None:
+        min_convincing_size = None
+    else:
+        min_convincing_size = \
+            target_metacell_size * min_convincing_size_factor
+    LOG.debug('  min_convincing_size: %s', min_convincing_size)
+    if min_convincing_size_factor is not None:
+        LOG.debug('  min_convincing_gene_fold_factor: %s',
+                  min_convincing_gene_fold_factor)
 
-        if min_convincing_size_factor is None:
-            min_convincing_size = None
-        else:
-            min_convincing_size = \
-                target_metacell_size * min_convincing_size_factor
-        LOG.debug('  min_convincing_size: %s', min_convincing_size)
-        if min_convincing_size_factor is not None:
-            LOG.debug('  min_convincing_gene_fold_factor: %s',
-                      min_convincing_gene_fold_factor)
-
-        did_dissolve = False
-        for candidate_index in range(candidates_count):
-            candidate_cell_indices = \
-                np.where(candidate_of_cells == candidate_index)[0]
-            if not _keep_candidate(adata, candidate_index,
-                                   data=data,
-                                   cell_sizes=cell_sizes,
-                                   fraction_of_genes=fraction_of_genes,
-                                   min_metacell_cells=min_metacell_cells,
-                                   min_robust_size=min_robust_size,
-                                   min_convincing_size=min_convincing_size,
-                                   min_convincing_gene_fold_factor=min_convincing_gene_fold_factor,
-                                   candidates_count=candidates_count,
-                                   candidate_cell_indices=candidate_cell_indices):
-                dissolved_of_cells[candidate_cell_indices] = True
-                candidate_of_cells[candidate_cell_indices] = -1
-                did_dissolve = True
+    did_dissolve = False
+    for candidate_index in range(candidates_count):
+        candidate_cell_indices = \
+            np.where(candidate_of_cells == candidate_index)[0]
+        if not _keep_candidate(adata, candidate_index,
+                               data=data,
+                               cell_sizes=cell_sizes,
+                               fraction_of_genes=fraction_of_genes,
+                               min_metacell_cells=min_metacell_cells,
+                               min_robust_size=min_robust_size,
+                               min_convincing_size=min_convincing_size,
+                               min_convincing_gene_fold_factor=min_convincing_gene_fold_factor,
+                               candidates_count=candidates_count,
+                               candidate_cell_indices=candidate_cell_indices):
+            dissolved_of_cells[candidate_cell_indices] = True
+            candidate_of_cells[candidate_cell_indices] = -1
+            did_dissolve = True
 
     if did_dissolve:
         metacell_of_cells = ut.compress_indices(candidate_of_cells)
@@ -172,9 +165,8 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
         metacells_count = -1
 
     if inplace:
-        if intermediate:
-            ut.set_o_data(adata, 'dissolved', dissolved_of_cells,
-                          log_value=ut.mask_description)
+        ut.set_o_data(adata, 'dissolved', dissolved_of_cells,
+                      log_value=ut.mask_description)
 
         ut.set_o_data(adata, to, metacell_of_cells,
                       log_value=ut.groups_description)

@@ -36,7 +36,6 @@ LOG = logging.getLogger(__name__)
 def analyze_clean_genes(
     adata: AnnData,
     *,
-    of: Optional[str] = None,
     properly_sampled_min_gene_total: int = pr.properly_sampled_min_gene_total,
     noisy_lonely_max_sampled_cells: int = pr.noisy_lonely_max_sampled_cells,
     noisy_lonely_downsample_cell_quantile: float = pr.noisy_lonely_downsample_cell_quantile,
@@ -46,7 +45,6 @@ def analyze_clean_genes(
     excluded_gene_names: Optional[Collection[str]] = None,
     excluded_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     random_seed: int = pr.random_seed,
-    intermediate: bool = True,
 ) -> None:
     '''
     Analyze genes in preparation for picking the "clean" subset of the ``adata``.
@@ -55,8 +53,6 @@ def analyze_clean_genes(
 
     A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
     are cells and the variables are genes.
-
-    All the computations will use the ``of`` data (by default, the focus).
 
     **Returns**
 
@@ -71,9 +67,6 @@ def analyze_clean_genes(
 
         ``excluded_gene``
             A mask of the genes which were excluded by name.
-
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
 
     **Computation Parameters**
 
@@ -95,11 +88,10 @@ def analyze_clean_genes(
     '''
     ut.log_pipeline_step(LOG, adata, 'analyze_clean_genes')
 
-    tl.find_properly_sampled_genes(adata, of=of,
-                                   min_gene_total=properly_sampled_min_gene_total,
-                                   intermediate=intermediate)
+    tl.find_properly_sampled_genes(adata,
+                                   min_gene_total=properly_sampled_min_gene_total)
 
-    tl.find_noisy_lonely_genes(adata, of=of,
+    tl.find_noisy_lonely_genes(adata,
                                max_sampled_cells=noisy_lonely_max_sampled_cells,
                                downsample_cell_quantile=noisy_lonely_downsample_cell_quantile,
                                min_gene_fraction=noisy_lonely_min_gene_fraction,
@@ -134,8 +126,6 @@ def pick_clean_genes(  # pylint: disable=dangerous-default-value
     A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
     are cells and the variables are genes.
 
-    All the computations will use the ``of`` data (by default, the focus).
-
     **Returns**
 
     Sets the following in the data:
@@ -156,7 +146,6 @@ def pick_clean_genes(  # pylint: disable=dangerous-default-value
 def analyze_clean_cells(
     adata: AnnData,
     *,
-    of: Optional[str] = None,
     properly_sampled_min_cell_total: Optional[int],
     properly_sampled_max_cell_total: Optional[int],
     properly_sampled_max_excluded_genes_fraction: Optional[float],
@@ -173,8 +162,6 @@ def analyze_clean_cells(
 
     A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
     are cells and the variables are genes.
-
-    All the computations will use the ``of`` data (by default, the focus).
 
     **Returns**
 
@@ -196,22 +183,22 @@ def analyze_clean_cells(
     '''
     ut.log_pipeline_step(LOG, adata, 'analyze_clean_cells')
 
-    excluded_data: Optional[AnnData] = None
+    excluded_adata: Optional[AnnData] = None
     if properly_sampled_max_excluded_genes_fraction is not None:
         excluded_genes = pp.filter_data(adata, name='dirty_genes', tmp=True,
                                         var_masks=['~clean_gene'])
         if excluded_genes is not None:
-            excluded_data = excluded_genes[0]
+            excluded_adata = excluded_genes[0]
 
     if excluded_genes is None:
         max_excluded_genes_fraction = None
     else:
         max_excluded_genes_fraction = properly_sampled_max_excluded_genes_fraction
 
-    tl.find_properly_sampled_cells(adata, of=of,
+    tl.find_properly_sampled_cells(adata,
                                    min_cell_total=properly_sampled_min_cell_total,
                                    max_cell_total=properly_sampled_max_cell_total,
-                                   excluded_data=excluded_data,
+                                   excluded_adata=excluded_adata,
                                    max_excluded_genes_fraction=max_excluded_genes_fraction)
 
 
@@ -233,8 +220,6 @@ def pick_clean_cells(  # pylint: disable=dangerous-default-value
 
     A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
     are cells and the variables are genes.
-
-    All the computations will use the ``of`` data (by default, the focus).
 
     **Returns**
 
@@ -269,8 +254,6 @@ def extract_clean_data(
 
     A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
     are cells and the variables are genes.
-
-    All the computations will use the ``of`` data (by default, the focus).
 
     **Returns**
 

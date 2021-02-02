@@ -11,7 +11,6 @@ import pandas as pd  # type: ignore
 from anndata import AnnData
 
 import metacells.parameters as pr
-import metacells.preprocessing as pp
 import metacells.utilities as ut
 
 __all__ = [
@@ -27,17 +26,15 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def find_properly_sampled_cells(
     adata: AnnData,
-    of: Optional[str] = None,
     *,
     min_cell_total: Optional[int],
     max_cell_total: Optional[int],
-    excluded_data: Optional[AnnData] = None,
+    excluded_adata: Optional[AnnData] = None,
     max_excluded_genes_fraction: Optional[float],
     inplace: bool = True,
-    intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Detect cells with a "proper" amount ``of`` some data sampled (by default, the focus).
+    Detect cells with a "proper" amount of UMIs.
 
     Due to both technical effects and natural variance between cells, the total number of UMIs
     varies from cell to cell. We often would like to work on cells that contain a sufficient number
@@ -53,13 +50,10 @@ def find_properly_sampled_cells(
 
     Observation (Cell) Annotations
         ``properly_sampled_cell``
-            A boolean mask indicating whether each cell has a "proper" amount of samples.
+            A boolean mask indicating whether each cell has a "proper" amount of UMIs.
 
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas series (indexed by the observation names).
-
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
 
     **Computation Parameters**
 
@@ -69,40 +63,40 @@ def find_properly_sampled_cells(
     2. Exclude all cells whose total data is more than the ``max_cell_total`` (no default), unless
        it is ``None``.
 
-    3. If ``max_excluded_genes_fraction`` (no default) is not ``None``, then ``excluded_data`` must
+    3. If ``max_excluded_genes_fraction`` (no default) is not ``None``, then ``excluded_adata`` must
        not be ``None`` and should contain just the excluded genes data for each cell. Exclude all
        cells whose sum of the excluded data divided by the total data is more than the specified
        threshold.
     '''
-    of, level = ut.log_operation(LOG, adata, 'find_properly_sampled_cells', of)
+    _, level = ut.log_operation(LOG, adata, 'find_properly_sampled_cells')
 
-    assert (max_excluded_genes_fraction is None) == (excluded_data is None)
+    assert (max_excluded_genes_fraction is None) == (excluded_adata is None)
 
-    with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        total_of_cells = pp.get_per_obs(adata, ut.sum_per).dense
-        cells_mask = np.full(adata.n_obs, True, dtype='bool')
+    data = ut.get_vo_data(adata, layout='row_major')
+    total_of_cells = ut.sum_per(data, per='row')
 
-        if min_cell_total is not None:
-            LOG.debug('  min_cell_total: %s', min_cell_total)
-            cells_mask = cells_mask & (total_of_cells >= min_cell_total)
+    cells_mask = np.full(adata.n_obs, True, dtype='bool')
 
-        if max_cell_total is not None:
-            LOG.debug('  max_cell_total: %s', max_cell_total)
-            cells_mask = \
-                cells_mask & (total_of_cells <= max_cell_total)
+    if min_cell_total is not None:
+        LOG.debug('  min_cell_total: %s', min_cell_total)
+        cells_mask = cells_mask & (total_of_cells >= min_cell_total)
 
-        if excluded_data is not None:
-            assert max_excluded_genes_fraction is not None
-            LOG.debug('  max_excluded_genes_fraction: %s',
-                      max_excluded_genes_fraction)
-            excluded_of_cells = \
-                pp.get_per_obs(excluded_data, ut.sum_per).dense
-            if np.min(total_of_cells) == 0:
-                total_of_cells = np.copy(total_of_cells)
-                total_of_cells[total_of_cells == 0] = 1
-            excluded_fraction = excluded_of_cells / total_of_cells
-            cells_mask = \
-                cells_mask & (excluded_fraction <= max_excluded_genes_fraction)
+    if max_cell_total is not None:
+        LOG.debug('  max_cell_total: %s', max_cell_total)
+        cells_mask = cells_mask & (total_of_cells <= max_cell_total)
+
+    if excluded_adata is not None:
+        assert max_excluded_genes_fraction is not None
+        LOG.debug('  max_excluded_genes_fraction: %s',
+                  max_excluded_genes_fraction)
+        excluded_data = ut.get_vo_data(excluded_adata, layout='row_major')
+        excluded_of_cells = ut.sum_per(excluded_data, per='row')
+        if np.min(total_of_cells) == 0:
+            total_of_cells = np.copy(total_of_cells)
+            total_of_cells[total_of_cells == 0] = 1
+        excluded_fraction = excluded_of_cells / total_of_cells
+        cells_mask = \
+            cells_mask & (excluded_fraction <= max_excluded_genes_fraction)
 
     if inplace:
         ut.set_o_data(adata, 'properly_sampled_cell', cells_mask)
@@ -117,14 +111,12 @@ def find_properly_sampled_cells(
 @ut.expand_doc()
 def find_properly_sampled_genes(
     adata: AnnData,
-    of: Optional[str] = None,
     *,
     min_gene_total: int = pr.properly_sampled_min_gene_total,
     inplace: bool = True,
-    intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Detect genes with a "proper" amount ``of`` some data samples (by default, the focus).
+    Detect genes with a "proper" amount of UMIs.
 
     Due to both technical effects and natural variance between genes, the expression of genes varies
     greatly between cells. This is exactly the information we are trying to analyze. We often would
@@ -144,25 +136,23 @@ def find_properly_sampled_genes(
 
     Variable (Gene) Annotations
         ``properly_sampled_gene``
-            A boolean mask indicating whether each gene has a "proper" number of samples.
+            A boolean mask indicating whether each gene has a "proper" number of UMIs.
 
     If ``inplace`` (default: {inplace}), this is written to the data and the function returns
     ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
-
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
 
     **Computation Parameters**
 
     1. Exclude all genes whose total data is less than the ``min_gene_total`` (default:
        {min_gene_total}).
     '''
-    of, level = ut.log_operation(LOG, adata, 'find_properly_sampled_genes', of)
+    _, level = ut.log_operation(LOG, adata, 'find_properly_sampled_genes')
 
-    with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        total_of_genes = pp.get_per_var(adata, ut.sum_per).dense
-        LOG.debug('  min_gene_total: %s', min_gene_total)
-        genes_mask = total_of_genes >= min_gene_total
+    data = ut.get_vo_data(adata, layout='column_major')
+    total_of_genes = ut.sum_per(data, per='column')
+
+    LOG.debug('  min_gene_total: %s', min_gene_total)
+    genes_mask = total_of_genes >= min_gene_total
 
     if inplace:
         ut.set_v_data(adata, 'properly_sampled_gene', genes_mask)

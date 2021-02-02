@@ -49,6 +49,10 @@ __all__ = [
     'rank_per',
     'quantile_per',
     'nanquantile_per',
+    'fraction_per',
+    'variance_per',
+    'normalized_variance_per',
+    'relative_variance_per',
 
     'sum_matrix',
     'nnz_matrix',
@@ -261,19 +265,77 @@ def sort_compressed_indices(matrix: utt.CompressedMatrix, force: bool = False) -
     matrix.has_sorted_indices = True
 
 
+def _ensure_per(matrix: utt.Matrix, per: Optional[str]) -> str:
+    if per is not None:
+        assert per in ('row', 'column')
+        return per
+
+    assert matrix.shape[0] == matrix.shape[1]
+    layout = utt.matrix_layout(matrix)
+    assert layout is not None
+    return layout[:-6]
+
+
+def _ensure_layout_for(operation: str, matrix: utt.Matrix,
+                       per: Optional[str], allow_inefficient: bool = True) -> None:
+    layout = utt.matrix_layout(matrix)
+    if layout == f'{per}_major':
+        return
+
+    if layout is not None:
+        operating_on_matrix_of_wrong_layout = \
+            f'{operation} of {per}s of a matrix with {layout} layout'
+        if not allow_inefficient:
+            raise NotImplementedError(operating_on_matrix_of_wrong_layout)
+        warn(operating_on_matrix_of_wrong_layout)
+        return
+
+    dense = utt.DenseMatrix.maybe(matrix)
+    if dense is not None:
+        operating_on_dense_matrix_of_inefficient_strides = \
+            f'{operation} of {per}s of a dense matrix with inefficient strides: {dense.strides}'
+        if not allow_inefficient:
+            raise NotImplementedError(  #
+                operating_on_dense_matrix_of_inefficient_strides)
+        warn(operating_on_dense_matrix_of_inefficient_strides)
+        return
+
+    sparse = utt.SparseMatrix.be(matrix)
+    operating_on_sparse_matrix_of_inefficient_format = \
+        f'{operation} of {per}s of a sparse matrix with inefficient format: {sparse.getformat()}'
+    if not allow_inefficient:
+        raise NotImplementedError(  #
+            operating_on_sparse_matrix_of_inefficient_format)
+    warn(operating_on_sparse_matrix_of_inefficient_format)
+
+
+def _ensure_per_for(operation: str, matrix: utt.Matrix, per: Optional[str]) -> str:
+    per = _ensure_per(matrix, per)
+    _ensure_layout_for(operation, matrix, per)
+    return per
+
+
+def _get_dense_for(operation: str, matrix: utt.Matrix,
+                   per: Optional[str]) -> Tuple[str, utt.DenseMatrix]:
+    per = _ensure_per(matrix, per)
+    dense = utt.to_dense_matrix(matrix, default_layout=f'{per}_major')
+    _ensure_layout_for(operation, dense, per)
+    return per, dense
+
+
 @utm.timed_call()
-@utd.expand_doc()
 def corrcoef(
     matrix: utt.Matrix,
     *,
-    per: Optional[str] = 'row',
+    per: Optional[str],
 ) -> utt.DenseMatrix:
     '''
     Similar to for ``np.corrcoef``, but also works for a sparse ``matrix``.
 
-    If ``per`` (default: {per}) is ``None``, the matrix must be square and is assumed to be
-    symmetric, so the most efficient direction is used based on the matrix layout. Otherwise it must
-    be one of ``row`` or ``column``.
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
+    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
+    ``column``, and the matrix must be in the appropriate layout (row-major for ranking data in each
+    row, column-major for ranking data in each column).
 
     .. todo::
 
@@ -304,57 +366,35 @@ def corrcoef(
         back. This means that the matrix will be slightly perturbed, so computation done on it
         before and after invoking this will give slightly different results.
     '''
-    dense = utt.to_dense_matrix(matrix)
-    layout = utt.matrix_layout(dense)
-
-    if per is None:
-        assert dense.shape[0] == dense.shape[1]
-        if layout is None:
-            per = 'row'
-        else:
-            per = utt.PER_OF_AXIS[utt.LAYOUT_OF_AXIS.index(layout)]
-
+    per, dense = _get_dense_for('corrcoef', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
-    fast_layout = utt.LAYOUT_OF_AXIS[axis]
-    if layout != fast_layout:
-        correlating_dense_input_matrix_of_inefficient_format = \
-            'correlating %ss of a matrix with inefficient strides: %s' \
-            % (per, dense.strides)
-        warn(correlating_dense_input_matrix_of_inefficient_format)
 
     utm.timed_parameters(results=dense.shape[axis],
                          elements=dense.shape[1 - axis])
 
-    is_frozen = utt.frozen(dense)
-    if is_frozen:
-        utt.unfreeze(dense)
-
-    # Replication of numpy code:
-    X = dense if per == 'row' else dense.T
-    row_averages = np.average(X, axis=1)
-    X -= row_averages[:, None]
-    result = np.matmul(X, X.T)
-    result *= 1 / X.shape[1]
-    X += row_averages[:, None]
-    diagonal = np.diag(result)
-    stddev = np.sqrt(diagonal)
-    result /= stddev[:, None]
-    result /= stddev[None, :]
-    np.clip(result, -1, 1, out=result)
-
-    if is_frozen:
-        utt.freeze(dense)
-    return result
+    with utt.unfrozen(dense):
+        # Replication of numpy code:
+        X = dense if per == 'row' else dense.T
+        row_averages = np.average(X, axis=1)
+        X -= row_averages[:, None]
+        result = np.matmul(X, X.T)
+        result *= 1 / X.shape[1]
+        X += row_averages[:, None]
+        diagonal = np.diag(result)
+        stddev = np.sqrt(diagonal)
+        result /= stddev[:, None]
+        result /= stddev[None, :]
+        np.clip(result, -1, 1, out=result)
+        return result
 
 
 @utm.timed_call()
-@utd.expand_doc()
 def logistics(
     matrix: utt.Matrix,
     *,
     location: float = 0.8,
     scale: float = 5,
-    per: Optional[str] = 'row',
+    per: Optional[str]
 ) -> utt.DenseMatrix:
     '''
     Compute a similarity matrix, similar to for ``np.corrcoef``, but uses the logistics function.
@@ -362,9 +402,10 @@ def logistics(
     This computes, for each pair of vectors, the mean of ``1/(1+exp(-scale*(abs(x-y)-location)))``
     of each of the elements. Typically this is applied to the log of the raw data.
 
-    If ``per`` (default: {per}) is ``None``, the matrix must be square and is assumed to be
-    symmetric, so the most efficient direction is used based on the matrix layout. Otherwise it must
-    be one of ``row`` or ``column``.
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
+    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
+    ``column``, and the matrix must be in the appropriate layout (row-major for ranking data in each
+    row, column-major for ranking data in each column).
 
     .. todo::
 
@@ -375,23 +416,8 @@ def logistics(
 
         The result is always dense, as even for sparse data, the result is rarely exactly zero.
     '''
-    dense = utt.to_dense_matrix(matrix)
-    layout = utt.matrix_layout(dense)
-
-    if per is None:
-        assert dense.shape[0] == dense.shape[1]
-        if layout is None:
-            per = 'row'
-        else:
-            per = utt.PER_OF_AXIS[utt.LAYOUT_OF_AXIS.index(layout)]
-
+    per, dense = _get_dense_for('logistics', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
-    fast_layout = utt.LAYOUT_OF_AXIS[axis]
-    if layout != fast_layout:
-        correlating_dense_input_matrix_of_inefficient_format = \
-            'logistics of %ss of a matrix with inefficient strides: %s' \
-            % (per, dense.strides)
-        warn(correlating_dense_input_matrix_of_inefficient_format)
 
     utm.timed_parameters(results=dense.shape[axis],
                          elements=dense.shape[1 - axis])
@@ -489,7 +515,7 @@ def downsample_matrix(
     eliminate_zeros: bool = True,
     inplace: bool = False,
     random_seed: int = 0,
-) -> utt.Matrix:
+) -> utt.ProperMatrix:
     '''
     Downsample the data ``per`` (one of ``row`` and ``column``) such that the sum of each one
     becomes ``samples``.
@@ -504,7 +530,7 @@ def downsample_matrix(
     A non-zero ``random_seed`` (default: {random_seed}) can be provided to make the operation
     replicable.
     '''
-    assert per in utt.PER_OF_AXIS
+    assert per in ('row', 'column')
     assert samples > 0
 
     _, dense, compressed = utt.to_proper_matrices(matrix)
@@ -746,157 +772,214 @@ def matrix_rows_auroc(
 
 
 @utm.timed_call()
-def mean_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
+def mean_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
     '''
     Compute the mean value ``per`` (``row`` or ``column``) of some ``matrix``.
+
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
+    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
+    ``column``, and the matrix must be in the appropriate layout (row-major for ranking data in each
+    row, column-major for ranking data in each column).
+
+    .. todo::
+
+        The :py:func:`logistics` always uses the dense implementation. Possibly a sparse
+        implementation might be faster.
     '''
-    axis = utt.PER_OF_AXIS.index(per)
-
-    sparse = utt.SparseMatrix.maybe(matrix)
-    if sparse is not None:
-        return _reduce_matrix(sparse, per, lambda sparse: sparse.mean(axis=1 - axis))
-
-    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
-    return _reduce_matrix(dense, per, lambda dense: np.mean(dense, axis=1 - axis))
+    per = _ensure_per_for('mean', matrix, per)
+    axis = 1 - utt.PER_OF_AXIS.index(per)
+    return sum_per(matrix, per=per) / matrix.shape[axis]
 
 
 @utm.timed_call()
-def nanmean_per(matrix: utt.DenseMatrix, *, per: str) -> utt.DenseVector:
+def nanmean_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
     '''
-    Compute the mean value ``per`` (``row`` or ``column``) of some ``matrix``,
-    ignoring ``None`` values, if any.
-    '''
-    axis = utt.PER_OF_AXIS.index(per)
+    Compute the mean value ``per`` (``row`` or ``column``) of some ``matrix``, ignoring ``None``
+    values, if any.
 
-    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
+    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
+    ``column``, and the matrix must be in the appropriate layout (row-major for ranking data in each
+    row, column-major for ranking data in each column).
+
+    .. todo::
+
+        The :py:func:`logistics` always uses the dense implementation. Possibly a sparse
+        implementation might be faster.
+    '''
+    per, dense = _get_dense_for('nanmean', matrix, per)
+    axis = utt.PER_OF_AXIS.index(per)
 
     with catch_warnings():
         filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
-
-        return _reduce_matrix(dense, per, lambda dense: np.nanmean(dense, axis=1 - axis))
+        return _reduce_matrix('nanmean', dense, per, lambda dense: np.nanmean(dense, axis=1 - axis))
 
 
 @utm.timed_call()
-def max_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
+def max_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
     '''
     Compute the maximal value ``per`` (``row`` or ``column``) of some ``matrix``.
+
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
+    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
+    ``column``, and the matrix must be in the appropriate layout (row-major for ranking data in each
+    row, column-major for ranking data in each column).
     '''
+    per = _ensure_per_for('max', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
     sparse = utt.SparseMatrix.maybe(matrix)
     if sparse is not None:
-        return _reduce_matrix(sparse, per, lambda sparse: sparse.max(axis=1 - axis))
+        return _reduce_matrix('max', sparse, per, lambda sparse: sparse.max(axis=1 - axis))
 
-    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
-    return _reduce_matrix(dense, per, lambda dense: np.max(dense, axis=1 - axis))
+    dense = utt.to_dense_matrix(matrix)
+    return _reduce_matrix('max', dense, per, lambda dense: np.max(dense, axis=1 - axis))
 
 
 @utm.timed_call()
-def nanmax_per(matrix: utt.DenseMatrix, *, per: str) -> utt.DenseVector:
+def nanmax_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
     '''
-    Compute the maximal value ``per`` (``row`` or ``column``) of some ``matrix``,
-    ignoring ``None`` values, if any.
+    Compute the maximal value ``per`` (``row`` or ``column``) of some ``matrix``, ignoring ``None``
+    values, if any.
+
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
+    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
+    ``column``, and the matrix must be in the appropriate layout (row-major for ranking data in each
+    row, column-major for ranking data in each column).
+
+    .. todo::
+
+        The :py:func:`logistics` always uses the dense implementation. Possibly a sparse
+        implementation might be faster.
     '''
+    per, dense = _get_dense_for('nanmax', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
-    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
     with catch_warnings():
         filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
-
-        return _reduce_matrix(dense, per, lambda dense: np.nanmax(dense, axis=1 - axis))
+        return _reduce_matrix('nanmax', dense, per, lambda dense: np.nanmax(dense, axis=1 - axis))
 
 
 @utm.timed_call()
-def min_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
+def min_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
     '''
     Compute the minimal value ``per`` (``row`` or ``column``) of some ``matrix``.
+
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
+    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
+    ``column``, and the matrix must be in the appropriate layout (row-major for ranking data in each
+    row, column-major for ranking data in each column).
     '''
+    per = _ensure_per_for('nanmax', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
     sparse = utt.SparseMatrix.maybe(matrix)
     if sparse is not None:
-        return _reduce_matrix(sparse, per, lambda sparse: sparse.min(axis=1 - axis))
+        return _reduce_matrix('min', sparse, per, lambda sparse: sparse.min(axis=1 - axis))
 
-    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
-    return _reduce_matrix(dense, per, lambda dense: np.min(dense, axis=1 - axis))
+    dense = utt.to_dense_matrix(matrix)
+    return _reduce_matrix('min', dense, per, lambda dense: np.min(dense, axis=1 - axis))
 
 
 @utm.timed_call()
-def nanmin_per(matrix: utt.DenseMatrix, *, per: str) -> utt.DenseVector:
+def nanmin_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
     '''
     Compute the minimal value ``per`` (``row`` or ``column``) of some ``matrix``,
     ignoring ``None`` values, if any.
+
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
+    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
+    ``column``, and the matrix must be in the appropriate layout (row-major for ranking data in each
+    row, column-major for ranking data in each column).
+
+    .. todo::
+
+        The :py:func:`logistics` always uses the dense implementation. Possibly a sparse
+        implementation might be faster.
     '''
+    per, dense = _get_dense_for('nanmin', matrix, per)
+    axis = utt.PER_OF_AXIS.index(per)
+
     with catch_warnings():
         filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
-
-        axis = utt.PER_OF_AXIS.index(per)
-
-        sparse = utt.SparseMatrix.maybe(matrix)
-        if sparse is not None:
-            return _reduce_matrix(sparse, per, lambda sparse: sparse.nanmin(axis=1 - axis))
-
-        dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
-        return _reduce_matrix(dense, per, lambda dense: np.nanmin(dense, axis=1 - axis))
+        return _reduce_matrix('nanmean', dense, per, lambda dense: np.nanmin(dense, axis=1 - axis))
 
 
 @utm.timed_call()
-def nnz_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
+def nnz_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
     '''
     Compute the number of non-zero values ``per`` (``row`` or ``column``) of some ``matrix``.
+
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
+    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
+    ``column``, and the matrix must be in the appropriate layout (row-major for ranking data in each
+    row, column-major for ranking data in each column).
     '''
+    per = _ensure_per_for('nnz', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
     sparse = utt.SparseMatrix.maybe(matrix)
     if sparse is not None:
-        return _reduce_matrix(sparse, per, lambda sparse: sparse.getnnz(axis=1 - axis))
+        return _reduce_matrix('nnz', sparse, per, lambda sparse: sparse.getnnz(axis=1 - axis))
 
-    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
-    return _reduce_matrix(dense, per, lambda dense: np.count_nonzero(dense, axis=1 - axis))
+    dense = utt.to_dense_matrix(matrix)
+    return _reduce_matrix('nnz', dense, per, lambda dense: np.count_nonzero(dense, axis=1 - axis))
 
 
 @utm.timed_call()
-def sum_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
+def sum_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
     '''
     Compute the total of the values ``per`` (``row`` or ``column``) of some ``matrix``.
+
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
+    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
+    ``column``, and the matrix must be in the appropriate layout (row-major for ranking data in each
+    row, column-major for ranking data in each column).
     '''
+    per = _ensure_per_for('sum', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
     sparse = utt.SparseMatrix.maybe(matrix)
     if sparse is not None:
-        return _reduce_matrix(sparse, per, lambda sparse: sparse.sum(axis=1 - axis))
+        return _reduce_matrix('sum', sparse, per, lambda sparse: sparse.sum(axis=1 - axis))
 
-    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
-    return _reduce_matrix(dense, per, lambda dense: np.sum(dense, axis=1 - axis))
+    dense = utt.to_dense_matrix(matrix)
+    return _reduce_matrix('sum', dense, per, lambda dense: np.sum(dense, axis=1 - axis))
 
 
 @utm.timed_call()
-def sum_squared_per(matrix: utt.Matrix, *, per: str) -> utt.DenseVector:
+def sum_squared_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
     '''
     Compute the total of the squared values ``per`` (``row`` or ``column``) of some ``matrix``.
+
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
+    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
+    ``column``, and the matrix must be in the appropriate layout (row-major for ranking data in each
+    row, column-major for ranking data in each column).
 
     .. todo::
 
         The :py:func:`sum_squared_per` implementation allocates and frees a complete copy of the
         matrix (to hold the squared values). An implementation that directly squares-and-adds the
-        elements would be more efficient.
+        elements would be more efficient and consume less memory.
     '''
+    per = _ensure_per_for('sum_squared', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
     sparse = utt.SparseMatrix.maybe(matrix)
     if sparse is not None:
         return \
-            _reduce_matrix(sparse, per,
+            _reduce_matrix('sum_squared', sparse, per,
                            lambda sparse:
                            sparse.multiply(sparse).sum(axis=1 - axis))
 
-    dense = utt.DenseMatrix.be(utt.to_proper_matrix(matrix))
-    return _reduce_matrix(dense, per,
+    dense = utt.to_dense_matrix(matrix)
+    return _reduce_matrix('sum_squared', dense, per,
                           lambda dense: np.square(dense).sum(axis=1 - axis))
 
 
 @utm.timed_call()
-def rank_per(matrix: utt.DenseMatrix, rank: int, *, per: Optional[str]) -> utt.DenseVector:
+def rank_per(matrix: utt.Matrix, rank: int, *, per: Optional[str]) -> utt.DenseVector:
     '''
     Get the ``rank`` element ``per`` (``row`` or ``column``) of some ``matrix``.
 
@@ -904,27 +987,26 @@ def rank_per(matrix: utt.DenseMatrix, rank: int, *, per: Optional[str]) -> utt.D
     symmetric, so the most efficient direction is used based on the matrix layout. Otherwise it must
     be one of ``row`` or ``column``, and the matrix must be in the appropriate layout (row-major for
     ranking data in each row, column-major for ranking data in each column).
-    '''
-    if per is None:
-        layout = utt.matrix_layout(matrix)
-        assert layout is not None
-        per = layout[:-6]
 
-    assert per in utt.PER_OF_AXIS
-    assert utt.matrix_layout(matrix) == per + '_major'
+    .. todo::
+
+        The :py:func:`logistics` always uses the dense implementation. Possibly a sparse
+        implementation might be faster.
+    '''
+    per, dense = _get_dense_for('ranking', matrix, per)
 
     if per == 'column':
-        matrix = matrix.transpose()
+        dense = dense.transpose()
 
-    output = np.empty(matrix.shape[0], dtype=matrix.dtype)
-    extension_name = 'rank_matrix_%s_t' % matrix.dtype
+    output = np.empty(dense.shape[0], dtype=dense.dtype)
+    extension_name = 'rank_matrix_%s_t' % dense.dtype
     extension = getattr(xt, extension_name)
-    extension(matrix, output, rank)
+    extension(dense, output, rank)
     return output
 
 
 @utm.timed_call()
-def quantile_per(matrix: utt.DenseMatrix, quantile: float, *, per: Optional[str]) -> utt.DenseVector:
+def quantile_per(matrix: utt.Matrix, quantile: float, *, per: Optional[str]) -> utt.DenseVector:
     '''
     Get the ``quantile`` element ``per`` (``row`` or ``column``) of some ``matrix``.
 
@@ -932,22 +1014,22 @@ def quantile_per(matrix: utt.DenseMatrix, quantile: float, *, per: Optional[str]
     symmetric, so the most efficient direction is used based on the matrix layout. Otherwise it must
     be one of ``row`` or ``column``, and the matrix must be in the appropriate layout (row-major for
     ranking data in each row, column-major for ranking data in each column).
+
+    .. todo::
+
+        The :py:func:`logistics` always uses the dense implementation. Possibly a sparse
+        implementation might be faster.
     '''
-    assert 0 <= quantile <= 1
-
-    if per is None:
-        layout = utt.matrix_layout(matrix)
-        assert layout is not None
-        per = layout[:-6]
-
+    per, dense = _get_dense_for('quantile', matrix, per)
     axis = 1 - utt.PER_OF_AXIS.index(per)
 
-    assert utt.matrix_layout(matrix) == per + '_major'
-    return np.nanquantile(matrix, quantile, axis)
+    assert 0 <= quantile <= 1
+
+    return np.nanquantile(dense, quantile, axis)
 
 
 @utm.timed_call()
-def nanquantile_per(matrix: utt.DenseMatrix, quantile: float, *, per: Optional[str]) -> utt.DenseVector:
+def nanquantile_per(matrix: utt.Matrix, quantile: float, *, per: Optional[str]) -> utt.DenseVector:
     '''
     Get the ``quantile`` element ``per`` (``row`` or ``column``) of some ``matrix``, ignoring
     ``None`` values.
@@ -956,18 +1038,102 @@ def nanquantile_per(matrix: utt.DenseMatrix, quantile: float, *, per: Optional[s
     symmetric, so the most efficient direction is used based on the matrix layout. Otherwise it must
     be one of ``row`` or ``column``, and the matrix must be in the appropriate layout (row-major for
     ranking data in each row, column-major for ranking data in each column).
+
+    .. todo::
+
+        The :py:func:`logistics` always uses the dense implementation. Possibly a sparse
+        implementation might be faster.
     '''
-    assert 0 <= quantile <= 1
-
-    if per is None:
-        layout = utt.matrix_layout(matrix)
-        assert layout is not None
-        per = layout[:-6]
-
+    per, dense = _get_dense_for('nanquantile', matrix, per)
     axis = 1 - utt.PER_OF_AXIS.index(per)
 
-    assert utt.is_layout(matrix, per + '_major')
-    return np.nanquantile(matrix, quantile, axis)
+    assert 0 <= quantile <= 1
+
+    return np.nanquantile(dense, quantile, axis)
+
+
+@utm.timed_call()
+def fraction_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
+    '''
+    Get the fraction ``per`` (``row`` or ``column``) out of the total of some ``matrix``.
+
+    If ``per`` (default: {per}) is ``None``, the matrix must be square and is assumed to be
+    symmetric, so the most efficient direction is used based on the matrix layout. Otherwise it must
+    be one of ``row`` or ``column``, and the matrix must be in the appropriate layout (row-major for
+    ranking data in each row, column-major for ranking data in each column).
+    '''
+    total_per_element = sum_per(matrix, per=per)
+    return total_per_element / total_per_element.sum()
+
+
+@utm.timed_call()
+def variance_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
+    '''
+    Get the variance ``per`` (``row`` or ``column``) of some ``matrix``.
+
+    If ``per`` (default: {per}) is ``None``, the matrix must be square and is assumed to be
+    symmetric, so the most efficient direction is used based on the matrix layout. Otherwise it must
+    be one of ``row`` or ``column``, and the matrix must be in the appropriate layout (row-major for
+    ranking data in each row, column-major for ranking data in each column).
+    '''
+    per = _ensure_per_for('variance', matrix, per)
+    sum_per_element = sum_per(matrix, per=per)
+    sum_squared_per_element = sum_squared_per(matrix, per=per)
+    axis = 1 - utt.PER_OF_AXIS.index(per)
+    size = matrix.shape[axis]
+    result = np.square(sum_per_element).astype(float)
+    result /= -size
+    result += sum_squared_per_element
+    result /= size
+    return result
+
+
+@utm.timed_call()
+def normalized_variance_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
+    '''
+    Get the normalized variance (variance / mean) ``per`` (``row`` or ``column``) of some ``matrix``.
+
+    If ``per`` (default: {per}) is ``None``, the matrix must be square and is assumed to be
+    symmetric, so the most efficient direction is used based on the matrix layout. Otherwise it must
+    be one of ``row`` or ``column``, and the matrix must be in the appropriate layout (row-major for
+    ranking data in each row, column-major for ranking data in each column).
+    '''
+    variance_per_element = variance_per(matrix, per=per)
+    mean_per_element = mean_per(matrix, per=per)
+    zeros_mask = mean_per_element == 0
+    result = np.reciprocal(mean_per_element, where=~zeros_mask)
+    result[zeros_mask] = 0
+    result *= variance_per_element
+    result[zeros_mask] = 1
+    np.log2(result, out=result)
+    return result
+
+
+@utm.timed_call()
+def relative_variance_per(
+    matrix: utt.Matrix,
+    *,
+    per: Optional[str],
+    window_size: int,
+) -> utt.DenseVector:
+    '''
+    Return the (normalized_variance - median_normalized_variance_of_similar) of the values
+    ``per`` (``row`` or ``column``) of some ``matrix``.
+
+    The median-normalized-variance-of-similar is the median normalized variance of the
+    ``window_size`` elements with the most similar mean. In general, the normalized variance may be
+    larger due to random noise alone. By subtracting the median normalized variance of variables of
+    a similar mean, we factor out this dependency on the mean to decide which variables (genes)
+    carry more meaningful information (and are more suitable to be picked as "feature genes").
+    '''
+    normalized_variance_per_element = normalized_variance_per(matrix, per=per)
+    mean_per_element = mean_per(matrix, per=per)
+    median_variance_per_element = \
+        sliding_window_function(normalized_variance_per_element,
+                                function='median',
+                                window_size=window_size,
+                                order_by=mean_per_element)
+    return normalized_variance_per_element - median_variance_per_element
 
 
 @utm.timed_call()
@@ -1064,6 +1230,7 @@ M = TypeVar('M', bound=utt.Matrix)
 
 
 def _reduce_matrix(
+    _name: str,
     matrix: M,
     per: str,
     reducer: Callable[[M], utt.DenseVector],
@@ -1087,15 +1254,6 @@ def _reduce_matrix(
                 timed_step = '.dense-efficient'
             else:
                 timed_step = '.dense-inefficient'
-                reducing_dense_matrix_of_inefficient_format = 'reducing axis: %s ' \
-                    'of a dense matrix with layout: %s ' \
-                    'instead of the efficient layout: %s' \
-                    % (axis,
-                       'f_contiguous' if dense.flags.f_contiguous
-                       else 'c_contiguous' if dense.flags.c_contiguous
-                       else 'non-contiguous',
-                       ['c_contiguous', 'f_contiguous'][axis])
-                warn(reducing_dense_matrix_of_inefficient_format)
 
         else:
             assert compressed is not None
@@ -1105,11 +1263,6 @@ def _reduce_matrix(
                 timed_step = '.compressed-efficient'
             else:
                 timed_step = '.compressed-inefficient'
-                reducing_sparse_matrix_of_inefficient_format = 'reducing axis: %s ' \
-                    'of a sparse matrix in the format: %s ' \
-                    'instead of the efficient format: %s' \
-                    % (axis, compressed.getformat(), axis_format)
-                warn(reducing_sparse_matrix_of_inefficient_format)
 
     with utm.timed_step(timed_step):
         utm.timed_parameters(results=results_count, elements=elements_count)
@@ -1432,7 +1585,7 @@ def sum_groups(
     matrix: utt.Matrix,
     groups: utt.Vector,
     *,
-    per: str
+    per: Optional[str]
 ) -> Optional[Tuple[utt.Matrix, utt.DenseVector]]:
     '''
     Given a ``matrix``, and a vector of ``groups`` ``per`` row or column, return a matrix with a row
@@ -1441,9 +1594,13 @@ def sum_groups(
 
     Negative group indices are ignored and their data is not included in the result. If there are no
     non-negative group indices, returns ``None``.
-    '''
 
-    assert per in utt.PER_OF_AXIS
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
+    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
+    ``column``, and the matrix must be in the appropriate layout (row-major for ranking data in each
+    row, column-major for ranking data in each column).
+    '''
+    per = _ensure_per_for('sum_groups', matrix, per)
 
     groups = utt.to_dense_vector(groups)
     groups_count = np.max(groups) + 1
@@ -1459,21 +1616,12 @@ def sum_groups(
             timed_step = '.compressed-efficient'
         else:
             timed_step = '.compressed-inefficient'
-            grouping_sparse_matrix_of_inefficient_format = 'grouping %ss ' \
-                'of a sparse matrix in the format: %s ' \
-                'instead of the efficient format: cs%s' \
-                % (per, sparse.getformat(), per[0])
-            warn(grouping_sparse_matrix_of_inefficient_format)
     else:
         matrix = utt.to_dense_matrix(matrix)
         if utt.matrix_layout(matrix) == efficient_layout:
             timed_step = '.dense-efficient'
         else:
             timed_step = '.dense-inefficient'
-            grouping_dense_matrix_of_inefficient_format = 'grouping %ss ' \
-                'of a dense matrix with inefficient strides: %s' \
-                % (per, matrix.strides)
-            warn(grouping_dense_matrix_of_inefficient_format)
 
     if per == 'column':
         matrix = matrix.transpose()
@@ -1515,15 +1663,12 @@ def shuffle_matrix(
     A non-zero ``random_seed`` (default: {random_seed}) can be provided to make the operation
     replicable.
     '''
-    assert per in utt.PER_OF_AXIS
+    _ensure_layout_for('shuffle', matrix, per, allow_inefficient=False)
     axis = utt.PER_OF_AXIS.index(per)
-    layout = utt.LAYOUT_OF_AXIS[axis]
 
-    _, dense, compressed = \
-        utt.to_proper_matrices(matrix, default_layout=layout)
+    _, dense, compressed = utt.to_proper_matrices(matrix)
 
     if compressed is not None:
-        assert utt.matrix_layout(compressed) == layout
         extension_name = 'shuffle_compressed_%s_t_%s_t_%s_t' \
             % (compressed.data.dtype,
                compressed.indices.dtype,
@@ -1534,7 +1679,6 @@ def shuffle_matrix(
 
     else:
         assert dense is not None
-        assert utt.matrix_layout(dense) == layout
         if per == 'column':
             dense = dense.transpose()
         extension_name = 'shuffle_matrix_%s_t' % dense.dtype

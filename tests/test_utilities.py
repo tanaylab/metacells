@@ -34,7 +34,7 @@ def test_corrcoef() -> None:
     numpy_correlation = np.corrcoef(dense)
     assert numpy_correlation.shape == (100, 100)
 
-    sparse_correlation = ut.corrcoef(matrix)
+    sparse_correlation = ut.corrcoef(matrix, per='row')
     assert sparse_correlation.shape == (100, 100)
     assert np.allclose(sparse_correlation, numpy_correlation, atol=1e-6)
 
@@ -50,7 +50,7 @@ def test_logistics() -> None:
                        [0, 0, 0, 1, 1, 1]], dtype='float64')
     same_value = 1 / (1 + np.exp(-5 * (0 - 0.8)))
     diff_value = 1 / (1 + np.exp(-5 * (1 - 0.8)))
-    results = ut.logistics(matrix)
+    results = ut.logistics(matrix, per='row')
     assert np.allclose(results[0, 0], 0)
     assert np.allclose(results[1, 1], 0)
     assert np.allclose(results[2, 2], 0)

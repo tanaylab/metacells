@@ -10,7 +10,6 @@ import pandas as pd  # type: ignore
 from anndata import AnnData
 
 import metacells.parameters as pr
-import metacells.preprocessing as pp
 import metacells.utilities as ut
 
 __all__ = [
@@ -33,7 +32,6 @@ def compute_obs_obs_similarity(
     location: float = pr.logistics_location,
     scale: float = pr.logistics_scale,
     inplace: bool = True,
-    intermediate: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
     Compute a measure of the similarity between the observations (cells) ``of`` some data (by
@@ -53,9 +51,6 @@ def compute_obs_obs_similarity(
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas data frame (indexed by the observation names).
 
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
-
     **Computation Parameters**
 
     1. If ``method`` (default: {method}) is ``logistics``, compute the mean value of the logistics
@@ -72,8 +67,7 @@ def compute_obs_obs_similarity(
                                         repeated=repeated,
                                         location=location,
                                         scale=scale,
-                                        inplace=inplace,
-                                        intermediate=intermediate)
+                                        inplace=inplace)
 
 
 @ut.timed_call()
@@ -87,7 +81,6 @@ def compute_var_var_similarity(
     location: float = pr.logistics_location,
     scale: float = pr.logistics_scale,
     inplace: bool = True,
-    intermediate: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
     Compute a measure of the similarity between the variables (genes) ``of`` some data (by
@@ -111,9 +104,6 @@ def compute_var_var_similarity(
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas data frame (indexed by the variable names).
 
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
-
     **Computation Parameters**
 
     1. If ``method`` (default: {method}) is ``logistics``, compute the mean value of the logistics
@@ -130,8 +120,7 @@ def compute_var_var_similarity(
                                         repeated=repeated,
                                         location=location,
                                         scale=scale,
-                                        inplace=inplace,
-                                        intermediate=intermediate)
+                                        inplace=inplace)
 
 
 def _compute_elements_similarity(  # pylint: disable=too-many-branches
@@ -144,7 +133,6 @@ def _compute_elements_similarity(  # pylint: disable=too-many-branches
     location: float,
     scale: float,
     inplace: bool,
-    intermediate: bool,
 ) -> Optional[ut.PandasFrame]:
     assert elements in ('obs', 'var')
 
@@ -156,40 +144,33 @@ def _compute_elements_similarity(  # pylint: disable=too-many-branches
 
     LOG.debug('  method: %s', method)
 
-    with ut.intermediate_step(adata, intermediate=intermediate):
-        if method == 'logistics':
-            LOG.debug('  location: %s', location)
-            LOG.debug('  scale: %s', scale)
-            if elements == 'obs':
-                similarity = pp.get_obs_obs_logistics(adata, of,
-                                                      location=location, scale=scale,
-                                                      inplace=inplace)
-            else:
-                similarity = pp.get_var_var_logistics(adata, of,
-                                                      location=location, scale=scale,
-                                                      inplace=inplace)
-        else:
-            LOG.debug('  repeated: %s', repeated)
+    data = ut.get_vo_proper(adata, of)
 
-            if elements == 'obs':
-                similarity = pp.get_obs_obs_correlation(adata, of,
-                                                        inplace=inplace or repeated)
-                if repeated:
-                    similarity = pp.get_obs_obs_correlation(adata, similarity.name,
-                                                            inplace=inplace)
-            else:
-                similarity = pp.get_var_var_correlation(adata, of,
-                                                        inplace=inplace or repeated)
-                if repeated:
-                    similarity = pp.get_var_var_correlation(adata, similarity.name,
-                                                            inplace=inplace)
+    if method == 'logistics':
+        LOG.debug('  location: %s', location)
+        LOG.debug('  scale: %s', scale)
+        if elements == 'obs':
+            similarity = ut.logistics(data, per='row')
+        else:
+            similarity = ut.logistics(data, per='column')
+    else:
+        LOG.debug('  repeated: %s', repeated)
+
+        if elements == 'obs':
+            similarity = ut.corrcoef(data, per='row')
+            if repeated:
+                similarity = ut.corrcoef(similarity, per=None)
+        else:
+            similarity = ut.corrcoef(data, per='column')
+            if repeated:
+                similarity = ut.corrcoef(similarity, per=None)
 
     if inplace:
         to = elements + '_similarity'
         if elements == 'obs':
-            ut.set_oo_data(adata, to, similarity.proper)
+            ut.set_oo_data(adata, to, similarity)
         else:
-            ut.set_vv_data(adata, to, similarity.proper)
+            ut.set_vv_data(adata, to, similarity)
         return None
 
     if elements == 'obs':
@@ -197,4 +178,4 @@ def _compute_elements_similarity(  # pylint: disable=too-many-branches
     else:
         names = adata.var_names
 
-    return pd.DataFrame(similarity.proper, index=names, columns=names)
+    return pd.DataFrame(similarity, index=names, columns=names)

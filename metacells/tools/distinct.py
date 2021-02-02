@@ -12,7 +12,6 @@ from anndata import AnnData
 
 import metacells.extensions as xt  # type: ignore
 import metacells.parameters as pr
-import metacells.preprocessing as pp
 import metacells.utilities as ut
 
 __all__ = [
@@ -33,7 +32,6 @@ def compute_distinct_folds(
     of: Optional[str] = None,
     normalization: float = 0,
     inplace: bool = True,
-    intermediate: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
     Compute for each observation (cell) and each variable (gene) how much is the value
@@ -55,9 +53,6 @@ def compute_distinct_folds(
     ``None``. Otherwise this is returned as a pandas frame (indexed by the observation and
     distinct gene rank).
 
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
-
     **Computation Parameters**
 
     1. Compute, for each gene, the fraction of the gene's values out of the total sum of the values
@@ -74,30 +69,28 @@ def compute_distinct_folds(
     '''
     of, _ = ut.log_operation(LOG, adata, 'compute_distinct_folds', of)
 
-    with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major',
-                     intermediate=intermediate) as data:
-        total_umis_of_cells = pp.get_per_obs(adata, ut.sum_per).dense
-        total_umis_of_genes = pp.get_per_var(adata, ut.sum_per).dense
+    columns_data = ut.get_vo_proper(adata, of, layout='column_major')
+    fractions_of_genes_in_data = ut.fraction_per(columns_data, per='column')
+    fractions_of_genes_in_data += normalization
 
-        fractions_of_genes_in_data = total_umis_of_genes / \
-            np.sum(total_umis_of_genes)
-        fractions_of_genes_in_data += normalization
+    rows_data = ut.get_vo_proper(adata, of, layout='row_major')
+    total_umis_of_cells = ut.sum_per(rows_data, per='row')
+    total_umis_of_cells = np.copy(total_umis_of_cells)
+    total_umis_of_cells[total_umis_of_cells == 0] = 1
+    fraction_of_genes_in_cells = \
+        ut.to_dense_matrix(rows_data) / total_umis_of_cells[:, np.newaxis]
+    fraction_of_genes_in_cells += normalization
 
-        total_umis_of_cells = np.copy(total_umis_of_cells)
-        total_umis_of_cells[total_umis_of_cells == 0] = 1
-        fraction_of_genes_in_cells = data / total_umis_of_cells[:, np.newaxis]
-        fraction_of_genes_in_cells += normalization
+    zeros_mask = fractions_of_genes_in_data <= 0
+    fractions_of_genes_in_data[zeros_mask] = -1
+    fraction_of_genes_in_cells[:, zeros_mask] = -1
 
-        zeros_mask = fractions_of_genes_in_data <= 0
-        fractions_of_genes_in_data[zeros_mask] = -1
-        fraction_of_genes_in_cells[:, zeros_mask] = -1
+    ratio_of_genes_in_cells = fraction_of_genes_in_cells
+    ratio_of_genes_in_cells /= fractions_of_genes_in_data
+    assert np.min(np.min(ratio_of_genes_in_cells)) > 0
 
-        ratio_of_genes_in_cells = fraction_of_genes_in_cells
-        ratio_of_genes_in_cells /= fractions_of_genes_in_data
-        assert np.min(np.min(ratio_of_genes_in_cells)) > 0
-
-        fold_of_genes_in_cells = \
-            np.log2(ratio_of_genes_in_cells, out=ratio_of_genes_in_cells)
+    fold_of_genes_in_cells = \
+        np.log2(ratio_of_genes_in_cells, out=ratio_of_genes_in_cells)
 
     if inplace:
         ut.set_vo_data(adata, 'distinct_fold', fold_of_genes_in_cells)
@@ -173,7 +166,7 @@ def compute_subset_distinct_genes(
     *,
     of: Optional[str] = None,
     to: Optional[str] = None,
-    normalize: Optional[Union[bool, str, ut.DenseVector]] = False,
+    normalize: Optional[Union[bool, str, ut.DenseVector]],
     subset: Union[str, ut.DenseVector],
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -208,10 +201,10 @@ def compute_subset_distinct_genes(
        be a vector of integer observation names, or a boolean mask, or the string name of a
        per-observation annotation containing the boolean mask.
 
-    2. If ``normalize`` (default: {normalize}) is ``False``, use the data as-is.
-       If it is ``True``, divide the data by the sum of each observation (cell).
-       If it is a string, it should be the name of a per-observation annotation to use.
-       Otherwise, it should be a vector of the scale factor for each observation (cell).
+    2. If ``normalize`` is ``False``, use the data as-is. If it is ``True``, divide the data by the
+       sum of each observation (cell). If it is a string, it should be the name of a per-observation
+       annotation to use. Otherwise, it should be a vector of the scale factor for each observation
+       (cell).
 
     3. Compute the AUROC for each gene for the scaled data based on this mask.
     '''
@@ -226,13 +219,15 @@ def compute_subset_distinct_genes(
         subset = mask
 
     scale_of_cells: Optional[ut.DenseVector] = None
-    if isinstance(normalize, bool):
-        if normalize:
-            scale_of_cells = pp.get_per_obs(adata, ut.sum_per, of).dense
-    elif isinstance(normalize, str):
-        scale_of_cells = ut.get_o_dense(adata, normalize)
-    elif normalize is not None:
-        scale_of_cells = normalize.astype('float32')
+    if not isinstance(normalize, bool):
+        scale_of_cells = ut.get_vector_parameter_data(LOG, adata, normalize,
+                                                      name='normalize', per='o')
+    elif normalize:
+        data = ut.get_vo_proper(adata, of, layout='row_major')
+        scale_of_cells = ut.sum_per(data, per='row')
+        LOG.debug('normalize: <sum>')
+    else:
+        LOG.debug('normalize: None')
 
     if scale_of_cells is not None:
         assert scale_of_cells.size == adata.n_obs

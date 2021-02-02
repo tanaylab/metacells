@@ -6,6 +6,7 @@ Most functions here use the facilities of :py:mod:`metacells.utilities.annotatio
 functions of :py:mod:`metacells.utilities.computation` in an easily accessible way.
 '''
 
+import logging
 from typing import Callable, List, NamedTuple, Optional, Tuple, Type, TypeVar
 
 import numpy as np  # type: ignore
@@ -16,6 +17,8 @@ import metacells.utilities.computation as utc
 import metacells.utilities.documentation as utd
 import metacells.utilities.timing as utm
 import metacells.utilities.typing as utt
+
+LOG = logging.getLogger(__name__)
 
 __all__ = [
     'NamedShaped',
@@ -897,8 +900,10 @@ def get_normalized_variance_per_var(
     def compute() -> utt.DenseVector:
         variance_per_var = \
             get_variance_per_var(adata, of, inplace=inplace).dense
+
         mean_per_var = \
             get_mean_per_var(adata, of, inplace=inplace).dense
+
         zeros_mask = mean_per_var == 0
 
         result = np.reciprocal(mean_per_var, where=~zeros_mask)
@@ -948,11 +953,14 @@ def get_relative_variance_per_var(
     def compute() -> utt.DenseVector:
         normalized_variance_per_var = \
             get_normalized_variance_per_var(adata, of, inplace=inplace).dense
+
         mean_per_var = get_mean_per_var(adata, of, inplace=inplace).dense
+
         median_variance_per_var = utc.sliding_window_function(normalized_variance_per_var,
                                                               function='median',
                                                               window_size=window_size,
                                                               order_by=mean_per_var)
+
         return normalized_variance_per_var - median_variance_per_var
 
     return _derive_1d_data(adata, per_of=per_of, of=of, per_to='v', to=to,

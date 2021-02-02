@@ -53,6 +53,9 @@ def test_find_rare_gene_modules() -> None:
 def test_direct_pipeline() -> None:
     for path in glob('../metacells-test-data/*.h5ad'):
         adata, expected = _load(path)
+#       import logging
+#       mc.ut.setup_logger(level=logging.DEBUG, time=False,
+#                          short_level_names=True)
 
         pdata = adata[range(6000), :].copy()
 
@@ -77,11 +80,11 @@ def test_direct_pipeline() -> None:
                             expected['gene_max_top_shuffled_r2'],
                             expected['gene_max_excess_r2']]
 
-        actual_results = [np.nanmean(mc.pp.get_per_var(mdata, mc.ut.nanmax_per,  # type: ignore
+        actual_results = [np.nanmean(mc.pp.get_per_var(mdata, mc.ut.nanmax_per,
                                                        'top_r2').dense),
-                          np.nanmean(mc.pp.get_per_var(mdata, mc.ut.nanmax_per,  # type: ignore
+                          np.nanmean(mc.pp.get_per_var(mdata, mc.ut.nanmax_per,
                                                        'top_shuffled_r2').dense),
-                          np.nanmean(mc.pp.get_per_var(mdata, mc.ut.nanmax_per,  # type: ignore
+                          np.nanmean(mc.pp.get_per_var(mdata, mc.ut.nanmax_per,
                                                        'excess_r2').dense)]
 
         assert np.allclose(expected_results, actual_results)

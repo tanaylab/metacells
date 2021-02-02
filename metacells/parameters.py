@@ -59,6 +59,13 @@ significant_value: int = 7
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
 downsample_cell_quantile: float = 0.05
 
+
+#: The window size to use to compute relative variance. See
+#: :py:func:`metacells.utilities.computation.relative_variance_per`
+#: and
+#: :py:func:`metacells.tools.high.find_high_relative_variance_genes`.
+relative_variance_window_size: int = 100
+
 #: The method to use to compute similarities. See
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
 #: and

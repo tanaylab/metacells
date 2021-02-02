@@ -14,7 +14,6 @@ from anndata import AnnData
 
 import metacells.extensions as xt  # type: ignore
 import metacells.parameters as pr
-import metacells.preprocessing as pp
 import metacells.utilities as ut
 
 __all__ = [
@@ -110,58 +109,59 @@ def find_deviant_cells(
 
     of, level = ut.log_operation(LOG, adata, 'find_deviant_cells', of)
 
-    with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major',
-                     intermediate=intermediate) as data:
-        cells_count, genes_count = data.shape
-        assert cells_count > 0
+    # with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major',
+    # intermediate=intermediate) as data:
+    cells_count, genes_count = adata.shape
+    assert cells_count > 0
 
-        candidate_of_cells = \
-            ut.get_vector_parameter_data(LOG, adata, candidates,
-                                         per='o', name='candidates')
-        assert candidate_of_cells is not None
-        assert candidate_of_cells.size == cells_count
+    candidate_of_cells = \
+        ut.get_vector_parameter_data(LOG, adata, candidates,
+                                     per='o', name='candidates')
+    assert candidate_of_cells is not None
+    assert candidate_of_cells.size == cells_count
 
-        totals_of_cells = pp.get_per_obs(adata, ut.sum_per).dense
-        assert totals_of_cells.size == cells_count
+    data = ut.get_vo_proper(adata, of, layout='row_major')
+    totals_of_cells = ut.sum_per(data, per='row')
+    assert totals_of_cells.size == cells_count
 
-        LOG.debug('  min_gene_fold_factor: %s', min_gene_fold_factor)
+    LOG.debug('  min_gene_fold_factor: %s', min_gene_fold_factor)
 
-        list_of_fold_factors, list_of_cell_index_of_rows = \
-            _collect_fold_factors(data=data,
-                                  candidate_of_cells=candidate_of_cells,
-                                  totals_of_cells=totals_of_cells,
-                                  min_gene_fold_factor=min_gene_fold_factor)
+    list_of_fold_factors, list_of_cell_index_of_rows = \
+        _collect_fold_factors(data=data,
+                              candidate_of_cells=candidate_of_cells,
+                              totals_of_cells=totals_of_cells,
+                              min_gene_fold_factor=min_gene_fold_factor)
 
-        fold_factors = _construct_fold_factors(cells_count,
-                                               list_of_fold_factors,
-                                               list_of_cell_index_of_rows)
+    fold_factors = _construct_fold_factors(cells_count,
+                                           list_of_fold_factors,
+                                           list_of_cell_index_of_rows)
 
-        if fold_factors is None:
-            votes_of_deviant_cells = np.zeros(adata.n_obs, dtype='int32')
-            votes_of_deviant_genes = np.zeros(adata.n_vars, dtype='int32')
+    if fold_factors is None:
+        votes_of_deviant_cells = np.zeros(adata.n_obs, dtype='int32')
+        votes_of_deviant_genes = np.zeros(adata.n_vars, dtype='int32')
 
-        else:
-            deviant_gene_indices = \
-                _filter_genes(cells_count=cells_count,
-                              genes_count=genes_count,
-                              fold_factors=fold_factors,
-                              min_gene_fold_factor=min_gene_fold_factor,
-                              max_gene_fraction=max_gene_fraction)
+    else:
+        deviant_gene_indices = \
+            _filter_genes(cells_count=cells_count,
+                          genes_count=genes_count,
+                          fold_factors=fold_factors,
+                          min_gene_fold_factor=min_gene_fold_factor,
+                          max_gene_fraction=max_gene_fraction)
 
-            if intermediate:
-                ut.set_vo_data(adata, 'fold_factor', fold_factors)
+        if intermediate:
+            ut.set_vo_data(adata, 'fold_factor', fold_factors)
 
-            deviant_genes_fold_ranks = \
-                _fold_ranks(cells_count=cells_count,
-                            fold_factors=fold_factors,
-                            deviant_gene_indices=deviant_gene_indices)
+        deviant_genes_fold_ranks = \
+            _fold_ranks(cells_count=cells_count,
+                        fold_factors=fold_factors,
+                        deviant_gene_indices=deviant_gene_indices)
 
-            votes_of_deviant_cells, votes_of_deviant_genes = \
-                _filter_cells(cells_count=cells_count,
-                              genes_count=genes_count,
-                              deviant_genes_fold_ranks=deviant_genes_fold_ranks,
-                              deviant_gene_indices=deviant_gene_indices,
-                              max_cell_fraction=max_cell_fraction)
+        votes_of_deviant_cells, votes_of_deviant_genes = \
+            _filter_cells(cells_count=cells_count,
+                          genes_count=genes_count,
+                          deviant_genes_fold_ranks=deviant_genes_fold_ranks,
+                          deviant_gene_indices=deviant_gene_indices,
+                          max_cell_fraction=max_cell_fraction)
 
     if inplace:
         ut.set_o_data(adata, 'cell_deviant_votes', votes_of_deviant_cells,

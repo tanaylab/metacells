@@ -10,7 +10,6 @@ import pandas as pd  # type: ignore
 from anndata import AnnData
 
 import metacells.parameters as pr
-import metacells.preprocessing as pp
 import metacells.utilities as ut
 
 __all__ = [
@@ -31,7 +30,6 @@ def find_high_fraction_genes(
     of: Optional[str] = None,
     min_gene_fraction: float = pr.significant_gene_fraction,
     inplace: bool = True,
-    intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
     Find genes which have high fraction of the total ``of`` some data of the cells.
@@ -55,9 +53,6 @@ def find_high_fraction_genes(
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
 
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
-
     **Computation Parameters**
 
     1. Use :py:func:`metacells.preprocessing.common.get_fraction_per_var` to get the
@@ -69,10 +64,11 @@ def find_high_fraction_genes(
     of, level = \
         ut.log_operation(LOG, adata, 'find_high_fraction_genes', of)
 
-    with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        fraction_of_genes = pp.get_fraction_per_var(adata).dense
-        LOG.debug('  min_gene_fraction: %s', min_gene_fraction)
-        genes_mask = fraction_of_genes >= min_gene_fraction
+    data = ut.get_vo_data(adata, of, layout='column_major')
+    fraction_of_genes = ut.fraction_per(data, per='column')
+
+    LOG.debug('  min_gene_fraction: %s', min_gene_fraction)
+    genes_mask = fraction_of_genes >= min_gene_fraction
 
     if inplace:
         ut.set_v_data(adata, 'high_fraction_gene', genes_mask)
@@ -91,7 +87,6 @@ def find_high_normalized_variance_genes(
     of: Optional[str] = None,
     min_gene_normalized_variance: float = pr.significant_gene_normalized_variance,
     inplace: bool = True,
-    intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
     Find genes which have high normalized variance ``of`` some data (by default, the focus).
@@ -118,9 +113,6 @@ def find_high_normalized_variance_genes(
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
 
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
-
     **Computation Parameters**
 
     1. Use :py:func:`metacells.preprocessing.common.get_normalized_variance_per_var` to get the
@@ -132,13 +124,14 @@ def find_high_normalized_variance_genes(
     of, level = \
         ut.log_operation(LOG, adata, 'find_high_normalized_variance_genes', of)
 
-    with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        normalized_variance_of_genes = \
-            pp.get_normalized_variance_per_var(adata).dense
-        LOG.debug('  min_gene_normalized_variance: %s',
-                  min_gene_normalized_variance)
-        genes_mask = \
-            normalized_variance_of_genes >= min_gene_normalized_variance
+    data = ut.get_vo_data(adata, of, layout='column_major')
+    normalized_variance_of_genes = \
+        ut.normalized_variance_per(data, per='column')
+
+    LOG.debug('  min_gene_normalized_variance: %s',
+              min_gene_normalized_variance)
+    genes_mask = \
+        normalized_variance_of_genes >= min_gene_normalized_variance
 
     if inplace:
         ut.set_v_data(adata, 'high_normalized_variance_gene', genes_mask)
@@ -156,8 +149,8 @@ def find_high_relative_variance_genes(
     *,
     of: Optional[str] = None,
     min_gene_relative_variance: float = pr.significant_gene_relative_variance,
+    window_size: int = pr.relative_variance_window_size,
     inplace: bool = True,
-    intermediate: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
     Find genes which have high relative variance ``of`` some data (by default, the focus).
@@ -186,9 +179,6 @@ def find_high_relative_variance_genes(
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
 
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
-
     **Computation Parameters**
 
     1. Use :py:func:`metacells.preprocessing.common.get_relative_variance_per_var` to get the
@@ -200,12 +190,13 @@ def find_high_relative_variance_genes(
     of, level = \
         ut.log_operation(LOG, adata, 'find_high_relative_variance_genes', of)
 
-    with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        relative_variance_of_genes = \
-            pp.get_relative_variance_per_var(adata).dense
-        LOG.debug('  min_gene_relative_variance: %s',
-                  min_gene_relative_variance)
-        genes_mask = relative_variance_of_genes >= min_gene_relative_variance
+    data = ut.get_vo_data(adata, of, layout='column_major')
+    relative_variance_of_genes = \
+        ut.relative_variance_per(data, per='column', window_size=window_size)
+
+    LOG.debug('  min_gene_relative_variance: %s',
+              min_gene_relative_variance)
+    genes_mask = relative_variance_of_genes >= min_gene_relative_variance
 
     if inplace:
         ut.set_v_data(adata, 'high_relative_variance_gene', genes_mask)

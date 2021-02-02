@@ -11,7 +11,6 @@ import pandas as pd  # type: ignore
 from anndata import AnnData
 
 import metacells.parameters as pr
-import metacells.preprocessing as pp
 import metacells.utilities as ut
 
 __all__ = [
@@ -32,7 +31,6 @@ def downsample_cells(
     random_seed: int = pr.random_seed,
     inplace: bool = True,
     infocus: bool = True,
-    intermediate: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
     Downsample the values ``of`` some data.
@@ -64,9 +62,6 @@ def downsample_cells(
 
     If ``infocus`` (default: {infocus}, implies ``inplace``), also makes the result the new focus.
 
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
-
     **Computation Parameters**
 
     1. Compute the total samples in each cell, and use the ``downsample_cell_quantile`` (default:
@@ -81,28 +76,27 @@ def downsample_cells(
     of, _ = \
         ut.log_operation(LOG, adata, 'downsample_cells', of)
 
-    with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        total_per_cell = pp.get_per_obs(adata, ut.sum_per).dense
+    data = ut.get_vo_data(adata, of, layout='row_major')
+    total_per_cell = ut.sum_per(data, per='row')
+    LOG.debug('  downsample_cell_quantile: %s', downsample_cell_quantile)
 
-        LOG.debug('  downsample_cell_quantile: %s',
-                  downsample_cell_quantile)
-        samples = round(np.quantile(total_per_cell, downsample_cell_quantile))
-        LOG.debug('  samples: %s', samples)
-        LOG.debug('  random_seed: %s', random_seed)
+    samples = round(np.quantile(total_per_cell, downsample_cell_quantile))
+    LOG.debug('  samples: %s', samples)
+    LOG.debug('  random_seed: %s', random_seed)
 
-        downsampled = pp.get_downsample_of_var_per_obs(adata,
-                                                       samples=samples,
-                                                       random_seed=random_seed)
+    downsampled = ut.downsample_matrix(data, per='row', samples=samples,
+                                       random_seed=random_seed)
+    name = (of or ut.get_focus_name(adata)) + \
+        f'|downsample_{samples}_var_per_obs'
 
     if inplace or infocus:
-        ut.set_vo_data(adata, downsampled.name,
-                       downsampled.proper, infocus=infocus)
+        ut.set_vo_data(adata, name, downsampled, infocus=infocus)
         return None
 
-    if ut.SparseMatrix.am(downsampled.matrix):
-        return pd.DataFrame.from_spmatrix(downsampled.matrix,
+    if ut.SparseMatrix.am(downsampled):
+        return pd.DataFrame.from_spmatrix(downsampled,
                                           index=adata.obs_names,
                                           columns=adata.var_names)
 
-    return pd.DataFrame(downsampled.matrix,
+    return pd.DataFrame(downsampled,
                         index=adata.obs_names, columns=adata.var_names)

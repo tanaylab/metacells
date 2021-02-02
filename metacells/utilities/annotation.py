@@ -153,18 +153,25 @@ __all__ = [
 
     'get_m_data',
     'get_o_data',
+    'get_o_series',
     'get_o_dense',
     'get_v_data',
+    'get_v_series',
     'get_v_dense',
     'get_oo_data',
+    'get_oo_frame',
     'get_oo_proper',
     'get_vv_data',
+    'get_vv_frame',
     'get_vv_proper',
     'get_oa_data',
+    'get_oa_frame',
     'get_oa_proper',
     'get_va_data',
+    'get_va_frame',
     'get_va_proper',
     'get_vo_data',
+    'get_vo_frame',
     'get_vo_proper',
 
     'all_data',
@@ -835,6 +842,23 @@ def get_o_data(
                             name=name, compute=compute, inplace=inplace)
 
 
+def get_o_series(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Vector]] = None,
+    inplace: bool = True,
+) -> utt.PandasSeries:
+    '''
+    Same as :py:func:`get_o_data` but returns a pandas data series.
+    '''
+    data = get_o_data(adata, name, compute=compute, inplace=inplace)
+    series = utt.PandasSeries.maybe(data)
+    if series is None:
+        series = pd.Series(utt.to_dense_vector(data), index=adata.obs_names)
+    return series
+
+
 def get_o_dense(
     adata: AnnData,
     name: str,
@@ -868,6 +892,23 @@ def get_v_data(
     '''
     return _get_shaped_data(adata, 'v', adata.var, shape=(adata.n_vars,),
                             name=name, compute=compute, inplace=inplace)
+
+
+def get_v_series(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Vector]] = None,
+    inplace: bool = True,
+) -> utt.PandasSeries:
+    '''
+    Same as :py:func:`get_v_data` but returns a pandas data series.
+    '''
+    data = get_v_data(adata, name, compute=compute, inplace=inplace)
+    series = utt.PandasSeries.maybe(data)
+    if series is None:
+        series = pd.Series(utt.to_dense_vector(data), index=adata.var_names)
+    return series
 
 
 def get_v_dense(
@@ -911,6 +952,26 @@ def get_oo_data(
                             shape=(adata.n_obs, adata.n_obs),
                             name=name, compute=compute,
                             inplace=inplace, layout=layout)
+
+
+def get_oo_frame(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Matrix]] = None,
+    inplace: bool = True,
+    layout: Optional[str] = None,
+) -> utt.PandasFrame:
+    '''
+    Same as :py:func:`get_oo_data` but returns a pandas data frame.
+    '''
+    data = get_oo_data(adata, name, compute=compute,
+                       inplace=inplace, layout=layout)
+    frame = utt.PandasFrame.maybe(data)
+    if frame is None:
+        frame = pd.DataFrame(utt.to_proper_matrix(data),
+                             index=adata.obs_names, columns=adata.obs_names)
+    return frame
 
 
 def get_oo_proper(
@@ -958,6 +1019,26 @@ def get_vv_data(
                             inplace=inplace, layout=layout)
 
 
+def get_vv_frame(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Matrix]] = None,
+    inplace: bool = True,
+    layout: Optional[str] = None,
+) -> utt.PandasFrame:
+    '''
+    Same as :py:func:`get_vv_data` but returns a pandas data frame.
+    '''
+    data = get_vv_data(adata, name, compute=compute,
+                       inplace=inplace, layout=layout)
+    frame = utt.PandasFrame.maybe(data)
+    if frame is None:
+        frame = pd.DataFrame(utt.to_proper_matrix(data),
+                             index=adata.var_names, columns=adata.var_names)
+    return frame
+
+
 def get_vv_proper(
     adata: AnnData,
     name: str,
@@ -1003,6 +1084,28 @@ def get_oa_data(
                             inplace=inplace, layout=layout)
 
 
+def get_oa_frame(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Matrix]] = None,
+    columns: Optional[Collection],
+    inplace: bool = True,
+    layout: Optional[str] = None,
+) -> utt.PandasFrame:
+    '''
+    Same as :py:func:`get_oa_data` but returns a pandas data frame.
+    '''
+    data = get_oa_data(adata, name, compute=compute,
+                       inplace=inplace, layout=layout)
+    frame = utt.PandasFrame.maybe(data)
+    if frame is None:
+        frame = pd.DataFrame(utt.to_proper_matrix(data), index=adata.obs_names)
+    if columns is not None:
+        frame.columns = columns
+    return frame
+
+
 def get_oa_proper(
     adata: AnnData,
     name: str,
@@ -1046,6 +1149,28 @@ def get_va_data(
                             shape=(adata.n_vars, 0),
                             name=name, compute=compute,
                             inplace=inplace, layout=layout)
+
+
+def get_va_frame(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Matrix]] = None,
+    columns: Optional[Collection],
+    inplace: bool = True,
+    layout: Optional[str] = None,
+) -> utt.PandasFrame:
+    '''
+    Same as :py:func:`get_va_data` but returns a pandas data frame.
+    '''
+    data = get_va_data(adata, name, compute=compute,
+                       inplace=inplace, layout=layout)
+    frame = utt.PandasFrame.maybe(data)
+    if frame is None:
+        frame = pd.DataFrame(utt.to_proper_matrix(data), index=adata.var_names)
+    if columns is not None:
+        frame.columns = columns
+    return frame
 
 
 def get_va_proper(
@@ -1109,6 +1234,26 @@ def get_vo_data(
         adata.uns['__focus__'] = name
 
     return data
+
+
+def get_vo_frame(
+    adata: AnnData,
+    name: str,
+    *,
+    compute: Optional[Callable[[], utt.Matrix]] = None,
+    inplace: bool = True,
+    layout: Optional[str] = None,
+) -> utt.PandasFrame:
+    '''
+    Same as :py:func:`get_vo_data` but returns a pandas data frame.
+    '''
+    data = get_vo_data(adata, name, compute=compute,
+                       inplace=inplace, layout=layout)
+    frame = utt.PandasFrame.maybe(data)
+    if frame is None:
+        frame = pd.DataFrame(utt.to_proper_matrix(data),
+                             index=adata.obs_names, columns=adata.var_names)
+    return frame
 
 
 def get_vo_proper(
@@ -1741,11 +1886,10 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
 
 #       if hasattr(value, 'ndim'):
 #           if value.ndim == 2:
-#               value = utt.to_dense_matrix(value).astype('float64')
-#               checksum = np.sum(np.sum(value * (1+np.arange(value.shape[1])), axis=1) * (1+np.arange(value.shape[0])))
+#               value = utt.to_dense_matrix(value).flatten()
 #           else:
-#               value = utt.to_proper_vector(value).astype('float64')
-#               checksum = np.sum(value * (1+np.arange(len(value))))
+#               value = utt.to_dense_vector(value)
+#           checksum = np.sum(value.astype('float64') * (1+np.arange(len(value))))
 #           texts.append(' checksum ')
 #           texts.append(str(checksum))
 
