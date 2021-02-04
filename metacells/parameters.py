@@ -59,7 +59,6 @@ significant_value: int = 7
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
 downsample_cell_quantile: float = 0.05
 
-
 #: The window size to use to compute relative variance. See
 #: :py:func:`metacells.utilities.computation.relative_variance_per`
 #: and
@@ -248,11 +247,11 @@ rare_max_gene_cell_fraction: float = 1e-3
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 rare_min_gene_maximum: int = significant_value
 
-#: Whether to compute repeated gene-gene pearson similarity for computing the rare gene modules. See
+#: How to compute gene-gene similarity for computing the rare gene modules. See
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-rare_repeated_similarity: bool = True
+rare_genes_similarity_method: str = 'repeated_pearson'
 
 #: The hierarchical clustering method to use for computing the rare gene modules. See
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`

@@ -28,7 +28,6 @@ def compute_obs_obs_similarity(
     of: Optional[str] = None,
     *,
     method: str = pr.similarity_method,
-    repeated: bool = False,
     location: float = pr.logistics_location,
     scale: float = pr.logistics_scale,
     inplace: bool = True,
@@ -36,6 +35,15 @@ def compute_obs_obs_similarity(
     '''
     Compute a measure of the similarity between the observations (cells) ``of`` some data (by
     default, the focus).
+
+    The ``method`` (default: {method}) can be one of:
+    * ``pearson`` for computing Pearson correlation.
+    * ``repeated_pearson`` for computing correlations-of-correlations.
+    * ``logistics`` for computing the logistics function.
+    * ``logistics_pearson`` for computing correlations-of-logistics.
+
+    If using the logistics function, use the ``scale`` (default: {scale}) and ``location`` (default:
+    {location}).
 
     **Input**
 
@@ -53,18 +61,18 @@ def compute_obs_obs_similarity(
 
     **Computation Parameters**
 
-    1. If ``method`` (default: {method}) is ``logistics``, compute the mean value of the logistics
-       function between the variables of each pair of observations.
+    1. If ``method`` (default: {method}) is ``logistics`` or ``logistics_pearson``, compute the mean
+       value of the logistics function between the variables of each pair of observations (cells).
+       Otherwise, it should be ``pearson`` or ``repeated_pearson``, so compute the cross-correlation
+       between all the observations.
 
-    2. Otherwise, the ``method`` must be ``pearson``. Compute the cross-correlation between all the
-       observations (cells), and if ``repeated`` (default: {repeated}), compute the
-       cross-correlation of the correlations. That is, for two observations (cells) to be similar,
-       they would need to be similar to the rest of the observations (cells) in the same way. This
+    2. If the ``method`` is ``logistics_pearson`` or ``repeated_pearson``, then compute the
+       cross-correlation of the results of the previous step. That is, two observations (cells) will
+       be similar if they are similar to the rest of the observations (cells) in the same way. This
        compensates for the extreme sparsity of the data.
     '''
-    return _compute_elements_similarity(adata, 'obs', of,
+    return _compute_elements_similarity(adata, 'obs', 'row', of,
                                         method=method,
-                                        repeated=repeated,
                                         location=location,
                                         scale=scale,
                                         inplace=inplace)
@@ -77,7 +85,6 @@ def compute_var_var_similarity(
     of: Optional[str] = None,
     *,
     method: str = pr.similarity_method,
-    repeated: bool = False,
     location: float = pr.logistics_location,
     scale: float = pr.logistics_scale,
     inplace: bool = True,
@@ -91,44 +98,49 @@ def compute_var_var_similarity(
     A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
     are cells and the variables are genes.
 
-    The ``method`` (default: {method}) can be one of ``pearson`` for computing Pearson correlation
-    or ``logistics`` for computing the logistics function. If the latter is, used, the function is
-    parameterized using the ``location`` (default: {location}) and ``scale`` (default: {scale}).
+    The ``method`` (default: {method}) can be one of:
+    * ``pearson`` for computing Pearson correlation.
+    * ``repeated_pearson`` for computing correlations-of-correlations.
+    * ``logistics`` for computing the logistics function.
+    * ``logistics_pearson`` for computing correlations-of-logistics.
+
+    If using the logistics function, use the ``scale`` (default: {scale}) and ``location`` (default:
+    {location}).
 
     **Returns**
 
     Variable-Pair (genes) Annotations
         ``var_similarity``
-            A square matrix where each entry is the similarity between a pair of cells.
+            A square matrix where each entry is the similarity between a pair of genes.
 
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas data frame (indexed by the variable names).
 
     **Computation Parameters**
 
-    1. If ``method`` (default: {method}) is ``logistics``, compute the mean value of the logistics
-       function between the observations of each pair of variables.
+    1. If ``method`` (default: {method}) is ``logistics`` or ``logistics_pearson``, compute the mean
+       value of the logistics function between the variables of each pair of variables (genes).
+       Otherwise, it should be ``pearson`` or ``repeated_pearson``, so compute the cross-correlation
+       between all the variables.
 
-    2. Otherwise, the ``method`` must be ``pearson``. Compute the cross-correlation between all the
-       varibles, and if ``repeated`` (default: {repeated}), compute the cross-correlation of the
-       correlations. That is, for two variables (genes) to be similar, they would need to be
-       similar to the rest of the variables (genes) in the same way. This compensates for the
-       extreme sparsity of the data.
+    2. If the ``method`` is ``logistics_pearson`` or ``repeated_pearson``, then compute the
+       cross-correlation of the results of the previous step. That is, two variables (genes) will
+       be similar if they are similar to the rest of the variables (genes) in the same way. This
+       compensates for the extreme sparsity of the data.
     '''
-    return _compute_elements_similarity(adata, 'var', of,
+    return _compute_elements_similarity(adata, 'var', 'column', of,
                                         method=method,
-                                        repeated=repeated,
                                         location=location,
                                         scale=scale,
                                         inplace=inplace)
 
 
-def _compute_elements_similarity(  # pylint: disable=too-many-branches
+def _compute_elements_similarity(
     adata: AnnData,
     elements: str,
+    per: str,
     of: Optional[str],
     *,
-    repeated: bool,
     method: str,
     location: float,
     scale: float,
@@ -136,7 +148,8 @@ def _compute_elements_similarity(  # pylint: disable=too-many-branches
 ) -> Optional[ut.PandasFrame]:
     assert elements in ('obs', 'var')
 
-    assert method in ('pearson', 'logistics')
+    assert method in ('pearson', 'repeated_pearson',
+                      'logistics', 'logistics_pearson')
 
     of, _ = \
         ut.log_operation(LOG, adata,
@@ -146,24 +159,15 @@ def _compute_elements_similarity(  # pylint: disable=too-many-branches
 
     data = ut.get_vo_proper(adata, of)
 
-    if method == 'logistics':
+    if method.startswith('logistics'):
         LOG.debug('  location: %s', location)
         LOG.debug('  scale: %s', scale)
-        if elements == 'obs':
-            similarity = ut.logistics(data, per='row')
-        else:
-            similarity = ut.logistics(data, per='column')
+        similarity = ut.logistics(data, per=per)
     else:
-        LOG.debug('  repeated: %s', repeated)
+        similarity = ut.corrcoef(data, per=per)
 
-        if elements == 'obs':
-            similarity = ut.corrcoef(data, per='row')
-            if repeated:
-                similarity = ut.corrcoef(similarity, per=None)
-        else:
-            similarity = ut.corrcoef(data, per='column')
-            if repeated:
-                similarity = ut.corrcoef(similarity, per=None)
+    if method.endswith('_pearson'):
+        similarity = ut.corrcoef(similarity, per=None)
 
     if inplace:
         to = elements + '_similarity'

@@ -36,7 +36,7 @@ def find_rare_gene_modules(
     max_gene_cell_fraction: float = pr.rare_max_gene_cell_fraction,
     min_gene_maximum: int = pr.rare_min_gene_maximum,
     similarity_of: Optional[str] = None,
-    repeated_similarity: bool = pr.rare_repeated_similarity,
+    genes_similarity_method: str = pr.rare_genes_similarity_method,
     genes_cluster_method: str = pr.rare_genes_cluster_method,
     forbidden_gene_names: Optional[Collection[str]] = None,
     forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
@@ -105,11 +105,10 @@ def find_rare_gene_modules(
        ``forbidden_gene_names`` or the ``forbidden_gene_patterns``.
 
     2. Compute the similarity between the genes using
-       :py:func:`metacells.tools.similarity.compute_var_var_similarity`. Pass it
-       ``repeated_similarity`` (default: {repeated_similarity}), which makes sense here since we
-       expect the gene expression to be very sparse even for a large number of cells. If
-       ``similarity_of`` is specified (default: {similarity_of}), use this data for computing the
-       similarity in exactly the way you prefer (e.g., to correlate the log values).
+       :py:func:`metacells.tools.similarity.compute_var_var_similarity` using the
+       ``genes_similarity_method`` (default: {genes_similarity_method}). If ``similarity_of`` is
+       specified (default: {similarity_of}), use this data for computing the similarity in exactly
+       the way you prefer (e.g., to correlate the log values).
 
     3. Create a hierarchical clustering of the candidate genes using the ``genes_cluster_method``
        (default: {genes_cluster_method}).
@@ -178,7 +177,7 @@ def find_rare_gene_modules(
         similarities_between_candidate_genes = \
             _genes_similarity(candidate_data=candidate_data,
                               of=similarity_of or of,
-                              repeated=repeated_similarity)
+                              method=genes_similarity_method)
 
         linkage = \
             _cluster_genes(similarities_between_candidate_genes=similarities_between_candidate_genes,
@@ -275,13 +274,13 @@ def _genes_similarity(
     *,
     candidate_data: AnnData,
     of: Optional[str],
-    repeated: bool,
+    method: str,
 ) -> ut.DenseMatrix:
     of = ut.log_of(LOG, candidate_data, of, name='similarity of candidates')
     similarity = \
         compute_var_var_similarity(candidate_data,
                                    of=of,
-                                   repeated=repeated,
+                                   method=method,
                                    inplace=False)
     assert similarity is not None
     return ut.to_dense_matrix(similarity)
