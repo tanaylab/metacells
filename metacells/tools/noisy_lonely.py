@@ -90,8 +90,7 @@ def find_noisy_lonely_genes(
     5. Find the noisy "lonely" genes whose maximal correlation is at most
        ``max_gene_similarity`` (default: {max_gene_similarity}) with all other genes.
     '''
-    of, level = ut.log_operation(LOG, adata, 'find_noisy_lonely_genes',
-                                 of, 'var_similarity')
+    of, level = ut.log_operation(LOG, adata, 'find_noisy_lonely_genes', of)
 
     LOG.debug('  max_sampled_cells: %s', max_sampled_cells)
     if max_sampled_cells < adata.n_obs:
@@ -106,11 +105,10 @@ def find_noisy_lonely_genes(
 
     downsample_cells(bdata,
                      downsample_cell_quantile=downsample_cell_quantile,
-                     random_seed=random_seed,
-                     infocus=True)
+                     random_seed=random_seed)
 
-    find_high_fraction_genes(bdata, min_gene_fraction=min_gene_fraction)
-    find_high_normalized_variance_genes(bdata,
+    find_high_fraction_genes(bdata, of='downsampled', min_gene_fraction=min_gene_fraction)
+    find_high_normalized_variance_genes(bdata, of='downsampled',
                                         min_gene_normalized_variance=min_gene_normalized_variance)
 
     results = pp.filter_data(bdata, name='noisy', tmp=True,
@@ -126,7 +124,7 @@ def find_noisy_lonely_genes(
         LOG.debug('  max_gene_similarity: %s', max_gene_similarity)
 
         gene_gene_similarity_frame = \
-            compute_var_var_similarity(ndata, inplace=False)
+            compute_var_var_similarity(ndata, 'downsampled', inplace=False)
         assert gene_gene_similarity_frame is not None
         gene_gene_similarity = \
             ut.to_dense_matrix(gene_gene_similarity_frame)

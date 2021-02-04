@@ -35,9 +35,7 @@ def extract_feature_data(
     min_gene_relative_variance: float = pr.feature_min_gene_relative_variance,
     forbidden_gene_names: Optional[Collection[str]] = None,
     forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    extract_downsampled: bool = True,
     random_seed: int = 0,
-    intermediate: bool = True,
 ) -> Optional[AnnData]:
     '''
     Extract a "feature" subset of the ``adata`` to compute metacells for.
@@ -61,11 +59,7 @@ def extract_feature_data(
     the data will be the (slice) ``of`` the (downsampled) input data. By default, the ``name`` of
     this data is {name}. If no features were selected, return ``None``.
 
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse, and set the ``feature`` per-variable boolean mask of ``adata``. Otherwise,
-    discard all intermediate data.
-
-    If ``intermediate``, this will also set the following annotations in the full ``adata``:
+    Also sets the following annotations in the full ``adata``:
 
     Variable (Gene) Annotations
         ``high_fraction_gene``
@@ -101,47 +95,34 @@ def extract_feature_data(
        This is stored in an intermediate per-variable (gene) ``forbidden_genes`` boolean mask.
 
     5. Invoke :py:func:`metacells.preprocessing.filter.filter_data` to slice just the selected
-       "feature" genes using the ``name`` (default: {name}) and ``tmp`` (default: {tmp}). If
-       ``extract_downsampled`` (default: {extract_downsampled}), slice the downsampled data,
-       otherwise, slice the original data.
+       "feature" genes using the ``name`` (default: {name}) and ``tmp`` (default: {tmp}).
     '''
     ut.log_pipeline_step(LOG, adata, 'extract_feature_data')
 
-    if of is None:
-        of = ut.get_focus_name(adata)
+    tl.downsample_cells(adata, of=of or '__x__',
+                        downsample_cell_quantile=downsample_cell_quantile,
+                        random_seed=random_seed)
 
-    with ut.focus_on(ut.get_vo_data, adata, of,
-                     intermediate=intermediate, keep='feature_gene'):
-        tl.downsample_cells(adata,
-                            downsample_cell_quantile=downsample_cell_quantile,
-                            random_seed=random_seed,
-                            infocus=True)
+    tl.find_high_fraction_genes(adata, of='downsampled',
+                                min_gene_fraction=min_gene_fraction)
 
-        tl.find_high_fraction_genes(adata,
-                                    min_gene_fraction=min_gene_fraction)
+    tl.find_high_relative_variance_genes(adata, of='downsampled',
+                                         min_gene_relative_variance=min_gene_relative_variance)
 
-        tl.find_high_relative_variance_genes(adata,
-                                             min_gene_relative_variance=min_gene_relative_variance)
+    if forbidden_gene_names is not None \
+            or forbidden_gene_patterns is not None:
+        tl.find_named_genes(adata,
+                            to='forbidden_gene',
+                            names=forbidden_gene_names,
+                            patterns=forbidden_gene_patterns)
 
-        if forbidden_gene_names is not None \
-                or forbidden_gene_patterns is not None:
-            tl.find_named_genes(adata,
-                                to='forbidden_gene',
-                                names=forbidden_gene_names,
-                                patterns=forbidden_gene_patterns)
+    results = pp.filter_data(adata, name=name, tmp=tmp,
+                             mask_var='feature_gene',
+                             var_masks=['high_fraction_gene',
+                                        'high_relative_variance_gene',
+                                        '~forbidden_gene'])
 
-        if not extract_downsampled:
-            ut.get_vo_data(adata, of, infocus=True)
+    if results is None:
+        raise ValueError('Empty feature data, giving up')
 
-        results = pp.filter_data(adata, name=name, tmp=tmp,
-                                 mask_var='feature_gene',
-                                 var_masks=['high_fraction_gene',
-                                            'high_relative_variance_gene',
-                                            '~forbidden_gene'])
-
-        if results is None:
-            raise ValueError('Empty feature data, giving up')
-
-    fdata = results[0]
-    ut.get_vo_data(fdata, of, infocus=True)
-    return fdata
+    return results[0]

@@ -69,31 +69,29 @@ def group_obs_data(
     '''
     ut.log_operation(LOG, adata, 'group_obs_data')
 
-    with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major') as data:
-        group_of_cells = \
-            ut.get_vector_parameter_data(LOG, adata, groups,
-                                         per='o', name='groups')
-        assert group_of_cells is not None
+    ut.log_use(LOG, adata, groups, per='o', name='groups')
+    group_of_cells = ut.get_o_dense(adata, groups)
 
-        results = ut.sum_groups(data, group_of_cells, per='row')
-        if results is None:
-            return None
-        summed_data, cell_counts = results
+    data = ut.get_vo_proper(adata, of, layout='row_major')
+    results = ut.sum_groups(data, group_of_cells, per='row')
+    if results is None:
+        return None
+    summed_data, cell_counts = results
 
-        gdata = AnnData(summed_data)
-        gdata.var_names = adata.var_names
+    gdata = AnnData(summed_data)
+    gdata.var_names = adata.var_names
 
-        if name is not None:
-            if name.startswith('.'):
-                base_name = ut.get_name(adata)
-                if base_name is None:
-                    name = name[1:]
-                else:
-                    name = base_name + name
-        ut.setup(gdata, name=name, x_name=ut.get_focus_name(adata), tmp=tmp)
+    if name is not None:
+        if name.startswith('.'):
+            base_name = ut.get_name(adata)
+            if base_name is None:
+                name = name[1:]
+            else:
+                name = base_name + name
+    ut.setup(gdata, name=name, tmp=tmp)
 
-        ut.set_o_data(gdata, 'grouped', cell_counts,
-                      log_value=ut.sizes_description)
+    ut.set_o_data(gdata, 'grouped', cell_counts,
+                  log_value=ut.sizes_description)
 
     return gdata
 
@@ -154,14 +152,11 @@ def group_obs_annotation(
     '''
     ut.log_operation(LOG, adata, 'group_obs_annotation')
 
-    group_of_cells = \
-        ut.get_vector_parameter_data(LOG, adata, groups,
-                                     per='o', name='groups')
-    assert group_of_cells is not None
+    ut.log_use(LOG, adata, groups, per='o', name='groups')
+    group_of_cells = ut.get_o_dense(adata, groups)
 
-    values_of_cells = ut.get_vector_parameter_data(LOG, adata, name,
-                                                   per='o', name='values')
-    assert values_of_cells is not None
+    ut.log_use(LOG, adata, name, per='o', name='values')
+    values_of_cells = ut.get_o_dense(adata, name)
 
     value_of_groups = np.empty(gdata.n_obs, dtype=values_of_cells.dtype)
 

@@ -93,23 +93,24 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
 
     dissolved_of_cells = np.zeros(adata.n_obs, dtype='bool')
 
-    candidate_of_cells = \
-        ut.get_vector_parameter_data(LOG, adata, candidates,
-                                     per='o', name='candidates')
+    ut.log_use(LOG, adata, candidates, per='o', name='candidates')
+    candidate_of_cells = ut.get_o_dense(adata, candidates)
     candidate_of_cells = np.copy(candidate_of_cells)
-    assert candidate_of_cells is not None
     raw_candidates_count = np.max(candidate_of_cells) + 1
     LOG.debug('  candidates: %s', raw_candidates_count)
 
     LOG.debug('  min_metacell_cells: %s', min_metacell_cells)
 
-    deviant_of_cells = \
-        ut.get_vector_parameter_data(LOG, adata, deviants,
-                                     per='o', name='deviants')
+    ut.log_use(LOG, adata, deviants, per='o', name='deviants')
+    if deviants is None:
+        deviant_of_cells: Optional[ut.DenseVector] = None
+    else:
+        deviant_of_cells = ut.get_o_dense(adata, deviants)
 
-    cell_sizes = \
-        ut.get_vector_parameter_data(LOG, adata, cell_sizes,
-                                     per='o', name='cell_sizes')
+    ut.log_use(LOG, adata, cell_sizes, per='o', name='cell_sizes')
+    if cell_sizes is not None:
+        cell_sizes = ut.get_o_dense(adata, cell_sizes)
+    assert not isinstance(cell_sizes, str)
 
     if deviant_of_cells is not None:
         candidate_of_cells[deviant_of_cells > 0] = -1

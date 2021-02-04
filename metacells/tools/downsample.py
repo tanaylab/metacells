@@ -30,7 +30,6 @@ def downsample_cells(
     downsample_cell_quantile: float = pr.downsample_cell_quantile,
     random_seed: int = pr.random_seed,
     inplace: bool = True,
-    infocus: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
     Downsample the values ``of`` some data.
@@ -60,8 +59,6 @@ def downsample_cells(
     ``None``. Otherwise this is returned as a pandas data frame (indexed by the cell and gene
     names).
 
-    If ``infocus`` (default: {infocus}, implies ``inplace``), also makes the result the new focus.
-
     **Computation Parameters**
 
     1. Compute the total samples in each cell, and use the ``downsample_cell_quantile`` (default:
@@ -76,7 +73,7 @@ def downsample_cells(
     of, _ = \
         ut.log_operation(LOG, adata, 'downsample_cells', of)
 
-    data = ut.get_vo_data(adata, of, layout='row_major')
+    data = ut.get_vo_proper(adata, of, layout='row_major')
     total_per_cell = ut.sum_per(data, per='row')
     LOG.debug('  downsample_cell_quantile: %s', downsample_cell_quantile)
 
@@ -86,11 +83,8 @@ def downsample_cells(
 
     downsampled = ut.downsample_matrix(data, per='row', samples=samples,
                                        random_seed=random_seed)
-    name = (of or ut.get_focus_name(adata)) + \
-        f'|downsample_{samples}_var_per_obs'
-
-    if inplace or infocus:
-        ut.set_vo_data(adata, name, downsampled, infocus=infocus)
+    if inplace:
+        ut.set_vo_data(adata, 'downsampled', downsampled)
         return None
 
     if ut.SparseMatrix.am(downsampled):

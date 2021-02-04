@@ -60,10 +60,9 @@ def find_high_fraction_genes(
     2. Select the genes whose fraction is at least ``min_gene_fraction`` (default:
        {min_gene_fraction}).
     '''
-    of, level = \
-        ut.log_operation(LOG, adata, 'find_high_fraction_genes', of)
+    of, level = ut.log_operation(LOG, adata, 'find_high_fraction_genes', of)
 
-    data = ut.get_vo_data(adata, of, layout='column_major')
+    data = ut.get_vo_proper(adata, of, layout='column_major')
     fraction_of_genes = ut.fraction_per(data, per='column')
 
     LOG.debug('  min_gene_fraction: %s', min_gene_fraction)
@@ -122,7 +121,7 @@ def find_high_normalized_variance_genes(
     of, level = \
         ut.log_operation(LOG, adata, 'find_high_normalized_variance_genes', of)
 
-    data = ut.get_vo_data(adata, of, layout='column_major')
+    data = ut.get_vo_proper(adata, of, layout='column_major')
     normalized_variance_of_genes = \
         ut.normalized_variance_per(data, per='column')
 
@@ -188,7 +187,7 @@ def find_high_relative_variance_genes(
     of, level = \
         ut.log_operation(LOG, adata, 'find_high_relative_variance_genes', of)
 
-    data = ut.get_vo_data(adata, of, layout='column_major')
+    data = ut.get_vo_proper(adata, of, layout='column_major')
     relative_variance_of_genes = \
         ut.relative_variance_per(data, per='column', window_size=window_size)
 

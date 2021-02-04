@@ -170,10 +170,8 @@ def _apply_annotations(  # pylint: disable=too-many-branches
         slice_data = sdata.var
         slice_size = sdata.n_vars
 
-    full_indices = \
-        ut.get_vector_parameter_data(LOG, adata, indices,
-                                     indent='', per='o', name='full_indices')
-    assert full_indices is not None
+    ut.log_use(LOG, adata, indices, per='o', name='full_indices')
+    full_indices = ut.get_o_dense(adata, indices)
     assert full_indices.size == slice_size
 
     for name, default_values in annotations.items():

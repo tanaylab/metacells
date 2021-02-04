@@ -109,16 +109,11 @@ def find_deviant_cells(
 
     of, level = ut.log_operation(LOG, adata, 'find_deviant_cells', of)
 
-    # with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major',
-    # intermediate=intermediate) as data:
     cells_count, genes_count = adata.shape
     assert cells_count > 0
 
-    candidate_of_cells = \
-        ut.get_vector_parameter_data(LOG, adata, candidates,
-                                     per='o', name='candidates')
-    assert candidate_of_cells is not None
-    assert candidate_of_cells.size == cells_count
+    ut.log_use(LOG, adata, candidates, per='o', name='candidates')
+    candidate_of_cells = ut.get_o_dense(adata, candidates)
 
     data = ut.get_vo_proper(adata, of, layout='row_major')
     totals_of_cells = ut.sum_per(data, per='row')

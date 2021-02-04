@@ -204,7 +204,7 @@ def log_operation(
     '''
     level = get_log_level(adata)
     name = adata.uns.get('__name__')
-    of = of or default or adata.uns['__focus__']
+    of = of or default or '__x__'
 
     texts = [operation]
     if of != '__no_of__':
@@ -230,7 +230,7 @@ def log_of(
     using the ``default`` or the focus, and log it properly using the ``name``.
     '''
     if of is None:
-        of = default or adata.uns['__focus__']
+        of = default or '__x__'
         level = logging.DEBUG
     else:
         level = get_log_level(adata)

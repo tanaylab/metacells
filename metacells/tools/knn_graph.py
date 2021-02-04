@@ -225,8 +225,10 @@ def _compute_elements_knn_graph(
                          of, elements + '_similarity')
 
     if elements == 'obs':
+        get_data = ut.get_oo_proper
         set_data = ut.set_oo_data
     else:
+        get_data = ut.get_vv_proper
         set_data = ut.set_vv_data
 
     def store_matrix(matrix: ut.CompressedMatrix, name: str, when: bool,
@@ -242,8 +244,9 @@ def _compute_elements_knn_graph(
                     ut.ratio_description(matrix.nnz,
                                          matrix.shape[0] * matrix.shape[1]))
 
-    similarity = ut.DenseMatrix.be(ut.get_proper_matrix(adata, of))
+    similarity = get_data(adata, of)
     similarity = ut.to_layout(similarity, 'row_major', symmetric=True)
+    similarity = ut.to_dense_matrix(similarity)
 
     LOG.debug('  k: %s', k)
     LOG.debug('  size: %s', similarity.shape[0])

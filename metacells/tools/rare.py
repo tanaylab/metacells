@@ -50,7 +50,6 @@ def find_rare_gene_modules(
     min_related_gene_fold_factor: float = pr.rare_min_related_gene_fold_factor,
     min_cell_module_total: int = pr.rare_min_cell_module_total,
     inplace: bool = True,
-    intermediate: bool = True,
 ) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame, ut.DenseVector]]:
     '''
     Detect rare genes modules based ``of`` some data (by default, the focus).
@@ -67,9 +66,6 @@ def find_rare_gene_modules(
 
     A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
     are cells and the variables are genes.
-
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
 
     **Returns**
 
@@ -147,91 +143,94 @@ def find_rare_gene_modules(
     assert min_cells_of_modules > 0
     assert min_genes_of_modules > 0
 
-    with ut.focus_on(ut.get_vo_data, adata, of, intermediate=intermediate):
-        forbidden_genes_mask = \
-            find_named_genes(adata, names=forbidden_gene_names,
-                             patterns=forbidden_gene_patterns)
-        assert forbidden_genes_mask is not None
+    forbidden_genes_mask = \
+        find_named_genes(adata, names=forbidden_gene_names,
+                         patterns=forbidden_gene_patterns)
+    assert forbidden_genes_mask is not None
 
-        LOG.debug('  genes forbidden by name: %s',
-                  np.sum(forbidden_genes_mask.values))
-        allowed_genes_mask = ~forbidden_genes_mask.values
+    LOG.debug('  genes forbidden by name: %s',
+              np.sum(forbidden_genes_mask.values))
+    allowed_genes_mask = ~forbidden_genes_mask.values
 
-        rare_module_of_cells = np.full(adata.n_obs, -1, dtype='int32')
-        list_of_names_of_genes_of_modules: List[ut.DenseVector] = []
+    rare_module_of_cells = np.full(adata.n_obs, -1, dtype='int32')
+    list_of_names_of_genes_of_modules: List[ut.DenseVector] = []
 
-        candidates = \
-            _pick_candidates(adata_of_all_genes_of_all_cells=adata,
-                             max_gene_cell_fraction=max_gene_cell_fraction,
-                             min_gene_maximum=min_gene_maximum,
-                             min_genes_of_modules=min_genes_of_modules,
-                             allowed_genes_mask=allowed_genes_mask)
-        if candidates is None:
-            return _results(adata=adata,
-                            level=level,
-                            rare_module_of_cells=rare_module_of_cells,
-                            list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules,
-                            inplace=inplace)
-        candidate_data, candidate_genes_indices = candidates
-
-        similarities_between_candidate_genes = \
-            _genes_similarity(candidate_data=candidate_data,
-                              of=similarity_of or of,
-                              method=genes_similarity_method)
-
-        linkage = \
-            _cluster_genes(similarities_between_candidate_genes=similarities_between_candidate_genes,
-                           genes_cluster_method=genes_cluster_method)
-
-        rare_gene_indices_of_modules = \
-            _identify_genes(candidate_genes_indices=candidate_genes_indices,
-                            similarities_between_candidate_genes=similarities_between_candidate_genes,
-                            linkage=linkage,
-                            min_module_correlation=min_module_correlation)
-
-        LOG.debug('  target_pile_size: %s', target_pile_size)
-        LOG.debug('  max_cells_of_random_pile: %s', max_cells_of_random_pile)
-        LOG.debug('  cells_count: %s', adata.n_obs)
-        max_cells_of_modules = \
-            int(max_cells_of_random_pile * adata.n_obs / target_pile_size)
-        LOG.debug('  max_cells_of_modules: %s', max_cells_of_modules)
-
-        related_gene_indices_of_modules = \
-            _related_genes(adata_of_all_genes_of_all_cells=adata,
-                           rare_gene_indices_of_modules=rare_gene_indices_of_modules,
-                           allowed_genes_mask=allowed_genes_mask,
-                           min_genes_of_modules=min_genes_of_modules,
-                           min_cells_of_modules=min_cells_of_modules,
-                           max_cells_of_modules=max_cells_of_modules,
-                           min_gene_maximum=min_gene_maximum,
-                           min_related_gene_fold_factor=min_related_gene_fold_factor)
-
-        _identify_cells(adata_of_all_genes_of_all_cells=adata,
-                        related_gene_indices_of_modules=related_gene_indices_of_modules,
-                        min_cells_of_modules=min_cells_of_modules,
-                        max_cells_of_modules=max_cells_of_modules,
-                        min_cell_module_total=min_cell_module_total,
-                        rare_module_of_cells=rare_module_of_cells)
-
-        _compress_modules(adata_of_all_genes_of_all_cells=adata,
-                          min_cells_of_modules=min_cells_of_modules,
-                          target_metacell_size=target_metacell_size,
-                          min_modules_size_factor=min_modules_size_factor,
-                          related_gene_indices_of_modules=related_gene_indices_of_modules,
-                          rare_module_of_cells=rare_module_of_cells,
-                          list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules)
-
+    candidates = \
+        _pick_candidates(adata_of_all_genes_of_all_cells=adata, of=of,
+                         max_gene_cell_fraction=max_gene_cell_fraction,
+                         min_gene_maximum=min_gene_maximum,
+                         min_genes_of_modules=min_genes_of_modules,
+                         allowed_genes_mask=allowed_genes_mask)
+    if candidates is None:
         return _results(adata=adata,
                         level=level,
                         rare_module_of_cells=rare_module_of_cells,
                         list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules,
                         inplace=inplace)
+    candidate_data, candidate_genes_indices = candidates
+
+    similarities_between_candidate_genes = \
+        _genes_similarity(candidate_data=candidate_data,
+                          of=similarity_of or of,
+                          method=genes_similarity_method)
+
+    linkage = \
+        _cluster_genes(similarities_between_candidate_genes=similarities_between_candidate_genes,
+                       genes_cluster_method=genes_cluster_method)
+
+    rare_gene_indices_of_modules = \
+        _identify_genes(candidate_genes_indices=candidate_genes_indices,
+                        similarities_between_candidate_genes=similarities_between_candidate_genes,
+                        linkage=linkage,
+                        min_module_correlation=min_module_correlation)
+
+    LOG.debug('  target_pile_size: %s', target_pile_size)
+    LOG.debug('  max_cells_of_random_pile: %s', max_cells_of_random_pile)
+    LOG.debug('  cells_count: %s', adata.n_obs)
+    max_cells_of_modules = \
+        int(max_cells_of_random_pile * adata.n_obs / target_pile_size)
+    LOG.debug('  max_cells_of_modules: %s', max_cells_of_modules)
+
+    related_gene_indices_of_modules = \
+        _related_genes(adata_of_all_genes_of_all_cells=adata,
+                       of=of,
+                       rare_gene_indices_of_modules=rare_gene_indices_of_modules,
+                       allowed_genes_mask=allowed_genes_mask,
+                       min_genes_of_modules=min_genes_of_modules,
+                       min_cells_of_modules=min_cells_of_modules,
+                       max_cells_of_modules=max_cells_of_modules,
+                       min_gene_maximum=min_gene_maximum,
+                       min_related_gene_fold_factor=min_related_gene_fold_factor)
+
+    _identify_cells(adata_of_all_genes_of_all_cells=adata,
+                    of=of,
+                    related_gene_indices_of_modules=related_gene_indices_of_modules,
+                    min_cells_of_modules=min_cells_of_modules,
+                    max_cells_of_modules=max_cells_of_modules,
+                    min_cell_module_total=min_cell_module_total,
+                    rare_module_of_cells=rare_module_of_cells)
+
+    _compress_modules(adata_of_all_genes_of_all_cells=adata,
+                      of=of,
+                      min_cells_of_modules=min_cells_of_modules,
+                      target_metacell_size=target_metacell_size,
+                      min_modules_size_factor=min_modules_size_factor,
+                      related_gene_indices_of_modules=related_gene_indices_of_modules,
+                      rare_module_of_cells=rare_module_of_cells,
+                      list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules)
+
+    return _results(adata=adata,
+                    level=level,
+                    rare_module_of_cells=rare_module_of_cells,
+                    list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules,
+                    inplace=inplace)
 
 
 @ut.timed_call('.pick_candidates')
 def _pick_candidates(
     *,
     adata_of_all_genes_of_all_cells: AnnData,
+    of: Optional[str],
     max_gene_cell_fraction: float,
     min_gene_maximum: int,
     min_genes_of_modules: int,
@@ -240,7 +239,7 @@ def _pick_candidates(
     LOG.debug('  max_gene_cell_fraction: %s',
               ut.fraction_description(max_gene_cell_fraction))
 
-    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells,
+    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells, of,
                             layout='column_major')
     nnz_cells_of_genes = ut.nnz_per(data, per='column')
 
@@ -278,10 +277,8 @@ def _genes_similarity(
 ) -> ut.DenseMatrix:
     of = ut.log_of(LOG, candidate_data, of, name='similarity of candidates')
     similarity = \
-        compute_var_var_similarity(candidate_data,
-                                   of=of,
-                                   method=method,
-                                   inplace=False)
+        compute_var_var_similarity(candidate_data, of or '__x__',
+                                   method=method, inplace=False)
     assert similarity is not None
     return ut.to_dense_matrix(similarity)
 
@@ -357,6 +354,7 @@ def _identify_genes(
 def _related_genes(
     *,
     adata_of_all_genes_of_all_cells: AnnData,
+    of: Optional[str],
     rare_gene_indices_of_modules: List[List[int]],
     allowed_genes_mask: ut.DenseVector,
     min_genes_of_modules: int,
@@ -369,7 +367,7 @@ def _related_genes(
               min_related_gene_fold_factor)
     LOG.debug('  min_genes_of_modules: %s', min_genes_of_modules)
 
-    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells,
+    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells, of,
                             layout='column_major')
     total_all_cells_umis_of_all_genes = ut.sum_per(data, per='column')
 
@@ -391,7 +389,7 @@ def _related_genes(
             ut.slice(adata_of_all_genes_of_all_cells,
                      vars=rare_gene_indices_of_module)
 
-        data = ut.get_vo_proper(adata_of_module_genes_of_all_cells,
+        data = ut.get_vo_proper(adata_of_module_genes_of_all_cells, of,
                                 layout='row_major')
         total_module_genes_umis_of_all_cells = ut.sum_per(data, per='row')
 
@@ -413,7 +411,7 @@ def _related_genes(
             ut.slice(adata_of_all_genes_of_all_cells,
                      obs=mask_of_expressed_cells)
 
-        data = ut.get_vo_proper(adata_of_all_genes_of_expressed_cells_of_module,
+        data = ut.get_vo_proper(adata_of_all_genes_of_expressed_cells_of_module, of,
                                 layout='column_major')
         total_expressed_cells_umis_of_all_genes = \
             ut.sum_per(data, per='column')
@@ -490,6 +488,7 @@ def _related_genes(
 def _identify_cells(
     *,
     adata_of_all_genes_of_all_cells: AnnData,
+    of: Optional[str],
     related_gene_indices_of_modules: List[List[int]],
     min_cell_module_total: int,
     min_cells_of_modules: int,
@@ -506,7 +505,7 @@ def _identify_cells(
         adata_of_related_genes_of_all_cells = \
             ut.slice(adata_of_all_genes_of_all_cells,
                      vars=related_gene_indices_of_module)
-        data = ut.get_vo_proper(adata_of_related_genes_of_all_cells,
+        data = ut.get_vo_proper(adata_of_related_genes_of_all_cells, of,
                                 layout='row_major')
         total_related_genes_of_all_cells = ut.sum_per(data, per='row')
 
@@ -536,6 +535,7 @@ def _identify_cells(
 def _compress_modules(
     *,
     adata_of_all_genes_of_all_cells: AnnData,
+    of: Optional[str],
     min_cells_of_modules: int,
     target_metacell_size: int,
     min_modules_size_factor: float,
@@ -550,7 +550,7 @@ def _compress_modules(
     LOG.debug('  min_modules_size_factor: %s', min_modules_size_factor)
     LOG.debug('  min_umis_of_modules: %s', min_umis_of_modules)
 
-    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells,
+    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells, of,
                             layout='row_major')
     total_all_genes_of_all_cells = ut.sum_per(data, per='row')
 

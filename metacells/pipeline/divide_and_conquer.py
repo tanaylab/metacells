@@ -284,12 +284,12 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
                 ut.to_dense_vector(self.genes_frame[gene_annotation.name])
 
             if gene_annotation.dtype == 'bool':
-                _modify_value(adata, ut.get_v_data, ut.set_v_data, target_name,
+                _modify_value(adata, ut.get_v_dense, ut.set_v_data, target_name,
                               lambda old_genes_value:
                               old_genes_value | new_genes_value,
                               log_value=gene_annotation.log_value)
             else:
-                _modify_value(adata, ut.get_v_data, ut.set_v_data, target_name,
+                _modify_value(adata, ut.get_v_dense, ut.set_v_data, target_name,
                               lambda old_genes_value: old_genes_value
                               + new_genes_value.astype('int32'),
                               log_value=gene_annotation.log_value)
@@ -327,7 +327,7 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
                     new_value = ut.to_dense_vector(  #
                         self.cells_frame[cell_annotation.name])
 
-                _modify_value_subset(adata, ut.get_o_data, ut.set_o_data,
+                _modify_value_subset(adata, ut.get_o_dense, ut.set_o_data,
                                      target_name, cell_indices,
                                      lambda old_cells_value:
                                      old_cells_value + new_value,
@@ -348,7 +348,7 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
                 new_cells_value[new_cells_value >= 0] += count
                 counts[target_name] = max(count, np.max(new_cells_value) + 1)
 
-            _modify_value_subset(adata, ut.get_o_data, ut.set_o_data,
+            _modify_value_subset(adata, ut.get_o_dense, ut.set_o_data,
                                  target_name, cell_indices,
                                  lambda _: new_cells_value,
                                  log_value=gene_annotation.log_value)
@@ -689,8 +689,7 @@ def divide_and_conquer_pipeline(
                                   min_related_gene_fold_factor=rare_min_related_gene_fold_factor,
                                   target_pile_size=target_pile_size,
                                   max_cells_of_random_pile=rare_max_cells_of_random_pile,
-                                  min_cell_module_total=rare_min_cell_module_total,
-                                  intermediate=intermediate)
+                                  min_cell_module_total=rare_min_cell_module_total)
 
         rare_module_of_cells = ut.get_o_dense(adata, 'cells_rare_gene_module')
         rare_modules_count = np.max(rare_module_of_cells) + 1
@@ -1417,7 +1416,7 @@ def _modify_value(
 
 def _modify_value_subset(
     adata: AnnData,
-    getter: Callable[[AnnData, str], ut.Vector],
+    getter: Callable[[AnnData, str], ut.DenseVector],
     setter: 'Setter',
     name: str,
     indices: ut.DenseVector,

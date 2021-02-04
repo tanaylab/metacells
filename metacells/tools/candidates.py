@@ -25,7 +25,7 @@ LOG = logging.getLogger(__name__)
 
 @ut.timed_call()
 @ut.expand_doc()
-def compute_candidate_metacells(
+def compute_candidate_metacells(  # pylint: disable=too-many-branches
     adata: AnnData,
     *,
     of: str = 'obs_outgoing_weights',
@@ -122,11 +122,12 @@ def compute_candidate_metacells(
     assert edge_weights.shape[0] == edge_weights.shape[1]
 
     LOG.debug('  partition_method: %s', partition_method.__qualname__)
-    node_sizes = \
-        ut.get_vector_parameter_data(LOG, adata, cell_sizes,
-                                     per='o', name='cell_sizes', default='1')
-    if node_sizes is not None:
-        node_sizes = node_sizes.astype('int')
+    ut.log_use(LOG, adata, cell_sizes, per='o', name='cell_sizes', default='1')
+    if cell_sizes is not None:
+        node_sizes: Optional[ut.DenseVector] = \
+            ut.get_o_dense(adata, cell_sizes).astype('int32')
+    else:
+        node_sizes = None
 
     assert target_metacell_size > 0
     LOG.debug('  target_metacell_size: %s', target_metacell_size)

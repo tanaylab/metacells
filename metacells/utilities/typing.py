@@ -113,6 +113,8 @@ __all__ = [
     'eliminate_zeros',
     'sort_indices',
     'sum_duplicates',
+
+    'shaped_checksum',
 ]
 
 
@@ -360,6 +362,9 @@ class DenseMatrix(NumpyShaped):
 
     @abstractmethod
     def argmax(self, *, axis: int) -> DenseVector: ...
+
+    @abstractmethod
+    def flatten(self) -> DenseVector: ...
 
     @abstractmethod
     def nonzero(self) -> Tuple[DenseVector, DenseVector]: ...
@@ -942,3 +947,14 @@ def sum_duplicates(compressed: CompressedMatrix) -> None:
         utm.timed_parameters(before=compressed.nnz)
         compressed.sum_duplicates()
         utm.timed_parameters(after=compressed.nnz)
+
+
+def shaped_checksum(shaped: Shaped) -> float:
+    '''
+    Return a checksum of the contents of ``shaped`` data (for debugging reproducibility).
+    '''
+    if shaped.ndim == 1:
+        values = to_dense_vector(shaped)
+    else:
+        values = to_dense_matrix(shaped).flatten()  # type: ignore
+    return np.sum(values.astype('float64') * (1 + np.arange(len(values))))

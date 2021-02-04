@@ -190,7 +190,6 @@ def compute_excess_r2(
     top_gene_rank: int = pr.excess_top_gene_rank,
     shuffles_count: int = pr.excess_shuffles_count,
     random_seed: int = pr.random_seed,
-    intermediate: bool = True,
     mdata: AnnData,
 ) -> None:
     '''
@@ -252,9 +251,6 @@ def compute_excess_r2(
             For each gene and metacell, the normalized variance (variance over mean) of the
             gene in the metacell.
 
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse.
-
     **Computation Parameters**
 
     For each metacell:
@@ -291,63 +287,59 @@ def compute_excess_r2(
     of, _ = ut.log_operation(LOG, adata, 'compute_excess_r2', of)
     assert shuffles_count > 0
 
-    with ut.focus_on(ut.get_vo_data, adata, of, layout='row_major',
-                     intermediate=intermediate) as data:
-        data = ut.to_proper_matrix(data)
+    data = ut.get_vo_proper(adata, of, layout='row_major')
 
-        metacell_of_cells = \
-            ut.get_vector_parameter_data(LOG, adata, metacells,
-                                         per='o', name='metacells')
-        assert metacell_of_cells is not None
+    ut.log_use(LOG, adata, metacells, per='o', name='metacells')
+    metacell_of_cells = ut.get_o_dense(adata, metacells)
 
-        metacells_count = np.max(metacell_of_cells) + 1
-        assert metacells_count > 0
+    metacells_count = np.max(metacell_of_cells) + 1
+    assert metacells_count > 0
 
-        LOG.debug('  mdata: %s', ut.get_name(mdata) or '<adata>')
+    LOG.debug('  mdata: %s', ut.get_name(mdata) or '<adata>')
 
-        if compatible_size is not None:
-            compatible_size_of_metacells: Optional[ut.DenseVector] = \
-                ut.get_o_dense(mdata, compatible_size)
+    if compatible_size is not None:
+        compatible_size_of_metacells: Optional[ut.DenseVector] = \
+            ut.get_o_dense(mdata, compatible_size)
+    else:
+        compatible_size_of_metacells = None
+
+    assert mdata.n_obs == metacells_count
+    top_r2_per_gene_per_metacell = \
+        np.full(mdata.shape, None, dtype='float')
+    top_shuffled_r2_per_gene_per_metacell = \
+        np.full(mdata.shape, None, dtype='float')
+    excess_r2_per_gene_per_metacell = \
+        np.full(mdata.shape, None, dtype='float')
+    variance_per_gene_per_metacell = \
+        np.full(mdata.shape, None, dtype='float')
+    normalized_variance_per_gene_per_metacell = \
+        np.full(mdata.shape, None, dtype='float')
+
+    LOG.debug('  downsample_cell_quantile: %s',
+              downsample_cell_quantile)
+    LOG.debug('  min_gene_total: %s', min_gene_total)
+    LOG.debug('  top_gene_rank: %s', top_gene_rank)
+
+    for metacell_index in range(metacells_count):
+        if compatible_size_of_metacells is not None:
+            compatible_size_of_metacell = compatible_size_of_metacells[metacell_index]
         else:
-            compatible_size_of_metacells = None
+            compatible_size_of_metacell = None
 
-        assert mdata.n_obs == metacells_count
-        top_r2_per_gene_per_metacell = \
-            np.full(mdata.shape, None, dtype='float')
-        top_shuffled_r2_per_gene_per_metacell = \
-            np.full(mdata.shape, None, dtype='float')
-        excess_r2_per_gene_per_metacell = \
-            np.full(mdata.shape, None, dtype='float')
-        variance_per_gene_per_metacell = \
-            np.full(mdata.shape, None, dtype='float')
-        normalized_variance_per_gene_per_metacell = \
-            np.full(mdata.shape, None, dtype='float')
-
-        LOG.debug('  downsample_cell_quantile: %s',
-                  downsample_cell_quantile)
-        LOG.debug('  min_gene_total: %s', min_gene_total)
-        LOG.debug('  top_gene_rank: %s', top_gene_rank)
-
-        for metacell_index in range(metacells_count):
-            if compatible_size_of_metacells is not None:
-                compatible_size_of_metacell = compatible_size_of_metacells[metacell_index]
-            else:
-                compatible_size_of_metacell = None
-
-            _collect_metacell_excess(metacell_index, metacells_count,
-                                     compatible_size=compatible_size_of_metacell,
-                                     metacell_of_cells=metacell_of_cells,
-                                     data=data,
-                                     downsample_cell_quantile=downsample_cell_quantile,
-                                     random_seed=random_seed,
-                                     shuffles_count=shuffles_count,
-                                     top_gene_rank=top_gene_rank,
-                                     min_gene_total=min_gene_total,
-                                     excess_r2_per_gene_per_metacell=excess_r2_per_gene_per_metacell,
-                                     top_r2_per_gene_per_metacell=top_r2_per_gene_per_metacell,
-                                     top_shuffled_r2_per_gene_per_metacell=top_shuffled_r2_per_gene_per_metacell,
-                                     variance_per_gene_per_metacell=variance_per_gene_per_metacell,
-                                     normalized_variance_per_gene_per_metacell=normalized_variance_per_gene_per_metacell)
+        _collect_metacell_excess(metacell_index, metacells_count,
+                                 compatible_size=compatible_size_of_metacell,
+                                 metacell_of_cells=metacell_of_cells,
+                                 data=data,
+                                 downsample_cell_quantile=downsample_cell_quantile,
+                                 random_seed=random_seed,
+                                 shuffles_count=shuffles_count,
+                                 top_gene_rank=top_gene_rank,
+                                 min_gene_total=min_gene_total,
+                                 excess_r2_per_gene_per_metacell=excess_r2_per_gene_per_metacell,
+                                 top_r2_per_gene_per_metacell=top_r2_per_gene_per_metacell,
+                                 top_shuffled_r2_per_gene_per_metacell=top_shuffled_r2_per_gene_per_metacell,
+                                 variance_per_gene_per_metacell=variance_per_gene_per_metacell,
+                                 normalized_variance_per_gene_per_metacell=normalized_variance_per_gene_per_metacell)
 
     ut.set_vo_data(mdata, 'excess_r2', excess_r2_per_gene_per_metacell)
     top_r2_per_gene_per_metacell[top_r2_per_gene_per_metacell < -5] = None

@@ -41,11 +41,6 @@ are three sources of (implementation) code complexity here:
 
 1.  Per-variable-per-observation data.
 
-    In the managed ``AnnData``, all the layers are equal. A special metadata property ``__focus__``
-    provides the default layer name for all layer functions. Similarly, operations that output a
-    layer allow specifying that the result will be ``infocus``, and the :py:func:`focus_on` function
-    allows for code to safely shift the focus for specific code regions.
-
     In contrast, raw ``AnnData`` contains a magic ``.X`` member which is distinct from the rest of
     the data layers. There is a strong assumption that all work will be done on ``X`` and the other
     layers are secondary at best.
@@ -109,9 +104,8 @@ responsible to ensure that the names of manually set data are also unique.
 '''
 
 import logging
-from contextlib import contextmanager
 from logging import Logger
-from typing import (Any, Callable, Collection, Dict, Iterable, Iterator, List,
+from typing import (Any, Callable, Collection, Dict, Iterable, List,
                     MutableMapping, NamedTuple, Optional, Set, Sized, Tuple,
                     Union)
 from warnings import warn
@@ -140,54 +134,47 @@ __all__ = [
     'safe_slicing_mask',
     'safe_slicing_derived',
 
-    'get_data',
-    'get_proper_matrix',
-    'get_dense_vector',
-    'get_vector_parameter_data',
-    'has_data',
-    'data_per',
+    'set_name',
+    'get_name',
 
+    'set_m_data',
     'get_m_data',
-    'get_o_data',
+
+    'set_o_data',
     'get_o_series',
     'get_o_dense',
-    'get_v_data',
+
+    'set_v_data',
     'get_v_series',
     'get_v_dense',
+
+    'set_oo_data',
     'get_oo_data',
     'get_oo_frame',
     'get_oo_proper',
+
+    'set_vv_data',
     'get_vv_data',
     'get_vv_frame',
     'get_vv_proper',
+
+    'set_oa_data',
     'get_oa_data',
     'get_oa_frame',
     'get_oa_proper',
+
+    'set_va_data',
     'get_va_data',
     'get_va_frame',
     'get_va_proper',
+
+    'set_vo_data',
     'get_vo_data',
     'get_vo_frame',
     'get_vo_proper',
 
-    'all_data',
-    'del_data',
-    'focus_on',
-    'intermediate_step',
-    'get_name',
-    'get_focus_name',
-    'get_x_name',
-
-    'set_m_data',
-    'set_o_data',
-    'set_v_data',
-    'set_oo_data',
-    'set_vv_data',
-    'set_vo_data',
-    'set_va_data',
-    'set_oa_data',
-
-    'annotation_items',
+    'log_use',
+    'has_data',
 ]
 
 
@@ -200,15 +187,11 @@ Annotations = Union[MutableMapping[Any, Any], pd.DataFrame]
 def setup(
     adata: AnnData,
     *,
-    x_name: str,
     name: Optional[str] = None,
     tmp: bool = False
 ) -> None:
     '''
     Set up the annotated ``adata`` for use by the ``metacells`` package.
-
-    This needs the ``x_name`` of the data contained in ``adata.X``, which also becomes the focus
-    data.
 
     The optional ``name``, if specified, is attached to log messages about setting annotation data.
 
@@ -233,8 +216,7 @@ def setup(
     X = utt.BaseShaped.be(X)
     assert X is not None
     assert X.ndim == 2
-    assert '__x__' not in adata.uns_keys()
-    assert '|' not in x_name
+    assert '__x__' not in adata.layers
 
     compressed = utt.CompressedMatrix.maybe(X)
     if compressed is not None:
@@ -249,9 +231,6 @@ def setup(
         adata.uns['__name__'] = name
         LOG.log(utl.get_log_level(adata),
                 '  created %s shape %s', name, adata.shape)
-    adata.uns['__x__'] = x_name
-    adata.uns['__focus__'] = x_name
-    _log_set_data(adata, 'm', '__focus__', x_name, force=True)
 
 
 class SlicingMask(NamedTuple):
@@ -368,10 +347,7 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     If ``tmp`` is set, logging of modifications to the result will use the ``DEBUG`` logging level.
     By default, logging of modifications is done using the ``INFO`` logging level.
     '''
-    x_name = get_x_name(adata)
-    focus = get_focus_name(adata)
-    assert x_name not in adata.layers
-    assert has_data(adata, focus)
+    assert '__x__' not in adata.layers
 
     shaped: Optional[utt.Shaped] = utt.BaseShaped.maybe(obs)  # type: ignore
     if shaped is None:
@@ -418,10 +394,7 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
 
     _restore_data(saved_data, adata)
 
-    assert get_x_name(adata) == x_name
-    assert get_focus_name(adata) == focus
-    assert x_name not in adata.layers
-    assert has_data(adata, focus)
+    assert '__x__' not in adata.layers
 
     if tmp:
         bdata.uns['__tmp__'] = True
@@ -436,13 +409,6 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
         LOG.log(utl.get_log_level(bdata),
                 '  sliced %s shape %s', name, bdata.shape)
 
-    assert get_x_name(bdata) == x_name
-    if focus == x_name or focus in bdata.layers:
-        assert get_focus_name(bdata) == focus
-    else:
-        focus = bdata.uns['__focus__'] = x_name
-    _log_set_data(bdata, 'm', '__focus__', focus, force=True)
-
     if track_obs is not None:
         obs_indices = np.arange(adata.n_obs)[obs]
         set_o_data(bdata, track_obs, obs_indices)
@@ -451,8 +417,7 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
         var_indices = np.arange(adata.n_vars)[vars]
         set_v_data(bdata, track_var, var_indices)
 
-    assert x_name not in bdata.layers
-    assert has_data(bdata, focus)
+    assert '__x__' not in bdata.layers
 
     return bdata
 
@@ -509,7 +474,7 @@ def _save_per_data(
             delete_names.add(name)
 
             base_name = name[:-len(by_suffix)]
-            if base_name == get_x_name(adata):
+            if base_name == '__x__':
                 adata.X = data
             else:
                 base_data = adata.layers[base_name]
@@ -555,7 +520,7 @@ def _preserve_data(
     do_slice_var: bool,
 ) -> bool:
     base_name = name
-    if '__' in name:
+    if name != '__x__' and '__' in name:
         is_per_obs = name.endswith(':__row_major__')
         is_per_var = name.endswith(':__column_major__')
         if is_per_obs or is_per_var:
@@ -576,46 +541,40 @@ def _preserve_data(
     return slicing_mask.obs and slicing_mask.vars
 
 
-def get_vector_parameter_data(
+def log_use(
     logger: Logger,
     adata: AnnData,
-    value: Optional[Union[str, utt.Vector]],
+    what: Optional[Union[str, utt.Shaped]],
     *,
     name: str,
     per: str,
     default: str = 'None',
     indent: str = '  ',
-) -> Optional[utt.DenseVector]:
+) -> None:
     '''
-    Given a parameter ``value`` which is either a name or an explicit (optional) vector parameter,
-    log it and either return it (as dense) or get it from the annotated data.
+    Log using some annotation data.
     '''
-    assert per in ('o', 'v')
-
-    if isinstance(value, str):
-        logger.debug('%s%s: %s', indent, name, value)
-        value = get_data(adata, value, per=per)
-    elif value is None:
+    assert per in ('m', 'v', 'o', 'vv', 'oo', 'vo', 'va', 'oa')
+    if isinstance(what, str):
+        data_name = get_name(adata)
+        if data_name is None:
+            logger.debug('%s%s: %s:%s',
+                         indent, name, MEMBER_OF_PER[per], what)
+        else:
+            logger.debug('%s%s: %s:%s:%s',
+                         indent, name, data_name, MEMBER_OF_PER[per], what)
+    elif what is None:
         logger.debug('%s%s: %s', indent, name, default)
     else:
-        logger.debug('%s%s: <vector>', indent, name)
-
-    if value is not None:
-        value = utt.to_dense_vector(value)  # type: ignore
-
-    return value
+        logger.debug('%s%s: <data>', indent, name)
 
 
-@utm.timed_call()
 @utd.expand_doc()
 def get_data(  # pylint: disable=too-many-return-statements
     adata: AnnData,
     name: Optional[str] = None,
     *,
     per: Optional[str] = None,
-    compute: Optional[Callable[[], Any]] = None,
-    inplace: bool = True,
-    infocus: bool = False,
     layout: Optional[str] = None,
 ) -> Any:
     '''
@@ -623,100 +582,43 @@ def get_data(  # pylint: disable=too-many-return-statements
 
     If no ``name`` is specified, return the focus.
 
-    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
-
-    If ``inplace`` (default: {inplace}), store the data for future reuse. This requires ``per`` (one
-    of: ``vo``, ``vv``, ``oo``, ``va``, ``oa``, ``v``, ``o``, ``m``, default: {per}) to specify
-    where to store the data.
-
-    If the data is per-variable-per-observation, and ``infocus`` (default: {infocus}, implies
-    ``inplace``), also makes the result the new focus.
-
     If the data is 2-dimensional, and ``layout`` (default: {layout}) is specified, it forces the
     layout of the returned data.
     '''
     assert layout is None or layout in utt.LAYOUT_OF_AXIS
 
     if name is None:
-        name = get_focus_name(adata)
+        name = '__x__'
 
     if per == 'vo' \
             or (per is None
-                and (name == get_x_name(adata) or name in adata.layers)):
-        return get_vo_data(adata, name, compute=compute,
-                           inplace=inplace, infocus=infocus, layout=layout)
-
-    assert not infocus
+                and (name == '__x__' or name in adata.layers)):
+        return get_vo_data(adata, name, layout=layout)
 
     if per == 'oo' or (per is None and name in adata.obsp):
-        return get_oo_data(adata, name, compute=compute,
-                           inplace=inplace, layout=layout)
+        return get_oo_data(adata, name, layout=layout)
 
     if per == 'vv' or (per is None and name in adata.varp):
-        return get_vv_data(adata, name, compute=compute,
-                           inplace=inplace, layout=layout)
+        return get_vv_data(adata, name, layout=layout)
 
     if per == 'oa' or (per is None and name in adata.obsm):
-        return get_oa_data(adata, name, compute=compute,
-                           inplace=inplace, layout=layout)
+        return get_oa_data(adata, name, layout=layout)
 
     if per == 'va' or (per is None and name in adata.varm):
-        return get_va_data(adata, name, compute=compute,
-                           inplace=inplace, layout=layout)
+        return get_va_data(adata, name, layout=layout)
 
     assert layout is None
 
     if per == 'm' or (per is None and name in adata.uns):
-        return get_m_data(adata, name, compute=compute, inplace=inplace)
+        return get_m_data(adata, name)
 
     if per == 'o' or (per is None and name in adata.obs):
-        return get_o_data(adata, name, compute=compute, inplace=inplace)
+        return _get_shaped_data(adata, 'o', adata.obs, shape=(adata.n_obs,), what=name)
 
     if per == 'v' or (per is None and name in adata.var):
-        return get_v_data(adata, name, compute=compute, inplace=inplace)
+        return _get_shaped_data(adata, 'v', adata.var, shape=(adata.n_vars,), what=name)
 
     raise _unknown_data(adata, name, per)
-
-
-@utm.timed_call()
-def get_proper_matrix(
-    adata: AnnData,
-    name: Optional[str] = None,
-    *,
-    per: Optional[str] = None,
-    compute: Optional[Callable[[], Any]] = None,
-    inplace: bool = True,
-    infocus: bool = False,
-    layout: Optional[str] = None,
-) -> utt.ProperMatrix:
-    '''
-    Same as :py:func:`get_data`, except that the returned data is
-    passed through :py:func:`metacells.utilities.typing.to_proper_matrix`
-    ensuring it is a :py:const:`metacells.utilities.typing.ProperMatrix`.
-    '''
-    data = get_data(adata, name, per=per, compute=compute,
-                    inplace=inplace, infocus=infocus, layout=layout)
-    assert utt.is_layout(data, layout)
-    return utt.to_proper_matrix(data, default_layout=layout or 'row_major')
-
-
-@utm.timed_call()
-def get_dense_vector(
-    adata: AnnData,
-    name: Optional[str] = None,
-    *,
-    per: Optional[str] = None,
-    compute: Optional[Callable[[], Any]] = None,
-    inplace: bool = True,
-    infocus: bool = False,
-) -> utt.DenseVector:
-    '''
-    Same as :py:func:`get_data`, except that the returned data is
-    passed through :py:func:`metacells.utilities.typing.to_dense_vector`
-    ensuring it is a :py:const:`metacells.utilities.typing.DenseVector`.
-    '''
-    return utt.to_dense_vector(get_data(adata, name, per=per, compute=compute,
-                                        inplace=inplace, infocus=infocus))
 
 
 def has_data(
@@ -734,7 +636,7 @@ def has_data(
     assert layout is None or layout in utt.LAYOUT_OF_AXIS
 
     for annotations in (adata.layers, adata.obsp, adata.varp, adata.obsm, adata.varm):
-        if (id(annotations) == id(adata.layers) and name == get_x_name(adata)) \
+        if (id(annotations) == id(adata.layers) and name == '__x__') \
                 or name in annotations:
             if layout is None:
                 return True
@@ -765,7 +667,7 @@ def data_per(
     Otherwise, return ``None``.
     '''
 
-    if name == get_x_name(adata):
+    if name == '__x__':
         return 'vo'
 
     for per, annotation in (('vo', adata.layers),
@@ -785,70 +687,27 @@ def data_per(
     return None
 
 
-@utm.timed_call()
-@utd.expand_doc()
-def get_m_data(
-    adata: AnnData,
-    name: str,
-    compute: Optional[Callable[[], utt.Vector]] = None,
-    *,
-    inplace: bool = True,
-) -> Any:
+def get_m_data(adata: AnnData, name: str) -> Any:
     '''
     Lookup metadata (unstructured annotation) in ``adata`` by its ``name``.
-
-    If the metadata does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
-
-    If ``inplace`` (default: {inplace}), store the result in ``adata``.
     '''
     data = adata.uns.get(name)
-    if data is not None:
-        return data
-
-    if compute is None:
+    if data is None:
         raise _unknown_data(adata, name, 'm')
-
-    data = compute()
-    assert data is not None
-
-    if inplace:
-        _log_set_data(adata, 'm', name, data)
-        adata.uns[name] = data
-
     return data
-
-
-@utm.timed_call()
-@utd.expand_doc()
-def get_o_data(
-    adata: AnnData,
-    name: str,
-    *,
-    compute: Optional[Callable[[], utt.Vector]] = None,
-    inplace: bool = True,
-) -> utt.Vector:
-    '''
-    Lookup per-observation (cell) data in ``adata`` by its ``name``.
-
-    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
-
-    If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
-    '''
-    return _get_shaped_data(adata, 'o', adata.obs, shape=(adata.n_obs,),
-                            name=name, compute=compute, inplace=inplace)
 
 
 def get_o_series(
     adata: AnnData,
-    name: str,
-    *,
-    compute: Optional[Callable[[], utt.Vector]] = None,
-    inplace: bool = True,
+    what: Union[str, utt.Vector],
 ) -> utt.PandasSeries:
     '''
-    Same as :py:func:`get_o_data` but returns a pandas data series.
+    Lookup per-observation (cell) data in ``adata`` by its ``name`` as a Pandas series.
+
+    If ``what`` is a string, it is the name of a per-observation annotation to fetch.
+    Otherwise, it should be some vector of data of the appropriate size.
     '''
-    data = get_o_data(adata, name, compute=compute, inplace=inplace)
+    data = _get_shaped_data(adata, 'o', adata.obs, shape=(adata.n_obs,), what=what)
     series = utt.PandasSeries.maybe(data)
     if series is None:
         series = pd.Series(utt.to_dense_vector(data), index=adata.obs_names)
@@ -857,50 +716,29 @@ def get_o_series(
 
 def get_o_dense(
     adata: AnnData,
-    name: str,
-    *,
-    compute: Optional[Callable[[], utt.Vector]] = None,
-    inplace: bool = True,
+    what: Union[str, utt.Vector],
 ) -> utt.DenseVector:
     '''
-    Same as :py:func:`get_o_data` but returns a numpy
-    :py:const:`metacells.utilities.typing.DenseVector`.
+    Lookup per-observation (cell) data in ``adata`` by its ``name`` as a Numpy array.
+
+    If ``what`` is a string, it is the name of a per-observation annotation to fetch.
+    Otherwise, it should be some vector of data of the appropriate size.
     '''
-    return utt.to_dense_vector(get_o_data(adata, name,
-                                          compute=compute, inplace=inplace))
-
-
-@utm.timed_call()
-@utd.expand_doc()
-def get_v_data(
-    adata: AnnData,
-    name: str,
-    *,
-    compute: Optional[Callable[[], utt.Vector]] = None,
-    inplace: bool = True,
-) -> utt.Vector:
-    '''
-    Lookup per-variable (gene) data in ``adata`` by its ``name``.
-
-    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
-
-    If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
-    '''
-    return _get_shaped_data(adata, 'v', adata.var, shape=(adata.n_vars,),
-                            name=name, compute=compute, inplace=inplace)
+    data = _get_shaped_data(adata, 'o', adata.obs, shape=(adata.n_obs,), what=what)
+    return utt.to_dense_vector(data)
 
 
 def get_v_series(
     adata: AnnData,
-    name: str,
-    *,
-    compute: Optional[Callable[[], utt.Vector]] = None,
-    inplace: bool = True,
+    what: Union[str, utt.Vector]
 ) -> utt.PandasSeries:
     '''
-    Same as :py:func:`get_v_data` but returns a pandas data series.
+    Lookup per-variable (gene) data in ``adata`` by its ``name`` as a pandas series.
+
+    If ``what`` is a string, it is the name of a per-variable annotation to fetch.
+    Otherwise, it should be some vector of data of the appropriate size.
     '''
-    data = get_v_data(adata, name, compute=compute, inplace=inplace)
+    data = _get_shaped_data(adata, 'v', adata.var, shape=(adata.n_vars,), what=what)
     series = utt.PandasSeries.maybe(data)
     if series is None:
         series = pd.Series(utt.to_dense_vector(data), index=adata.var_names)
@@ -909,60 +747,51 @@ def get_v_series(
 
 def get_v_dense(
     adata: AnnData,
-    name: str,
-    *,
-    compute: Optional[Callable[[], utt.Vector]] = None,
-    inplace: bool = True,
+    what: Union[str, utt.Vector]
 ) -> utt.DenseVector:
     '''
-    Same as :py:func:`get_v_data` but returns a numpy
-    :py:const:`metacells.utilities.typing.DenseVector`.
+    Lookup per-variable (gene) data in ``adata`` by its ``name`` as a numpy array.
+
+    If ``what`` is a string, it is the name of a per-variable annotation to fetch.
+    Otherwise, it should be some vector of data of the appropriate size.
     '''
-    return utt.to_dense_vector(get_v_data(adata, name,
-                                          compute=compute, inplace=inplace))
+    data = _get_shaped_data(adata, 'v', adata.var, shape=(adata.n_vars,), what=what)
+    return utt.to_dense_vector(data)
 
 
-@utm.timed_call()
 @utd.expand_doc()
 def get_oo_data(
     adata: AnnData,
-    name: str,
+    what: Union[str, utt.Matrix],
     *,
-    compute: Optional[Callable[[], utt.Matrix]] = None,
-    inplace: bool = True,
     layout: Optional[str] = None,
 ) -> utt.Matrix:
     '''
     Lookup per-observation-per-observation (cell) data in ``adata`` by its ``name``.
 
-    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
-
-    If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
+    If ``what`` is a string, it is the name of a per-variable annotation to fetch.
+    Otherwise, it should be some matrix of data of the appropriate size.
 
     If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
     ``column_major`` (genes). This returns the data in a layout optimized for by-observation
-    (row-major / csr) or by-variable (column-major / csc). If also ``inplace``, this is cached in an
-    additional "hidden" annotation whose name is suffixed (e.g. ``...:__row_major__``).
+    (row-major / csr) or by-variable (column-major / csc). This is cached in an additional "hidden"
+    annotation whose name is suffixed (e.g. ``...:__row_major__``).
     '''
     return _get_layout_data(adata, 'oo', adata.obsp,
                             shape=(adata.n_obs, adata.n_obs),
-                            name=name, compute=compute,
-                            inplace=inplace, layout=layout)
+                            what=what, layout=layout)
 
 
 def get_oo_frame(
     adata: AnnData,
-    name: str,
+    what: Union[str, utt.Matrix],
     *,
-    compute: Optional[Callable[[], utt.Matrix]] = None,
-    inplace: bool = True,
     layout: Optional[str] = None,
 ) -> utt.PandasFrame:
     '''
     Same as :py:func:`get_oo_data` but returns a pandas data frame.
     '''
-    data = get_oo_data(adata, name, compute=compute,
-                       inplace=inplace, layout=layout)
+    data = get_oo_data(adata, what, layout=layout)
     frame = utt.PandasFrame.maybe(data)
     if frame is None:
         frame = pd.DataFrame(utt.to_proper_matrix(data),
@@ -972,62 +801,51 @@ def get_oo_frame(
 
 def get_oo_proper(
     adata: AnnData,
-    name: str,
+    what: Union[str, utt.Matrix],
     *,
-    compute: Optional[Callable[[], utt.Matrix]] = None,
-    inplace: bool = True,
     layout: Optional[str] = None,
 ) -> utt.ProperMatrix:
     '''
     Same as :py:func:`get_oo_data` but returns a numpy
     :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
-    return utt.to_proper_matrix(get_oo_data(adata, name, compute=compute,
-                                            inplace=inplace, layout=layout),
+    return utt.to_proper_matrix(get_oo_data(adata, what, layout=layout),
                                 default_layout=layout or 'row_major')
 
 
-@utm.timed_call()
 @utd.expand_doc()
 def get_vv_data(
     adata: AnnData,
-    name: str,
+    what: Union[str, utt.Matrix],
     *,
-    compute: Optional[Callable[[], utt.Matrix]] = None,
-    inplace: bool = True,
     layout: Optional[str] = None,
 ) -> utt.Matrix:
     '''
     Lookup per-variable-per-variable (gene) data in ``adata``.
 
-    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
-
-    If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
+    If ``what`` is a string, it is the name of a per-variable annotation to fetch.
+    Otherwise, it should be some matrix of data of the appropriate size.
 
     If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
     ``column_major`` (genes). This returns the data in a layout optimized for by-observation
-    (row-major / csr) or by-variable (column-major / csc). If also ``inplace``, this is cached in an
-    additional "hidden" annotation whose name is suffixed (e.g. ``...:__row_major__``).
+    (row-major / csr) or by-variable (column-major / csc). This is cached in an additional "hidden"
+    annotation whose name is suffixed (e.g. ``...:__row_major__``).
     '''
     return _get_layout_data(adata, 'vv', adata.varp,
                             shape=(adata.n_vars, adata.n_vars),
-                            name=name, compute=compute,
-                            inplace=inplace, layout=layout)
+                            what=what, layout=layout)
 
 
 def get_vv_frame(
     adata: AnnData,
-    name: str,
+    what: Union[str, utt.Matrix],
     *,
-    compute: Optional[Callable[[], utt.Matrix]] = None,
-    inplace: bool = True,
     layout: Optional[str] = None,
 ) -> utt.PandasFrame:
     '''
     Same as :py:func:`get_vv_data` but returns a pandas data frame.
     '''
-    data = get_vv_data(adata, name, compute=compute,
-                       inplace=inplace, layout=layout)
+    data = get_vv_data(adata, what, layout=layout)
     frame = utt.PandasFrame.maybe(data)
     if frame is None:
         frame = pd.DataFrame(utt.to_proper_matrix(data),
@@ -1037,63 +855,52 @@ def get_vv_frame(
 
 def get_vv_proper(
     adata: AnnData,
-    name: str,
+    what: Union[str, utt.Matrix],
     *,
-    compute: Optional[Callable[[], utt.Matrix]] = None,
-    inplace: bool = True,
     layout: Optional[str] = None,
 ) -> utt.ProperMatrix:
     '''
     Same as :py:func:`get_vv_data` but returns a numpy
     :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
-    return utt.to_proper_matrix(get_vv_data(adata, name, compute=compute,
-                                            inplace=inplace, layout=layout),
+    return utt.to_proper_matrix(get_vv_data(adata, what, layout=layout),
                                 default_layout=layout or 'row_major')
 
 
-@utm.timed_call()
 @utd.expand_doc()
 def get_oa_data(
     adata: AnnData,
-    name: str,
+    what: Union[str, utt.Matrix],
     *,
-    compute: Optional[Callable[[], utt.Matrix]] = None,
-    inplace: bool = True,
     layout: Optional[str] = None,
 ) -> utt.Matrix:
     '''
     Lookup per-observation-per-any (cell) data in ``adata`` by its ``name``.
 
-    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
-
-    If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
+    If ``what`` is a string, it is the name of a per-variable annotation to fetch.
+    Otherwise, it should be some matrix of data of the appropriate size.
 
     If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
     ``column_major`` (genes). This returns the data in a layout optimized for by-observation
-    (row-major / csr) or by-variable (column-major / csc). If also ``inplace``, this is cached in an
-    additional "hidden" annotation whose name is suffixed (e.g. ``...:__row_major__``).
+    (row-major / csr) or by-variable (column-major / csc). This is cached in an additional "hidden"
+    annotation whose name is suffixed (e.g. ``...:__row_major__``).
     '''
     return _get_layout_data(adata, 'oa', adata.obsm,
                             shape=(adata.n_obs, 0),
-                            name=name, compute=compute,
-                            inplace=inplace, layout=layout)
+                            what=what, layout=layout)
 
 
 def get_oa_frame(
     adata: AnnData,
-    name: str,
+    what: Union[str, utt.Matrix],
     *,
-    compute: Optional[Callable[[], utt.Matrix]] = None,
     columns: Optional[Collection],
-    inplace: bool = True,
     layout: Optional[str] = None,
 ) -> utt.PandasFrame:
     '''
     Same as :py:func:`get_oa_data` but returns a pandas data frame.
     '''
-    data = get_oa_data(adata, name, compute=compute,
-                       inplace=inplace, layout=layout)
+    data = get_oa_data(adata, what, layout=layout)
     frame = utt.PandasFrame.maybe(data)
     if frame is None:
         frame = pd.DataFrame(utt.to_proper_matrix(data), index=adata.obs_names)
@@ -1104,63 +911,52 @@ def get_oa_frame(
 
 def get_oa_proper(
     adata: AnnData,
-    name: str,
+    what: Union[str, utt.Matrix],
     *,
-    compute: Optional[Callable[[], utt.Matrix]] = None,
-    inplace: bool = True,
     layout: Optional[str] = None,
 ) -> utt.ProperMatrix:
     '''
     Same as :py:func:`get_oa_data` but returns a numpy
     :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
-    return utt.to_proper_matrix(get_oa_data(adata, name, compute=compute,
-                                            inplace=inplace, layout=layout),
+    return utt.to_proper_matrix(get_oa_data(adata, what, layout=layout),
                                 default_layout=layout or 'row_major')
 
 
-@utm.timed_call()
 @utd.expand_doc()
 def get_va_data(
     adata: AnnData,
-    name: str,
+    what: Union[str, utt.Matrix],
     *,
-    compute: Optional[Callable[[], utt.Matrix]] = None,
-    inplace: bool = True,
     layout: Optional[str] = None,
 ) -> utt.Matrix:
     '''
     Lookup per-variable-per-variable (gene) data in ``adata``.
 
-    If the data does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
-
-    If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
+    If ``what`` is a string, it is the name of a per-variable annotation to fetch.
+    Otherwise, it should be some matrix of data of the appropriate size.
 
     If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
     ``column_major`` (genes). This returns the data in a layout optimized for by-observation
-    (row-major / csr) or by-variable (column-major / csc). If also ``inplace``, this is cached in an
-    additional "hidden" annotation whose name is suffixed (e.g. ``...:__row_major__``).
+    (row-major / csr) or by-variable (column-major / csc). This is cached in an additional "hidden"
+    annotation whose name is suffixed (e.g. ``...:__row_major__``).
     '''
     return _get_layout_data(adata, 'va', adata.varm,
                             shape=(adata.n_vars, 0),
-                            name=name, compute=compute,
-                            inplace=inplace, layout=layout)
+                            what=what, layout=layout)
 
 
 def get_va_frame(
     adata: AnnData,
-    name: str,
+    what: Union[str, utt.Matrix],
     *,
-    compute: Optional[Callable[[], utt.Matrix]] = None,
     columns: Optional[Collection],
-    inplace: bool = True,
     layout: Optional[str] = None,
 ) -> utt.PandasFrame:
     '''
     Same as :py:func:`get_va_data` but returns a pandas data frame.
     '''
-    data = get_va_data(adata, name, compute=compute,
-                       inplace=inplace, layout=layout)
+    data = get_va_data(adata, what, layout=layout)
     frame = utt.PandasFrame.maybe(data)
     if frame is None:
         frame = pd.DataFrame(utt.to_proper_matrix(data), index=adata.var_names)
@@ -1171,80 +967,59 @@ def get_va_frame(
 
 def get_va_proper(
     adata: AnnData,
-    name: str,
+    what: Union[str, utt.Matrix],
     *,
-    compute: Optional[Callable[[], utt.Matrix]] = None,
-    inplace: bool = True,
     layout: Optional[str] = None,
 ) -> utt.ProperMatrix:
     '''
     Same as :py:func:`get_va_data` but returns a numpy
     :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
-    return utt.to_proper_matrix(get_va_data(adata, name, compute=compute,
-                                            inplace=inplace, layout=layout),
+    return utt.to_proper_matrix(get_va_data(adata, what, layout=layout),
                                 default_layout=layout or 'row_major')
 
 
-@utm.timed_call()
 @utd.expand_doc()
 def get_vo_data(
     adata: AnnData,
-    name: Optional[str] = None,
+    what: Union[str, utt.Matrix, None] = None,
     *,
-    compute: Optional[Callable[[], utt.Matrix]] = None,
-    inplace: bool = True,
-    infocus: bool = False,
     layout: Optional[str] = None,
 ) -> utt.Matrix:
     '''
     Lookup a per-variable-per-observation matrix (data layer) in ``adata`` by its ``name``.
 
-    If the ``name`` is not specified, get the focus data.
-
-    If the layer does not exist, ``compute`` it. If no ``compute`` function was given, ``raise``.
-
-    If ``inplace`` (default: {inplace}), store the result in ``adata`` for future reuse.
-
-    If ``infocus`` (default: {infocus}, implies ``inplace``), also makes the result the new focus
-    data.
+    If ``what`` is not specified, uses the value of the ``X`` member.
+    If ``what`` is a string, it is the name of a per-variable annotation to fetch.
+    Otherwise, it should be some matrix of data of the appropriate size.
 
     If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
     ``column_major`` (genes). This returns the data in a layout optimized for by-observation
-    (row-major / csr) or by-variable (column-major / csc). If also ``inplace`` (or ``infocus``),
-    this is cached in an additional "hidden" layer whose name is suffixed (e.g.
-    ``...:__row_major__``).
+    (row-major / csr) or by-variable (column-major / csc). This is cached in an additional "hidden"
+    layer whose name is suffixed (e.g. ``...:__row_major__``).
 
     Returns the result data.
     '''
-    if name is None:
-        name = get_focus_name(adata)
+    if what is None:
+        what = '__x__'
 
     data = _get_layout_data(adata, 'vo', adata.layers,
                             shape=(adata.n_obs, adata.n_vars),
-                            name=name, compute=compute,
-                            inplace=inplace or infocus, layout=layout)
-
-    if infocus:
-        _log_set_data(adata, 'm', '__focus__', name)
-        adata.uns['__focus__'] = name
+                            what=what, layout=layout)
 
     return data
 
 
 def get_vo_frame(
     adata: AnnData,
-    name: str,
+    what: Union[str, utt.Matrix, None] = None,
     *,
-    compute: Optional[Callable[[], utt.Matrix]] = None,
-    inplace: bool = True,
     layout: Optional[str] = None,
 ) -> utt.PandasFrame:
     '''
     Same as :py:func:`get_vo_data` but returns a pandas data frame.
     '''
-    data = get_vo_data(adata, name, compute=compute,
-                       inplace=inplace, layout=layout)
+    data = get_vo_data(adata, what, layout=layout)
     frame = utt.PandasFrame.maybe(data)
     if frame is None:
         frame = pd.DataFrame(utt.to_proper_matrix(data),
@@ -1254,18 +1029,15 @@ def get_vo_frame(
 
 def get_vo_proper(
     adata: AnnData,
-    name: Optional[str] = None,
+    what: Union[str, utt.Matrix, None] = None,
     *,
-    compute: Optional[Callable[[], utt.Matrix]] = None,
-    inplace: bool = True,
     layout: Optional[str] = None,
 ) -> utt.ProperMatrix:
     '''
     Same as :py:func:`get_vo_data` but returns a numpy
     :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
-    return utt.to_proper_matrix(get_vo_data(adata, name, compute=compute,
-                                            inplace=inplace, layout=layout),
+    return utt.to_proper_matrix(get_vo_data(adata, what, layout=layout),
                                 default_layout=layout or 'row_major')
 
 
@@ -1275,23 +1047,26 @@ def _get_layout_data(
     annotations: Annotations,
     *,
     shape: Tuple[int, ...],
-    name: str,
-    compute: Optional[Callable[[], utt.Shaped]],
-    inplace: bool,
+    what: Union[str, utt.Matrix],
     layout: Optional[str],
 ) -> Any:
-    assert '__' not in name
+    if not isinstance(what, str):
+        assert what.shape == shape
+        if layout is None or utt.is_layout(what, layout):
+            return what
+        return utc.to_layout(what, layout=layout)
+
+    assert what == '__x__' or '__' not in what
 
     def get_base_data() -> Any:
-        return _get_shaped_data(adata, per, annotations, shape=shape,
-                                name=name, compute=compute, inplace=inplace)
+        return _get_shaped_data(adata, per, annotations, shape=shape, what=what)
 
     if layout is None:
         return get_base_data()
 
     assert layout in utt.LAYOUT_OF_AXIS
 
-    layout_name = '%s:__%s__' % (name, layout)
+    layout_name = '%s:__%s__' % (what, layout)
     data = adata.layers.get(layout_name)
     if data is not None:
         # TODO: assert utt.matrix_layout(data) == layout
@@ -1307,14 +1082,13 @@ def _get_layout_data(
         return data
 
     data = utc.to_layout(data, layout=layout)
-    assert utt.matrix_layout(data) == layout
-    if inplace:
-        if not utt.frozen(data):
-            utt.freeze(data)
-        _log_set_data(adata, 'vo', name, layout)
-        assert utt.is_layout(data, layout)
-        annotations[layout_name] = data
+    assert utt.is_layout(data, layout)
 
+    if not utt.frozen(data):
+        utt.freeze(data)
+    _log_set_data(adata, 'vo', what, layout)
+
+    annotations[layout_name] = data
     return data
 
 
@@ -1324,42 +1098,29 @@ def _get_shaped_data(
     annotations: Annotations,
     *,
     shape: Tuple[int, ...],
-    name: str,
-    compute: Optional[Callable[[], utt.Shaped]],
-    inplace: bool
+    what: Union[str, utt.Shaped],
 ) -> Any:
-    assert '__' not in name
+    if isinstance(what, str):
+        assert what == '__x__' or '__' not in what
+        if per == 'vo' and what == '__x__':
+            data = _fix_data(adata.X)
+        elif (isinstance(annotations, pd.DataFrame) and what in annotations.columns) \
+                or what in annotations:
+            data = _fix_data(annotations[what])
+        else:
+            raise _unknown_data(adata, what, per)
 
-    if per == 'vo' and name == get_x_name(adata):
-        data = _fix_data(adata.X)
         if not utt.frozen(data):
             utt.freeze(data)
-        return data
 
-    if (isinstance(annotations, pd.DataFrame) and name in annotations.columns) \
-            or name in annotations:
-        data = _fix_data(annotations[name])
-        if not utt.frozen(data):
-            utt.freeze(data)
-        return data
-
-    if compute is None:
-        raise _unknown_data(adata, name, per)
-
-    data = compute()
-    assert data is not None
-    if len(shape) == 2 and shape[1] == 0:
-        assert data.shape[0] == shape[0]
     else:
-        assert data.shape == shape
-    assert utt.is_canonical(data)
+        assert what.shape == shape
+        if len(shape) == 1:
+            data = utt.to_dense_vector(what)
+        else:
+            data = utt.to_proper_matrix(what)  # type: ignore
 
-    if inplace:
-        if not utt.frozen(data):
-            utt.freeze(data)
-        _log_set_data(adata, per, name, data)
-        annotations[name] = data
-
+    assert data.shape == shape
     return data
 
 
@@ -1389,8 +1150,8 @@ def del_data(
 
     .. note::
 
-        You can't delete the ``x_name`` (layer of ``X``). Deleting the focus (default) data changes
-        the focus to become whatever is in ``X``.
+        You can't delete the ``__x__`` (that is, the ``X`` pseudo-layer). Deleting the focus
+        (default) data changes the focus to become whatever is in ``X``.
 
     .. todo::
 
@@ -1406,7 +1167,7 @@ def del_data(
         layout = 'column_major'
         name = name[:-17]
 
-    assert '__' not in name
+    assert name == '__x__' or '__' not in name
 
     if per is None:
         per = data_per(adata, name)
@@ -1415,10 +1176,7 @@ def del_data(
     _log_del_data(adata, per, name, layout)
 
     if per == 'vo':
-        x_name = get_x_name(adata)
-        if name == get_focus_name(adata):
-            _log_set_data(adata, 'm', '__focus__', x_name)
-            adata.uns['__focus__'] = x_name
+        assert name != '__x__'
 
     annotation = _annotation_per(adata, per)
 
@@ -1429,9 +1187,6 @@ def del_data(
         elif must_exist:
             assert layout_name in annotation
         return
-
-    if per == 'vo':
-        assert name != x_name
 
     if must_exist:
         assert name in annotation
@@ -1464,132 +1219,19 @@ def _annotation_per(  # pylint: disable=too-many-return-statements
     raise ValueError('unknown per: %s' % per)
 
 
-@contextmanager
-@utd.expand_doc()
-def focus_on(
-    accessor: Callable,
-    adata: AnnData,
-    *args: Any,
-    intermediate: bool = True,
-    keep: Optional[Union[str, Collection[str]]] = None,
-    **kwargs: Any
-) -> Iterator[Any]:
+def set_name(adata: AnnData, name: str) -> None:
     '''
-    Get some per-variable-per-observation data by invoking the ``accessor`` with ``adata`` (and some
-    ``args`` and ``kwargs``), and make it the focus for the duration of the ``with`` statement.
+    Set the ``name`` of the data (for log messages).
 
-    If the original focus data is deleted inside the ``with`` statement, then when it is done, the
-    focus will revert to whatever is in ``X``.
-
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it, unless it is listed in ``keep``.
-
-    For example, in order to temporarily focus on the log of some linear measurements,
-    write:
-
-    .. code:: python
-
-        ...
-        # The focus data is some linear measurements.
-        with ut.focus_on(ut.get_log, adata) as log_data:
-            # log_data contains the log of the measurements.
-            # The focus data is the log of the measurements.
-            ...
-        # The focus data is back to the linear measurements.
-        ...
-
-    It is also possible to focus on some data by its name by writing ``focus_on(get_vo_data, adata,
-    name)``.
-
-    .. note::
-
-        Do not specify ``inplace`` and/or ``infocus`` in the ``kwargs``, as they are implied.
+    If the name starts with ``.`` it is appended to the current name.
     '''
-    for name in ('infocus', 'inplace'):
-        if name in kwargs:
-            ignoring_redundant_explict_flags_to_focus_on = \
-                'ignoring explicit %s flag for focus_on' % name
-            warn(ignoring_redundant_explict_flags_to_focus_on)
-            del kwargs[name]
-
-    with intermediate_step(adata, intermediate=intermediate, keep=keep):
-        yield accessor(adata, *args, infocus=True, **kwargs)
-
-
-@contextmanager
-@utd.expand_doc()
-def intermediate_step(
-    adata: AnnData,
-    *,
-    intermediate: bool = True,
-    keep: Optional[Union[str, Collection[str]]] = None,
-) -> Iterator[None]:
-    '''
-    Execute some code in a ``with`` statements and restore the focus at the end, if it was modified
-    by the wrapped code.
-
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it, unless it is listed in ``keep``.
-
-    .. note::
-
-        This does not protected against deletion of data by the wrapped code. If the original focus
-        data is deleted inside the ``with`` statement, then when it is done, the focus will revert
-        to whatever is in ``X``.
-    '''
-    if not intermediate:
-        old_tmp = '__tmp__' in adata.uns
-        adata.uns['__tmp__'] = True
-        old_data = all_data(adata)
-
-    old_focus = get_focus_name(adata)
-
-    if keep is None:
-        keep = []
-    elif isinstance(keep, str):
-        keep = [keep]
-
-    try:
-        yield
-
-    finally:
-        if not intermediate:
-            if not old_tmp:
-                del adata.uns['__tmp__']
-            new_data = all_data(adata)
-            for per, new_names in new_data.items():
-                old_names = old_data[per]
-                for name in new_names:
-                    if name not in old_names and name not in keep:
-                        del_data(adata, name, per=per)
-
-        if has_data(adata, old_focus):
-            adata.uns['__focus__'] = old_focus
+    if name[0] == '.':
+        old_name = get_name(adata)
+        if old_name is None:
+            name = name[1:]
         else:
-            x_name = get_x_name(adata)
-            _log_set_data(adata, 'm', '__focus__', x_name)
-            adata.uns['__focus__'] = x_name
-
-
-def all_data(adata: AnnData) -> Dict[str, Set[str]]:
-    '''
-    Return all the data stored in the ``adata``.
-    '''
-    names = dict(x=set([get_x_name(adata)]))
-
-    for per, annotations in (('m', adata.uns),
-                             ('vo', adata.layers),
-                             ('o', adata.obs),
-                             ('v', adata.var),
-                             ('oo', adata.obsp),
-                             ('vv', adata.varp),
-                             ('oa', adata.obsm),
-                             ('va', adata.varm)):
-        names[per] = set()
-        for name, _ in annotation_items(annotations):
-            names[per].add(name)
-
-    return names
+            name = old_name + name
+    adata.uns['__name__'] = name
 
 
 def get_name(adata: AnnData, default: Optional[str] = None) -> Optional[str]:
@@ -1601,21 +1243,6 @@ def get_name(adata: AnnData, default: Optional[str] = None) -> Optional[str]:
     return adata.uns.get('__name__', default)
 
 
-def get_focus_name(adata: AnnData) -> str:
-    '''
-    Return the name of the focus per-variable-per-observation data.
-    '''
-    return adata.uns['__focus__']
-
-
-def get_x_name(adata: AnnData) -> str:
-    '''
-    Return the name of the ``X`` per-variable-per-observation data.
-    '''
-    return adata.uns['__x__']
-
-
-@utm.timed_call()
 def set_m_data(
     adata: AnnData,
     name: str,
@@ -1632,7 +1259,6 @@ def set_m_data(
     adata.uns[name] = data
 
 
-@utm.timed_call()
 def set_o_data(
     adata: AnnData,
     name: str,
@@ -1654,7 +1280,6 @@ def set_o_data(
     adata.obs[name] = data
 
 
-@utm.timed_call()
 def set_v_data(
     adata: AnnData,
     name: str,
@@ -1675,7 +1300,6 @@ def set_v_data(
     adata.var[name] = data
 
 
-@utm.timed_call()
 def set_oo_data(
     adata: AnnData,
     name: str,
@@ -1696,7 +1320,6 @@ def set_oo_data(
     adata.obsp[name] = data
 
 
-@utm.timed_call()
 def set_vv_data(
     adata: AnnData,
     name: str,
@@ -1717,7 +1340,6 @@ def set_vv_data(
     adata.varp[name] = data
 
 
-@utm.timed_call()
 def set_oa_data(
     adata: AnnData,
     name: str,
@@ -1738,7 +1360,6 @@ def set_oa_data(
     adata.obsm[name] = data
 
 
-@utm.timed_call()
 def set_va_data(
     adata: AnnData,
     name: str,
@@ -1759,7 +1380,6 @@ def set_va_data(
     adata.varm[name] = data
 
 
-@utm.timed_call()
 @utd.expand_doc()
 def set_vo_data(
     adata: AnnData,
@@ -1767,14 +1387,11 @@ def set_vo_data(
     data: utt.ProperMatrix,
     *,
     log_value: Optional[Callable[[Any], Optional[str]]] = None,
-    infocus: bool = False,
 ) -> Any:
     '''
     Set per-variable-per-observation (per-gene-per-cell) meta-data.
-
-    If ``infocus`` (default: {infocus}, also make the result the new focus.
     '''
-    if name == get_x_name(adata):
+    if name == '__x__':
         _log_set_data(adata, 'x', name, data, log_value=log_value)
     else:
         _log_set_data(adata, 'vo', name, data, log_value=log_value)
@@ -1783,13 +1400,10 @@ def set_vo_data(
     if not utt.frozen(data):
         utt.freeze(data)
 
-    if name == get_x_name(adata):
+    if name == '__x__':
         adata.X = data
     else:
         adata.layers[name] = data
-
-    if infocus:
-        adata.uns['__focus__'] = name
 
 
 MEMBER_OF_PER = \
@@ -1805,7 +1419,6 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
     per: str,
     name: str,
     value: Any = None,
-    force: bool = False,
     log_value: Optional[Callable[[Any], Optional[str]]] = None,
 ) -> None:
     if '|' in name:
@@ -1820,17 +1433,6 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
 
     try:
         data_name = get_name(adata)
-
-        if name == '__focus__':
-            if not force and value == adata.uns['__focus__']:
-                return
-            texts.append('focusing ')
-            if data_name is not None:
-                texts.append(data_name)
-            texts.append(' on ')
-            assert isinstance(value, str)
-            texts.append(value)
-            return
 
         texts.append('setting ')
         if data_name is not None:
@@ -1880,14 +1482,9 @@ def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branch
                 texts.append(' size ')
                 texts.append(str(value.size))
 
-#       if hasattr(value, 'ndim'):
-#           if value.ndim == 2:
-#               value = utt.to_dense_matrix(value).flatten()
-#           else:
-#               value = utt.to_dense_vector(value)
-#           checksum = np.sum(value.astype('float64') * (1+np.arange(len(value))))
-#           texts.append(' checksum ')
-#           texts.append(str(checksum))
+        if hasattr(value, 'ndim'):
+            texts.append(' checksum ')
+            texts.append(str(utt.shaped_checksum(value)))
 
     finally:
         text = ''.join(texts)

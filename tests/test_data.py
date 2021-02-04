@@ -15,6 +15,8 @@ import metacells as mc
 # pylint: disable=missing-function-docstring
 
 
+np.seterr(all='raise')
+
 LOADED: Dict[str, Tuple[AnnData, Dict[str, Any]]] = {}
 
 
@@ -28,7 +30,7 @@ def _load(path: str) -> Tuple[AnnData, Dict[str, Any]]:
     with mc.ut.timed_step('read'):
         adata = sc.read(path)
 
-    mc.ut.setup(adata, x_name='UMIs')
+    mc.ut.setup(adata)
 
     LOADED[path] = (adata, expected)
     return adata, expected
@@ -43,7 +45,7 @@ def test_find_rare_gene_modules() -> None:
 
         actual_rare_gene_modules = [
             list(module_gene_names) for module_gene_names
-            in mc.ut.get_data(adata, 'rare_gene_modules')
+            in mc.ut.get_m_data(adata, 'rare_gene_modules')
         ]
         expected_rare_gene_modules = expected['rare_gene_modules']
 
@@ -53,9 +55,9 @@ def test_find_rare_gene_modules() -> None:
 def test_direct_pipeline() -> None:
     for path in glob('../metacells-test-data/*.h5ad'):
         adata, expected = _load(path)
-#       import logging
-#       mc.ut.setup_logger(level=logging.DEBUG, time=False,
-#                          short_level_names=True)
+        import logging  # TODOX
+        mc.ut.setup_logger(level=logging.DEBUG, time=False,
+                           short_level_names=True)
 
         pdata = adata[range(6000), :].copy()
 

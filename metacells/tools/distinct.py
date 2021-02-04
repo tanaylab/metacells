@@ -220,12 +220,15 @@ def compute_subset_distinct_genes(
 
     scale_of_cells: Optional[ut.DenseVector] = None
     if not isinstance(normalize, bool):
-        scale_of_cells = ut.get_vector_parameter_data(LOG, adata, normalize,
-                                                      name='normalize', per='o')
+        ut.log_use(LOG, adata, normalize, name='normalize', per='o')
+        if normalize is not None:
+            scale_of_cells = ut.get_o_dense(adata, normalize)
+
     elif normalize:
         data = ut.get_vo_proper(adata, of, layout='row_major')
         scale_of_cells = ut.sum_per(data, per='row')
         LOG.debug('normalize: <sum>')
+
     else:
         LOG.debug('normalize: None')
 

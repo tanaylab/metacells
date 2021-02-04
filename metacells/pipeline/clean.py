@@ -281,7 +281,4 @@ def extract_clean_data(
     if results is None:
         return None
 
-    cdata = results[0]
-
-    ut.get_vo_data(cdata, ut.get_focus_name(adata), infocus=True)
-    return cdata
+    return results[0]

@@ -69,17 +69,19 @@ def combine_masks(  # pylint: disable=too-many-branches
         else:
             must_exist = True
 
-        mask_per = ut.data_per(adata, mask_name, must_exist=must_exist)
-        if mask_per is None:
+        if mask_name in adata.obs:
+            mask_per = 'o'
+            mask = ut.get_o_dense(adata, mask_name)
+        elif mask_name in adata.var:
+            mask_per = 'v'
+            mask = ut.get_v_dense(adata, mask_name)
+        else:
+            if must_exist:
+                raise KeyError(f'unknown mask data: {mask_name}')
             continue
-        if mask_per not in ['o', 'v']:
-            raise ValueError('the data: %s '
-                             'is not per-observation or per-variable'
-                             % mask_name)
 
-        mask = ut.get_dense_vector(adata, mask_name)
         if mask.dtype != 'bool':
-            raise ValueError('the data: %s is not a boolean mask')
+            raise ValueError(f'the data: {mask_name} is not a boolean mask')
 
         if invert_mask:
             mask = ~mask

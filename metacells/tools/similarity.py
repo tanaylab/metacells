@@ -4,7 +4,7 @@ Cross-Similarity
 '''
 
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 import pandas as pd  # type: ignore
 from anndata import AnnData
@@ -25,7 +25,7 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def compute_obs_obs_similarity(
     adata: AnnData,
-    of: Optional[str] = None,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
     method: str = pr.similarity_method,
     location: float = pr.logistics_location,
@@ -71,7 +71,7 @@ def compute_obs_obs_similarity(
        be similar if they are similar to the rest of the observations (cells) in the same way. This
        compensates for the extreme sparsity of the data.
     '''
-    return _compute_elements_similarity(adata, 'obs', 'row', of,
+    return _compute_elements_similarity(adata, 'obs', 'row', what,
                                         method=method,
                                         location=location,
                                         scale=scale,
@@ -82,7 +82,7 @@ def compute_obs_obs_similarity(
 @ut.expand_doc()
 def compute_var_var_similarity(
     adata: AnnData,
-    of: Optional[str] = None,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
     method: str = pr.similarity_method,
     location: float = pr.logistics_location,
@@ -128,7 +128,7 @@ def compute_var_var_similarity(
        be similar if they are similar to the rest of the variables (genes) in the same way. This
        compensates for the extreme sparsity of the data.
     '''
-    return _compute_elements_similarity(adata, 'var', 'column', of,
+    return _compute_elements_similarity(adata, 'var', 'column', what,
                                         method=method,
                                         location=location,
                                         scale=scale,
@@ -139,7 +139,7 @@ def _compute_elements_similarity(
     adata: AnnData,
     elements: str,
     per: str,
-    of: Optional[str],
+    what: Union[str, ut.Matrix],
     *,
     method: str,
     location: float,
@@ -151,13 +151,13 @@ def _compute_elements_similarity(
     assert method in ('pearson', 'repeated_pearson',
                       'logistics', 'logistics_pearson')
 
-    of, _ = \
-        ut.log_operation(LOG, adata,
-                         'compute_%s_%s_similarity' % (elements, elements), of)
+    ut.log_operation(LOG, adata,
+                     'compute_%s_%s_similarity' % (elements, elements),
+                     what if isinstance(what, str) else '<data>')
 
     LOG.debug('  method: %s', method)
 
-    data = ut.get_vo_proper(adata, of)
+    data = ut.get_vo_proper(adata, what)
 
     if method.startswith('logistics'):
         LOG.debug('  location: %s', location)

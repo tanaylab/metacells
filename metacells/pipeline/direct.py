@@ -205,8 +205,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        and
        ``dissolve_min_metacell_cells`` (default: ``dissolve_min_metacell_cells``).
     '''
-    data = ut.get_vo_proper(adata, of, layout='row_major')
-    total_per_cell = ut.sum_per(data, per='row')
+    total_per_cell = \
+        ut.sum_per(ut.get_vo_proper(adata, of, layout='row_major'), per='row')
 
     fdata = \
         extract_feature_data(adata, of=of, tmp=True,
@@ -215,78 +215,70 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
                              min_gene_fraction=feature_min_gene_fraction,
                              forbidden_gene_names=forbidden_gene_names,
                              forbidden_gene_patterns=forbidden_gene_patterns,
-                             random_seed=random_seed,
-                             intermediate=intermediate)
+                             random_seed=random_seed)
 
     if fdata is None:
         raise ValueError('Empty feature data, giving up')
 
     ut.log_pipeline_step(LOG, fdata, 'compute_direct_metacells')
 
-    with ut.focus_on(ut.get_vo_data, fdata, of, intermediate=intermediate):
-        focus = ut.get_focus_name(fdata)
-        if isinstance(cell_sizes, str):
-            cell_sizes = cell_sizes.replace('<of>', focus)
-            LOG.debug('  cell_sizes: %s', cell_sizes)
+    ut.log_use(LOG, adata, cell_sizes, per='o', name='cell_sizes')
+    if isinstance(cell_sizes, str):
+        if cell_sizes.endswith('|sum_per_obs'):
+            cell_sizes = \
+                ut.sum_per(ut.get_vo_data(adata, cell_sizes[:-12],
+                                          layout='row_major'), per='row')
+        else:
+            cell_sizes = ut.get_o_dense(adata, cell_sizes)
 
-        if cell_sizes == focus + '|sum_per_obs' and cell_sizes not in adata.obs:
-            cell_sizes = ut.sum_per(data, per='row')
+    data = ut.get_vo_proper(fdata, of)
+    data = ut.fraction_by(data, sums=total_per_cell, by='row')
+    if cells_similarity_log_data:
+        LOG.debug('  log of: %s base: 2 normalization: 1/%s',
+                  of or '__x__', 1/cells_similarity_log_normalization)
+        data = ut.log_data(data, base=2,
+                           normalization=cells_similarity_log_normalization)
 
-        cell_sizes = \
-            ut.get_vector_parameter_data(LOG, adata, cell_sizes,
-                                         indent='', per='o', name='cell_sizes')
+    tl.compute_obs_obs_similarity(fdata, data, method=cells_similarity_method)
 
-        data = ut.get_vo_proper(fdata, of)
-        data = ut.fraction_by(data, sums=total_per_cell, by='row')
-        if cells_similarity_log_data:
-            LOG.debug('  log of: %s base: 2 normalization: 1/%s',
-                      focus, 1/cells_similarity_log_normalization)
-            data = ut.log_data(data, base=2,
-                               normalization=cells_similarity_log_normalization)
+    if knn_k is None:
+        if cell_sizes is None:
+            total_cell_sizes = fdata.n_obs
+        else:
+            total_cell_sizes = np.sum(cell_sizes)
+        knn_k = round(total_cell_sizes / target_metacell_size)
 
-        ut.set_vo_data(fdata, 'data', data)
-        with ut.focus_on(ut.get_vo_data, fdata, 'data', intermediate=intermediate):
-            tl.compute_obs_obs_similarity(fdata, of=of,
-                                          method=cells_similarity_method)
+    LOG.debug('  knn_k: %s', knn_k)
+    if knn_k == 0:
+        LOG.debug('  too small, try a single metacell')
+        ut.set_o_data(fdata, 'candidate',
+                      np.full(fdata.n_obs, 0, dtype='int32'),
+                      log_value=lambda _: '* <- 0')
+    else:
+        tl.compute_obs_obs_knn_graph(fdata,
+                                     k=knn_k,
+                                     balanced_ranks_factor=knn_balanced_ranks_factor,
+                                     incoming_degree_factor=knn_incoming_degree_factor,
+                                     outgoing_degree_factor=knn_outgoing_degree_factor)
 
-            if knn_k is None:
-                if cell_sizes is None:
-                    total_cell_sizes = fdata.n_obs
-                else:
-                    total_cell_sizes = np.sum(cell_sizes)
-                knn_k = round(total_cell_sizes / target_metacell_size)
+        tl.compute_candidate_metacells(fdata,
+                                       target_metacell_size=target_metacell_size,
+                                       must_complete_cover=must_complete_cover,
+                                       cell_sizes=cell_sizes,
+                                       partition_method=candidates_partition_method,
+                                       min_split_size_factor=candidates_min_split_size_factor,
+                                       max_merge_size_factor=candidates_max_merge_size_factor,
+                                       min_metacell_cells=candidates_min_metacell_cells,
+                                       random_seed=random_seed)
 
-            LOG.debug('  knn_k: %s', knn_k)
-            if knn_k == 0:
-                LOG.debug('  too small, try a single metacell')
-                ut.set_o_data(fdata, 'candidate',
-                              np.full(fdata.n_obs, 0, dtype='int32'),
-                              log_value=lambda _: '* <- 0')
-            else:
-                tl.compute_obs_obs_knn_graph(fdata,
-                                             k=knn_k,
-                                             balanced_ranks_factor=knn_balanced_ranks_factor,
-                                             incoming_degree_factor=knn_incoming_degree_factor,
-                                             outgoing_degree_factor=knn_outgoing_degree_factor)
+    candidate_of_cells = ut.get_o_dense(fdata, 'candidate')
 
-                tl.compute_candidate_metacells(fdata,
-                                               target_metacell_size=target_metacell_size,
-                                               must_complete_cover=must_complete_cover,
-                                               cell_sizes=cell_sizes,
-                                               partition_method=candidates_partition_method,
-                                               min_split_size_factor=candidates_min_split_size_factor,
-                                               max_merge_size_factor=candidates_max_merge_size_factor,
-                                               min_metacell_cells=candidates_min_metacell_cells,
-                                               random_seed=random_seed)
-
-            candidate_of_cells = ut.get_o_dense(fdata, 'candidate')
-
-            if intermediate:
-                ut.set_o_data(adata, 'candidate', candidate_of_cells,
-                              log_value=ut.groups_description)
-                outgoing_weights = \
-                    ut.get_oo_proper(fdata, 'obs_outgoing_weights')
-                ut.set_oo_data(adata, 'obs_outgoing_weights', outgoing_weights)
+    if intermediate:
+        ut.set_o_data(adata, 'candidate', candidate_of_cells,
+                      log_value=ut.groups_description)
+        outgoing_weights = \
+            ut.get_oo_proper(fdata, 'obs_outgoing_weights')
+        ut.set_oo_data(adata, 'obs_outgoing_weights', outgoing_weights)
 
     if must_complete_cover:
         assert np.min(candidate_of_cells) == 0
@@ -309,21 +301,20 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
                       log_value=ut.groups_description)
 
     else:
-        with ut.intermediate_step(adata, intermediate=intermediate, keep='metacell'):
-            tl.find_deviant_cells(adata,
-                                  candidates=candidate_of_cells,
-                                  min_gene_fold_factor=deviants_min_gene_fold_factor,
-                                  max_gene_fraction=deviants_max_gene_fraction,
-                                  max_cell_fraction=deviants_max_cell_fraction)
+        tl.find_deviant_cells(adata,
+                              candidates=candidate_of_cells,
+                              min_gene_fold_factor=deviants_min_gene_fold_factor,
+                              max_gene_fraction=deviants_max_gene_fraction,
+                              max_cell_fraction=deviants_max_cell_fraction)
 
-            tl.dissolve_metacells(adata,
-                                  candidates=candidate_of_cells,
-                                  target_metacell_size=target_metacell_size,
-                                  cell_sizes=cell_sizes,
-                                  min_robust_size_factor=dissolve_min_robust_size_factor,
-                                  min_convincing_size_factor=dissolve_min_convincing_size_factor,
-                                  min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
-                                  min_metacell_cells=dissolve_min_metacell_cells)
+        tl.dissolve_metacells(adata,
+                              candidates=candidate_of_cells,
+                              target_metacell_size=target_metacell_size,
+                              cell_sizes=cell_sizes,
+                              min_robust_size_factor=dissolve_min_robust_size_factor,
+                              min_convincing_size_factor=dissolve_min_convincing_size_factor,
+                              min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                              min_metacell_cells=dissolve_min_metacell_cells)
 
     if intermediate:
         metacell_of_cells = ut.get_o_dense(adata, 'metacell')
