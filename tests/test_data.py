@@ -80,11 +80,15 @@ def test_direct_pipeline() -> None:
                             expected['gene_max_top_shuffled_r2'],
                             expected['gene_max_excess_r2']]
 
-        actual_results = [np.nanmean(mc.pp.get_per_var(mdata, mc.ut.nanmax_per,
-                                                       'top_r2').dense),
-                          np.nanmean(mc.pp.get_per_var(mdata, mc.ut.nanmax_per,
-                                                       'top_shuffled_r2').dense),
-                          np.nanmean(mc.pp.get_per_var(mdata, mc.ut.nanmax_per,
-                                                       'excess_r2').dense)]
+        top_r2 = mc.ut.get_vo_data(mdata, 'top_r2', layout='column_major')
+        top_shuffled_r2 = \
+            mc.ut.get_vo_data(mdata, 'top_shuffled_r2', layout='column_major')
+        excess_r2 = \
+            mc.ut.get_vo_data(mdata, 'excess_r2', layout='column_major')
+        actual_results = [
+            np.nanmean(mc.ut.nanmax_per(top_r2, per='column')),
+            np.nanmean(mc.ut.nanmax_per(top_shuffled_r2, per='column')),
+            np.nanmean(mc.ut.nanmax_per(excess_r2, per='column'))
+        ]
 
         assert np.allclose(expected_results, actual_results)

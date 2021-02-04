@@ -55,8 +55,7 @@ def find_high_fraction_genes(
 
     **Computation Parameters**
 
-    1. Use :py:func:`metacells.preprocessing.common.get_fraction_per_var` to get the
-       normalized variance of each gene.
+    1. Use :py:func:`metacells.utilities.computation.fraction_per` to get the fraction of each gene.
 
     2. Select the genes whose fraction is at least ``min_gene_fraction`` (default:
        {min_gene_fraction}).
@@ -91,9 +90,8 @@ def find_high_normalized_variance_genes(
     '''
     Find genes which have high normalized variance ``of`` some data (by default, the focus).
 
-    The normalized variance measures the variance / mean of each gene.
-    See :py:func:`metacells.preprocessing.common.get_normalized_variance_per_var`
-    for details.
+    The normalized variance measures the variance / mean of each gene. See
+    :py:func:`metacells.utilities.computation.normalized_variance_per` for details.
 
     Genes with a high normalized variance are "noisy", that is, have significantly different
     expression level in different cells.
@@ -115,8 +113,8 @@ def find_high_normalized_variance_genes(
 
     **Computation Parameters**
 
-    1. Use :py:func:`metacells.preprocessing.common.get_normalized_variance_per_var` to get the
-       normalized variance of each gene.
+    1. Use :py:func:`metacells.utilities.computation.normalized_variance_per` to get the normalized
+       variance of each gene.
 
     2. Select the genes whose normalized variance is at least
        ``min_gene_normalized_variance`` (default: {min_gene_normalized_variance}).
@@ -157,7 +155,7 @@ def find_high_relative_variance_genes(
 
     The relative variance measures the variance / mean of each gene relative to the other genes with
     a similar level of expression. See
-    :py:func:`metacells.preprocessing.common.get_relative_variance_per_var` for details.
+    :py:func:`metacells.utilities.computation.relative_variance_per` for details.
 
     Genes with a high relative variance are good candidates for being selected as "feature genes",
     that is, be used to compute the similarity between cells. Using the relative variance
@@ -181,8 +179,8 @@ def find_high_relative_variance_genes(
 
     **Computation Parameters**
 
-    1. Use :py:func:`metacells.preprocessing.common.get_relative_variance_per_var` to get the
-       relative variance of each gene.
+    1. Use :py:func:`metacells.utilities.computation.relative_variance_per` to get the relative
+       variance of each gene.
 
     2. Select the genes whose relative variance is at least
        ``min_gene_relative_variance`` (default: {min_gene_relative_variance}).

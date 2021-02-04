@@ -379,3 +379,70 @@ def test_group_piles() -> None:
     expected = np.array([0, 1, 1, 0, 0, 1, 1, 0, 0, 1])
     result = ut.group_piles(group_of_elements, group_of_groups)
     assert np.allclose(result, expected)
+
+
+def test_dense_per() -> None:
+    matrix = np.array([[0, 1, 2], [3, 4, 5]], dtype='float')
+    _test_per(matrix)
+
+
+def test_sparse_per() -> None:
+    matrix = np.array([[0, 1, 2], [3, 4, 5]], dtype='float')
+    matrix = sparse.csr_matrix(matrix)
+    _test_per(matrix)
+
+
+def _test_per(rows_matrix: ut.Matrix) -> None:
+    columns_matrix = ut.to_layout(rows_matrix, layout='column_major')
+
+    assert np.allclose(ut.nnz_per(rows_matrix, per='row'),
+                       np.array([2, 3]))
+    assert np.allclose(ut.nnz_per(columns_matrix, per='column'),
+                       np.array([1, 2, 2]))
+
+    assert np.allclose(ut.sum_per(rows_matrix, per='row'),
+                       np.array([3, 12]))
+    assert np.allclose(ut.sum_per(columns_matrix, per='column'),
+                       np.array([3, 5, 7]))
+
+    assert np.allclose(ut.max_per(rows_matrix, per='row'),
+                       np.array([2, 5]))
+    assert np.allclose(ut.max_per(columns_matrix, per='column'),
+                       np.array([3, 4, 5]))
+
+    assert np.allclose(ut.min_per(rows_matrix, per='row'),
+                       np.array([0, 3]))
+    assert np.allclose(ut.min_per(columns_matrix, per='column'),
+                       np.array([0, 1, 2]))
+
+    assert np.allclose(ut.sum_squared_per(rows_matrix, per='row'),
+                       np.array([5, 50]))
+    assert np.allclose(ut.sum_squared_per(columns_matrix, per='column'),
+                       np.array([9, 17, 29]))
+
+    assert np.allclose(ut.fraction_per(rows_matrix, per='row'),
+                       np.array([3/15, 12/15]))
+    assert np.allclose(ut.fraction_per(columns_matrix, per='column'),
+                       np.array([3/15, 5/15, 7/15]))
+
+    assert np.allclose(ut.mean_per(rows_matrix, per='row'),
+                       np.array([3/3, 12/3]))
+    assert np.allclose(ut.mean_per(columns_matrix, per='column'),
+                       np.array([3/2, 5/2, 7/2]))
+
+    assert np.allclose(ut.variance_per(rows_matrix, per='row'),
+                       np.array([5/3 - (3/3)**2, 50/3 - (12/3)**2]))
+
+    assert np.allclose(ut.variance_per(columns_matrix, per='column'),
+                       np.array([9/2 - (3/2)**2, 17/2 - (5/2)**2, 29/2 - (7/2)**2]))
+
+    assert np.allclose(ut.normalized_variance_per(columns_matrix, per='column'),
+                       np.log2(np.array([(9/2 - (3/2)**2) / (3/2),
+                                         (17/2 - (5/2)**2) / (5/2),
+                                         (29/2 - (7/2)**2) / (7/2)])))
+
+    dense = ut.to_dense_matrix(ut.fraction_by(rows_matrix, by='row'))
+    assert np.allclose(dense, np.array([[0/3, 1/3, 2/3], [3/12, 4/12, 5/12]]))
+
+    dense = ut.to_dense_matrix(ut.fraction_by(columns_matrix, by='column'))
+    assert np.allclose(dense, np.array([[0/3, 1/5, 2/7], [3/3, 4/5, 5/7]]))

@@ -14,7 +14,6 @@ import scipy.spatial.distance as scd  # type: ignore
 from anndata import AnnData
 
 import metacells.parameters as pr
-import metacells.preprocessing as pp
 import metacells.utilities as ut
 
 from .named import find_named_genes
@@ -242,16 +241,17 @@ def _pick_candidates(
     LOG.debug('  max_gene_cell_fraction: %s',
               ut.fraction_description(max_gene_cell_fraction))
 
-    nnz_cells_of_genes = \
-        pp.get_per_var(adata_of_all_genes_of_all_cells, ut.nnz_per).dense
+    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells,
+                            layout='column_major')
+    nnz_cells_of_genes = ut.nnz_per(data, per='column')
+
     nnz_cell_fraction_of_genes = nnz_cells_of_genes / \
         adata_of_all_genes_of_all_cells.n_obs
     nnz_cell_fraction_mask_of_genes = \
         nnz_cell_fraction_of_genes <= max_gene_cell_fraction
 
     LOG.debug('  min_gene_maximum: %s', min_gene_maximum)
-    max_umis_of_genes = \
-        pp.get_per_var(adata_of_all_genes_of_all_cells, ut.max_per).dense
+    max_umis_of_genes = ut.max_per(data, per='column')
     max_umis_mask_of_genes = max_umis_of_genes >= min_gene_maximum
 
     candidates_mask_of_genes = \
@@ -370,8 +370,9 @@ def _related_genes(
               min_related_gene_fold_factor)
     LOG.debug('  min_genes_of_modules: %s', min_genes_of_modules)
 
-    total_all_cells_umis_of_all_genes = \
-        pp.get_per_var(adata_of_all_genes_of_all_cells, ut.sum_per).dense
+    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells,
+                            layout='column_major')
+    total_all_cells_umis_of_all_genes = ut.sum_per(data, per='column')
 
     related_data_of_genes: Dict[int, Tuple[bool, float, float, int]] = {}
 
@@ -391,9 +392,9 @@ def _related_genes(
             ut.slice(adata_of_all_genes_of_all_cells,
                      vars=rare_gene_indices_of_module)
 
-        total_module_genes_umis_of_all_cells = \
-            pp.get_per_obs(adata_of_module_genes_of_all_cells,
-                           ut.sum_per).dense
+        data = ut.get_vo_proper(adata_of_module_genes_of_all_cells,
+                                layout='row_major')
+        total_module_genes_umis_of_all_cells = ut.sum_per(data, per='row')
 
         mask_of_expressed_cells = total_module_genes_umis_of_all_cells > 0
 
@@ -413,13 +414,12 @@ def _related_genes(
             ut.slice(adata_of_all_genes_of_all_cells,
                      obs=mask_of_expressed_cells)
 
+        data = ut.get_vo_proper(adata_of_all_genes_of_expressed_cells_of_module,
+                                layout='column_major')
         total_expressed_cells_umis_of_all_genes = \
-            pp.get_per_var(adata_of_all_genes_of_expressed_cells_of_module,
-                           ut.sum_per).dense
+            ut.sum_per(data, per='column')
 
-        max_expressed_cells_umis_of_all_genes = \
-            pp.get_per_var(adata_of_all_genes_of_expressed_cells_of_module,
-                           ut.max_per).dense
+        max_expressed_cells_umis_of_all_genes = ut.max_per(data, per='column')
 
         total_background_cells_umis_of_all_genes = \
             total_all_cells_umis_of_all_genes - total_expressed_cells_umis_of_all_genes
@@ -507,9 +507,9 @@ def _identify_cells(
         adata_of_related_genes_of_all_cells = \
             ut.slice(adata_of_all_genes_of_all_cells,
                      vars=related_gene_indices_of_module)
-        total_related_genes_of_all_cells = \
-            pp.get_per_obs(adata_of_related_genes_of_all_cells,
-                           ut.sum_per).dense
+        data = ut.get_vo_proper(adata_of_related_genes_of_all_cells,
+                                layout='row_major')
+        total_related_genes_of_all_cells = ut.sum_per(data, per='row')
 
         mask_of_strong_cells_of_module = \
             total_related_genes_of_all_cells >= min_cell_module_total
@@ -551,8 +551,9 @@ def _compress_modules(
     LOG.debug('  min_modules_size_factor: %s', min_modules_size_factor)
     LOG.debug('  min_umis_of_modules: %s', min_umis_of_modules)
 
-    total_all_genes_of_all_cells = \
-        pp.get_per_obs(adata_of_all_genes_of_all_cells, ut.sum_per).dense
+    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells,
+                            layout='row_major')
+    total_all_genes_of_all_cells = ut.sum_per(data, per='row')
 
     next_module_index = 0
     for module_index, gene_indices_of_module in enumerate(related_gene_indices_of_modules):

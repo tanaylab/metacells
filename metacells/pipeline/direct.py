@@ -154,8 +154,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        to make this replicable.
 
     2. If ``cells_similarity_log_data`` (default: {cells_similarity_log_data}), invoke the
-       :py:func:`metacells.preprocessing.common.get_log_matrix` function to compute the log (base 2)
-       of the data, using the ``cells_similarity_log_normalization`` (default:
+       :py:func:`metacells.utilities.computation.log_data` function to compute the log (base 2) of
+       the data, using the ``cells_similarity_log_normalization`` (default:
        {cells_similarity_log_normalization}).
 
     3. Invoke :py:func:`metacells.tools.similarity.compute_obs_obs_similarity` to compute the

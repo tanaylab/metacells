@@ -96,10 +96,6 @@ the log data, while in the managed ``AnnData`` the approach would be to create a
 that in principle one never needs to mutate any data. This is (not 100%) enforced by
 :py:func:`metacells.utilities.typing.freeze`-ing the data whenever possible.
 
-The managed ``AnnData`` provides standard functions that compute and cache new data from existing
-data, using arbitrary compute functions. See the :py:mod:`metacells.preprocessing.common` module for
-these functions.
-
 Data Names
 ..........
 

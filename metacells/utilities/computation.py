@@ -3,9 +3,7 @@ Computation
 -----------
 
 Most of the functions defined here are thin wrappers around builtin numpy or scipy functions.
-However, they are provided with a uniform interface that works for both sparse and dense data. This
-allows safely passing them to functions such as
-:py:func:`metacells.preprocessing.common.get_per_obs` etc.
+However, they are provided with a uniform interface that works for both sparse and dense data.
 
 All the functions here (optionally) collect timing information using
 :py:mod:`metacells.utilities.timing`, to make it easier to locate the performance bottleneck of the
