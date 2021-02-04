@@ -701,7 +701,7 @@ def get_proper_matrix(
     data = get_data(adata, name, per=per, compute=compute,
                     inplace=inplace, infocus=infocus, layout=layout)
     assert utt.is_layout(data, layout)
-    return utt.to_proper_matrix(data, default_layout=layout)
+    return utt.to_proper_matrix(data, default_layout=layout or 'row_major')
 
 
 @utm.timed_call()
@@ -988,7 +988,7 @@ def get_oo_proper(
     '''
     return utt.to_proper_matrix(get_oo_data(adata, name, compute=compute,
                                             inplace=inplace, layout=layout),
-                                default_layout=layout)
+                                default_layout=layout or 'row_major')
 
 
 @utm.timed_call()
@@ -1053,7 +1053,7 @@ def get_vv_proper(
     '''
     return utt.to_proper_matrix(get_vv_data(adata, name, compute=compute,
                                             inplace=inplace, layout=layout),
-                                default_layout=layout)
+                                default_layout=layout or 'row_major')
 
 
 @utm.timed_call()
@@ -1120,7 +1120,7 @@ def get_oa_proper(
     '''
     return utt.to_proper_matrix(get_oa_data(adata, name, compute=compute,
                                             inplace=inplace, layout=layout),
-                                default_layout=layout)
+                                default_layout=layout or 'row_major')
 
 
 @utm.timed_call()
@@ -1187,7 +1187,7 @@ def get_va_proper(
     '''
     return utt.to_proper_matrix(get_va_data(adata, name, compute=compute,
                                             inplace=inplace, layout=layout),
-                                default_layout=layout)
+                                default_layout=layout or 'row_major')
 
 
 @utm.timed_call()
@@ -1270,7 +1270,7 @@ def get_vo_proper(
     '''
     return utt.to_proper_matrix(get_vo_data(adata, name, compute=compute,
                                             inplace=inplace, layout=layout),
-                                default_layout=layout)
+                                default_layout=layout or 'row_major')
 
 
 def _get_layout_data(

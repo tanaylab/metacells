@@ -195,7 +195,9 @@ def get_derived(
         assert of is not None
         shaped = uta.get_data(adata, of, layout=of_layout)
         if shaped.ndim == 2:
-            shaped = utt.to_proper_matrix(shaped, default_layout=of_layout)
+            shaped = \
+                utt.to_proper_matrix(shaped,
+                                     default_layout=of_layout or 'row_major')
         else:
             assert of_layout is None
             shaped = utt.to_dense_vector(shaped)
@@ -585,11 +587,13 @@ def get_fraction_of_var_per_obs(
 
         sparse = utt.SparseMatrix.maybe(matrix)
         if sparse is not None:
-            return utc.to_layout(sparse.multiply(tmp[:, None]),
-                                 layout or 'row_major')
+            result = utc.to_layout(sparse.multiply(tmp[:, None]),
+                                   layout or 'row_major')
+        else:
+            dense = utt.DenseMatrix.be(matrix)
+            result = dense * tmp[:, None]
 
-        dense = utt.DenseMatrix.be(matrix)
-        return dense * tmp[:, None]
+        return result
 
     return _derive_vo_data(adata, of=of, to=to, compute=compute,
                            slicing_mask=uta.SAFE_WHEN_SLICING_OBS,
@@ -657,11 +661,13 @@ def get_fraction_of_obs_per_var(
 
         sparse = utt.SparseMatrix.maybe(matrix)
         if sparse is not None:
-            return utc.to_layout(sparse.multiply(tmp[None, :]),
-                                 layout or 'column_major')
+            result = utc.to_layout(sparse.multiply(tmp[None, :]),
+                                   layout or 'column_major')
+        else:
+            dense = utt.DenseMatrix.be(matrix)
+            result = dense * tmp[None, :]
 
-        dense = utt.DenseMatrix.be(matrix)
-        return dense * tmp[None, :]
+        return result
 
     return _derive_vo_data(adata, of=of, to=to, compute=compute,
                            slicing_mask=uta.SAFE_WHEN_SLICING_VAR,

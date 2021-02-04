@@ -558,7 +558,7 @@ PandasShaped = Union[PandasFrame, PandasSeries, PandasCategorical]
 def to_proper_matrix(
     matrix: Matrix,
     *,
-    default_layout: Optional[str] = 'row_major'
+    default_layout: str = 'row_major'
 ) -> ProperMatrix:
     '''
     Given some 2D ``matrix``, return in in a :py:const:`ProperMatrix` format.
@@ -572,8 +572,8 @@ def to_proper_matrix(
             ValueError(f'data is {matrix.ndim}-dimensional, '
                        'expected 2-dimensional')
 
-    if default_layout is not None:
-        assert default_layout in LAYOUT_OF_AXIS
+    if default_layout not in LAYOUT_OF_AXIS:
+        raise ValueError(f'invalid default layout: {default_layout}')
 
     if isinstance(matrix, pd.DataFrame):
         matrix = matrix.values
@@ -606,7 +606,7 @@ def to_proper_matrix(
 def to_proper_matrices(
     matrix: Matrix,
     *,
-    default_layout: Optional[str] = 'row_major'
+    default_layout: str = 'row_major'
 ) -> Tuple[ProperMatrix, Optional[DenseMatrix], Optional[CompressedMatrix]]:
     '''
     Given some matrix, return the properly-formatted data within it using
@@ -715,7 +715,7 @@ def unfrozen(proper: ProperShaped) -> Iterator[None]:
 def to_dense_matrix(
     matrix: Matrix,
     *,
-    default_layout: Optional[str] = 'row_major',
+    default_layout: str = 'row_major',
     copy: Optional[bool] = False
 ) -> DenseMatrix:
     '''

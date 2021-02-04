@@ -49,6 +49,8 @@ __all__ = [
     'rank_per',
     'quantile_per',
     'nanquantile_per',
+    'scale_by',
+    'fraction_by',
     'fraction_per',
     'variance_per',
     'normalized_variance_per',
@@ -1050,6 +1052,57 @@ def nanquantile_per(matrix: utt.Matrix, quantile: float, *, per: Optional[str]) 
     assert 0 <= quantile <= 1
 
     return np.nanquantile(dense, quantile, axis)
+
+
+@utm.timed_call()
+def scale_by(matrix: utt.Matrix, scale: utt.Vector, *, by: str) -> utt.ProperMatrix:
+    '''
+    Return a ``matrix`` where each ``by`` (``row`` or ``column``) is scaled by the matching
+    value of the ``vector``.
+    '''
+    axis = utt.PER_OF_AXIS.index(by)
+    assert len(scale) == matrix.shape[axis]
+
+    _, dense, compressed = \
+        utt.to_proper_matrices(matrix, default_layout=f'{by}_major')
+
+    if compressed is not None:
+        scale_matrix = sp.spdiags(scale, 0, len(scale), len(scale))
+        if by == 'row':
+            result = scale_matrix * matrix
+        else:
+            result = matrix * scale_matrix
+        utt.sum_duplicates(result)
+        utt.eliminate_zeros(result)
+        return result
+
+    assert dense is not None
+    if by == 'row':
+        return dense * scale[:, None]
+    return dense * scale[None, :]
+
+
+@utm.timed_call()
+def fraction_by(matrix: utt.Matrix, *,
+                sums: Optional[utt.Vector] = None, by: str) -> utt.ProperMatrix:
+    '''
+    Return a matrix containing, in each entry, the fraction of the original data out of the
+    total ``by`` (``row`` or ``column``).
+
+    That is, the sum of ``by`` in the result will be 1. However, if ``sums`` is specified, it is
+    used instead of the sum of each ``by``, so the sum of the results may be different.
+
+    .. note::
+
+        This assumes all the data values are non-negative.
+    '''
+    proper = utt.to_proper_matrix(matrix, default_layout=f'{by}_major')
+    if sums is None:
+        sums = sum_per(proper, per=by)
+    zeros_mask = sums == 0
+    scale = np.reciprocal(sums, where=~zeros_mask)
+    scale[zeros_mask] = 0
+    return scale_by(proper, scale, by=by)
 
 
 @utm.timed_call()

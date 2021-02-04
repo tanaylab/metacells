@@ -11,7 +11,6 @@ import numpy as np  # type: ignore
 from anndata import AnnData
 
 import metacells.parameters as pr
-import metacells.preprocessing as pp
 import metacells.tools as tl
 import metacells.utilities as ut
 
@@ -206,7 +205,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        and
        ``dissolve_min_metacell_cells`` (default: ``dissolve_min_metacell_cells``).
     '''
-    total_per_cell = pp.get_per_obs(adata, ut.sum_per, of=of).dense
+    data = ut.get_vo_proper(adata, of, layout='row_major')
+    total_per_cell = ut.sum_per(data, per='row')
 
     fdata = \
         extract_feature_data(adata, of=of, tmp=True,
@@ -230,25 +230,22 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
             LOG.debug('  cell_sizes: %s', cell_sizes)
 
         if cell_sizes == focus + '|sum_per_obs' and cell_sizes not in adata.obs:
-            pp.get_per_obs(adata, ut.sum_per, of=focus)
+            cell_sizes = ut.sum_per(data, per='row')
 
         cell_sizes = \
             ut.get_vector_parameter_data(LOG, adata, cell_sizes,
                                          indent='', per='o', name='cell_sizes')
 
-        of_fractions = \
-            pp.get_fraction_of_var_per_obs(fdata,
-                                           sum_per_obs=total_per_cell,
-                                           sum_per_obs_name='total').name
-        with ut.focus_on(ut.get_vo_data, fdata, of_fractions, intermediate=intermediate):
-            if cells_similarity_log_data:
-                LOG.debug('  log of: %s base: 2 normalization: 1/%s',
-                          focus, 1/cells_similarity_log_normalization)
-                of = pp.get_log_matrix(fdata, base=2,
-                                       normalization=cells_similarity_log_normalization).name
-            else:
-                of = None
+        data = ut.get_vo_proper(fdata, of)
+        data = ut.fraction_by(data, sums=total_per_cell, by='row')
+        if cells_similarity_log_data:
+            LOG.debug('  log of: %s base: 2 normalization: 1/%s',
+                      focus, 1/cells_similarity_log_normalization)
+            data = ut.log_data(data, base=2,
+                               normalization=cells_similarity_log_normalization)
 
+        ut.set_vo_data(fdata, 'data', data)
+        with ut.focus_on(ut.get_vo_data, fdata, 'data', intermediate=intermediate):
             tl.compute_obs_obs_similarity(fdata, of=of,
                                           method=cells_similarity_method)
 
