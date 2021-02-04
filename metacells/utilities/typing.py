@@ -66,6 +66,7 @@ __all__ = [
     'ImproperShaped',
     'NumpyShaped',
     'DenseShaped',
+    'PandasShaped',
 
     'Matrix',
     'ProperMatrix',
@@ -77,7 +78,9 @@ __all__ = [
     'PandasFrame',
 
     'Vector',
+    'ImproperVector',
     'PandasSeries',
+    'PandasCategorical',
     'DenseVector',
 
     'to_proper_matrix',
@@ -148,7 +151,10 @@ class BaseShaped:
         '''
         Check whether the ``data`` is ``Shaped``.
         '''
-        return isinstance(data, (np.ndarray, pd.DataFrame, pd.Series)) \
+        return isinstance(data, (np.ndarray,
+                                 pd.DataFrame,
+                                 pd.Series,
+                                 pd.core.arrays.categorical.Categorical)) \
             or sp.issparse(data)
 
     @classmethod
@@ -491,6 +497,19 @@ class PandasSeries(BaseShaped, Sized):
         return isinstance(data, pd.Series)
 
 
+class PandasCategorical(BaseShaped, Sized):
+    '''
+    A ``mypy`` type for pandas 1-dimensional categorical data.
+    '''
+    size: int
+    shape: Tuple[int]
+    codes: DenseVector
+
+    @staticmethod
+    def am(data: Any) -> bool:
+        return isinstance(data, pd.core.arrays.categorical.Categorical)
+
+
 # pylint: enable=missing-function-docstring
 # pylint: enable=abstract-method
 
@@ -501,35 +520,38 @@ class PandasSeries(BaseShaped, Sized):
 #: to mess with its formatting.
 ProperMatrix = Union[DenseMatrix, CompressedMatrix]
 
-
 #: A ``mypy`` type for "improper" 2-dimensional data.
 #:
 #: "Improper" data contains "proper" data somewhere inside it.
 ImproperMatrix = Union[NumpyMatrix, PandasFrame, SparseMatrix]
 
-
 #: A ``mypy`` type for any 2-dimensional data.
 Matrix = Union[ProperMatrix, ImproperMatrix]
 
+#: An "improper" 1-dimensional data.
+ImproperVector = Union[PandasSeries, PandasCategorical]
 
 #: A ``mypy`` type for any 1-dimensional data.
 #:
 #: .. todo::
 #:
 #:    Is there any need for ``SparseVector``?
-Vector = Union[DenseVector, PandasSeries]
+Vector = Union[DenseVector, ImproperVector]
 
 #: A "proper" 1- or 2-dimensional data.
 ProperShaped = Union[ProperMatrix, DenseVector]
 
 #: An "improper" 1- or 2- dimensional data.
-ImproperShaped = Union[ImproperMatrix, PandasSeries]
+ImproperShaped = Union[ImproperMatrix, ImproperVector]
 
 #: Shaped data of any of the types we can deal with.
 Shaped = Union[ProperShaped, ImproperShaped]
 
 #: Dense 1- or 2-dimensional data.
 DenseShaped = Union[DenseVector, DenseMatrix]
+
+#: Pandas data in various types.
+PandasShaped = Union[PandasFrame, PandasSeries, PandasCategorical]
 
 
 @utd.expand_doc()
@@ -598,7 +620,7 @@ def to_proper_matrices(
     return (proper, dense, compressed)
 
 
-def frozen(shaped: Union[ProperShaped, PandasFrame, PandasSeries]) -> bool:
+def frozen(shaped: Union[ProperShaped, PandasShaped]) -> bool:
     '''
     Test whether the ``shaped`` data is protected against future modification.
     '''
@@ -612,6 +634,9 @@ def frozen(shaped: Union[ProperShaped, PandasFrame, PandasSeries]) -> bool:
     if isinstance(shaped, (pd.DataFrame, pd.Series)):
         shaped = shaped.values
 
+    if isinstance(shaped, pd.core.arrays.categorical.Categorical):
+        shaped = shaped.codes
+
     numpy = NumpyShaped.maybe(shaped)
     if numpy is not None:
         return not numpy.flags.writeable
@@ -619,7 +644,7 @@ def frozen(shaped: Union[ProperShaped, PandasFrame, PandasSeries]) -> bool:
     raise NotImplementedError('frozen of %s' % shaped.__class__)
 
 
-def freeze(shaped: Union[ProperShaped, PandasFrame, PandasSeries]) -> None:
+def freeze(shaped: Union[ProperShaped, PandasShaped]) -> None:
     '''
     Protect the ``shaped`` data against future modification.
     '''
@@ -633,6 +658,9 @@ def freeze(shaped: Union[ProperShaped, PandasFrame, PandasSeries]) -> None:
     if isinstance(shaped, (pd.DataFrame, pd.Series)):
         shaped = shaped.values
 
+    if isinstance(shaped, pd.core.arrays.categorical.Categorical):
+        shaped = shaped.codes
+
     numpy = NumpyShaped.maybe(shaped)
     if numpy is not None:
         numpy.setflags(write=False)
@@ -641,7 +669,7 @@ def freeze(shaped: Union[ProperShaped, PandasFrame, PandasSeries]) -> None:
     raise NotImplementedError('freeze of %s' % shaped.__class__)
 
 
-def unfreeze(shaped: Union[ProperShaped, PandasFrame, PandasSeries]) -> None:
+def unfreeze(shaped: Union[ProperShaped, PandasShaped]) -> None:
     '''
     Permit future modification of some ``shaped`` data.
     '''
@@ -654,6 +682,9 @@ def unfreeze(shaped: Union[ProperShaped, PandasFrame, PandasSeries]) -> None:
 
     if isinstance(shaped, (pd.DataFrame, pd.Series)):
         shaped = shaped.values
+
+    if isinstance(shaped, pd.core.arrays.categorical.Categorical):
+        shaped = shaped.codes
 
     numpy = NumpyShaped.maybe(shaped)
     if numpy is not None:
@@ -731,11 +762,10 @@ def to_dense_vector(shaped: Shaped, *, copy: Optional[bool] = False) -> DenseVec
     else:
         assert shaped.ndim == 1
         if isinstance(shaped, pd.Series):
-            dense = DenseVector.be(shaped.values)
-            if isinstance(dense, pd.core.arrays.categorical.Categorical):
-                dense = np.array(dense)
-        else:
-            dense = DenseVector.be(shaped)
+            shaped = shaped.values
+        if isinstance(shaped, pd.core.arrays.categorical.Categorical):
+            shaped = np.array(shaped)
+        dense = DenseVector.be(shaped)
 
     if copy and id(dense) == id(shaped):
         dense = np.copy(dense)
