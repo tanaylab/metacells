@@ -4,7 +4,7 @@ Downsample
 '''
 
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -25,14 +25,14 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def downsample_cells(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
-    of: Optional[str] = None,
     downsample_cell_quantile: float = pr.downsample_cell_quantile,
     random_seed: int = pr.random_seed,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
-    Downsample the values ``of`` some data.
+    Downsample the values of ``what`` data.
 
     Downsampling is an effective way to get the same number of samples in multiple cells
     (that is, the same number of total UMIs in multiple cells), and serves as an alternative to
@@ -51,7 +51,7 @@ def downsample_cells(
     **Returns**
 
     Variable-Observation (Gene-Cell) Annotations
-        ``<of>|downsample_<samples>_var_per_obs``
+        ``downsampled``
             The downsampled data where the total number of samples in each cell is at most
             ``samples``.
 
@@ -70,10 +70,9 @@ def downsample_cells(
     2. Downsample each cell so that it has at most the selected number of samples. Use the
        ``random_seed`` to allow making this replicable.
     '''
-    of, _ = \
-        ut.log_operation(LOG, adata, 'downsample_cells', of)
+    ut.log_operation(LOG, adata, 'downsample_cells', what)
 
-    data = ut.get_vo_proper(adata, of, layout='row_major')
+    data = ut.get_vo_proper(adata, what, layout='row_major')
     total_per_cell = ut.sum_per(data, per='row')
     LOG.debug('  downsample_cell_quantile: %s', downsample_cell_quantile)
 

@@ -28,8 +28,8 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def compute_distinct_folds(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
-    of: Optional[str] = None,
     normalization: float = 0,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
@@ -67,13 +67,13 @@ def compute_distinct_folds(
 
     4. Compute the log (base 2) of the result and use it as the fold factor.
     '''
-    of, _ = ut.log_operation(LOG, adata, 'compute_distinct_folds', of)
+    ut.log_operation(LOG, adata, 'compute_distinct_folds', what)
 
-    columns_data = ut.get_vo_proper(adata, of, layout='column_major')
+    columns_data = ut.get_vo_proper(adata, what, layout='column_major')
     fractions_of_genes_in_data = ut.fraction_per(columns_data, per='column')
     fractions_of_genes_in_data += normalization
 
-    rows_data = ut.get_vo_proper(adata, of, layout='row_major')
+    rows_data = ut.get_vo_proper(adata, what, layout='row_major')
     total_umis_of_cells = ut.sum_per(rows_data, per='row')
     total_umis_of_cells = np.copy(total_umis_of_cells)
     total_umis_of_cells[total_umis_of_cells == 0] = 1
@@ -103,8 +103,8 @@ def compute_distinct_folds(
 @ut.expand_doc()
 def find_distinct_genes(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = 'distinct_fold',
     *,
-    distinct_fold: str = 'distinct_fold',
     distinct_genes_count: int = pr.distinct_genes_count,
     inplace: bool = True,
 ) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame]]:
@@ -116,7 +116,7 @@ def find_distinct_genes(
 
     A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
     are (mata)cells and the variables are genes, including a per-observation-per-variable annotated
-    data named ``distinct_fold``, e.g. as computed by :py:func:`compute_distinct_folds`.
+    folds data, {what}), e.g. as computed by :py:func:`compute_distinct_folds`.
 
     **Returns**
 
@@ -132,12 +132,12 @@ def find_distinct_genes(
 
     **Computation Parameters**
 
-    1. Fetch the previously computed per-observation-per-variable `distinct_fold`` annotation
-       (default: {distinct_fold}).
+    1. Fetch the previously computed per-observation-per-variable `what`` data
+       (default: {what}).
 
     2. Keep the ``distinct_genes_count`` (default: {distinct_genes_count}) top fold factors.
     '''
-    ut.log_operation(LOG, adata, 'find_distinct_genes')
+    ut.log_operation(LOG, adata, 'find_distinct_genes', what)
     assert 0 < distinct_genes_count < adata.n_vars
 
     distinct_gene_indices = \
@@ -145,7 +145,7 @@ def find_distinct_genes(
     distinct_gene_folds = \
         np.empty((adata.n_obs, distinct_genes_count), dtype='float32')
 
-    fold_in_cells = ut.get_vo_proper(adata, distinct_fold, layout='row_major')
+    fold_in_cells = ut.get_vo_proper(adata, what, layout='row_major')
     xt.top_distinct(distinct_gene_indices, distinct_gene_folds,
                     fold_in_cells, False)
 
@@ -163,8 +163,8 @@ def find_distinct_genes(
 @ut.expand_doc()
 def compute_subset_distinct_genes(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
-    of: Optional[str] = None,
     to: Optional[str] = None,
     normalize: Optional[Union[bool, str, ut.DenseVector]],
     subset: Union[str, ut.DenseVector],
@@ -208,7 +208,7 @@ def compute_subset_distinct_genes(
 
     3. Compute the AUROC for each gene for the scaled data based on this mask.
     '''
-    ut.log_operation(LOG, adata, 'compute_subset_distinct_genes')
+    ut.log_operation(LOG, adata, 'compute_subset_distinct_genes', what)
 
     if isinstance(subset, str):
         subset = ut.get_o_dense(adata, subset)
@@ -225,7 +225,7 @@ def compute_subset_distinct_genes(
             scale_of_cells = ut.get_o_dense(adata, normalize)
 
     elif normalize:
-        data = ut.get_vo_proper(adata, of, layout='row_major')
+        data = ut.get_vo_proper(adata, what, layout='row_major')
         scale_of_cells = ut.sum_per(data, per='row')
         LOG.debug('normalize: <sum>')
 
@@ -235,8 +235,7 @@ def compute_subset_distinct_genes(
     if scale_of_cells is not None:
         assert scale_of_cells.size == adata.n_obs
 
-    matrix = ut.get_vo_proper(adata, of, layout='column_major').transpose()
-
+    matrix = ut.get_vo_proper(adata, what, layout='column_major').transpose()
     distinct_of_genes = ut.matrix_rows_auroc(matrix, subset, scale_of_cells)
 
     if inplace:

@@ -4,7 +4,7 @@ Noisy Lonely
 '''
 
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -30,7 +30,7 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def find_noisy_lonely_genes(
     adata: AnnData,
-    of: Optional[str] = None,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
     max_sampled_cells: int = pr.noisy_lonely_max_sampled_cells,
     downsample_cell_quantile: float = pr.noisy_lonely_downsample_cell_quantile,
@@ -90,7 +90,7 @@ def find_noisy_lonely_genes(
     5. Find the noisy "lonely" genes whose maximal correlation is at most
        ``max_gene_similarity`` (default: {max_gene_similarity}) with all other genes.
     '''
-    of, level = ut.log_operation(LOG, adata, 'find_noisy_lonely_genes', of)
+    level = ut.log_operation(LOG, adata, 'find_noisy_lonely_genes', what)
 
     LOG.debug('  max_sampled_cells: %s', max_sampled_cells)
     if max_sampled_cells < adata.n_obs:
@@ -103,12 +103,13 @@ def find_noisy_lonely_genes(
         bdata = adata.copy()
         bdata.uns['__tmp__'] = True
 
-    downsample_cells(bdata,
+    downsample_cells(bdata, what,
                      downsample_cell_quantile=downsample_cell_quantile,
                      random_seed=random_seed)
 
-    find_high_fraction_genes(bdata, of='downsampled', min_gene_fraction=min_gene_fraction)
-    find_high_normalized_variance_genes(bdata, of='downsampled',
+    find_high_fraction_genes(bdata, 'downsampled',
+                             min_gene_fraction=min_gene_fraction)
+    find_high_normalized_variance_genes(bdata, 'downsampled',
                                         min_gene_normalized_variance=min_gene_normalized_variance)
 
     results = pp.filter_data(bdata, name='noisy', tmp=True,

@@ -4,7 +4,7 @@ High
 '''
 
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 import pandas as pd  # type: ignore
 from anndata import AnnData
@@ -26,8 +26,8 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def find_high_fraction_genes(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
-    of: Optional[str] = None,
     min_gene_fraction: float = pr.significant_gene_fraction,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -60,9 +60,9 @@ def find_high_fraction_genes(
     2. Select the genes whose fraction is at least ``min_gene_fraction`` (default:
        {min_gene_fraction}).
     '''
-    of, level = ut.log_operation(LOG, adata, 'find_high_fraction_genes', of)
+    level = ut.log_operation(LOG, adata, 'find_high_fraction_genes', what)
 
-    data = ut.get_vo_proper(adata, of, layout='column_major')
+    data = ut.get_vo_proper(adata, what, layout='column_major')
     fraction_of_genes = ut.fraction_per(data, per='column')
 
     LOG.debug('  min_gene_fraction: %s', min_gene_fraction)
@@ -81,13 +81,13 @@ def find_high_fraction_genes(
 @ut.expand_doc()
 def find_high_normalized_variance_genes(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
-    of: Optional[str] = None,
     min_gene_normalized_variance: float = pr.significant_gene_normalized_variance,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Find genes which have high normalized variance ``of`` some data (by default, the focus).
+    Find genes which have high normalized variance of ``what`` data (by default, the ``X``).
 
     The normalized variance measures the variance / mean of each gene. See
     :py:func:`metacells.utilities.computation.normalized_variance_per` for details.
@@ -118,10 +118,11 @@ def find_high_normalized_variance_genes(
     2. Select the genes whose normalized variance is at least
        ``min_gene_normalized_variance`` (default: {min_gene_normalized_variance}).
     '''
-    of, level = \
-        ut.log_operation(LOG, adata, 'find_high_normalized_variance_genes', of)
+    level = \
+        ut.log_operation(LOG, adata,
+                         'find_high_normalized_variance_genes', what)
 
-    data = ut.get_vo_proper(adata, of, layout='column_major')
+    data = ut.get_vo_proper(adata, what, layout='column_major')
     normalized_variance_of_genes = \
         ut.normalized_variance_per(data, per='column')
 
@@ -143,14 +144,14 @@ def find_high_normalized_variance_genes(
 @ut.expand_doc()
 def find_high_relative_variance_genes(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
-    of: Optional[str] = None,
     min_gene_relative_variance: float = pr.significant_gene_relative_variance,
     window_size: int = pr.relative_variance_window_size,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Find genes which have high relative variance ``of`` some data (by default, the focus).
+    Find genes which have high relative variance of ``what`` data (by default, the ``X``).
 
     The relative variance measures the variance / mean of each gene relative to the other genes with
     a similar level of expression. See
@@ -184,10 +185,10 @@ def find_high_relative_variance_genes(
     2. Select the genes whose relative variance is at least
        ``min_gene_relative_variance`` (default: {min_gene_relative_variance}).
     '''
-    of, level = \
-        ut.log_operation(LOG, adata, 'find_high_relative_variance_genes', of)
+    level = \
+        ut.log_operation(LOG, adata, 'find_high_relative_variance_genes', what)
 
-    data = ut.get_vo_proper(adata, of, layout='column_major')
+    data = ut.get_vo_proper(adata, what, layout='column_major')
     relative_variance_of_genes = \
         ut.relative_variance_per(data, per='column', window_size=window_size)
 

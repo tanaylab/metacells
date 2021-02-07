@@ -451,8 +451,8 @@ def _patch_direct_results(
 @ut.expand_doc()
 def divide_and_conquer_pipeline(
     adata: AnnData,
+    what: str = '__x__',
     *,
-    of: Optional[str] = None,
     rare_max_gene_cell_fraction: float = pr.rare_max_gene_cell_fraction,
     rare_min_gene_maximum: int = pr.rare_min_gene_maximum,
     rare_similarity_of: Optional[str] = None,
@@ -673,7 +673,7 @@ def divide_and_conquer_pipeline(
     normal_cells_mask = np.full(adata.n_obs, True, dtype='bool')
 
     with ut.timed_step('.rare'):
-        tl.find_rare_gene_modules(adata, of=of,
+        tl.find_rare_gene_modules(adata, what,
                                   forbidden_gene_names=forbidden_gene_names,
                                   forbidden_gene_patterns=forbidden_gene_patterns,
                                   max_gene_cell_fraction=rare_max_gene_cell_fraction,
@@ -695,7 +695,7 @@ def divide_and_conquer_pipeline(
         rare_modules_count = np.max(rare_module_of_cells) + 1
         if rare_modules_count > 0:
             subset_results = \
-                _run_parallel_piles(adata, of=of,
+                _run_parallel_piles(adata, what,
                                     phase='rare',
                                     piles_count=rare_modules_count,
                                     pile_of_cells=rare_module_of_cells,
@@ -754,7 +754,7 @@ def divide_and_conquer_pipeline(
     else:
         cdata = adata
 
-    compute_divide_and_conquer_metacells(cdata, of=of,
+    compute_divide_and_conquer_metacells(cdata, what,
                                          feature_downsample_cell_quantile=feature_downsample_cell_quantile,
                                          feature_min_gene_relative_variance=feature_min_gene_relative_variance,
                                          feature_min_gene_fraction=feature_min_gene_fraction,
@@ -802,8 +802,8 @@ def divide_and_conquer_pipeline(
 
 def compute_divide_and_conquer_metacells(
     adata: AnnData,
+    what: str = '__x__',
     *,
-    of: Optional[str] = None,
     feature_downsample_cell_quantile: float = pr.feature_downsample_cell_quantile,
     feature_min_gene_fraction: float = pr.feature_min_gene_fraction,
     feature_min_gene_relative_variance: float = pr.feature_min_gene_relative_variance,
@@ -981,7 +981,7 @@ def compute_divide_and_conquer_metacells(
 
     if piles_count < 2:
         with ut.timed_step('.direct'):
-            compute_direct_metacells(adata, of=of,
+            compute_direct_metacells(adata, what,
                                      feature_downsample_cell_quantile=feature_downsample_cell_quantile,
                                      feature_min_gene_fraction=feature_min_gene_fraction,
                                      feature_min_gene_relative_variance=feature_min_gene_relative_variance,
@@ -1016,7 +1016,7 @@ def compute_divide_and_conquer_metacells(
     _initialize_results(adata, intermediate=intermediate, pre_metacells=True)
 
     with ut.timed_step('.preliminary_metacells'):
-        _compute_piled_metacells(adata, of=of,
+        _compute_piled_metacells(adata, what,
                                  phase='preliminary',
                                  pile_of_cells=random_pile_of_cells,
                                  feature_downsample_cell_quantile=feature_downsample_cell_quantile,
@@ -1055,9 +1055,9 @@ def compute_divide_and_conquer_metacells(
                                  intermediate=intermediate)
 
     with ut.timed_step('.metacell_piles'):
-        ut.log_operation(LOG, adata, 'metacell_piles', of)
+        ut.log_operation(LOG, adata, 'metacell_piles', what)
 
-        mdata = pp.group_obs_data(adata, of=of, groups='pre_metacell',
+        mdata = pp.group_obs_data(adata, what, groups='pre_metacell',
                                   name='.preliminary_metacells', tmp=True)
         if mdata is None:
             raise ValueError('Empty metacells data, giving up')
@@ -1106,7 +1106,7 @@ def compute_divide_and_conquer_metacells(
                            pile_of_preliminary_metacells)
 
     with ut.timed_step('.final_metacells'):
-        _compute_piled_metacells(adata, of=of,
+        _compute_piled_metacells(adata, what,
                                  phase='final',
                                  pile_of_cells=preliminary_pile_of_cells,
                                  feature_downsample_cell_quantile=feature_downsample_cell_quantile,
@@ -1147,8 +1147,8 @@ def compute_divide_and_conquer_metacells(
 
 def _compute_piled_metacells(
     adata: AnnData,
+    what: str,
     *,
-    of: Optional[str],
     phase: str,
     pile_of_cells: ut.DenseVector,
     feature_downsample_cell_quantile: float,
@@ -1186,13 +1186,13 @@ def _compute_piled_metacells(
     random_seed: int,
     intermediate: bool,
 ) -> None:
-    ut.log_operation(LOG, adata, phase + '_metacells', of)
+    ut.log_operation(LOG, adata, phase + '_metacells', what)
     piles_count = np.max(pile_of_cells) + 1
     assert piles_count > 0
     LOG.debug('  piles_count: %s', piles_count)
 
     subset_results = \
-        _run_parallel_piles(adata, of=of,
+        _run_parallel_piles(adata, what,
                             phase=phase,
                             piles_count=piles_count,
                             pile_of_cells=pile_of_cells,
@@ -1259,7 +1259,7 @@ def _compute_piled_metacells(
         odata = ut.slice(adata, obs=outlier_of_cells, name=name, tmp=True,
                          track_obs='complete_cell_index')
 
-        compute_divide_and_conquer_metacells(odata, of=of,
+        compute_divide_and_conquer_metacells(odata, what,
                                              feature_downsample_cell_quantile=feature_downsample_cell_quantile,
                                              feature_min_gene_fraction=feature_min_gene_fraction,
                                              feature_min_gene_relative_variance=feature_min_gene_relative_variance,
@@ -1305,8 +1305,8 @@ def _compute_piled_metacells(
 
 def _run_parallel_piles(
     adata: AnnData,
+    what: str,
     *,
-    of: Optional[str],
     phase: str,
     piles_count: int,
     pile_of_cells: ut.DenseVector,
@@ -1345,7 +1345,7 @@ def _run_parallel_piles(
         name = '.%s.pile-%s/%s' % (phase, pile_index, piles_count)
         pdata = ut.slice(adata, obs=pile_cells_mask, name=name, tmp=True,
                          track_obs='complete_cell_index')
-        compute_direct_metacells(pdata, of=of,
+        compute_direct_metacells(pdata, what,
                                  feature_downsample_cell_quantile=feature_downsample_cell_quantile,
                                  feature_min_gene_fraction=feature_min_gene_fraction,
                                  feature_min_gene_relative_variance=feature_min_gene_relative_variance,

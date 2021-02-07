@@ -707,7 +707,8 @@ def get_o_series(
     If ``what`` is a string, it is the name of a per-observation annotation to fetch.
     Otherwise, it should be some vector of data of the appropriate size.
     '''
-    data = _get_shaped_data(adata, 'o', adata.obs, shape=(adata.n_obs,), what=what)
+    data = _get_shaped_data(adata, 'o', adata.obs,
+                            shape=(adata.n_obs,), what=what)
     series = utt.PandasSeries.maybe(data)
     if series is None:
         series = pd.Series(utt.to_dense_vector(data), index=adata.obs_names)
@@ -724,7 +725,8 @@ def get_o_dense(
     If ``what`` is a string, it is the name of a per-observation annotation to fetch.
     Otherwise, it should be some vector of data of the appropriate size.
     '''
-    data = _get_shaped_data(adata, 'o', adata.obs, shape=(adata.n_obs,), what=what)
+    data = _get_shaped_data(adata, 'o', adata.obs,
+                            shape=(adata.n_obs,), what=what)
     return utt.to_dense_vector(data)
 
 
@@ -738,7 +740,8 @@ def get_v_series(
     If ``what`` is a string, it is the name of a per-variable annotation to fetch.
     Otherwise, it should be some vector of data of the appropriate size.
     '''
-    data = _get_shaped_data(adata, 'v', adata.var, shape=(adata.n_vars,), what=what)
+    data = _get_shaped_data(adata, 'v', adata.var,
+                            shape=(adata.n_vars,), what=what)
     series = utt.PandasSeries.maybe(data)
     if series is None:
         series = pd.Series(utt.to_dense_vector(data), index=adata.var_names)
@@ -755,7 +758,8 @@ def get_v_dense(
     If ``what`` is a string, it is the name of a per-variable annotation to fetch.
     Otherwise, it should be some vector of data of the appropriate size.
     '''
-    data = _get_shaped_data(adata, 'v', adata.var, shape=(adata.n_vars,), what=what)
+    data = _get_shaped_data(adata, 'v', adata.var,
+                            shape=(adata.n_vars,), what=what)
     return utt.to_dense_vector(data)
 
 
@@ -1380,7 +1384,6 @@ def set_va_data(
     adata.varm[name] = data
 
 
-@utd.expand_doc()
 def set_vo_data(
     adata: AnnData,
     name: str,
@@ -1414,7 +1417,7 @@ MEMBER_OF_PER = \
          vo='layers', x='X')
 
 
-def _log_set_data(  # pylint: disable=too-many-return-statements,too-many-branches,too-many-statements
+def _log_set_data(  # pylint: disable=too-many-branches,too-many-statements
     adata: AnnData,
     per: str,
     name: str,

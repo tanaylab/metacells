@@ -4,7 +4,7 @@ Properly Sampled
 '''
 
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -26,6 +26,7 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def find_properly_sampled_cells(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
     min_cell_total: Optional[int],
     max_cell_total: Optional[int],
@@ -34,7 +35,7 @@ def find_properly_sampled_cells(
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Detect cells with a "proper" amount of UMIs.
+    Detect cells with a "proper" amount of ``what`` data.
 
     Due to both technical effects and natural variance between cells, the total number of UMIs
     varies from cell to cell. We often would like to work on cells that contain a sufficient number
@@ -68,11 +69,11 @@ def find_properly_sampled_cells(
        cells whose sum of the excluded data divided by the total data is more than the specified
        threshold.
     '''
-    _, level = ut.log_operation(LOG, adata, 'find_properly_sampled_cells')
+    level = ut.log_operation(LOG, adata, 'find_properly_sampled_cells', what)
 
     assert (max_excluded_genes_fraction is None) == (excluded_adata is None)
 
-    data = ut.get_vo_proper(adata, layout='row_major')
+    data = ut.get_vo_proper(adata, what, layout='row_major')
     total_of_cells = ut.sum_per(data, per='row')
 
     cells_mask = np.full(adata.n_obs, True, dtype='bool')
@@ -111,12 +112,13 @@ def find_properly_sampled_cells(
 @ut.expand_doc()
 def find_properly_sampled_genes(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
     min_gene_total: int = pr.properly_sampled_min_gene_total,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Detect genes with a "proper" amount of UMIs.
+    Detect genes with a "proper" amount of ``what`` data.
 
     Due to both technical effects and natural variance between genes, the expression of genes varies
     greatly between cells. This is exactly the information we are trying to analyze. We often would
@@ -146,9 +148,9 @@ def find_properly_sampled_genes(
     1. Exclude all genes whose total data is less than the ``min_gene_total`` (default:
        {min_gene_total}).
     '''
-    _, level = ut.log_operation(LOG, adata, 'find_properly_sampled_genes')
+    level = ut.log_operation(LOG, adata, 'find_properly_sampled_genes', what)
 
-    data = ut.get_vo_proper(adata, layout='column_major')
+    data = ut.get_vo_proper(adata, what, layout='column_major')
     total_of_genes = ut.sum_per(data, per='column')
 
     LOG.debug('  min_gene_total: %s', min_gene_total)

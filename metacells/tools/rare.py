@@ -31,8 +31,8 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def find_rare_gene_modules(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
-    of: Optional[str] = None,
     max_gene_cell_fraction: float = pr.rare_max_gene_cell_fraction,
     min_gene_maximum: int = pr.rare_min_gene_maximum,
     similarity_of: Optional[str] = None,
@@ -156,7 +156,8 @@ def find_rare_gene_modules(
     list_of_names_of_genes_of_modules: List[ut.DenseVector] = []
 
     candidates = \
-        _pick_candidates(adata_of_all_genes_of_all_cells=adata, of=of,
+        _pick_candidates(adata_of_all_genes_of_all_cells=adata,
+                         what=what,
                          max_gene_cell_fraction=max_gene_cell_fraction,
                          min_gene_maximum=min_gene_maximum,
                          min_genes_of_modules=min_genes_of_modules,
@@ -171,7 +172,7 @@ def find_rare_gene_modules(
 
     similarities_between_candidate_genes = \
         _genes_similarity(candidate_data=candidate_data,
-                          of=similarity_of or of,
+                          what=similarity_of or what,
                           method=genes_similarity_method)
 
     linkage = \
@@ -193,7 +194,7 @@ def find_rare_gene_modules(
 
     related_gene_indices_of_modules = \
         _related_genes(adata_of_all_genes_of_all_cells=adata,
-                       of=of,
+                       what=what,
                        rare_gene_indices_of_modules=rare_gene_indices_of_modules,
                        allowed_genes_mask=allowed_genes_mask,
                        min_genes_of_modules=min_genes_of_modules,
@@ -203,7 +204,7 @@ def find_rare_gene_modules(
                        min_related_gene_fold_factor=min_related_gene_fold_factor)
 
     _identify_cells(adata_of_all_genes_of_all_cells=adata,
-                    of=of,
+                    what=what,
                     related_gene_indices_of_modules=related_gene_indices_of_modules,
                     min_cells_of_modules=min_cells_of_modules,
                     max_cells_of_modules=max_cells_of_modules,
@@ -211,7 +212,7 @@ def find_rare_gene_modules(
                     rare_module_of_cells=rare_module_of_cells)
 
     _compress_modules(adata_of_all_genes_of_all_cells=adata,
-                      of=of,
+                      what=what,
                       min_cells_of_modules=min_cells_of_modules,
                       target_metacell_size=target_metacell_size,
                       min_modules_size_factor=min_modules_size_factor,
@@ -230,7 +231,7 @@ def find_rare_gene_modules(
 def _pick_candidates(
     *,
     adata_of_all_genes_of_all_cells: AnnData,
-    of: Optional[str],
+    what: Union[str, ut.Matrix] = '__x__',
     max_gene_cell_fraction: float,
     min_gene_maximum: int,
     min_genes_of_modules: int,
@@ -239,7 +240,7 @@ def _pick_candidates(
     LOG.debug('  max_gene_cell_fraction: %s',
               ut.fraction_description(max_gene_cell_fraction))
 
-    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells, of,
+    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells, what,
                             layout='column_major')
     nnz_cells_of_genes = ut.nnz_per(data, per='column')
 
@@ -272,12 +273,11 @@ def _pick_candidates(
 def _genes_similarity(
     *,
     candidate_data: AnnData,
-    of: Optional[str],
+    what: Union[str, ut.Matrix],
     method: str,
 ) -> ut.DenseMatrix:
-    of = ut.log_of(LOG, candidate_data, of, name='similarity of candidates')
     similarity = \
-        compute_var_var_similarity(candidate_data, of or '__x__',
+        compute_var_var_similarity(candidate_data, what,
                                    method=method, inplace=False)
     assert similarity is not None
     return ut.to_dense_matrix(similarity)
@@ -354,7 +354,7 @@ def _identify_genes(
 def _related_genes(
     *,
     adata_of_all_genes_of_all_cells: AnnData,
-    of: Optional[str],
+    what: Union[str, ut.Matrix] = '__x__',
     rare_gene_indices_of_modules: List[List[int]],
     allowed_genes_mask: ut.DenseVector,
     min_genes_of_modules: int,
@@ -367,7 +367,7 @@ def _related_genes(
               min_related_gene_fold_factor)
     LOG.debug('  min_genes_of_modules: %s', min_genes_of_modules)
 
-    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells, of,
+    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells, what,
                             layout='column_major')
     total_all_cells_umis_of_all_genes = ut.sum_per(data, per='column')
 
@@ -389,7 +389,7 @@ def _related_genes(
             ut.slice(adata_of_all_genes_of_all_cells,
                      vars=rare_gene_indices_of_module)
 
-        data = ut.get_vo_proper(adata_of_module_genes_of_all_cells, of,
+        data = ut.get_vo_proper(adata_of_module_genes_of_all_cells, what,
                                 layout='row_major')
         total_module_genes_umis_of_all_cells = ut.sum_per(data, per='row')
 
@@ -411,7 +411,7 @@ def _related_genes(
             ut.slice(adata_of_all_genes_of_all_cells,
                      obs=mask_of_expressed_cells)
 
-        data = ut.get_vo_proper(adata_of_all_genes_of_expressed_cells_of_module, of,
+        data = ut.get_vo_proper(adata_of_all_genes_of_expressed_cells_of_module, what,
                                 layout='column_major')
         total_expressed_cells_umis_of_all_genes = \
             ut.sum_per(data, per='column')
@@ -488,7 +488,7 @@ def _related_genes(
 def _identify_cells(
     *,
     adata_of_all_genes_of_all_cells: AnnData,
-    of: Optional[str],
+    what: Union[str, ut.Matrix] = '__x__',
     related_gene_indices_of_modules: List[List[int]],
     min_cell_module_total: int,
     min_cells_of_modules: int,
@@ -505,7 +505,7 @@ def _identify_cells(
         adata_of_related_genes_of_all_cells = \
             ut.slice(adata_of_all_genes_of_all_cells,
                      vars=related_gene_indices_of_module)
-        data = ut.get_vo_proper(adata_of_related_genes_of_all_cells, of,
+        data = ut.get_vo_proper(adata_of_related_genes_of_all_cells, what,
                                 layout='row_major')
         total_related_genes_of_all_cells = ut.sum_per(data, per='row')
 
@@ -535,7 +535,7 @@ def _identify_cells(
 def _compress_modules(
     *,
     adata_of_all_genes_of_all_cells: AnnData,
-    of: Optional[str],
+    what: Union[str, ut.Matrix] = '__x__',
     min_cells_of_modules: int,
     target_metacell_size: int,
     min_modules_size_factor: float,
@@ -550,7 +550,7 @@ def _compress_modules(
     LOG.debug('  min_modules_size_factor: %s', min_modules_size_factor)
     LOG.debug('  min_umis_of_modules: %s', min_umis_of_modules)
 
-    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells, of,
+    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells, what,
                             layout='row_major')
     total_all_genes_of_all_cells = ut.sum_per(data, per='row')
 

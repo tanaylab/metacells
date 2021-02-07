@@ -28,8 +28,8 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-statements
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
-    of: Optional[str] = None,
     feature_downsample_cell_quantile: float = pr.feature_downsample_cell_quantile,
     feature_min_gene_fraction: float = pr.feature_min_gene_fraction,
     feature_min_gene_relative_variance: float = pr.feature_min_gene_relative_variance,
@@ -206,10 +206,11 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        ``dissolve_min_metacell_cells`` (default: ``dissolve_min_metacell_cells``).
     '''
     total_per_cell = \
-        ut.sum_per(ut.get_vo_proper(adata, of, layout='row_major'), per='row')
+        ut.sum_per(ut.get_vo_proper(adata, what, layout='row_major'),
+                   per='row')
 
     fdata = \
-        extract_feature_data(adata, of=of, tmp=True,
+        extract_feature_data(adata, what, tmp=True,
                              downsample_cell_quantile=feature_downsample_cell_quantile,
                              min_gene_relative_variance=feature_min_gene_relative_variance,
                              min_gene_fraction=feature_min_gene_fraction,
@@ -231,11 +232,12 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
         else:
             cell_sizes = ut.get_o_dense(adata, cell_sizes)
 
-    data = ut.get_vo_proper(fdata, of)
+    data = ut.get_vo_proper(fdata, what, layout='row_major')
     data = ut.fraction_by(data, sums=total_per_cell, by='row')
     if cells_similarity_log_data:
         LOG.debug('  log of: %s base: 2 normalization: 1/%s',
-                  of or '__x__', 1/cells_similarity_log_normalization)
+                  what if isinstance(what, str) else '<data>',
+                  1/cells_similarity_log_normalization)
         data = ut.log_data(data, base=2,
                            normalization=cells_similarity_log_normalization)
 

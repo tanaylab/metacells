@@ -4,7 +4,7 @@ Collect
 '''
 
 import logging
-from typing import Optional
+from typing import Union
 
 from anndata import AnnData
 
@@ -22,8 +22,8 @@ LOG = logging.getLogger(__name__)
 @ut.timed_call('collect_metacells')
 def collect_metacells(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
-    of: Optional[str] = None,
     name: str = 'metacells',
     tmp: bool = False,
     intermediate: bool = True,
@@ -85,7 +85,7 @@ def collect_metacells(
     ut.log_pipeline_step(LOG, adata, 'collect_metacells')
 
     mdata = \
-        pp.group_obs_data(adata, of=of, groups='metacell', name=name, tmp=tmp)
+        pp.group_obs_data(adata, what, groups='metacell', name=name, tmp=tmp)
     assert mdata is not None
 
     for annotation_name, always in (('excluded_gene', False),

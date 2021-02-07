@@ -26,8 +26,8 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def extract_feature_data(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
-    of: Optional[str] = None,
     name: Optional[str] = '.feature',
     tmp: bool = False,
     downsample_cell_quantile: float = pr.feature_downsample_cell_quantile,
@@ -99,14 +99,14 @@ def extract_feature_data(
     '''
     ut.log_pipeline_step(LOG, adata, 'extract_feature_data')
 
-    tl.downsample_cells(adata, of=of or '__x__',
+    tl.downsample_cells(adata, what,
                         downsample_cell_quantile=downsample_cell_quantile,
                         random_seed=random_seed)
 
-    tl.find_high_fraction_genes(adata, of='downsampled',
+    tl.find_high_fraction_genes(adata, 'downsampled',
                                 min_gene_fraction=min_gene_fraction)
 
-    tl.find_high_relative_variance_genes(adata, of='downsampled',
+    tl.find_high_relative_variance_genes(adata, 'downsampled',
                                          min_gene_relative_variance=min_gene_relative_variance)
 
     if forbidden_gene_names is not None \

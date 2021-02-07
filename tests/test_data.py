@@ -55,9 +55,9 @@ def test_find_rare_gene_modules() -> None:
 def test_direct_pipeline() -> None:
     for path in glob('../metacells-test-data/*.h5ad'):
         adata, expected = _load(path)
-        import logging  # TODOX
-        mc.ut.setup_logger(level=logging.DEBUG, time=False,
-                           short_level_names=True)
+#       import logging
+#       mc.ut.setup_logger(level=logging.DEBUG, time=False,
+#                          short_level_names=True)
 
         pdata = adata[range(6000), :].copy()
 

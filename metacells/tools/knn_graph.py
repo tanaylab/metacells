@@ -4,7 +4,7 @@ K-Nearest-Neighbors Graph
 '''
 
 import logging
-from typing import Optional
+from typing import Optional, Union
 
 import numpy as np  # type: ignore
 import pandas as pd  # type: ignore
@@ -28,7 +28,7 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def compute_obs_obs_knn_graph(
     adata: AnnData,
-    of: Optional[str] = None,
+    what: Union[str, ut.Matrix] = 'obs_similarity',
     *,
     k: int,
     balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
@@ -41,8 +41,7 @@ def compute_obs_obs_knn_graph(
     Compute a directed  K-Nearest-Neighbors graph based on similarity data for each pair of
     observations (cells).
 
-    If ``of`` (default: {of}) is specified, this specific data is used. Otherwise,
-    ``obs_similarity`` is used.
+    If ``of`` is specified, this specific data is used. Otherwise, ``obs_similarity`` is used.
 
     **Input**
 
@@ -106,7 +105,7 @@ def compute_obs_obs_knn_graph(
             candidate grouping to add it to. This of course doesn't protect the node from being
             rejected by its group as deviant.
     '''
-    return _compute_elements_knn_graph(adata, 'obs', of, k=k,
+    return _compute_elements_knn_graph(adata, 'obs', what, k=k,
                                        balanced_ranks_factor=balanced_ranks_factor,
                                        incoming_degree_factor=incoming_degree_factor,
                                        outgoing_degree_factor=outgoing_degree_factor,
@@ -117,7 +116,7 @@ def compute_obs_obs_knn_graph(
 @ut.expand_doc()
 def compute_var_var_knn_graph(
     adata: AnnData,
-    of: Optional[str] = None,
+    what: Union[str, ut.Matrix] = 'var_similarity',
     *,
     k: int,
     balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
@@ -130,7 +129,7 @@ def compute_var_var_knn_graph(
     Compute a directed  K-Nearest-Neighbors graph based on similarity data for each pair of
     variables (genes).
 
-    If ``of`` (default: {of}) is specified, this specific data is used. Otherwise,
+    If ``of`` is specified, this specific data is used. Otherwise,
     ``var_similarity`` is used.
 
     **Input**
@@ -195,7 +194,7 @@ def compute_var_var_knn_graph(
             candidate grouping to add it to. This of course doesn't protect the node from being
             rejected by its group as deviant.
     '''
-    return _compute_elements_knn_graph(adata, 'var', of, k=k,
+    return _compute_elements_knn_graph(adata, 'var', what, k=k,
                                        balanced_ranks_factor=balanced_ranks_factor,
                                        incoming_degree_factor=incoming_degree_factor,
                                        outgoing_degree_factor=outgoing_degree_factor,
@@ -205,7 +204,7 @@ def compute_var_var_knn_graph(
 def _compute_elements_knn_graph(
     adata: AnnData,
     elements: str,
-    of: Optional[str] = None,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
     k: int,
     balanced_ranks_factor: float = 4.0,
@@ -219,10 +218,10 @@ def _compute_elements_knn_graph(
     assert incoming_degree_factor > 0.0
     assert outgoing_degree_factor > 0.0
 
-    of, level = \
+    level = \
         ut.log_operation(LOG, adata,
                          'compute_%s_%s_knn_graph' % (elements, elements),
-                         of, elements + '_similarity')
+                         what)
 
     if elements == 'obs':
         get_data = ut.get_oo_proper
@@ -244,7 +243,7 @@ def _compute_elements_knn_graph(
                     ut.ratio_description(matrix.nnz,
                                          matrix.shape[0] * matrix.shape[1]))
 
-    similarity = get_data(adata, of)
+    similarity = ut.to_proper_matrix(get_data(adata, what))
     similarity = ut.to_layout(similarity, 'row_major', symmetric=True)
     similarity = ut.to_dense_matrix(similarity)
 
@@ -273,7 +272,7 @@ def _compute_elements_knn_graph(
     else:
         names = adata.var_names
 
-    return pd.DataFrame(ut.to_dense_matrix(outgoing_weights), index=names, columns=names)
+    return pd.DataFrame(outgoing_weights, index=names, columns=names)
 
 
 @ ut.timed_call('.rank_outgoing')

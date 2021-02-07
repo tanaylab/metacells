@@ -181,7 +181,7 @@ def compute_type_compatible_sizes(
 @ut.expand_doc()
 def compute_excess_r2(
     adata: AnnData,
-    of: Optional[str] = None,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
     metacells: Union[str, ut.Vector] = 'metacell',
     compatible_size: Optional[str] = 'compatible_size',
@@ -193,8 +193,8 @@ def compute_excess_r2(
     mdata: AnnData,
 ) -> None:
     '''
-    Compute the excess gene-gene coefficient of determination (R^2) for the metacells based ``of``
-    some data.
+    Compute the excess gene-gene coefficient of determination (R^2) for the metacells based of
+    ``what`` data.
 
     In an ideal metacell, all cells have the same biological state, and the only variation is due to
     sampling noise. In such an ideal metacell, there would be zero R^2 between the expression of
@@ -284,10 +284,10 @@ def compute_excess_r2(
     6 The difference, for each gene, between the gene's top R^2, and the gene's (averaged) top
       shuffled R^2, is the gene's excess R^2 for this metacell.
     '''
-    of, _ = ut.log_operation(LOG, adata, 'compute_excess_r2', of)
+    ut.log_operation(LOG, adata, 'compute_excess_r2', what)
     assert shuffles_count > 0
 
-    data = ut.get_vo_proper(adata, of, layout='row_major')
+    data = ut.get_vo_proper(adata, what, layout='row_major')
 
     ut.log_use(LOG, adata, metacells, per='o', name='metacells')
     metacell_of_cells = ut.get_o_dense(adata, metacells)

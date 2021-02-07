@@ -27,8 +27,8 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def compute_candidate_metacells(  # pylint: disable=too-many-branches
     adata: AnnData,
+    what: Union[str, ut.Matrix] = 'obs_outgoing_weights',
     *,
-    of: str = 'obs_outgoing_weights',
     partition_method: 'ut.PartitionMethod' = ut.leiden_bounded_surprise,
     target_metacell_size: int,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.candidates_cell_sizes,
@@ -40,8 +40,7 @@ def compute_candidate_metacells(  # pylint: disable=too-many-branches
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Assign observations (cells) to (raw, candidate) metacells based ``of`` a weighted directed graph
-    (by default, {of}).
+    Assign observations (cells) to (raw, candidate) metacells based ``of`` a weighted directed graph.
 
     These candidate metacells typically go through additional vetting (e.g. deviant detection and
     dissolving too-small metacells) to obtain the final metacells.
@@ -114,11 +113,9 @@ def compute_candidate_metacells(  # pylint: disable=too-many-branches
         or eliminate the need for the split and merge steps. However, most partition algorithms do
         not naturally allow for this level of control over the resulting communities.
     '''
-    of, level = ut.log_operation(LOG, adata, 'compute_candidate_metacells',
-                                 of, 'obs_outgoing_weights')
+    level = ut.log_operation(LOG, adata, 'compute_candidate_metacells', what)
 
-    edge_weights = ut.get_oo_proper(adata, of)
-    edge_weights = ut.to_layout(edge_weights, 'row_major')
+    edge_weights = ut.get_oo_proper(adata, what, layout='row_major')
     assert edge_weights.shape[0] == edge_weights.shape[1]
 
     LOG.debug('  partition_method: %s', partition_method.__qualname__)

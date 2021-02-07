@@ -49,7 +49,7 @@ def combine_masks(  # pylint: disable=too-many-branches
 
     2. If ``invert`` (default: {invert}), invert the result combined mask.
     '''
-    _, level = ut.log_operation(LOG, adata, 'combine_masks')
+    level = ut.log_operation(LOG, adata, 'combine_masks')
     assert len(masks) > 0
 
     per: Optional[str] = None

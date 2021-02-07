@@ -25,8 +25,8 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def group_obs_data(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
-    of: Optional[str] = None,
     groups: Union[str, ut.Vector],
     name: Optional[str] = None,
     tmp: bool = False,
@@ -72,7 +72,7 @@ def group_obs_data(
     ut.log_use(LOG, adata, groups, per='o', name='groups')
     group_of_cells = ut.get_o_dense(adata, groups)
 
-    data = ut.get_vo_proper(adata, of, layout='row_major')
+    data = ut.get_vo_proper(adata, what, layout='row_major')
     results = ut.sum_groups(data, group_of_cells, per='row')
     if results is None:
         return None

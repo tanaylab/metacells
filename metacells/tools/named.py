@@ -44,7 +44,7 @@ def find_named_genes(
 
     Otherwise, it returns it as a pandas series (indexed by the variable, that is gene, names).
     '''
-    _, level = ut.log_operation(LOG, adata, 'find_named_genes')
+    level = ut.log_operation(LOG, adata, 'find_named_genes')
 
     if names is None:
         names_mask = np.zeros(adata.n_vars, dtype='bool')

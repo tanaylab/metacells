@@ -25,7 +25,7 @@ from logging import (Formatter, Logger, LogRecord, StreamHandler, getLogger,
                      setLoggerClass)
 from multiprocessing import Lock
 from threading import current_thread
-from typing import IO, Any, Optional, Tuple
+from typing import IO, Any, Optional, Union
 
 import numpy as np  # type: ignore
 from anndata import AnnData
@@ -39,7 +39,6 @@ __all__ = [
     'get_log_level',
     'log_pipeline_step',
     'log_operation',
-    'log_of',
     'log_mask',
     'sizes_description',
     'groups_description',
@@ -190,53 +189,30 @@ def log_operation(
     logger: Logger,
     adata: AnnData,
     operation: str,
-    of: Optional[str] = '__no_of__',
-    default: Optional[str] = None,
-) -> Tuple[str, int]:
+    what: Union[str, utt.Shaped, None] = None,
+) -> int:
     '''
     Log the start of some ``operation``.
 
-    Also log the ``of`` data it applies to, similarly to using :py:func:`log_of`. If the (default)
-    special value ``__no_of__`` is given, then the operation has no ``of`` data (e.g.,
-    py:func:`metacells.tools.named.find_named_genes`).
+    Also log the ``what`` data it applies to. If it is ``None`` (the default), then the operation
+    has no data (e.g., py:func:`metacells.tools.named.find_named_genes`).
 
-    Return the explicit ``of`` data name and the log level for the ``adata``.
+    Returns the log level for the ``adata``.
     '''
     level = get_log_level(adata)
     name = adata.uns.get('__name__')
-    of = of or default or '__x__'
 
     texts = [operation]
-    if of != '__no_of__':
-        texts.append(of)
+    if isinstance(what, str):
+        texts.append(what)
+    elif what is not None:
+        texts.append('<data>')
+
     if name is not None:
         texts.append(name)
 
     logger.log(level, '%s ...', ' of '.join(texts))
-
-    return of, level
-
-
-def log_of(
-    logger: Logger,
-    adata: AnnData,
-    of: Optional[str],
-    default: Optional[str] = None,
-    *,
-    name: str = 'of'
-) -> str:
-    '''
-    Given an ``of`` parameter for an operation, compute and return the actual value
-    using the ``default`` or the focus, and log it properly using the ``name``.
-    '''
-    if of is None:
-        of = default or '__x__'
-        level = logging.DEBUG
-    else:
-        level = get_log_level(adata)
-
-    logger.log(level, '  %s: %s', name, of)
-    return of
+    return level
 
 
 def log_mask(

@@ -28,8 +28,8 @@ LOG = logging.getLogger(__name__)
 @ut.expand_doc()
 def find_deviant_cells(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
-    of: Optional[str] = None,
     candidates: Union[str, ut.Vector] = 'candidate',
     min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
@@ -107,7 +107,7 @@ def find_deviant_cells(
     assert 0 < max_gene_fraction < 1
     assert 0 < max_cell_fraction < 1
 
-    of, level = ut.log_operation(LOG, adata, 'find_deviant_cells', of)
+    level = ut.log_operation(LOG, adata, 'find_deviant_cells', what)
 
     cells_count, genes_count = adata.shape
     assert cells_count > 0
@@ -115,7 +115,7 @@ def find_deviant_cells(
     ut.log_use(LOG, adata, candidates, per='o', name='candidates')
     candidate_of_cells = ut.get_o_dense(adata, candidates)
 
-    data = ut.get_vo_proper(adata, of, layout='row_major')
+    data = ut.get_vo_proper(adata, what, layout='row_major')
     totals_of_cells = ut.sum_per(data, per='row')
     assert totals_of_cells.size == cells_count
 

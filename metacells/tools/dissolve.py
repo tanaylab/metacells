@@ -25,8 +25,8 @@ LOG = logging.getLogger(__name__)
 @ut.timed_call()
 def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
-    of: Optional[str] = None,
     to: str = 'metacell',
     candidates: Union[str, ut.Vector] = 'candidate',
     deviants: Optional[Union[str, ut.Vector]] = 'cell_deviant_votes',
@@ -89,7 +89,7 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
 
     6 . Any remaining metacell is dissolved into "outlier" cells.
     '''
-    of, level = ut.log_operation(LOG, adata, 'dissolve_metacells', of)
+    level = ut.log_operation(LOG, adata, 'dissolve_metacells', what)
 
     dissolved_of_cells = np.zeros(adata.n_obs, dtype='bool')
 
@@ -118,7 +118,7 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
     candidates_count = np.max(candidate_of_cells) + 1
 
     LOG.debug('  target_metacell_size: %s', target_metacell_size)
-    data = ut.get_vo_proper(adata, of, layout='column_major')
+    data = ut.get_vo_proper(adata, what, layout='column_major')
     fraction_of_genes = ut.fraction_per(data, per='column')
 
     if min_robust_size_factor is None:

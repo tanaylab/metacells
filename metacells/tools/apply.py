@@ -92,7 +92,7 @@ def apply_obs_annotations(
 
     4. Apply the slice data values to the entries of the full data identified by the ``indices``.
     '''
-    ut.log_operation(LOG, adata, 'apply_var_annotations', of='__no_of__')
+    ut.log_operation(LOG, adata, 'apply_var_annotations')
     _apply_annotations(adata, sdata, 'o', annotations, indices)
 
 
@@ -141,7 +141,7 @@ def apply_var_annotations(
 
     4. Apply the slice data values to the entries of the full data identified by the ``indices``.
     '''
-    ut.log_operation(LOG, adata, 'apply_var_annotations', of='__no_of__')
+    ut.log_operation(LOG, adata, 'apply_var_annotations')
     _apply_annotations(adata, sdata, 'v', annotations, indices)
 
 
