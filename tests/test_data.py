@@ -16,6 +16,7 @@ import metacells as mc
 
 
 np.seterr(all='raise')
+mc.ut.allow_inefficient_layout(False)
 
 LOADED: Dict[str, Tuple[AnnData, Dict[str, Any]]] = {}
 

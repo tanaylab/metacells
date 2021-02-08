@@ -156,7 +156,7 @@ def _compute_elements_similarity(
 
     LOG.debug('  method: %s', method)
 
-    data = ut.get_vo_proper(adata, what)
+    data = ut.get_vo_proper(adata, what, layout=f'{per}_major')
 
     if method.startswith('logistics'):
         LOG.debug('  location: %s', location)

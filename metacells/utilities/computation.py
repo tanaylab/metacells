@@ -26,6 +26,7 @@ import metacells.utilities.timing as utm
 import metacells.utilities.typing as utt
 
 __all__ = [
+    'allow_inefficient_layout',
     'to_layout',
     'relayout_compressed',
     'sort_compressed_indices',
@@ -83,6 +84,23 @@ __all__ = [
     'cover_diameter',
     'cover_coordinates',
 ]
+
+
+ALLOW_INEFFICIENT_LAYOUT: bool = True
+
+
+def allow_inefficient_layout(allow: bool) -> bool:
+    '''
+    Specify whether to allow inefficient layout (as a warning).
+
+    Returns the previous setting.
+
+    This is ``True`` by default.
+    '''
+    global ALLOW_INEFFICIENT_LAYOUT
+    prev_allow = ALLOW_INEFFICIENT_LAYOUT
+    ALLOW_INEFFICIENT_LAYOUT = allow
+    return prev_allow
 
 
 @overload
@@ -281,6 +299,9 @@ def _ensure_layout_for(operation: str, matrix: utt.Matrix,
     layout = utt.matrix_layout(matrix)
     if layout == f'{per}_major':
         return
+
+    if not ALLOW_INEFFICIENT_LAYOUT:
+        allow_inefficient = False
 
     if layout is not None:
         operating_on_matrix_of_wrong_layout = \

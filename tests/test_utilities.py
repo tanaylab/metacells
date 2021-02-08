@@ -13,6 +13,8 @@ from sklearn.metrics import roc_auc_score  # type: ignore
 
 import metacells.utilities as ut
 
+ut.allow_inefficient_layout(False)
+
 # pylint: disable=missing-function-docstring
 
 
