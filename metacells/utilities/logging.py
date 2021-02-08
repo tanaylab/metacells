@@ -224,7 +224,7 @@ def log_use(
         logger.debug('%s%s: <data>', indent, name)
 
 
-def log_set_data(  # pylint: disable=too-many-branches
+def log_set_data(
     logger: Logger,
     adata: AnnData,
     per: str,

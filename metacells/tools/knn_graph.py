@@ -456,8 +456,7 @@ def _prune_ranks(
 def _weigh_edges(pruned_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     size = pruned_ranks.shape[0]
 
-    total_ranks_per_row = \
-        ut.to_numpy_vector(ut.sum_per(pruned_ranks, per='row'))
+    total_ranks_per_row = ut.sum_per(pruned_ranks, per='row')
 
     ut.timed_parameters(size=size)
     scale_per_row = \

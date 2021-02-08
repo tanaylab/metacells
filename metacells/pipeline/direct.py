@@ -205,9 +205,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        and
        ``dissolve_min_metacell_cells`` (default: ``dissolve_min_metacell_cells``).
     '''
-    total_per_cell = \
-        ut.sum_per(ut.get_vo_proper(adata, what, layout='row_major'),
-                   per='row')
+    total_per_cell = ut.get_o_numpy(adata, what, sum=True)
 
     fdata = \
         extract_feature_data(adata, what, tmp=True,
@@ -226,14 +224,10 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
     ut.log_use(LOG, adata, cell_sizes, per='o', name='cell_sizes')
     if cell_sizes is None:
         pass
-    elif not isinstance(cell_sizes, str):
-        cell_sizes = ut.to_numpy_vector(cell_sizes)
-    elif cell_sizes.endswith('|sum_per_obs'):
-        cell_sizes = \
-            ut.sum_per(ut.get_vo_data(adata, cell_sizes[:-12],
-                                      layout='row_major'), per='row')
-    else:
+    elif isinstance(cell_sizes, str):
         cell_sizes = ut.get_o_numpy(adata, cell_sizes)
+    else:
+        cell_sizes = ut.to_numpy_vector(cell_sizes)
 
     data = ut.get_vo_proper(fdata, what, layout='row_major')
     data = ut.fraction_by(data, sums=total_per_cell, by='row')

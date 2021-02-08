@@ -542,9 +542,27 @@ def get_m_data(adata: AnnData, name: str) -> Any:
     return data
 
 
+def _get_o_data(
+    adata: AnnData,
+    what: Union[str, utt.Shaped],
+    sum: bool,  # pylint: disable=redefined-builtin
+) -> Any:
+    if isinstance(what, str) and what.endswith('|sum'):
+        what = what[:-4]
+        assert not sum
+        sum = True
+
+    if sum:
+        return _get_sum_data(adata, 'row', what)
+
+    return _get_shaped_data(adata, 'o', adata.obs,
+                            shape=(adata.n_obs,), what=what)
+
+
 def get_o_series(
     adata: AnnData,
-    what: Union[str, utt.Vector],
+    what: Union[str, utt.Shaped],
+    sum: bool = False,  # pylint: disable=redefined-builtin
 ) -> utt.PandasSeries:
     '''
     Lookup per-observation (cell) data in ``adata`` by its ``name`` as a Pandas series.
@@ -552,8 +570,7 @@ def get_o_series(
     If ``what`` is a string, it is the name of a per-observation annotation to fetch.
     Otherwise, it should be some vector of data of the appropriate size.
     '''
-    data = _get_shaped_data(adata, 'o', adata.obs,
-                            shape=(adata.n_obs,), what=what)
+    data = _get_o_data(adata, what, sum)
     series = utt.maybe_pandas_series(data)
     if series is None:
         series = utt.to_pandas_series(data, index=adata.obs_names)
@@ -562,22 +579,43 @@ def get_o_series(
 
 def get_o_numpy(
     adata: AnnData,
-    what: Union[str, utt.Vector],
+    what: Union[str, utt.Shaped],
+    sum: bool = False,  # pylint: disable=redefined-builtin
 ) -> utt.NumpyVector:
     '''
     Lookup per-observation (cell) data in ``adata`` by its ``name`` as a Numpy array.
 
     If ``what`` is a string, it is the name of a per-observation annotation to fetch.
     Otherwise, it should be some vector of data of the appropriate size.
+
+    If ``sum`` is ``True``, then ``what`` should be the name of a per-observation-per-variable
+    annotation, or a matrix, and this will return the sum (per row) of this data.
     '''
-    data = _get_shaped_data(adata, 'o', adata.obs,
-                            shape=(adata.n_obs,), what=what)
+    data = _get_o_data(adata, what, sum)
     return utt.to_numpy_vector(data)
+
+
+def _get_v_data(
+    adata: AnnData,
+    what: Union[str, utt.Shaped],
+    sum: bool,  # pylint: disable=redefined-builtin
+) -> Any:
+    if isinstance(what, str) and what.endswith('|sum'):
+        what = what[:-4]
+        assert not sum
+        sum = True
+
+    if sum:
+        return _get_sum_data(adata, 'column', what)
+
+    return _get_shaped_data(adata, 'v', adata.var,
+                            shape=(adata.n_vars,), what=what)
 
 
 def get_v_series(
     adata: AnnData,
-    what: Union[str, utt.Vector]
+    what: Union[str, utt.Shaped],
+    sum: bool = False,  # pylint: disable=redefined-builtin
 ) -> utt.PandasSeries:
     '''
     Lookup per-variable (gene) data in ``adata`` by its ``name`` as a pandas series.
@@ -585,8 +623,7 @@ def get_v_series(
     If ``what`` is a string, it is the name of a per-variable annotation to fetch.
     Otherwise, it should be some vector of data of the appropriate size.
     '''
-    data = _get_shaped_data(adata, 'v', adata.var,
-                            shape=(adata.n_vars,), what=what)
+    data = _get_v_data(adata, what, sum)
     series = utt.maybe_pandas_series(data)
     if series is None:
         series = utt.to_pandas_series(data, index=adata.var_names)
@@ -595,7 +632,8 @@ def get_v_series(
 
 def get_v_numpy(
     adata: AnnData,
-    what: Union[str, utt.Vector]
+    what: Union[str, utt.Shaped],
+    sum: bool = False,  # pylint: disable=redefined-builtin
 ) -> utt.NumpyVector:
     '''
     Lookup per-variable (gene) data in ``adata`` by its ``name`` as a numpy array.
@@ -603,8 +641,7 @@ def get_v_numpy(
     If ``what`` is a string, it is the name of a per-variable annotation to fetch.
     Otherwise, it should be some vector of data of the appropriate size.
     '''
-    data = _get_shaped_data(adata, 'v', adata.var,
-                            shape=(adata.n_vars,), what=what)
+    data = _get_v_data(adata, what, sum)
     return utt.to_numpy_vector(data)
 
 
@@ -891,6 +928,29 @@ def get_vo_proper(
     '''
     return utt.to_proper_matrix(get_vo_data(adata, what, layout=layout),
                                 default_layout=layout or 'row_major')
+
+
+def _get_sum_data(adata: AnnData, per: str, what: Union[str, utt.Shaped]) -> utt.NumpyVector:
+    if not isinstance(what, str):
+        assert utt.is_2d(what)
+        assert what.shape == adata.shape  # type: ignore
+        return utc.sum_per(what, per=per)  # type: ignore
+
+    if not hasattr(adata, '__derived__'):
+        derived: Dict[str, utt.NumpyVector] = dict()
+        setattr(adata, '__derived__', derived)
+    else:
+        derived = getattr(adata, '__derived__')
+
+    key = f'{what}|sum_per_{per}'
+    sum_data = derived.get(key)
+    if sum_data is not None:
+        return sum_data
+
+    data = get_vo_proper(adata, what, layout=f'{per}_major')
+    sum_data = utc.sum_per(data, per=per)
+    derived[key] = sum_data
+    return sum_data
 
 
 def _get_layout_data(

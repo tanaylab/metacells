@@ -71,14 +71,14 @@ def downsample_cells(
     '''
     ut.log_operation(LOG, adata, 'downsample_cells', what)
 
-    data = ut.get_vo_proper(adata, what, layout='row_major')
-    total_per_cell = ut.sum_per(data, per='row')
+    total_per_cell = ut.get_o_numpy(adata, what, sum=True)
     LOG.debug('  downsample_cell_quantile: %s', downsample_cell_quantile)
 
     samples = round(np.quantile(total_per_cell, downsample_cell_quantile))
     LOG.debug('  samples: %s', samples)
     LOG.debug('  random_seed: %s', random_seed)
 
+    data = ut.get_vo_proper(adata, what, layout='row_major')
     downsampled = ut.downsample_matrix(data, per='row', samples=samples,
                                        random_seed=random_seed)
     if inplace:

@@ -366,9 +366,8 @@ def _related_genes(
               min_related_gene_fold_factor)
     LOG.debug('  min_genes_of_modules: %s', min_genes_of_modules)
 
-    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells, what,
-                            layout='column_major')
-    total_all_cells_umis_of_all_genes = ut.sum_per(data, per='column')
+    total_all_cells_umis_of_all_genes = \
+        ut.get_v_numpy(adata_of_all_genes_of_all_cells, what, sum=True)
 
     related_data_of_genes: Dict[int, Tuple[bool, float, float, int]] = {}
 
@@ -388,9 +387,8 @@ def _related_genes(
             ut.slice(adata_of_all_genes_of_all_cells,
                      vars=rare_gene_indices_of_module)
 
-        data = ut.get_vo_proper(adata_of_module_genes_of_all_cells, what,
-                                layout='row_major')
-        total_module_genes_umis_of_all_cells = ut.sum_per(data, per='row')
+        total_module_genes_umis_of_all_cells = \
+            ut.get_o_numpy(adata_of_module_genes_of_all_cells, what, sum=True)
 
         mask_of_expressed_cells = total_module_genes_umis_of_all_cells > 0
 
@@ -410,11 +408,12 @@ def _related_genes(
             ut.slice(adata_of_all_genes_of_all_cells,
                      obs=mask_of_expressed_cells)
 
+        total_expressed_cells_umis_of_all_genes = \
+            ut.get_v_numpy(adata_of_all_genes_of_expressed_cells_of_module,
+                           what, sum=True)
+
         data = ut.get_vo_proper(adata_of_all_genes_of_expressed_cells_of_module, what,
                                 layout='column_major')
-        total_expressed_cells_umis_of_all_genes = \
-            ut.sum_per(data, per='column')
-
         max_expressed_cells_umis_of_all_genes = ut.max_per(data, per='column')
 
         total_background_cells_umis_of_all_genes = \
@@ -504,9 +503,8 @@ def _identify_cells(
         adata_of_related_genes_of_all_cells = \
             ut.slice(adata_of_all_genes_of_all_cells,
                      vars=related_gene_indices_of_module)
-        data = ut.get_vo_proper(adata_of_related_genes_of_all_cells, what,
-                                layout='row_major')
-        total_related_genes_of_all_cells = ut.sum_per(data, per='row')
+        total_related_genes_of_all_cells = \
+            ut.get_o_numpy(adata_of_related_genes_of_all_cells, what, sum=True)
 
         mask_of_strong_cells_of_module = \
             total_related_genes_of_all_cells >= min_cell_module_total
@@ -549,9 +547,8 @@ def _compress_modules(
     LOG.debug('  min_modules_size_factor: %s', min_modules_size_factor)
     LOG.debug('  min_umis_of_modules: %s', min_umis_of_modules)
 
-    data = ut.get_vo_proper(adata_of_all_genes_of_all_cells, what,
-                            layout='row_major')
-    total_all_genes_of_all_cells = ut.sum_per(data, per='row')
+    total_all_genes_of_all_cells = \
+        ut.get_o_numpy(adata_of_all_genes_of_all_cells, what, sum=True)
 
     next_module_index = 0
     for module_index, gene_indices_of_module in enumerate(related_gene_indices_of_modules):

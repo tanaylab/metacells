@@ -107,7 +107,7 @@ target_metacell_size: int = 160000
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
 #: and
-cell_sizes: Union[str, utt.Vector] = '__x__|sum_per_obs'
+cell_sizes: Union[str, utt.Vector] = '__x__|sum'
 
 #: The generic maximal group size factor, above which we should split it. See
 #: :py:const:`pile_min_split_size_factor`

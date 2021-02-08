@@ -72,10 +72,10 @@ def compute_distinct_folds(
     fractions_of_genes_in_data = ut.fraction_per(columns_data, per='column')
     fractions_of_genes_in_data += normalization
 
-    rows_data = ut.get_vo_proper(adata, what, layout='row_major')
-    total_umis_of_cells = ut.sum_per(rows_data, per='row')
-    total_umis_of_cells = np.copy(total_umis_of_cells)
+    total_umis_of_cells = ut.get_o_numpy(adata, what, sum=True)
     total_umis_of_cells[total_umis_of_cells == 0] = 1
+
+    rows_data = ut.get_vo_proper(adata, what, layout='row_major')
     fraction_of_genes_in_cells = \
         ut.to_numpy_matrix(rows_data) / total_umis_of_cells[:, np.newaxis]
     fraction_of_genes_in_cells += normalization
@@ -219,18 +219,17 @@ def compute_subset_distinct_genes(
         subset = mask
 
     scale_of_cells: Optional[ut.NumpyVector] = None
-    if not isinstance(normalize, bool):
-        ut.log_use(LOG, adata, normalize, name='normalize', per='o')
-        if normalize is not None:
-            scale_of_cells = ut.get_o_numpy(adata, normalize)
 
-    elif normalize:
-        data = ut.get_vo_proper(adata, what, layout='row_major')
-        scale_of_cells = ut.sum_per(data, per='row')
-        LOG.debug('normalize: <sum>')
+    if isinstance(normalize, bool) and normalize:
+        scale_of_cells = ut.get_o_numpy(adata, what, sum=True)
+
+    elif isinstance(normalize, bool) or normalize is None:
+        assert not normalize
+        LOG.debug('normalize: None')
 
     else:
-        LOG.debug('normalize: None')
+        ut.log_use(LOG, adata, normalize, name='normalize', per='o')
+        scale_of_cells = ut.get_o_numpy(adata, normalize)
 
     if scale_of_cells is not None:
         assert scale_of_cells.size == adata.n_obs

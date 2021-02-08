@@ -114,12 +114,12 @@ def find_deviant_cells(
     ut.log_use(LOG, adata, candidates, per='o', name='candidates')
     candidate_of_cells = ut.get_o_numpy(adata, candidates)
 
-    data = ut.get_vo_proper(adata, what, layout='row_major')
-    totals_of_cells = ut.sum_per(data, per='row')
+    totals_of_cells = ut.get_o_numpy(adata, what, sum=True)
     assert totals_of_cells.size == cells_count
 
     LOG.debug('  min_gene_fold_factor: %s', min_gene_fold_factor)
 
+    data = ut.get_vo_proper(adata, what, layout='row_major')
     list_of_fold_factors, list_of_cell_index_of_rows = \
         _collect_fold_factors(data=data,
                               candidate_of_cells=candidate_of_cells,
