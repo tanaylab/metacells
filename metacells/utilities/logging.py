@@ -25,9 +25,10 @@ from logging import (Formatter, Logger, LogRecord, StreamHandler, getLogger,
                      setLoggerClass)
 from multiprocessing import Lock
 from threading import current_thread
-from typing import IO, Any, Optional, Union
+from typing import IO, Any, Callable, Optional, Union
 
 import numpy as np
+import pandas as pd  # type: ignore
 from anndata import AnnData
 
 import metacells.utilities.documentation as utd
@@ -37,6 +38,8 @@ import metacells.utilities.typing as utt
 __all__ = [
     'setup_logger',
     'get_log_level',
+    'log_use',
+    'log_set_data',
     'log_pipeline_step',
     'log_operation',
     'log_mask',
@@ -183,6 +186,110 @@ def log_pipeline_step(logger: Logger, adata: AnnData, name: str) -> int:
     else:
         logger.log(level, '# %s: %s %s', name, data_name, adata.shape)
     return level
+
+
+MEMBER_OF_PER = \
+    dict(m='uns',
+         o='obs', v='var',
+         oo='obsp', vv='varp',
+         oa='obsm', va='varm',
+         vo='layers', x='X')
+
+
+def log_use(
+    logger: Logger,
+    adata: AnnData,
+    what: Optional[Union[str, utt.Shaped]],
+    *,
+    name: str,
+    per: str,
+    default: str = 'None',
+    indent: str = '  ',
+) -> None:
+    '''
+    Log using some annotation data.
+    '''
+    assert per in ('m', 'v', 'o', 'vv', 'oo', 'vo', 'va', 'oa')
+    if isinstance(what, str):
+        data_name = adata.uns.get('__name__')
+        if data_name is None:
+            logger.debug('%s%s: %s:%s',
+                         indent, name, MEMBER_OF_PER[per], what)
+        else:
+            logger.debug('%s%s: %s:%s:%s',
+                         indent, name, data_name, MEMBER_OF_PER[per], what)
+    elif what is None:
+        logger.debug('%s%s: %s', indent, name, default)
+    else:
+        logger.debug('%s%s: <data>', indent, name)
+
+
+def log_set_data(  # pylint: disable=too-many-branches
+    logger: Logger,
+    adata: AnnData,
+    per: str,
+    name: str,
+    value: Any,
+    log_value: Optional[Callable[[Any], Optional[str]]] = None,
+) -> None:
+    '''
+    Log setting an annotation in the data.
+    '''
+    level = get_log_level(adata)
+
+    if not logger.isEnabledFor(level):
+        return
+
+    texts = ['  ']
+
+    try:
+        texts.append('setting ')
+
+        data_name = adata.uns.get('__name__')
+        if data_name is not None:
+            texts.append(data_name)
+            texts.append(':')
+
+        texts.append(MEMBER_OF_PER[per])
+        texts.append(':')
+        texts.append(name)
+
+        if log_value is not None:
+            value = log_value(value)
+            assert isinstance(value, str)
+
+        if value is None:
+            return
+
+        if isinstance(value, (str, int, float)):
+            texts.append(' to ')
+            texts.append(str(value))
+            return
+
+        if isinstance(value, (pd.Series, np.ndarray)) and value.dtype == 'bool':
+            texts.append(' to a mask of ')
+            texts.append(mask_description(value))
+            return
+
+        if hasattr(value, 'ndim'):
+            if value.ndim == 2:
+                texts.append(' to a matrix of type ')
+                texts.append(str(value.dtype))
+                texts.append(' shape ')
+                texts.append(str(value.shape))
+            elif value.ndim == 1:
+                texts.append(' to a vector of type ')
+                texts.append(str(value.dtype))
+                texts.append(' size ')
+                texts.append(str(value.size))
+
+#           texts.append(' checksum ')
+#           texts.append(str(utt.shaped_checksum(value)))
+
+    finally:
+        text = ''.join(texts)
+        if text != '  ':
+            logger.log(level, text)
 
 
 def log_operation(

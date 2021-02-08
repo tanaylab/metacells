@@ -104,14 +104,12 @@ responsible to ensure that the names of manually set data are also unique.
 '''
 
 import logging
-from logging import Logger
 from typing import (Any, Callable, Collection, Dict, List, MutableMapping,
                     NamedTuple, Optional, Tuple, Union)
 from warnings import warn
 
 import anndata as ad
 import numpy as np
-import pandas as pd  # type: ignore
 from anndata import AnnData
 
 import metacells.utilities.computation as utc
@@ -172,7 +170,6 @@ __all__ = [
     'get_vo_frame',
     'get_vo_proper',
 
-    'log_use',
     'has_data',
 ]
 
@@ -415,34 +412,6 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
         set_v_data(bdata, track_var, np.arange(adata.n_vars)[vars])
 
     return bdata
-
-
-def log_use(
-    logger: Logger,
-    adata: AnnData,
-    what: Optional[Union[str, utt.Shaped]],
-    *,
-    name: str,
-    per: str,
-    default: str = 'None',
-    indent: str = '  ',
-) -> None:
-    '''
-    Log using some annotation data.
-    '''
-    assert per in ('m', 'v', 'o', 'vv', 'oo', 'vo', 'va', 'oa')
-    if isinstance(what, str):
-        data_name = get_name(adata)
-        if data_name is None:
-            logger.debug('%s%s: %s:%s',
-                         indent, name, MEMBER_OF_PER[per], what)
-        else:
-            logger.debug('%s%s: %s:%s:%s',
-                         indent, name, data_name, MEMBER_OF_PER[per], what)
-    elif what is None:
-        logger.debug('%s%s: %s', indent, name, default)
-    else:
-        logger.debug('%s%s: <data>', indent, name)
 
 
 @utd.expand_doc()
@@ -1058,7 +1027,7 @@ def set_m_data(
 
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
-    _log_set_data(adata, 'm', name, data, log_value=log_value)
+    utl.log_set_data(LOG, adata, 'm', name, data, log_value=log_value)
 
     adata.uns[name] = data
 
@@ -1074,7 +1043,7 @@ def set_o_data(
 
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
-    _log_set_data(adata, 'o', name, data, log_value=log_value)
+    utl.log_set_data(LOG, adata, 'o', name, data, log_value=log_value)
 
     if not isinstance(data, list):
         assert utt.is_canonical(data)
@@ -1095,7 +1064,7 @@ def set_v_data(
 
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
-    _log_set_data(adata, 'v', name, data, log_value=log_value)
+    utl.log_set_data(LOG, adata, 'v', name, data, log_value=log_value)
 
     assert utt.is_canonical(data)
     if not utt.frozen(data):
@@ -1115,7 +1084,7 @@ def set_oo_data(
 
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
-    _log_set_data(adata, 'oo', name, data, log_value=log_value)
+    utl.log_set_data(LOG, adata, 'oo', name, data, log_value=log_value)
 
     assert utt.is_canonical(data)
     if not utt.frozen(data):
@@ -1135,7 +1104,7 @@ def set_vv_data(
 
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
-    _log_set_data(adata, 'vv', name, data, log_value=log_value)
+    utl.log_set_data(LOG, adata, 'vv', name, data, log_value=log_value)
 
     assert utt.is_canonical(data)
     if not utt.frozen(data):
@@ -1155,7 +1124,7 @@ def set_oa_data(
 
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
-    _log_set_data(adata, 'oa', name, data, log_value=log_value)
+    utl.log_set_data(LOG, adata, 'oa', name, data, log_value=log_value)
 
     assert utt.is_canonical(data)
     if not utt.frozen(data):
@@ -1175,7 +1144,7 @@ def set_va_data(
 
     If ``log_value`` is specified, its results is used when logging the operation.
     '''
-    _log_set_data(adata, 'va', name, data, log_value=log_value)
+    utl.log_set_data(LOG, adata, 'va', name, data, log_value=log_value)
 
     assert utt.is_canonical(data)
     if not utt.frozen(data):
@@ -1195,9 +1164,9 @@ def set_vo_data(
     Set per-variable-per-observation (per-gene-per-cell) meta-data.
     '''
     if name == '__x__':
-        _log_set_data(adata, 'x', name, data, log_value=log_value)
+        utl.log_set_data(LOG, adata, 'x', name, data, log_value=log_value)
     else:
-        _log_set_data(adata, 'vo', name, data, log_value=log_value)
+        utl.log_set_data(LOG, adata, 'vo', name, data, log_value=log_value)
 
     assert utt.is_canonical(data)
     if not utt.frozen(data):
@@ -1207,92 +1176,6 @@ def set_vo_data(
         adata.X = data
     else:
         adata.layers[name] = data
-
-
-MEMBER_OF_PER = \
-    dict(m='uns',
-         o='obs', v='var',
-         oo='obsp', vv='varp',
-         oa='obsm', va='varm',
-         vo='layers', x='X')
-
-
-def _log_set_data(  # pylint: disable=too-many-branches
-    adata: AnnData,
-    per: str,
-    name: str,
-    value: Any = None,
-    log_value: Optional[Callable[[Any], Optional[str]]] = None,
-) -> None:
-    if '|' in name:
-        level = logging.DEBUG
-    else:
-        level = utl.get_log_level(adata)
-
-    if not LOG.isEnabledFor(level):
-        return
-
-    texts = ['  ']
-
-    try:
-        data_name = get_name(adata)
-
-        texts.append('setting ')
-        if data_name is not None:
-            texts.append(data_name)
-            texts.append(':')
-        texts.append(MEMBER_OF_PER[per])
-        texts.append(':')
-        texts.append(name)
-
-        if log_value is not None:
-            value = log_value(value)
-            assert isinstance(value, str)
-
-        if value is None:
-            return
-
-        if per == 'vo' and isinstance(value, str):
-            level = logging.DEBUG
-            texts[1] = 'caching '
-            texts.append(' ')
-            texts.append(value)
-            texts.append(' layout')
-            return
-
-        if len(per) > 1:
-            return
-
-        if isinstance(value, (str, int, float)):
-            texts.append(' to ')
-            texts.append(str(value))
-            return
-
-        if isinstance(value, (pd.Series, np.ndarray)) and value.dtype == 'bool':
-            texts.append(' to a mask of ')
-            texts.append(utl.mask_description(value))
-            return
-
-        if per == 'm' and hasattr(value, 'ndim'):
-            if value.ndim == 2:
-                texts.append(' to a matrix of type ')
-                texts.append(str(value.dtype))
-                texts.append(' shape ')
-                texts.append(str(value.shape))
-            elif value.ndim == 1:
-                texts.append(' to a vector of type ')
-                texts.append(str(value.dtype))
-                texts.append(' size ')
-                texts.append(str(value.size))
-
-#       if hasattr(value, 'ndim'):
-#           texts.append(' checksum ')
-#           texts.append(str(utt.shaped_checksum(value)))
-
-    finally:
-        text = ''.join(texts)
-        if text != '  ':
-            LOG.log(level, text)
 
 
 def _unknown_data(adata: AnnData, name: str, per: Optional[str] = None) -> KeyError:
