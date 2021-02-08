@@ -5,7 +5,7 @@
 
 all: for-commit
 
-for-commit: reformat format isort rst unstaged todo mypy pylint test docs tox
+for-commit: reformat format isort rst unstaged todo pylint test docs tox  # mypy
 
 reformat: .clang-formatted
 	autopep8 -i -r metacells tests setup.py

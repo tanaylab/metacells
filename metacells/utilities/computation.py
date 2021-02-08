@@ -385,7 +385,7 @@ def corrcoef(
         result /= stddev[:, None]
         result /= stddev[None, :]
         np.clip(result, -1, 1, out=result)
-        return result
+    return result
 
 
 @utm.timed_call()

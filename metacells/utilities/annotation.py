@@ -105,9 +105,8 @@ responsible to ensure that the names of manually set data are also unique.
 
 import logging
 from logging import Logger
-from typing import (Any, Callable, Collection, Dict, Iterable, List,
-                    MutableMapping, NamedTuple, Optional, Set, Sized, Tuple,
-                    Union)
+from typing import (Any, Callable, Collection, Dict, List, MutableMapping,
+                    NamedTuple, Optional, Sized, Tuple, Union)
 from warnings import warn
 
 import anndata as ad
@@ -347,198 +346,80 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     If ``tmp`` is set, logging of modifications to the result will use the ``DEBUG`` logging level.
     By default, logging of modifications is done using the ``INFO`` logging level.
     '''
+
     assert '__x__' not in adata.layers
 
-    shaped: Optional[utt.Shaped] = utt.BaseShaped.maybe(obs)  # type: ignore
-    if shaped is None:
-        if obs is None:
-            obs = range(adata.n_obs)
-        will_slice_obs = len(obs) != adata.n_obs
+    is_same_obs: Optional[bool] = None
+    if obs is None:
+        obs = range(adata.n_obs)
+        is_same_obs = True
     else:
-        obs = utt.to_dense_vector(shaped)
-        if obs.dtype == 'bool':
-            assert np.any(obs)
-            will_slice_obs = not np.all(obs)
-        else:
-            assert obs.size > 0
-            will_slice_obs = obs.size != adata.n_obs
+        assert 0 < len(obs) <= adata.n_obs
+        if len(obs) < adata.n_obs:
+            is_same_obs = False
 
-    shaped = utt.BaseShaped.maybe(vars)  # type: ignore
-    if shaped is None:
-        if vars is None:
-            vars = range(adata.n_vars)
-        will_slice_var = len(vars) != adata.n_vars
+        shaped = utt.BaseShaped.maybe(obs)
+        if shaped is not None:
+            obs = utt.to_dense_vector(shaped)  # type: ignore
+            if obs.dtype == 'bool':
+                assert obs.size == adata.n_obs
+                assert np.any(obs)
+                is_same_obs = np.all(obs)
+
+    is_same_vars: Optional[bool] = None
+    if vars is None:
+        vars = range(adata.n_vars)
+        is_same_vars = True
     else:
-        vars = utt.to_dense_vector(shaped)
-        if vars.dtype == 'bool':
-            assert np.any(vars)
-            will_slice_var = not np.all(vars)
-        else:
-            assert vars.size > 0
-            will_slice_var = vars.size != adata.n_vars
+        assert 0 < len(vars) <= adata.n_vars
+        if len(vars) < adata.n_vars:
+            is_same_vars = False
 
-    if not will_slice_obs and not will_slice_var:
+        shaped = utt.BaseShaped.maybe(vars)
+        if shaped is not None:
+            vars = utt.to_dense_vector(shaped)  # type: ignore
+            if vars.dtype == 'bool':
+                assert vars.size == adata.n_vars
+                assert np.any(vars)
+                is_same_vars = np.all(vars)
+
+    if is_same_obs and is_same_vars:
         with utm.timed_step('adata.copy'):
-            return adata.copy()
+            bdata = adata.copy()
+        assert not hasattr(bdata, '__derived__')
+        if hasattr(adata, '__derived__'):
+            setattr(bdata, '__derived__', getattr(adata, '__derived__'))
 
-    saved_data = _save_data(adata, will_slice_obs, will_slice_var)
+    else:
+        with utm.timed_step('adata.slice'):
+            bdata = adata[obs, vars].copy()
 
-    with utm.timed_step('adata.slice'):
-        bdata = adata[obs, vars].copy()
-
-    did_slice_obs = bdata.n_obs != adata.n_obs
-    did_slice_var = bdata.n_vars != adata.n_vars
-
-    assert did_slice_obs == will_slice_obs
-    assert did_slice_var == will_slice_var
-
-    _restore_data(saved_data, adata)
-
-    assert '__x__' not in adata.layers
+        assert not hasattr(bdata, '__derived__')
+        if hasattr(adata, '__derived__'):
+            if is_same_obs is None:
+                is_same_obs = bdata.n_obs == adata.n_obs \
+                    and np.all(bdata.obs_names == adata.obs_names)
+            if is_same_obs and is_same_vars is None:
+                is_same_vars = bdata.n_obs == adata.n_vars \
+                    and np.all(bdata.var_names == adata.var_names)
+            if is_same_obs and is_same_vars:
+                setattr(bdata, '__derived__', getattr(adata, '__derived__'))
 
     if tmp:
         bdata.uns['__tmp__'] = True
+
     if name is not None:
-        if name.startswith('.'):
-            base_name = get_name(adata)
-            if base_name is None:
-                name = name[1:]
-            else:
-                name = base_name + name
-        bdata.uns['__name__'] = name
+        set_name(bdata, name)
         LOG.log(utl.get_log_level(bdata),
                 '  sliced %s shape %s', name, bdata.shape)
 
     if track_obs is not None:
-        obs_indices = np.arange(adata.n_obs)[obs]
-        set_o_data(bdata, track_obs, obs_indices)
+        set_o_data(bdata, track_obs, np.arange(adata.n_obs)[obs])
 
     if track_var is not None:
-        var_indices = np.arange(adata.n_vars)[vars]
-        set_v_data(bdata, track_var, var_indices)
-
-    assert '__x__' not in bdata.layers
+        set_v_data(bdata, track_var, np.arange(adata.n_vars)[vars])
 
     return bdata
-
-
-def _save_data(
-    adata: AnnData,
-    will_slice_obs: bool,
-    will_slice_var: bool,
-) -> Dict[Tuple[str, str], Any]:
-    saved_data: Dict[Tuple[str, str], Any] = {}
-
-    for per, annotations in (('vo', adata.layers),
-                             ('o', adata.obs),
-                             ('v', adata.var),
-                             ('oo', adata.obsp),
-                             ('vv', adata.varp),
-                             ('oa', adata.obsm),
-                             ('va', adata.varm),
-                             ('m', adata.uns)):
-        _save_per_data(saved_data, adata, per, annotations,
-                       will_slice_obs, will_slice_var)
-
-    return saved_data
-
-
-def _save_per_data(
-    saved_data: Dict[Tuple[str, str], Any],
-    adata: AnnData,
-    per: str,
-    annotations: Annotations,
-    will_slice_obs: bool,
-    will_slice_var: bool,
-) -> None:
-    delete_names: Set[str] = set()
-
-    if per not in ('vo', 'va', 'oa'):
-        def patch(name: str) -> None:  # pylint: disable=unused-argument
-            pass
-    else:
-        will_slice_only_obs = will_slice_obs and not will_slice_var
-        will_slice_only_var = will_slice_var and not will_slice_obs
-
-        def patch(name: str) -> None:
-            if will_slice_only_obs:
-                patch_only(name, ':__row_major__')
-            if will_slice_only_var:
-                patch_only(name, ':__column_major__')
-
-        def patch_only(name: str, by_suffix: str) -> None:
-            if not name.endswith(by_suffix):
-                return
-
-            data = adata.layers[name]
-            delete_names.add(name)
-
-            base_name = name[:-len(by_suffix)]
-            if base_name == '__x__':
-                adata.X = data
-            else:
-                base_data = adata.layers[base_name]
-                saved_data[(per, base_name)] = base_data
-
-    for name, data in annotation_items(annotations):
-        if _preserve_data(name, will_slice_obs, will_slice_var):
-            patch(name)
-        else:
-            saved_data[(per, name)] = data
-            delete_names.add(name)
-
-    for name in delete_names:
-        del annotations[name]
-
-
-def _restore_data(saved_data: Dict[Tuple[str, str], Any], adata: AnnData) -> None:
-    per_annotations = dict(m=adata.uns,
-                           o=adata.obs,
-                           v=adata.var,
-                           vo=adata.layers,
-                           oo=adata.obsp,
-                           vv=adata.varp,
-                           oa=adata.obsm,
-                           va=adata.varm)
-    for (per, name), data in saved_data.items():
-        per_annotations[per][name] = data
-
-
-def annotation_items(annotations: Annotations) -> Iterable[Tuple[str, Any]]:
-    '''
-    Given some annotations data (such as ``adata.obs``, ``adata.layers``, etc.), iterate on all the
-    name and value pairs it contains.
-    '''
-    if isinstance(annotations, pd.DataFrame):
-        return annotations.iteritems()
-    return annotations.items()
-
-
-def _preserve_data(
-    name: str,
-    do_slice_obs: bool,
-    do_slice_var: bool,
-) -> bool:
-    base_name = name
-    if name != '__x__' and '__' in name:
-        is_per_obs = name.endswith(':__row_major__')
-        is_per_var = name.endswith(':__column_major__')
-        if is_per_obs or is_per_var:
-            base_name = ':'.join(name.split(':')[:-1])
-    else:
-        is_per_obs = False
-        is_per_var = False
-
-    slicing_mask = safe_slicing_mask(base_name)
-    if is_per_var:
-        slicing_mask = slicing_mask & SAFE_WHEN_SLICING_VAR
-    if is_per_obs:
-        slicing_mask = slicing_mask & SAFE_WHEN_SLICING_OBS
-
-    slicing_mask = slicing_mask | SlicingMask(obs=not do_slice_obs,
-                                              vars=not do_slice_var)
-
-    return slicing_mask.obs and slicing_mask.vars
 
 
 def log_use(
@@ -1054,46 +935,36 @@ def _get_layout_data(
     what: Union[str, utt.Matrix],
     layout: Optional[str],
 ) -> Any:
+    data = _get_shaped_data(adata, per, annotations, shape=shape, what=what)
     if not isinstance(what, str):
-        assert what.shape == shape
-        if layout is None or utt.is_layout(what, layout):
-            return what
-        return utc.to_layout(what, layout=layout)
-
-    assert what == '__x__' or '__' not in what
-
-    def get_base_data() -> Any:
-        return _get_shaped_data(adata, per, annotations, shape=shape, what=what)
-
-    if layout is None:
-        return get_base_data()
-
-    assert layout in utt.LAYOUT_OF_AXIS
-
-    layout_name = '%s:__%s__' % (what, layout)
-    data = adata.layers.get(layout_name)
-    if data is not None:
-        # TODO: assert utt.matrix_layout(data) == layout
-        if utt.matrix_layout(data) == layout:
-            return data
-        warn('%s %s layout is actually: %s'
-             % (get_name(adata, 'adata'),
-                layout_name,
-                utt.matrix_layout(data)))
-
-    data = get_base_data()
-    if utt.matrix_layout(data) == layout:
+        if not utt.is_layout(data, layout):
+            data = utc.to_layout(what, layout=layout)
         return data
 
-    data = utc.to_layout(data, layout=layout)
-    assert utt.is_layout(data, layout)
+    if utt.is_layout(data, layout):
+        return data
 
-    if not utt.frozen(data):
-        utt.freeze(data)
-    _log_set_data(adata, 'vo', what, layout)
+    assert layout in utt.LAYOUT_OF_AXIS
+    layout_name = '%s:%s' % (what, layout)
 
-    annotations[layout_name] = data
-    return data
+    if not hasattr(adata, '__derived__'):
+        derived: Dict[str, utt.ProperMatrix] = dict()
+        setattr(adata, '__derived__', derived)
+    else:
+        derived = getattr(adata, '__derived__')
+
+    layout_data = derived.get(layout_name)
+    if layout_data is not None:
+        assert layout_data.shape == shape
+        assert utt.is_layout(layout_data, layout)
+    else:
+        layout_data = utc.to_layout(data, layout=layout)
+        derived[layout_name] = layout_data
+
+    if not utt.frozen(layout_data):
+        utt.freeze(layout_data)
+
+    return layout_data
 
 
 def _get_shaped_data(
@@ -1105,7 +976,6 @@ def _get_shaped_data(
     what: Union[str, utt.Shaped],
 ) -> Any:
     if isinstance(what, str):
-        assert what == '__x__' or '__' not in what
         if per == 'vo' and what == '__x__':
             data = _fix_data(adata.X)
         elif (isinstance(annotations, pd.DataFrame) and what in annotations.columns) \
@@ -1170,8 +1040,6 @@ def del_data(
         assert layout is None
         layout = 'column_major'
         name = name[:-17]
-
-    assert name == '__x__' or '__' not in name
 
     if per is None:
         per = data_per(adata, name)
@@ -1417,7 +1285,7 @@ MEMBER_OF_PER = \
          vo='layers', x='X')
 
 
-def _log_set_data(  # pylint: disable=too-many-branches,too-many-statements
+def _log_set_data(  # pylint: disable=too-many-branches
     adata: AnnData,
     per: str,
     name: str,
@@ -1485,9 +1353,9 @@ def _log_set_data(  # pylint: disable=too-many-branches,too-many-statements
                 texts.append(' size ')
                 texts.append(str(value.size))
 
-        if hasattr(value, 'ndim'):
-            texts.append(' checksum ')
-            texts.append(str(utt.shaped_checksum(value)))
+#       if hasattr(value, 'ndim'):
+#           texts.append(' checksum ')
+#           texts.append(str(utt.shaped_checksum(value)))
 
     finally:
         text = ''.join(texts)
