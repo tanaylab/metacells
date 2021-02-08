@@ -37,7 +37,8 @@ DEVELOP_REQUIRES = [
     'pylint',
     'pylint_strict_informational',
     'sphinx',
-    'sphinx_rtd_theme'
+    'sphinx_rtd_theme',
+    'typing_extensions'
 ]
 
 setup(

@@ -6,7 +6,6 @@ Mask
 import logging
 from typing import List, Optional
 
-import pandas as pd  # type: ignore
 from anndata import AnnData
 
 import metacells.utilities as ut
@@ -27,7 +26,7 @@ def combine_masks(  # pylint: disable=too-many-branches
     *,
     invert: bool = False,
     to: Optional[str] = None,
-) -> Optional[pd.Series]:
+) -> Optional[ut.PandasSeries]:
     '''
     Combine different pre-computed masks into a final overall mask.
 
@@ -71,10 +70,10 @@ def combine_masks(  # pylint: disable=too-many-branches
 
         if mask_name in adata.obs:
             mask_per = 'o'
-            mask = ut.get_o_dense(adata, mask_name)
+            mask = ut.get_o_numpy(adata, mask_name)
         elif mask_name in adata.var:
             mask_per = 'v'
-            mask = ut.get_v_dense(adata, mask_name)
+            mask = ut.get_v_numpy(adata, mask_name)
         else:
             if must_exist:
                 raise KeyError(f'unknown mask data: {mask_name}')
@@ -106,9 +105,9 @@ def combine_masks(  # pylint: disable=too-many-branches
 
     if to is None:
         if per == 'o':
-            return pd.Series(combined_mask, index=adata.obs_names)
+            return ut.to_pandas_series(combined_mask, index=adata.obs_names)
         assert per == 'v'
-        return pd.Series(combined_mask, index=adata.var_names)
+        return ut.to_pandas_series(combined_mask, index=adata.var_names)
 
     if per == 'o':
         ut.set_o_data(adata, to, combined_mask)

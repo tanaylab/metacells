@@ -27,7 +27,7 @@ from multiprocessing import Lock
 from threading import current_thread
 from typing import IO, Any, Optional, Union
 
-import numpy as np  # type: ignore
+import numpy as np
 from anndata import AnnData
 
 import metacells.utilities.documentation as utd
@@ -234,7 +234,7 @@ def sizes_description(sizes: utt.Vector) -> str:
 
     This returns the mean size.
     '''
-    mean = np.mean(utt.to_dense_vector(sizes))
+    mean = np.mean(utt.to_numpy_vector(sizes))
     return 'mean size %.2f' % mean
 
 
@@ -244,7 +244,7 @@ def groups_description(groups: utt.Vector) -> str:
 
     This returns the number and mean size of the groups.
     '''
-    groups = utt.to_dense_vector(groups)
+    groups = utt.to_numpy_vector(groups)
     count = np.max(groups) + 1
     return '%s groups with mean size %.2f and %s outliers' \
         % (count,
@@ -258,7 +258,7 @@ def mask_description(mask: utt.Vector) -> str:
 
     This returns the number of set entries, the total number of entries, and the percentage.
     '''
-    mask = utt.to_dense_vector(mask)
+    mask = utt.to_numpy_vector(mask)
     return ratio_description(np.sum(mask > 0), mask.size)
 
 

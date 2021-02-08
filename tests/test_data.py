@@ -5,7 +5,7 @@ Test applying functions to real data.
 from glob import glob
 from typing import Any, Dict, Tuple
 
-import numpy as np  # type: ignore
+import numpy as np
 import scanpy as sc  # type: ignore
 import yaml
 from anndata import AnnData

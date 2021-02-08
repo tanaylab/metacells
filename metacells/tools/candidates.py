@@ -8,8 +8,7 @@ from dataclasses import dataclass
 from math import ceil, floor
 from typing import List, Optional, Union
 
-import numpy as np  # type: ignore
-import pandas as pd  # type: ignore
+import numpy as np
 from anndata import AnnData
 
 import metacells.parameters as pr
@@ -121,8 +120,8 @@ def compute_candidate_metacells(  # pylint: disable=too-many-branches
     LOG.debug('  partition_method: %s', partition_method.__qualname__)
     ut.log_use(LOG, adata, cell_sizes, per='o', name='cell_sizes', default='1')
     if cell_sizes is not None:
-        node_sizes: Optional[ut.DenseVector] = \
-            ut.get_o_dense(adata, cell_sizes).astype('int32')
+        node_sizes: Optional[ut.NumpyVector] = \
+            ut.get_o_numpy(adata, cell_sizes).astype('int32')
     else:
         node_sizes = None
 
@@ -202,7 +201,7 @@ def compute_candidate_metacells(  # pylint: disable=too-many-branches
     if LOG.isEnabledFor(level):
         LOG.log(level, '  candidates: %s', np.max(community_of_cells) + 1)
 
-    return pd.Series(community_of_cells, index=adata.obs_names)
+    return ut.to_pandas_series(community_of_cells, index=adata.obs_names)
 
 
 @dataclass  # pylint: disable=too-many-instance-attributes
@@ -221,7 +220,7 @@ class Community:
     size: int
 
     #: A boolean mask of all the nodes that belong to the community.
-    mask: ut.DenseVector
+    mask: ut.NumpyVector
 
     #: By how much (if at all) does the community have fewer nodes than the minimum allowed.
     too_few: int
@@ -243,11 +242,11 @@ class Improver:  # pylint: disable=too-many-instance-attributes
 
     def __init__(  #
         self,
-        membership: ut.DenseVector,
+        membership: ut.NumpyVector,
         *,
         partition_method: 'ut.PartitionMethod',
         edge_weights: ut.ProperMatrix,
-        node_sizes: Optional[ut.DenseVector],
+        node_sizes: Optional[ut.NumpyVector],
         target_comm_size: int,
         must_complete_cover: bool,
         min_comm_size: Optional[int],
@@ -421,13 +420,15 @@ class Improver:  # pylint: disable=too-many-instance-attributes
         edge_weights_of_merged_nodes = \
             edge_weights_of_merged_nodes[:, merged_nodes_mask]
         edge_weights_of_merged_nodes = \
-            ut.to_dense_matrix(edge_weights_of_merged_nodes)
-        merge_frame = pd.DataFrame(edge_weights_of_merged_nodes)
+            ut.to_numpy_matrix(edge_weights_of_merged_nodes)
+        merge_frame = ut.to_pandas_frame(edge_weights_of_merged_nodes)
         location_of_merged_nodes = location_of_nodes[merged_nodes_mask]
         merge_frame = \
-            merge_frame.groupby(location_of_merged_nodes, axis=0).mean()
+            merge_frame.groupby(location_of_merged_nodes,  # type: ignore
+                                axis=0).mean()
         merge_frame = \
-            merge_frame.groupby(location_of_merged_nodes, axis=1).mean()
+            merge_frame.groupby(location_of_merged_nodes,  # type: ignore
+                                axis=1).mean()
         merged_communities_edge_weights = ut.to_proper_matrix(merge_frame)
         np.fill_diagonal(merged_communities_edge_weights, 0)
 

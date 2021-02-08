@@ -6,8 +6,7 @@ Properly Sampled
 import logging
 from typing import Optional, Union
 
-import numpy as np  # type: ignore
-import pandas as pd  # type: ignore
+import numpy as np
 from anndata import AnnData
 
 import metacells.parameters as pr
@@ -105,7 +104,7 @@ def find_properly_sampled_cells(
 
     ut.log_mask(LOG, level, 'properly_sampled_cell', cells_mask)
 
-    return pd.Series(cells_mask, index=adata.obs_names)
+    return ut.to_pandas_series(cells_mask, index=adata.obs_names)
 
 
 @ut.timed_call()
@@ -162,4 +161,4 @@ def find_properly_sampled_genes(
 
     ut.log_mask(LOG, level, 'properly_sampled_gene', genes_mask)
 
-    return pd.Series(genes_mask, index=adata.obs_names)
+    return ut.to_pandas_series(genes_mask, index=adata.obs_names)

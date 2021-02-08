@@ -6,8 +6,7 @@ Distincts
 import logging
 from typing import Optional, Tuple, Union
 
-import numpy as np  # type: ignore
-import pandas as pd  # type: ignore
+import numpy as np
 from anndata import AnnData
 
 import metacells.extensions as xt  # type: ignore
@@ -78,7 +77,7 @@ def compute_distinct_folds(
     total_umis_of_cells = np.copy(total_umis_of_cells)
     total_umis_of_cells[total_umis_of_cells == 0] = 1
     fraction_of_genes_in_cells = \
-        ut.to_dense_matrix(rows_data) / total_umis_of_cells[:, np.newaxis]
+        ut.to_numpy_matrix(rows_data) / total_umis_of_cells[:, np.newaxis]
     fraction_of_genes_in_cells += normalization
 
     zeros_mask = fractions_of_genes_in_data <= 0
@@ -96,7 +95,8 @@ def compute_distinct_folds(
         ut.set_vo_data(adata, 'distinct_fold', fold_of_genes_in_cells)
         return None
 
-    return pd.DataFrame(fold_of_genes_in_cells, index=adata.obs_names, columns=adata.var_names)
+    return ut.to_pandas_frame(fold_of_genes_in_cells,
+                              index=adata.obs_names, columns=adata.var_names)
 
 
 @ut.timed_call()
@@ -155,8 +155,8 @@ def find_distinct_genes(
         ut.set_oa_data(adata, 'cell_distinct_gene_folds', distinct_gene_folds)
         return None
 
-    return pd.DataFrame(distinct_gene_indices, index=adata.obs_names), \
-        pd.DataFrame(distinct_gene_folds, index=adata.obs_names)
+    return ut.to_pandas_frame(distinct_gene_indices, index=adata.obs_names), \
+        ut.to_pandas_frame(distinct_gene_folds, index=adata.obs_names)
 
 
 @ut.timed_call()
@@ -166,8 +166,8 @@ def compute_subset_distinct_genes(
     what: Union[str, ut.Matrix] = '__x__',
     *,
     to: Optional[str] = None,
-    normalize: Optional[Union[bool, str, ut.DenseVector]],
-    subset: Union[str, ut.DenseVector],
+    normalize: Optional[Union[bool, str, ut.NumpyVector]],
+    subset: Union[str, ut.NumpyVector],
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
@@ -211,18 +211,18 @@ def compute_subset_distinct_genes(
     ut.log_operation(LOG, adata, 'compute_subset_distinct_genes', what)
 
     if isinstance(subset, str):
-        subset = ut.get_o_dense(adata, subset)
+        subset = ut.get_o_numpy(adata, subset)
 
     if subset.dtype != 'bool':
-        mask: ut.DenseVector = np.full(adata.n_obs, False)
+        mask: ut.NumpyVector = np.full(adata.n_obs, False)
         mask[subset] = True
         subset = mask
 
-    scale_of_cells: Optional[ut.DenseVector] = None
+    scale_of_cells: Optional[ut.NumpyVector] = None
     if not isinstance(normalize, bool):
         ut.log_use(LOG, adata, normalize, name='normalize', per='o')
         if normalize is not None:
-            scale_of_cells = ut.get_o_dense(adata, normalize)
+            scale_of_cells = ut.get_o_numpy(adata, normalize)
 
     elif normalize:
         data = ut.get_vo_proper(adata, what, layout='row_major')
@@ -243,4 +243,4 @@ def compute_subset_distinct_genes(
         ut.set_v_data(adata, to, distinct_of_genes)
         return None
 
-    return pd.Series(distinct_of_genes, index=adata.var_names)
+    return ut.to_pandas_series(distinct_of_genes, index=adata.var_names)

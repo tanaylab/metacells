@@ -5,7 +5,7 @@ Layout
 
 import logging
 
-import numpy as np  # type: ignore
+import numpy as np
 import scipy.sparse as sp  # type: ignore
 import umap  # type: ignore
 from anndata import AnnData
@@ -80,8 +80,8 @@ def umap_by_distances(
                                 n_neighbors=n_neighbors,
                                 min_dist=min_dist).fit_transform(distances_csr)
 
-    x_coordinates = ut.to_dense_vector(coordinates[:, 0], copy=True)
-    y_coordinates = ut.to_dense_vector(coordinates[:, 1], copy=True)
+    x_coordinates = ut.to_numpy_vector(coordinates[:, 0], copy=True)
+    y_coordinates = ut.to_numpy_vector(coordinates[:, 1], copy=True)
 
     x_min = np.min(x_coordinates)
     y_min = np.min(y_coordinates)
@@ -145,8 +145,8 @@ def spread_coordinates(
     assert 0 < cover_fraction < 1
     assert noise_fraction >= 0
 
-    x_coordinates = ut.get_o_dense(adata, f'{prefix}_x')
-    y_coordinates = ut.get_o_dense(adata, f'{prefix}_y')
+    x_coordinates = ut.get_o_numpy(adata, f'{prefix}_x')
+    y_coordinates = ut.get_o_numpy(adata, f'{prefix}_y')
 
     x_coordinates, y_coordinates = ut.cover_coordinates(x_coordinates, y_coordinates,
                                                         cover_fraction=cover_fraction,

@@ -6,8 +6,7 @@ Filter
 import logging
 from typing import List, Optional, Tuple
 
-import numpy as np  # type: ignore
-import pandas as pd  # type: ignore
+import numpy as np
 from anndata import AnnData
 
 import metacells.tools as tl
@@ -36,7 +35,7 @@ def filter_data(  # pylint: disable=dangerous-default-value
     track_var: Optional[str] = None,
     name: Optional[str] = None,
     tmp: bool = False,
-) -> Optional[Tuple[AnnData, pd.Series, pd.Series]]:
+) -> Optional[Tuple[AnnData, ut.PandasSeries, ut.PandasSeries]]:
     '''
     Filter (slice) the data based on previously-computed masks.
 
@@ -89,22 +88,26 @@ def filter_data(  # pylint: disable=dangerous-default-value
         if mask_obs is not None:
             ut.set_o_data(adata, mask_obs, obs_mask)
     else:
-        obs_mask = \
+        mask = \
             tl.combine_masks(adata, obs_masks, invert=invert_obs, to=mask_obs)
-        if obs_mask is None:
+        if mask is None:
             assert mask_obs is not None
-            obs_mask = ut.get_o_dense(adata, mask_obs)
+            obs_mask = ut.get_o_numpy(adata, mask_obs)
+        else:
+            obs_mask = ut.to_numpy_vector(mask, only_extract=True)
 
     if len(var_masks) == 0:
         var_mask = np.full(adata.n_vars, True, dtype='bool')
         if mask_var is not None:
             ut.set_o_data(adata, mask_var, var_mask)
     else:
-        var_mask = \
+        mask = \
             tl.combine_masks(adata, var_masks, invert=invert_var, to=mask_var)
-        if var_mask is None:
+        if mask is None:
             assert mask_var is not None
-            var_mask = ut.get_v_dense(adata, mask_var)
+            var_mask = ut.get_v_numpy(adata, mask_var)
+        else:
+            var_mask = ut.to_numpy_vector(mask, only_extract=True)
 
     if not np.any(obs_mask) or not np.any(var_mask):
         return None
@@ -113,5 +116,5 @@ def filter_data(  # pylint: disable=dangerous-default-value
                      obs=obs_mask, vars=var_mask,
                      track_obs=track_obs, track_var=track_var)
 
-    return fdata, pd.Series(obs_mask, index=adata.obs_names), \
-        pd.Series(var_mask, index=adata.var_names)
+    return fdata, ut.to_pandas_series(obs_mask, index=adata.obs_names), \
+        ut.to_pandas_series(var_mask, index=adata.var_names)

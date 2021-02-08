@@ -6,8 +6,7 @@ Noisy Lonely
 import logging
 from typing import Optional, Union
 
-import numpy as np  # type: ignore
-import pandas as pd  # type: ignore
+import numpy as np
 from anndata import AnnData
 
 import metacells.parameters as pr
@@ -128,14 +127,14 @@ def find_noisy_lonely_genes(
             compute_var_var_similarity(ndata, 'downsampled', inplace=False)
         assert gene_gene_similarity_frame is not None
         gene_gene_similarity = \
-            ut.to_dense_matrix(gene_gene_similarity_frame)
+            ut.to_numpy_matrix(gene_gene_similarity_frame, only_extract=True)
         np.fill_diagonal(gene_gene_similarity, -1)
 
         assert ut.matrix_layout(gene_gene_similarity) == 'row_major'
         max_similarity_of_genes = ut.max_per(gene_gene_similarity, per='row')
 
         lonely_genes_mask = max_similarity_of_genes < max_gene_similarity
-        base_index_of_genes = ut.get_v_dense(ndata, 'sampled_gene_index')
+        base_index_of_genes = ut.get_v_numpy(ndata, 'sampled_gene_index')
         lonely_genes_indices = base_index_of_genes[lonely_genes_mask]
 
         noisy_lonely_genes_mask[lonely_genes_indices] = True
@@ -149,4 +148,4 @@ def find_noisy_lonely_genes(
 
     ut.log_mask(LOG, level, 'noisy_lonely_genes', noisy_lonely_genes_mask)
 
-    return pd.Series(noisy_lonely_genes_mask, index=adata.var_names)
+    return ut.to_pandas_series(noisy_lonely_genes_mask, index=adata.var_names)

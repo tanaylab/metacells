@@ -6,7 +6,6 @@ Cross-Similarity
 import logging
 from typing import Optional, Union
 
-import pandas as pd  # type: ignore
 from anndata import AnnData
 
 import metacells.parameters as pr
@@ -182,4 +181,4 @@ def _compute_elements_similarity(
     else:
         names = adata.var_names
 
-    return pd.DataFrame(similarity, index=names, columns=names)
+    return ut.to_pandas_frame(similarity, index=names, columns=names)

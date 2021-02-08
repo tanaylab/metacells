@@ -33,26 +33,26 @@ To put some order in this chaos, the following concepts are used:
   any 2d data, and :py:const:`Vector` is any 1d data.
 
 * For 2D data, we allow multiple data types that we can't directly operate on:
-  most :py:class:`SparseMatrix` layouts, :py:class:`PandasFrame` and :py:class:`NumpyMatrix` have
+  most :py:class:`SparseMatrix` layouts, :py:class:`PandasFrame` and ``np.matrix`` have
   strange quirks when it comes to directly operating on them and should be avoided, while CSR and
   CSC :py:class:`CompressedMatrix` sparse matrices and properly-laid-out 2D numpy arrays
-  :py:class:`DenseMatrix` are in general well-behaved. We therefore introduce the concept of
+  :py:const:`NumpyMatrix` are in general well-behaved. We therefore introduce the concept of
   :py:const:`ImproperMatrix` and :py:const:`ProperMatrix` types, and provide functions that
   manipulate whether the "proper" data is in row-major or column-major order.
 
 * For 1D data, we just distinguish between :py:class:`PandasSeries` and 1D numpy
-  :py:class:`DenseVector` arrays, as these are the only types we allow. In theory we could have also
+  :py:const:`NumpyVector` arrays, as these are the only types we allow. In theory we could have also
   allowed for sparse vectors but mercifully these are very uncommon so we can just ignore them.
 '''
 
-from abc import abstractmethod
 from contextlib import contextmanager
-from typing import (Any, Iterable, Iterator, Optional, Sized, Tuple, Type,
-                    TypeVar, Union, overload)
+from typing import (Any, Collection, Iterator, Optional, Sized, Tuple, TypeVar,
+                    Union)
 
-import numpy as np  # type: ignore
+import numpy as np
 import pandas as pd  # type: ignore
 import scipy.sparse as sp  # type: ignore
+from typing_extensions import Protocol
 
 import metacells.utilities.documentation as utd
 import metacells.utilities.timing as utm
@@ -61,38 +61,52 @@ __all__ = [
     'CPP_DATA_TYPES',
 
     'Shaped',
-    'BaseShaped',
     'ProperShaped',
     'ImproperShaped',
-    'NumpyShaped',
-    'DenseShaped',
-    'PandasShaped',
 
     'Matrix',
     'ProperMatrix',
-    'ImproperMatrix',
-    'DenseMatrix',
-    'SparseMatrix',
-    'CompressedMatrix',
     'NumpyMatrix',
+    'CompressedMatrix',
+    'ImproperMatrix',
+    'SparseMatrix',
     'PandasFrame',
 
     'Vector',
+    'NumpyVector',
     'ImproperVector',
     'PandasSeries',
     'PandasCategorical',
-    'DenseVector',
+
+    'is_1d',
+    'is_2d',
+
+    'maybe_numpy_vector',
+    'maybe_numpy_matrix',
+    'maybe_sparse_matrix',
+    'maybe_compressed_matrix',
+    'maybe_pandas_frame',
+    'maybe_pandas_series',
+
+    'mustbe_numpy_vector',
+    'mustbe_numpy_matrix',
+    'mustbe_sparse_matrix',
+    'mustbe_compressed_matrix',
+    'mustbe_pandas_frame',
+    'mustbe_pandas_series',
 
     'to_proper_matrix',
     'to_proper_matrices',
+    'to_pandas_series',
+    'to_pandas_frame',
 
     'frozen',
     'freeze',
     'unfreeze',
     'unfrozen',
 
-    'to_dense_matrix',
-    'to_dense_vector',
+    'to_numpy_matrix',
+    'to_numpy_vector',
 
     'DENSE_FAST_FLAG',
     'SPARSE_FAST_FORMAT',
@@ -103,9 +117,6 @@ __all__ = [
     'matrix_layout',
 
     'is_layout',
-    'is_row_major',
-    'is_column_major',
-
     'is_contiguous',
     'to_contiguous',
 
@@ -118,433 +129,187 @@ __all__ = [
 ]
 
 
-#: The data types supported by the C++ extensions code.
-CPP_DATA_TYPES = ['float32', 'float64', 'int32', 'int64', 'uint32', 'uint64']
+#: Numpy 2-dimensional data.
+#:
+#: .. note::
+#:
+#:    This is not to be confused with :py:const:`np.matrix` which must not be used, but is returned
+#:    by the occasional function and would wreak havoc on the semantics of some operations unless
+#:    immediately concerted to a proper ``NumpyMatrix``, which is a simple 2-dimensional
+#:    ``ndarray``.
+NumpyMatrix = np.ndarray  # Should be: Annotated[np.ndarray, NDim(2)]
 
-
-BS = TypeVar('BS', bound='BaseShaped')
+#: Numpy 1-dimensional data.
+NumpyVector = np.ndarray  # Should be: Annotated[np.ndarray, NDim(1)]
 
 
 # pylint: disable=missing-function-docstring
-# pylint: disable=abstract-method
 
 
-class BaseShaped:
+S = TypeVar('S', bound='ShapedProtocol')
+
+
+class ShapedProtocol(Protocol):
     '''
     A ``mypy`` type for any shaped (1- or 2-dimensional, proper or improper) data.
     '''
     ndim: int
     shape: Union[Tuple[int, int], Tuple[int]]
 
-    @abstractmethod
-    def dtype(self) -> str: ...
+    def dtype(self) -> np.dtype: ...
 
-    @abstractmethod
     def __getitem__(self, key: Any) -> Any: ...
 
-    @abstractmethod
     def __setitem__(self, key: Any, value: Any) -> Any: ...
 
-    @abstractmethod
-    def transpose(self: BS) -> BS: ...
-
-    @staticmethod
-    def am(data: Any) -> bool:
-        '''
-        Check whether the ``data`` is ``Shaped``.
-        '''
-        return isinstance(data, (np.ndarray,
-                                 pd.DataFrame,
-                                 pd.Series,
-                                 pd.core.arrays.categorical.Categorical)) \
-            or sp.issparse(data)
-
-    @classmethod
-    def be(cls: Type[BS], data: Any, name: str = 'data') -> BS:
-        '''
-        Return the ``data`` in the particular ``cls`` format.
-        '''
-        if not cls.am(data):
-            raise ValueError('%s: %s is not  %s'
-                             % (name, data.__class__, cls.__name__))
-        return data
-
-    @classmethod
-    def maybe(cls: Type[BS], data: Any) -> Optional[BS]:
-        '''
-        Return the ``data`` in the particular ``cls`` format, if it already is of that class.
-        '''
-        if not cls.am(data):
-            return None
-        return data
-
-
-class NumpyShaped(BaseShaped):
-    '''
-    A ``mypy`` type for numpy 1- or 2-dimensional data.
-    '''
-    strides: Union[Tuple[int, int], Tuple[int]]
-    flags: Any
-
-    @abstractmethod
-    def setflags(self, write: bool = False) -> None: ...
-
-    @abstractmethod
-    def __lt__(self: BS,  # type: ignore
-               value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __le__(self: BS,  # type: ignore
-               value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __eq__(self: BS,  # type: ignore
-               value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __ne__(self: BS,  # type: ignore
-               value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __ge__(self: BS,  # type: ignore
-               value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __gt__(self: BS,  # type: ignore
-               value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __add__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __iadd__(self: BS, value: Union[BS, float, int]) -> BS: ...
-
-    @abstractmethod
-    def __sub__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __isub__(self: BS, value: Union[BS, float, int]) -> BS: ...
-
-    @abstractmethod
-    def __mul__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __imul__(self: BS, value: Union[BS, float, int]) -> BS: ...
-
-    @abstractmethod
-    def __matmul__(self, value: 'NumpyShaped') -> 'NumpyShaped': ...
-
-    @abstractmethod
-    def __imatmul__(self, value: BS) -> 'NumpyShaped': ...
-
-    @abstractmethod
-    def __truediv__(self: BS,
-                    value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __itruediv__(self: BS, value: Union[BS, float, int]) -> BS: ...
-
-    @abstractmethod
-    def __floordiv__(self: BS,
-                     value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __ifloordiv__(self: BS, value: Union[BS, float, int]) -> BS: ...
-
-    @abstractmethod
-    def __mod__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __imod__(self: BS, value: Union[BS, float, int]) -> BS: ...
-
-    @abstractmethod
-    def __pow__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __ipow__(self: BS, value: Union[BS, float, int]) -> BS: ...
-
-    @abstractmethod
-    def __lshift__(self: BS,
-                   value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __ilshift__(self: BS, value: Union[BS, float, int]) -> BS: ...
-
-    @abstractmethod
-    def __rshift__(self: BS,
-                   value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __irshift__(self: BS, value: Union[BS, float, int]) -> BS: ...
-
-    @abstractmethod
-    def __and__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __iand__(self: BS, value: Union[BS, float, int]) -> BS: ...
-
-    @abstractmethod
-    def __xor__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __ixor__(self: BS, value: Union[BS, float, int]) -> BS: ...
-
-    @abstractmethod
-    def __or__(self: BS, value: Union['NumpyShaped', float, int]) -> BS: ...
-
-    @abstractmethod
-    def __ior__(self: BS, value: Union[BS, float, int]) -> BS: ...
-
-    @abstractmethod
-    def __neg__(self: BS) -> BS: ...
-
-    @abstractmethod
-    def __pos__(self: BS) -> BS: ...
-
-    @abstractmethod
-    def __abs__(self: BS) -> BS: ...
-
-    @abstractmethod
-    def __invert__(self: BS) -> BS: ...
-
-    @abstractmethod
-    def astype(self: BS, typ: str) -> BS: ...
-
-    @staticmethod
-    def am(data: Any) -> bool:
-        return isinstance(data, (np.ndarray, np.matrix))
-
-
-class NumpyMatrix(NumpyShaped):
-    '''
-    A ``mypy`` type for numpy ``matrix`` data. Avoid using if at all possible.
-    '''
-    shape: Tuple[int, int]
-    strides: Tuple[int, int]
-
-    @staticmethod
-    def am(data: Any) -> bool:
-        return isinstance(data, np.matrix)
-
-
-class DenseVector(NumpyShaped, Iterable, Sized):
-    '''
-    A ``mypy`` type for numpy 1-dimensional data.
-    '''
-    size: int
-    shape: Tuple[int]
-    strides: Tuple[int]
-
-    @abstractmethod
-    def sum(self) -> Union[float, int]: ...
-
-    @abstractmethod
-    def argmax(self) -> int: ...
-
-    @abstractmethod
-    def nonzero(self) -> Tuple['DenseVector']: ...
-
-    @staticmethod
-    def am(data: Any) -> bool:
-        return isinstance(data, np.ndarray) and data.ndim == 1
-
-
-class DenseMatrix(NumpyShaped):
-    '''
-    A ``mypy`` type for numpy 2-dimensional data.
-    '''
-    shape: Tuple[int, int]
-    strides: Tuple[int, int]
-    T: 'DenseMatrix'
-
-    @abstractmethod
-    def sum(self, *, axis: int) -> DenseVector: ...
-
-    @abstractmethod
-    def argmax(self, *, axis: int) -> DenseVector: ...
-
-    @abstractmethod
-    def flatten(self) -> DenseVector: ...
-
-    @abstractmethod
-    def nonzero(self) -> Tuple[DenseVector, DenseVector]: ...
-
-    @staticmethod
-    def am(data: Any) -> bool:
-        return isinstance(data, np.ndarray) and data.ndim == 2
+    def transpose(self: S) -> S: ...
 
 
 SP = TypeVar('SP', bound='SparseMatrix')
 
 
-class SparseMatrix(BaseShaped):
+class SparseMatrix(ShapedProtocol, Protocol):
     '''
     A ``mypy`` type for sparse 2-dimensional data.
+
+    Should have been ``SparseMatrix = sp.base.spmatrix``.
     '''
     shape: Tuple[int, int]
     nnz: int
 
-    @abstractmethod
     def getformat(self) -> str: ...
 
-    @abstractmethod
-    def toarray(self) -> DenseMatrix: ...
+    def toarray(self) -> NumpyMatrix: ...
 
-    @abstractmethod
-    def multiply(self: SP, other: BaseShaped) -> SP: ...
+    def multiply(self: SP, other: ShapedProtocol) -> SP: ...
 
-    @abstractmethod
     def getcol(self: SP, index: int) -> SP: ...
 
-    @abstractmethod
     def getrow(self: SP, index: int) -> SP: ...
 
-    @abstractmethod
-    def sum(self, *, axis: int) -> DenseVector: ...
+    def sum(self, *, axis: int) -> NumpyVector: ...
 
-    @abstractmethod
-    def max(self, *, axis: int) -> DenseVector: ...
+    def max(self, *, axis: int) -> NumpyVector: ...
 
-    @abstractmethod
-    def nanmax(self, *, axis: int) -> DenseVector: ...
+    def nanmax(self, *, axis: int) -> NumpyVector: ...
 
-    @abstractmethod
-    def min(self, *, axis: int) -> DenseVector: ...
+    def min(self, *, axis: int) -> NumpyVector: ...
 
-    @abstractmethod
-    def nanmin(self, *, axis: int) -> DenseVector: ...
+    def nanmin(self, *, axis: int) -> NumpyVector: ...
 
-    @abstractmethod
-    def getnnz(self, *, axis: int) -> DenseVector: ...
+    def getnnz(self, *, axis: int) -> NumpyVector: ...
 
-    @abstractmethod
-    def argmax(self, *, axis: int) -> DenseVector: ...
+    def argmax(self, *, axis: int) -> NumpyVector: ...
 
-    @abstractmethod
     def maximum(self: SP, other: SP) -> SP: ...
 
-    @abstractmethod
     def tocsr(self) -> 'CompressedMatrix': ...
 
-    @abstractmethod
     def tocsc(self) -> 'CompressedMatrix': ...
 
-    @abstractmethod
-    def nonzero(self) -> Tuple[DenseVector, DenseVector]: ...
+    def nonzero(self) -> Tuple[np.ndarray, np.ndarray]: ...
 
-    @abstractmethod
-    def mean(self: SP, *, axis: int) -> 'DenseVector': ...
+    def mean(self: SP, *, axis: int) -> 'np.ndarray': ...
 
-    @abstractmethod
     def copy(self: SP) -> SP: ...
 
-    @staticmethod
-    def am(data: Any) -> bool:
-        return sp.issparse(data)
 
-
-class CompressedMatrix(SparseMatrix):
+class CompressedMatrix(SparseMatrix, Protocol):
     '''
     A ``mypy`` type for sparse CSR/CSC 2-dimensional data.
+
+    Should have been ``CompressedMatrix = sp.compressed._cs_matrix``.
     '''
-    indices: DenseVector
-    indptr: DenseVector
-    data: DenseVector
+    indices: np.ndarray
+    indptr: np.ndarray
+    data: np.ndarray
     has_sorted_indices: bool
     has_canonical_format: bool
 
-    @abstractmethod
     def sum_duplicates(self) -> None: ...
 
-    @abstractmethod
     def eliminate_zeros(self) -> None: ...
 
-    @abstractmethod
     def sort_indices(self) -> None: ...
 
-    @staticmethod
-    def am(data: Any) -> bool:
-        return SparseMatrix.am(data) and data.getformat() in ('csr', 'csc')
 
-
-class PandasIndex(BaseShaped):
+class PandasIndex(ShapedProtocol, Sized, Protocol):
     '''
     A ``mypy`` type for a pandas index.
     '''
-    values: DenseVector
+    values: NumpyVector
 
 
-class PandasFrame(BaseShaped):
+class PandasFrame(ShapedProtocol, Protocol):
     '''
     A ``mypy`` type for pandas 2-dimensional data.
+
+    Should have been ``PandasFrame = pd.DataFrame``.
     '''
     shape: Tuple[int, int]
-    values: DenseMatrix
+    values: NumpyMatrix
     index: PandasIndex
     columns: PandasIndex
 
-    @staticmethod
-    def am(data: Any) -> bool:
-        return isinstance(data, pd.DataFrame)
+    def __delitem__(self, key: Any) -> None: ...
+
+    def __constraints__(self, key: Any) -> bool: ...
 
 
-class PandasSeries(BaseShaped, Sized):
+class PandasSeries(ShapedProtocol, Sized, Protocol):
     '''
     A ``mypy`` type for pandas 1-dimensional data.
+
+    Should have been ``PandasSeries = pd.Series``.
     '''
     size: int
     shape: Tuple[int]
-    values: DenseVector
+    values: NumpyVector
     index: PandasIndex
 
-    @staticmethod
-    def am(data: Any) -> bool:
-        return isinstance(data, pd.Series)
 
-
-class PandasCategorical(BaseShaped, Sized):
+class PandasCategorical(ShapedProtocol, Sized):
     '''
     A ``mypy`` type for pandas 1-dimensional categorical data.
     '''
     size: int
     shape: Tuple[int]
-    codes: DenseVector
-
-    @staticmethod
-    def am(data: Any) -> bool:
-        return isinstance(data, pd.core.arrays.categorical.Categorical)
+    codes: NumpyVector
 
 
 # pylint: enable=missing-function-docstring
-# pylint: enable=abstract-method
 
+
+#: The data types supported by the C++ extensions code.
+CPP_DATA_TYPES = ['float32', 'float64', 'int32', 'int64', 'uint32', 'uint64']
 
 #: A ``mypy`` type for "proper" 2-dimensional data.
 #:
 #: "Proper" data allows for direct processing without having
 #: to mess with its formatting.
-ProperMatrix = Union[DenseMatrix, CompressedMatrix]
+ProperMatrix = Union[NumpyMatrix, CompressedMatrix]
 
 #: A ``mypy`` type for "improper" 2-dimensional data.
 #:
 #: "Improper" data contains "proper" data somewhere inside it.
-ImproperMatrix = Union[NumpyMatrix, PandasFrame, SparseMatrix]
+ImproperMatrix = Union[PandasFrame, SparseMatrix]
 
 #: A ``mypy`` type for any 2-dimensional data.
 Matrix = Union[ProperMatrix, ImproperMatrix]
 
 #: An "improper" 1-dimensional data.
-ImproperVector = Union[PandasSeries, PandasCategorical]
+ImproperVector = Union[Collection[int],
+                       Collection[float], PandasSeries, PandasCategorical]
 
 #: A ``mypy`` type for any 1-dimensional data.
 #:
 #: .. todo::
 #:
 #:    Is there any need for ``SparseVector``?
-Vector = Union[DenseVector, ImproperVector]
+Vector = Union[NumpyVector, ImproperVector]
 
 #: A "proper" 1- or 2-dimensional data.
-ProperShaped = Union[ProperMatrix, DenseVector]
+ProperShaped = Union[ProperMatrix, NumpyVector]
 
 #: An "improper" 1- or 2- dimensional data.
 ImproperShaped = Union[ImproperMatrix, ImproperVector]
@@ -552,11 +317,144 @@ ImproperShaped = Union[ImproperMatrix, ImproperVector]
 #: Shaped data of any of the types we can deal with.
 Shaped = Union[ProperShaped, ImproperShaped]
 
-#: Dense 1- or 2-dimensional data.
-DenseShaped = Union[DenseVector, DenseMatrix]
-
 #: Pandas data in various types.
 PandasShaped = Union[PandasFrame, PandasSeries, PandasCategorical]
+
+
+def is_1d(shaped: Shaped) -> bool:
+    '''
+    Test whether the ``shaped`` is 1-dimensional.
+    '''
+    return not hasattr(shaped, 'ndim') or getattr(shaped, 'ndim') == 1
+
+
+def is_2d(shaped: Shaped) -> bool:
+    '''
+    Test whether the ``shaped`` is 2-dimensional.
+    '''
+    return hasattr(shaped, 'ndim') and getattr(shaped, 'ndim') == 2
+
+
+def maybe_numpy_vector(shaped: Any) -> Optional[NumpyVector]:
+    '''
+    Test whether ``shaped`` is a :py:const:`NumpyVector`.
+    '''
+    if isinstance(shaped, np.ndarray) and shaped.ndim == 1:
+        return shaped
+    return None
+
+
+def maybe_numpy_matrix(shaped: Any) -> Optional[NumpyMatrix]:
+    '''
+    Test whether ``shaped`` is a :py:const:`NumpyMatrix`.
+
+    .. note::
+
+        This looks for a 2-d ``np.ndarray`` which is **not** an ``np.matrix``.
+    '''
+    if isinstance(shaped, np.ndarray) and shaped.ndim == 2 \
+            and not isinstance(shaped, np.matrix):
+        return shaped
+    return None
+
+
+def maybe_sparse_matrix(shaped: Any) -> Optional[SparseMatrix]:
+    '''
+    Test whether ``shaped`` is a :py:const:`SparseMatrix`.
+
+    .. note::
+
+        This will succeed for a :py:const:`CompressedMatrix`.
+    '''
+    if isinstance(shaped, sp.base.spmatrix):
+        return shaped
+    return None
+
+
+def maybe_compressed_matrix(shaped: Any) -> Optional[CompressedMatrix]:
+    '''
+    Test whether ``shaped`` is a :py:const:`CompressedMatrix`.
+    '''
+    if isinstance(shaped,
+                  sp.compressed._cs_matrix):  # pylint: disable=protected-access
+        return shaped
+    return None
+
+
+def maybe_pandas_series(shaped: Any) -> Optional[PandasSeries]:
+    '''
+    Test whether ``shaped`` is a :py:const:`PandasSeries`.
+    '''
+    if isinstance(shaped, pd.Series):
+        return shaped
+    return None
+
+
+def maybe_pandas_frame(shaped: Any) -> Optional[PandasFrame]:
+    '''
+    Test whether ``shaped`` is a :py:const:`PandasFrame`.
+    '''
+    if isinstance(shaped, pd.DataFrame):
+        return shaped
+    return None
+
+
+def mustbe_numpy_vector(shaped: Any) -> NumpyVector:
+    '''
+    Test whether ``shaped`` is a :py:const:`NumpyVector`.
+    '''
+    assert isinstance(shaped, np.ndarray) and shaped.ndim == 1
+    return shaped
+
+
+def mustbe_numpy_matrix(shaped: Any) -> NumpyMatrix:
+    '''
+    Assert that ``shaped`` is a :py:const:`NumpyMatrix`.
+
+    .. note::
+
+        This looks for a 2-d ``np.ndarray`` which is **not** an ``np.matrix``.
+    '''
+    assert isinstance(shaped, np.ndarray) and shaped.ndim == 2 \
+        and not isinstance(shaped, np.matrix)
+    return shaped
+
+
+def mustbe_sparse_matrix(shaped: Any) -> SparseMatrix:
+    '''
+    Assert that ``shaped`` is a :py:const:`SparseMatrix`.
+
+    .. note::
+
+        This will succeed for a :py:const:`CompressedMatrix`.
+    '''
+    assert isinstance(shaped, sp.base.spmatrix)
+    return shaped
+
+
+def mustbe_compressed_matrix(shaped: Any) -> CompressedMatrix:
+    '''
+    Assert that ``shaped`` is a :py:const:`CompressedMatrix`.
+    '''
+    assert isinstance(shaped,
+                      sp.compressed._cs_matrix)  # pylint: disable=protected-access
+    return shaped
+
+
+def mustbe_pandas_series(shaped: Any) -> PandasSeries:
+    '''
+    Assert that ``shaped`` is a :py:const:`PandasSeries`.
+    '''
+    assert isinstance(shaped, pd.Series)
+    return shaped
+
+
+def mustbe_pandas_frame(shaped: Any) -> PandasFrame:
+    '''
+    Assert that ``shaped`` is a :py:const:`PandasFrame`.
+    '''
+    assert isinstance(shaped, pd.DataFrame)
+    return shaped
 
 
 @utd.expand_doc()
@@ -580,56 +478,92 @@ def to_proper_matrix(
     if default_layout not in LAYOUT_OF_AXIS:
         raise ValueError(f'invalid default layout: {default_layout}')
 
-    if isinstance(matrix, pd.DataFrame):
-        matrix = matrix.values
+    frame = maybe_pandas_frame(matrix)
+    if frame is not None:
+        matrix = frame.values
         if isinstance(matrix, pd.core.arrays.categorical.Categorical):
             matrix = np.array(matrix)
 
-    sparse = SparseMatrix.maybe(matrix)
-    if sparse is not None:
-        compressed = CompressedMatrix.maybe(sparse)
-        if compressed is None:
-            if default_layout == 'column_major':
-                with utm.timed_step('sparse.tocsc'):
-                    compressed = sparse.tocsc()
-                    utm.timed_parameters(results=compressed.shape[1],
-                                         elements=compressed.nnz / compressed.shape[1])
-            else:
-                with utm.timed_step('sparse.tocsr'):
-                    compressed = sparse.tocsr()
-                    utm.timed_parameters(results=compressed.shape[0],
-                                         elements=compressed.nnz / compressed.shape[0])
+    compressed = maybe_compressed_matrix(matrix)
+    if compressed is not None:
         return compressed
 
-    if isinstance(matrix, np.matrix) or not isinstance(matrix, np.ndarray):
-        matrix = np.asarray(matrix)
-    assert isinstance(matrix, np.ndarray)
+    sparse = maybe_sparse_matrix(matrix)
+    if sparse is not None:
+        if default_layout == 'column_major':
+            with utm.timed_step('matrix.tocsc'):
+                utm.timed_parameters(results=sparse.shape[1],
+                                     elements=sparse.nnz / sparse.shape[1])
+                return sparse.tocsc()
 
-    return matrix
+        with utm.timed_step('matrix.tocsr'):
+            utm.timed_parameters(results=sparse.shape[0],
+                                 elements=sparse.nnz / sparse.shape[0])
+            return sparse.tocsr()
+
+    dense = maybe_numpy_matrix(matrix)
+    if dense is None:
+        dense = np.asarray(matrix)
+
+    return dense
 
 
 def to_proper_matrices(
     matrix: Matrix,
     *,
     default_layout: str = 'row_major'
-) -> Tuple[ProperMatrix, Optional[DenseMatrix], Optional[CompressedMatrix]]:
+) -> Tuple[ProperMatrix, Optional[NumpyMatrix], Optional[CompressedMatrix]]:
     '''
     Given some matrix, return the properly-formatted data within it using
     :py:func:`to_proper_matrix`, which may be either dense or compressed (sparse).
     '''
     proper = to_proper_matrix(matrix, default_layout=default_layout)
-    dense = DenseMatrix.maybe(proper)
-    compressed = CompressedMatrix.maybe(proper)
-    assert (dense is not None) or (compressed is not None)
+    dense = maybe_numpy_matrix(proper)
+    compressed = maybe_compressed_matrix(proper)
+    assert (dense is None) or (compressed is None)
     assert (dense is None) != (compressed is None)
     return (proper, dense, compressed)
+
+
+def to_pandas_series(
+    vector: Optional[Vector] = None,
+    *,
+    index: Optional[Vector] = None,
+) -> PandasSeries:
+    '''
+    Construct a pandas series from a vector.
+    '''
+    if vector is None:
+        return pd.Series(index=index)
+
+    return pd.Series(to_numpy_vector(vector), index=index)
+
+
+def to_pandas_frame(
+    matrix: Optional[Matrix] = None,
+    *,
+    index: Optional[Vector] = None,
+    columns: Optional[Vector] = None
+) -> PandasFrame:
+    '''
+    Construct a pandas frame from a matrix.
+    '''
+    if matrix is None:
+        return pd.DataFrame(index=index, columns=columns)
+
+    sparse = maybe_sparse_matrix(matrix)
+    if sparse is not None:
+        return pd.DataFrame.from_spmatrix(sparse, index=index, columns=columns)
+
+    return pd.DataFrame(to_numpy_matrix(matrix, only_extract=True),
+                        index=index, columns=columns)
 
 
 def frozen(shaped: Union[ProperShaped, PandasShaped]) -> bool:
     '''
     Test whether the ``shaped`` data is protected against future modification.
     '''
-    compressed = CompressedMatrix.maybe(shaped)
+    compressed = maybe_compressed_matrix(shaped)
     if compressed is not None:
         assert compressed.indices.flags.writeable \
             == compressed.indptr.flags.writeable \
@@ -642,9 +576,8 @@ def frozen(shaped: Union[ProperShaped, PandasShaped]) -> bool:
     if isinstance(shaped, pd.core.arrays.categorical.Categorical):
         shaped = shaped.codes
 
-    numpy = NumpyShaped.maybe(shaped)
-    if numpy is not None:
-        return not numpy.flags.writeable
+    if isinstance(shaped, np.ndarray):
+        return not shaped.flags.writeable
 
     raise NotImplementedError('frozen of %s' % shaped.__class__)
 
@@ -653,7 +586,7 @@ def freeze(shaped: Union[ProperShaped, PandasShaped]) -> None:
     '''
     Protect the ``shaped`` data against future modification.
     '''
-    compressed = CompressedMatrix.maybe(shaped)
+    compressed = maybe_compressed_matrix(shaped)
     if compressed is not None:
         compressed.indices.setflags(write=False)
         compressed.indptr.setflags(write=False)
@@ -666,9 +599,8 @@ def freeze(shaped: Union[ProperShaped, PandasShaped]) -> None:
     if isinstance(shaped, pd.core.arrays.categorical.Categorical):
         shaped = shaped.codes
 
-    numpy = NumpyShaped.maybe(shaped)
-    if numpy is not None:
-        numpy.setflags(write=False)
+    if isinstance(shaped, np.ndarray):
+        shaped.setflags(write=False)
         return
 
     raise NotImplementedError('freeze of %s' % shaped.__class__)
@@ -678,7 +610,7 @@ def unfreeze(shaped: Union[ProperShaped, PandasShaped]) -> None:
     '''
     Permit future modification of some ``shaped`` data.
     '''
-    compressed = CompressedMatrix.maybe(shaped)
+    compressed = maybe_compressed_matrix(shaped)
     if compressed is not None:
         compressed.indices.setflags(write=True)
         compressed.indptr.setflags(write=True)
@@ -691,9 +623,8 @@ def unfreeze(shaped: Union[ProperShaped, PandasShaped]) -> None:
     if isinstance(shaped, pd.core.arrays.categorical.Categorical):
         shaped = shaped.codes
 
-    numpy = NumpyShaped.maybe(shaped)
-    if numpy is not None:
-        numpy.setflags(write=True)
+    if isinstance(shaped, np.ndarray):
+        shaped.setflags(write=True)
         return
 
     raise NotImplementedError('unfreeze of %s' % shaped.__class__)
@@ -717,40 +648,46 @@ def unfrozen(proper: ProperShaped) -> Iterator[None]:
 
 
 @utd.expand_doc()
-def to_dense_matrix(
+def to_numpy_matrix(
     matrix: Matrix,
     *,
     default_layout: str = 'row_major',
-    copy: Optional[bool] = False
-) -> DenseMatrix:
+    copy: Optional[bool] = False,
+    only_extract: bool = False,
+) -> NumpyMatrix:
     '''
     Convert some (possibly improper) ``matrix`` data to a dense 2-dimensional numpy array.
 
     If ``copy`` (default: {copy}), a copy of the data is returned even if it is already a numpy
     array. If ``copy`` is ``None``, always returns the data without copying (fails on sparse data).
+
+    If ``only_extract`` (default: {only_extract}) then this is only expected to extract the dense
+    data out of some wrapper (typically pandas data).
     '''
-    sparse = SparseMatrix.maybe(matrix)
+    sparse = maybe_sparse_matrix(matrix)
     if sparse is not None:
         assert copy is not None
+        assert not only_extract
         with utm.timed_step('sparse.toarray'):
-            if sparse.ndim == 2:
-                utm.timed_parameters(results=sparse.shape[0],
-                                     elements=sparse.shape[1])
-            else:
-                utm.timed_parameters(size=sparse.shape[0])
+            utm.timed_parameters(results=sparse.shape[0],
+                                 elements=sparse.shape[1])
             return sparse.toarray()
 
-    dense = \
-        DenseMatrix.be(to_proper_matrix(matrix, default_layout=default_layout))
+    dense = to_proper_matrix(matrix, default_layout=default_layout)
 
     if copy and id(dense) == id(matrix):
         dense = np.copy(dense)
 
-    return DenseMatrix.be(dense)
+    return mustbe_numpy_matrix(dense)
 
 
 @utd.expand_doc()
-def to_dense_vector(shaped: Shaped, *, copy: Optional[bool] = False) -> DenseVector:
+def to_numpy_vector(
+    shaped: Shaped,
+    *,
+    copy: Optional[bool] = False,
+    only_extract: bool = False,
+) -> NumpyVector:
     '''
     Convert some (possibly improper) data to a dense 1-dimensional numpy array.
 
@@ -758,24 +695,34 @@ def to_dense_vector(shaped: Shaped, *, copy: Optional[bool] = False) -> DenseVec
 
     If ``copy`` (default: {copy}), a copy of the data is returned even if it is already a 1d numpy
     array. If ``copy`` is ``None``, always returns the data without copying (fails on sparse data).
-    '''
-    if shaped.ndim == 2:
-        assert shaped.shape[0] == 1 or shaped.shape[1] == 1  # type: ignore
-        dense: DenseVector = to_dense_matrix(shaped, copy=copy)  # type: ignore
-        dense = np.reshape(dense, -1)
 
-    else:
-        assert shaped.ndim == 1
-        if isinstance(shaped, pd.Series):
-            shaped = shaped.values
+    If ``only_extract`` (default: {only_extract}) then this is only expected to extract the dense
+    data out of some wrapper (typically pandas data).
+    '''
+    if not hasattr(shaped, 'ndim'):
+        dense = np.array(shaped)
+
+    elif shaped.ndim == 1:  # type: ignore
+        series = maybe_pandas_series(shaped)
+        if series is not None:
+            shaped = series.values
+
         if isinstance(shaped, pd.core.arrays.categorical.Categorical):
             shaped = np.array(shaped)
-        dense = DenseVector.be(shaped)
+
+        dense = shaped  # type: ignore
+
+    else:
+        assert shaped.ndim == 2  # type: ignore
+        assert shaped.shape[0] == 1 or shaped.shape[1] == 1  # type: ignore
+        dense = to_numpy_matrix(shaped, copy=copy,  # type: ignore
+                                only_extract=only_extract)
+        dense = np.reshape(dense, -1)
 
     if copy and id(dense) == id(shaped):
         dense = np.copy(dense)
 
-    return DenseVector.be(dense)
+    return mustbe_numpy_vector(dense)
 
 
 #: Which flag indicates efficient 2D dense matrix layout.
@@ -801,37 +748,15 @@ def is_layout(matrix: Matrix, layout: Optional[str]) -> bool:
     if layout is None:
         return True
 
-    sparse = SparseMatrix.maybe(matrix)
+    sparse = maybe_sparse_matrix(matrix)
     if sparse is not None:
         return sparse.getformat() == SPARSE_FAST_FORMAT[layout]
 
-    dense = DenseMatrix.be(to_proper_matrix(matrix))
+    dense = to_numpy_matrix(matrix, only_extract=True)
     return dense.flags[DENSE_FAST_FLAG[layout]]
 
 
-def is_row_major(matrix: Matrix) -> bool:
-    '''
-    Test whether the matrix ``layout`` is optimized for per-row (variable, gene) processing.
-    '''
-    return is_layout(matrix, 'row_major')
-
-
-def is_column_major(matrix: Matrix) -> bool:
-    '''
-    Test whether the ``matrix`` layout is optimized for per-column (observation, cell) processing.
-    '''
-    return is_layout(matrix, 'column_major')
-
-
-@overload
-def matrix_layout(matrix: ProperMatrix) -> str: ...
-
-
-@overload
-def matrix_layout(matrix: ImproperMatrix) -> Optional[str]: ...
-
-
-def matrix_layout(matrix):  # type: ignore
+def matrix_layout(matrix: Matrix) -> Optional[str]:
     '''
     Return which layout the ``matrix`` is optimized for (``row_major`` or ``column_major``).
 
@@ -839,17 +764,18 @@ def matrix_layout(matrix):  # type: ignore
 
         The matrix may be in neither layout, in which case this returns ``None``.
     '''
-    sparse = SparseMatrix.maybe(matrix)
+    sparse = maybe_sparse_matrix(matrix)
     if sparse is not None:
         for layout, sparse_format in SPARSE_FAST_FORMAT.items():
             if sparse.getformat() == sparse_format:
                 return layout
         return None
 
-    dense = DenseMatrix.be(to_proper_matrix(matrix))
+    dense = to_numpy_matrix(matrix, only_extract=True)
     for layout, flag in DENSE_FAST_FLAG.items():
         if dense.flags[flag]:
             return layout
+
     return None
 
 
@@ -859,18 +785,18 @@ def is_contiguous(vector: Vector) -> bool:
 
     This is only ``True`` for a dense vector.
     '''
-    dense = to_dense_vector(vector)
+    dense = to_numpy_vector(vector)
     return dense.flags.c_contiguous and dense.flags.f_contiguous
 
 
-def to_contiguous(vector: Vector, *, copy: bool = False) -> DenseVector:
+def to_contiguous(vector: Vector, *, copy: bool = False) -> NumpyVector:
     '''
     Return the ``vector`` in contiguous (dense) format.
 
     If ``copy`` (default: {copy}), a copy of the vector is returned even if it is already a
     contiguous numpy array.
     '''
-    dense = to_dense_vector(vector)
+    dense = to_numpy_vector(vector)
     if copy or not dense.flags.c_contiguous or not dense.flags.f_contiguous:
         dense = np.copy(dense)
     return dense
@@ -888,12 +814,16 @@ def is_canonical(shaped: Shaped) -> bool:  # pylint: disable=too-many-return-sta
 
     In general, we'd like all the data stored in the annotated data to be canonical.
     '''
-    if shaped.ndim == 1:
+    if not hasattr(shaped, 'ndim'):
+        return False
+
+    if shaped.ndim == 1:  # type: ignore
         return is_contiguous(shaped)  # type: ignore
 
-    sparse = SparseMatrix.maybe(shaped)
+    matrix: Matrix = shaped  # type: ignore
+    sparse = maybe_sparse_matrix(matrix)
     if sparse is None:
-        return matrix_layout(shaped) is not None  # type: ignore
+        return matrix_layout(matrix) is not None
 
     if sparse.getformat() not in ('coo', 'csr', 'csc'):
         return False
@@ -906,7 +836,7 @@ def is_canonical(shaped: Shaped) -> bool:  # pylint: disable=too-many-return-sta
             and not getattr(sparse, 'has_sorted_indices'):
         return False
 
-    compressed = CompressedMatrix.maybe(sparse)
+    compressed = maybe_compressed_matrix(matrix)
     if compressed is not None:
         return compressed.indptr[-1] == compressed.data.size \
             and is_canonical(compressed.indptr) \
@@ -953,8 +883,8 @@ def shaped_checksum(shaped: Shaped) -> float:
     '''
     Return a checksum of the contents of ``shaped`` data (for debugging reproducibility).
     '''
-    if shaped.ndim == 1:
-        values = to_dense_vector(shaped)
+    if is_1d(shaped):
+        values = to_numpy_vector(shaped)
     else:
-        values = to_dense_matrix(shaped).flatten()  # type: ignore
+        values = to_numpy_matrix(shaped).flatten()  # type: ignore
     return np.sum(values.astype('float64') * (1 + np.arange(len(values))))

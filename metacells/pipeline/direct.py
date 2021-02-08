@@ -7,7 +7,7 @@ import logging
 from re import Pattern
 from typing import Collection, Optional, Union
 
-import numpy as np  # type: ignore
+import numpy as np
 from anndata import AnnData
 
 import metacells.parameters as pr
@@ -224,13 +224,16 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
     ut.log_pipeline_step(LOG, fdata, 'compute_direct_metacells')
 
     ut.log_use(LOG, adata, cell_sizes, per='o', name='cell_sizes')
-    if isinstance(cell_sizes, str):
-        if cell_sizes.endswith('|sum_per_obs'):
-            cell_sizes = \
-                ut.sum_per(ut.get_vo_data(adata, cell_sizes[:-12],
-                                          layout='row_major'), per='row')
-        else:
-            cell_sizes = ut.get_o_dense(adata, cell_sizes)
+    if cell_sizes is None:
+        pass
+    elif not isinstance(cell_sizes, str):
+        cell_sizes = ut.to_numpy_vector(cell_sizes)
+    elif cell_sizes.endswith('|sum_per_obs'):
+        cell_sizes = \
+            ut.sum_per(ut.get_vo_data(adata, cell_sizes[:-12],
+                                      layout='row_major'), per='row')
+    else:
+        cell_sizes = ut.get_o_numpy(adata, cell_sizes)
 
     data = ut.get_vo_proper(fdata, what, layout='row_major')
     data = ut.fraction_by(data, sums=total_per_cell, by='row')
@@ -245,9 +248,9 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
 
     if knn_k is None:
         if cell_sizes is None:
-            total_cell_sizes = fdata.n_obs
+            total_cell_sizes: float = fdata.n_obs
         else:
-            total_cell_sizes = np.sum(cell_sizes)
+            total_cell_sizes = float(np.sum(cell_sizes))
         knn_k = round(total_cell_sizes / target_metacell_size)
 
     LOG.debug('  knn_k: %s', knn_k)
@@ -273,7 +276,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
                                        min_metacell_cells=candidates_min_metacell_cells,
                                        random_seed=random_seed)
 
-    candidate_of_cells = ut.get_o_dense(fdata, 'candidate')
+    candidate_of_cells = ut.get_o_numpy(fdata, 'candidate')
 
     if intermediate:
         ut.set_o_data(adata, 'candidate', candidate_of_cells,
@@ -319,7 +322,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
                               min_metacell_cells=dissolve_min_metacell_cells)
 
     if intermediate:
-        metacell_of_cells = ut.get_o_dense(adata, 'metacell')
+        metacell_of_cells = ut.get_o_numpy(adata, 'metacell')
 
         outlier_of_cells = metacell_of_cells < 0
         ut.set_o_data(adata, 'outlier', outlier_of_cells,

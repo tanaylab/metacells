@@ -6,7 +6,7 @@ import os
 from glob import glob
 from typing import Any, List
 
-import numpy as np  # type: ignore
+import numpy as np
 from scipy import sparse  # type: ignore
 from scipy import stats
 from sklearn.metrics import roc_auc_score  # type: ignore
@@ -313,24 +313,26 @@ def test_sum_groups() -> None:
 
     results = ut.sum_groups(dense_rows, groups, per='row')
     assert results is not None
-    assert np.allclose(results[0], expected_sums)
+    assert np.allclose(ut.to_numpy_matrix(results[0]), expected_sums)
     assert np.allclose(results[1], expected_sizes)
 
     results = ut.sum_groups(dense_rows.transpose(), groups, per='column')
     assert results is not None
-    assert np.allclose(results[0], expected_sums.transpose())
+    assert np.allclose(ut.to_numpy_matrix(results[0]),
+                       expected_sums.transpose())
     assert np.allclose(results[1], expected_sizes)
 
     sparse_rows = sparse.csr_matrix(dense_rows)
 
     results = ut.sum_groups(sparse_rows, groups, per='row')
     assert results is not None
-    assert np.allclose(results[0], expected_sums)
+    assert np.allclose(ut.to_numpy_matrix(results[0]), expected_sums)
     assert np.allclose(results[1], expected_sizes)
 
     results = ut.sum_groups(sparse_rows.transpose(), groups, per='column')
     assert results is not None
-    assert np.allclose(results[0], expected_sums.transpose())
+    assert np.allclose(ut.to_numpy_matrix(results[0]),
+                       expected_sums.transpose())
     assert np.allclose(results[1], expected_sizes)
 
 
@@ -441,8 +443,8 @@ def _test_per(rows_matrix: ut.Matrix) -> None:
                                          (17/2 - (5/2)**2) / (5/2),
                                          (29/2 - (7/2)**2) / (7/2)])))
 
-    dense = ut.to_dense_matrix(ut.fraction_by(rows_matrix, by='row'))
+    dense = ut.to_numpy_matrix(ut.fraction_by(rows_matrix, by='row'))
     assert np.allclose(dense, np.array([[0/3, 1/3, 2/3], [3/12, 4/12, 5/12]]))
 
-    dense = ut.to_dense_matrix(ut.fraction_by(columns_matrix, by='column'))
+    dense = ut.to_numpy_matrix(ut.fraction_by(columns_matrix, by='column'))
     assert np.allclose(dense, np.array([[0/3, 1/5, 2/7], [3/3, 4/5, 5/7]]))

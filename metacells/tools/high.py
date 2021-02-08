@@ -6,7 +6,6 @@ High
 import logging
 from typing import Optional, Union
 
-import pandas as pd  # type: ignore
 from anndata import AnnData
 
 import metacells.parameters as pr
@@ -74,7 +73,7 @@ def find_high_fraction_genes(
 
     ut.log_mask(LOG, level, 'high_fraction_genes', genes_mask)
 
-    return pd.Series(genes_mask, index=adata.var_names)
+    return ut.to_pandas_series(genes_mask, index=adata.var_names)
 
 
 @ut.timed_call()
@@ -137,7 +136,7 @@ def find_high_normalized_variance_genes(
 
     ut.log_mask(LOG, level, 'high_normalized_variance_genes', genes_mask)
 
-    return pd.Series(genes_mask, index=adata.var_names)
+    return ut.to_pandas_series(genes_mask, index=adata.var_names)
 
 
 @ut.timed_call()
@@ -202,4 +201,4 @@ def find_high_relative_variance_genes(
 
     ut.log_mask(LOG, level, 'high_relative_variance_genes', genes_mask)
 
-    return pd.Series(genes_mask, index=adata.var_names)
+    return ut.to_pandas_series(genes_mask, index=adata.var_names)

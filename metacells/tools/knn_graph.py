@@ -6,8 +6,7 @@ K-Nearest-Neighbors Graph
 import logging
 from typing import Optional, Union
 
-import numpy as np  # type: ignore
-import pandas as pd  # type: ignore
+import numpy as np
 import scipy.sparse as sparse  # type: ignore
 from anndata import AnnData
 
@@ -245,7 +244,7 @@ def _compute_elements_knn_graph(
 
     similarity = ut.to_proper_matrix(get_data(adata, what))
     similarity = ut.to_layout(similarity, 'row_major', symmetric=True)
-    similarity = ut.to_dense_matrix(similarity)
+    similarity = ut.to_numpy_matrix(similarity)
 
     LOG.debug('  k: %s', k)
     LOG.debug('  size: %s', similarity.shape[0])
@@ -272,18 +271,18 @@ def _compute_elements_knn_graph(
     else:
         names = adata.var_names
 
-    return pd.DataFrame(outgoing_weights, index=names, columns=names)
+    return ut.to_pandas_frame(outgoing_weights, index=names, columns=names)
 
 
 @ ut.timed_call('.rank_outgoing')
 def _rank_outgoing(
-    similarity: ut.DenseMatrix,
+    similarity: ut.NumpyMatrix,
     k: int,
     balanced_ranks_factor: float
 ) -> ut.CompressedMatrix:
-    similarity = ut.to_dense_matrix(similarity, copy=True)
     size = similarity.shape[0]
     assert similarity.shape == (size, size)
+    similarity = np.copy(similarity)
 
     LOG.debug('  balanced_ranks_factor: %s', balanced_ranks_factor)
     degree = int(round(k * balanced_ranks_factor))
@@ -339,14 +338,14 @@ def _balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     size = outgoing_ranks.shape[0]
 
     transposed_ranks = \
-        ut.CompressedMatrix.be(ut.to_layout(outgoing_ranks.transpose(),
-                                            'row_major'))
+        ut.mustbe_compressed_matrix(ut.to_layout(outgoing_ranks.transpose(),
+                                                 'row_major'))
     _assert_sparse(transposed_ranks, 'csr')
 
     with ut.timed_step('.multiply'):
         ut.timed_parameters(size=size, nnz=outgoing_ranks.nnz)
-        balanced_ranks = \
-            ut.CompressedMatrix.be(outgoing_ranks.multiply(transposed_ranks))
+        balanced_ranks = ut.mustbe_compressed_matrix(  #
+            outgoing_ranks.multiply(transposed_ranks))
 
     ut.sort_compressed_indices(balanced_ranks)
     _assert_sparse(balanced_ranks, 'csr')
@@ -377,12 +376,12 @@ def _prune_ranks(
     all_indices = np.arange(size)
     with ut.timed_step('numpy.argmax'):
         ut.timed_parameters(results=size, elements=balanced_ranks.nnz / size)
-        max_index_of_each = ut.to_dense_vector(balanced_ranks.argmax(axis=1))
+        max_index_of_each = ut.to_numpy_vector(balanced_ranks.argmax(axis=1))
 
     preserved_row_indices = all_indices
     preserved_column_indices = max_index_of_each
     preserved_balanced_ranks = \
-        ut.to_dense_vector(balanced_ranks[preserved_row_indices,
+        ut.to_numpy_vector(balanced_ranks[preserved_row_indices,
                                           preserved_column_indices])
     preserved_matrix = \
         sparse.coo_matrix((preserved_balanced_ranks,
@@ -396,8 +395,9 @@ def _prune_ranks(
     ranks_array = np.empty(size * max_degree, dtype='float32')
 
     pruned_ranks = \
-        ut.CompressedMatrix.be(ut.to_layout(balanced_ranks,
-                                            'column_major', symmetric=True))
+        ut.mustbe_compressed_matrix(ut.to_layout(balanced_ranks,
+                                                 'column_major',
+                                                 symmetric=True))
     _assert_sparse(pruned_ranks, 'csc')
 
     with ut.timed_step('extensions.collect_pruned'):
@@ -419,7 +419,7 @@ def _prune_ranks(
     _assert_sparse(pruned_ranks, 'csc')
 
     pruned_ranks = \
-        ut.CompressedMatrix.be(ut.to_layout(pruned_ranks, 'row_major'))
+        ut.mustbe_compressed_matrix(ut.to_layout(pruned_ranks, 'row_major'))
     _assert_sparse(pruned_ranks, 'csr')
 
     with ut.timed_step('extensions.collect_pruned'):
@@ -444,7 +444,7 @@ def _prune_ranks(
         ut.timed_parameters(collected=pruned_ranks.nnz,
                             preserved=preserved_matrix.nnz)
         pruned_ranks = pruned_ranks.maximum(preserved_matrix)
-    pruned_ranks = ut.CompressedMatrix.be(pruned_ranks)
+    pruned_ranks = ut.mustbe_compressed_matrix(pruned_ranks)
 
     ut.sort_compressed_indices(pruned_ranks)
 
@@ -457,7 +457,7 @@ def _weigh_edges(pruned_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     size = pruned_ranks.shape[0]
 
     total_ranks_per_row = \
-        ut.to_dense_vector(ut.sum_per(pruned_ranks, per='row'))
+        ut.to_numpy_vector(ut.sum_per(pruned_ranks, per='row'))
 
     ut.timed_parameters(size=size)
     scale_per_row = \

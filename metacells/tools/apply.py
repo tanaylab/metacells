@@ -6,7 +6,7 @@ Apply
 import logging
 from typing import Any, Callable, Dict, NamedTuple, Optional, Union
 
-import numpy as np  # type: ignore
+import numpy as np
 from anndata import AnnData
 
 import metacells.utilities as ut
@@ -171,7 +171,7 @@ def _apply_annotations(  # pylint: disable=too-many-branches
         slice_size = sdata.n_vars
 
     ut.log_use(LOG, adata, indices, per='o', name='full_indices')
-    full_indices = ut.get_o_dense(adata, indices)
+    full_indices = ut.get_o_numpy(adata, indices)
     assert full_indices.size == slice_size
 
     for name, default_values in annotations.items():

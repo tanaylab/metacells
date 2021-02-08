@@ -11,8 +11,7 @@ from re import Pattern
 from typing import (Any, Callable, Collection, Dict, List, NamedTuple,
                     Optional, Union)
 
-import numpy as np  # type: ignore
-import pandas as pd  # type: ignore
+import numpy as np
 from anndata import AnnData
 
 import metacells.parameters as pr
@@ -203,7 +202,7 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
         #: This must cover all the genes of the "complete" (clean) data. It must contain a
         #: ``feature_gene`` column, and optionally the intermediate ``high_fraction_gene``,
         #: ``high_relative_variance_gene``, ``forbidden_gene`` and ``gene_deviant_votes`` columns.
-        self.genes_frame = pd.DataFrame(index=range(adata.n_vars))
+        self.genes_frame = ut.to_pandas_frame(index=range(adata.n_vars))
 
         for gene_annotation in GENE_ANNOTATIONS:
             if (not self.intermediate and not gene_annotation.always) \
@@ -212,16 +211,16 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
                 continue
 
             self.genes_frame[gene_annotation.name] = \
-                ut.get_v_dense(adata, gene_annotation.name)
+                ut.get_v_numpy(adata, gene_annotation.name)
 
-        cell_indices = ut.get_o_dense(adata, 'complete_cell_index')
+        cell_indices = ut.get_o_numpy(adata, 'complete_cell_index')
 
         #: The per-cell data.
         #:
         #: The index contains the indices of the cells in the "complete" (clean) data. It must
         #: contain a ``metacell`` column, and optionally the intermediate ``candidate``,
         #: ``cell_deviant_votes``, ``dissolved`` and ``outlier`` columns.
-        self.cells_frame = pd.DataFrame(index=cell_indices)
+        self.cells_frame = ut.to_pandas_frame(index=cell_indices)
 
         for cell_annotation in CELL_ANNOTATIONS:
             # pylint: disable=too-many-boolean-expressions
@@ -234,7 +233,7 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
             # pylint: enable=too-many-boolean-expressions
 
             self.cells_frame[cell_annotation.name] = \
-                ut.get_o_dense(adata, cell_annotation.name)
+                ut.get_o_numpy(adata, cell_annotation.name)
 
     def collect(  # pylint: disable=too-many-branches,too-many-statements
         self,
@@ -281,15 +280,15 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
 
             # pylint: disable=cell-var-from-loop
             new_genes_value = \
-                ut.to_dense_vector(self.genes_frame[gene_annotation.name])
+                ut.to_numpy_vector(self.genes_frame[gene_annotation.name])
 
             if gene_annotation.dtype == 'bool':
-                _modify_value(adata, ut.get_v_dense, ut.set_v_data, target_name,
+                _modify_value(adata, ut.get_v_numpy, ut.set_v_data, target_name,
                               lambda old_genes_value:
                               old_genes_value | new_genes_value,
                               log_value=gene_annotation.log_value)
             else:
-                _modify_value(adata, ut.get_v_dense, ut.set_v_data, target_name,
+                _modify_value(adata, ut.get_v_numpy, ut.set_v_data, target_name,
                               lambda old_genes_value: old_genes_value
                               + new_genes_value.astype('int32'),
                               log_value=gene_annotation.log_value)
@@ -322,12 +321,12 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
                 # pylint: disable=cell-var-from-loop
                 if self.is_direct:
                     assert cell_annotation.name == 'cell_directs'
-                    new_value: Union[int, ut.DenseVector] = 1
+                    new_value: Union[int, ut.NumpyVector] = 1
                 else:
-                    new_value = ut.to_dense_vector(  #
+                    new_value = ut.to_numpy_vector(  #
                         self.cells_frame[cell_annotation.name])
 
-                _modify_value_subset(adata, ut.get_o_dense, ut.set_o_data,
+                _modify_value_subset(adata, ut.get_o_numpy, ut.set_o_data,
                                      target_name, cell_indices,
                                      lambda old_cells_value:
                                      old_cells_value + new_value,
@@ -341,14 +340,14 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
                     np.zeros(len(self.cells_frame.index), dtype='int32')
             else:
                 new_cells_value = \
-                    ut.to_dense_vector(self.cells_frame[cell_annotation.name])
+                    ut.to_numpy_vector(self.cells_frame[cell_annotation.name])
 
             count = counts.get(target_name)
             if count is not None:
                 new_cells_value[new_cells_value >= 0] += count
                 counts[target_name] = max(count, np.max(new_cells_value) + 1)
 
-            _modify_value_subset(adata, ut.get_o_dense, ut.set_o_data,
+            _modify_value_subset(adata, ut.get_o_numpy, ut.set_o_data,
                                  target_name, cell_indices,
                                  lambda _: new_cells_value,
                                  log_value=gene_annotation.log_value)
@@ -417,7 +416,7 @@ def _patch_direct_results(
                           log_value=lambda _: '* <- %s' % gene_annotation.default)
             continue
 
-        value = ut.get_v_dense(adata, gene_annotation.name)
+        value = ut.get_v_numpy(adata, gene_annotation.name)
         if str(value.dtype) == gene_annotation.dtype:
             continue
 
@@ -691,7 +690,7 @@ def divide_and_conquer_pipeline(
                                   max_cells_of_random_pile=rare_max_cells_of_random_pile,
                                   min_cell_module_total=rare_min_cell_module_total)
 
-        rare_module_of_cells = ut.get_o_dense(adata, 'cells_rare_gene_module')
+        rare_module_of_cells = ut.get_o_numpy(adata, 'cells_rare_gene_module')
         rare_modules_count = np.max(rare_module_of_cells) + 1
         if rare_modules_count > 0:
             subset_results = \
@@ -1097,9 +1096,9 @@ def compute_divide_and_conquer_metacells(
                                              cell_sizes='grouped',
                                              random_seed=random_seed,
                                              intermediate=intermediate)
-        preliminary_metacell_of_cells = ut.get_o_dense(adata, 'pre_metacell')
+        preliminary_metacell_of_cells = ut.get_o_numpy(adata, 'pre_metacell')
 
-        pile_of_preliminary_metacells = ut.get_o_dense(mdata, 'metacell')
+        pile_of_preliminary_metacells = ut.get_o_numpy(mdata, 'metacell')
 
         preliminary_pile_of_cells = \
             ut.group_piles(preliminary_metacell_of_cells,
@@ -1150,7 +1149,7 @@ def _compute_piled_metacells(
     what: str,
     *,
     phase: str,
-    pile_of_cells: ut.DenseVector,
+    pile_of_cells: ut.NumpyVector,
     feature_downsample_cell_quantile: float,
     feature_min_gene_fraction: float,
     feature_min_gene_relative_variance: float,
@@ -1242,7 +1241,7 @@ def _compute_piled_metacells(
     else:
         metacell_annotation = 'metacell'
 
-    metacell_of_cells = ut.get_o_dense(adata, metacell_annotation)
+    metacell_of_cells = ut.get_o_numpy(adata, metacell_annotation)
 
     outlier_of_cells = metacell_of_cells < 0
     if piles_count == 1 \
@@ -1309,7 +1308,7 @@ def _run_parallel_piles(
     *,
     phase: str,
     piles_count: int,
-    pile_of_cells: ut.DenseVector,
+    pile_of_cells: ut.NumpyVector,
     feature_downsample_cell_quantile: float,
     feature_min_gene_fraction: float,
     feature_min_gene_relative_variance: float,
@@ -1416,14 +1415,14 @@ def _modify_value(
 
 def _modify_value_subset(
     adata: AnnData,
-    getter: Callable[[AnnData, str], ut.DenseVector],
+    getter: Callable[[AnnData, str], ut.NumpyVector],
     setter: 'Setter',
     name: str,
-    indices: ut.DenseVector,
-    modifier: Callable[[ut.DenseVector], ut.DenseVector],
+    indices: ut.NumpyVector,
+    modifier: Callable[[ut.NumpyVector], ut.NumpyVector],
     log_value: LogValue = None,
 ) -> None:
-    old_value = ut.to_dense_vector(getter(adata, name))
+    old_value = getter(adata, name)
     ut.unfreeze(old_value)
     old_value[indices] = modifier(old_value[indices])
     ut.freeze(old_value)

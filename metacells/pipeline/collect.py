@@ -99,7 +99,7 @@ def collect_metacells(
                 and (annotation_name.startswith('pre_')
                      or annotation_name in ('excluded_gene', 'clean_gene')):
             continue
-        value_per_gene = ut.get_v_dense(adata, annotation_name)
+        value_per_gene = ut.get_v_numpy(adata, annotation_name)
         ut.set_v_data(mdata, annotation_name, value_per_gene,
                       log_value=ut.mask_description)
 

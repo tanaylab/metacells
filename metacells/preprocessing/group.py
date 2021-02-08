@@ -6,8 +6,7 @@ Group
 import logging
 from typing import Any, Optional, Union
 
-import numpy as np  # type: ignore
-import pandas as pd  # type: ignore
+import numpy as np
 from anndata import AnnData
 
 import metacells.utilities as ut
@@ -70,7 +69,7 @@ def group_obs_data(
     ut.log_operation(LOG, adata, 'group_obs_data')
 
     ut.log_use(LOG, adata, groups, per='o', name='groups')
-    group_of_cells = ut.get_o_dense(adata, groups)
+    group_of_cells = ut.get_o_numpy(adata, groups)
 
     data = ut.get_vo_proper(adata, what, layout='row_major')
     results = ut.sum_groups(data, group_of_cells, per='row')
@@ -108,7 +107,7 @@ def group_obs_annotation(
     min_value_fraction: float = 0.5,
     conflict: Optional[Any] = None,
     inplace: bool = True,
-) -> Optional[pd.Series]:
+) -> Optional[ut.PandasSeries]:
     '''
     Transfer per-observation data from the per-observation (cell) ``adata`` to the
     per-group-of-observations (metacells) ``gdata``.
@@ -153,10 +152,10 @@ def group_obs_annotation(
     ut.log_operation(LOG, adata, 'group_obs_annotation')
 
     ut.log_use(LOG, adata, groups, per='o', name='groups')
-    group_of_cells = ut.get_o_dense(adata, groups)
+    group_of_cells = ut.get_o_numpy(adata, groups)
 
     ut.log_use(LOG, adata, name, per='o', name='values')
-    values_of_cells = ut.get_o_dense(adata, name)
+    values_of_cells = ut.get_o_numpy(adata, name)
 
     value_of_groups = np.empty(gdata.n_obs, dtype=values_of_cells.dtype)
 
@@ -190,4 +189,4 @@ def group_obs_annotation(
         ut.set_o_data(gdata, name, value_of_groups)
         return None
 
-    return pd.Series(value_of_groups, index=gdata.obs_names)
+    return ut.to_pandas_series(value_of_groups, index=gdata.obs_names)

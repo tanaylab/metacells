@@ -6,7 +6,7 @@ Project
 import logging
 from typing import Any, Callable, Optional
 
-import numpy as np  # type: ignore
+import numpy as np
 from anndata import AnnData
 
 import metacells.utilities as ut
@@ -50,8 +50,8 @@ def project_group_to_obs(
     if to_property_name is None:
         to_property_name = property_name
 
-    group_of_obs = ut.get_o_dense(adata, group)
-    property_of_group = ut.get_o_dense(gdata, property_name)
+    group_of_obs = ut.get_o_numpy(adata, group)
+    property_of_group = ut.get_o_numpy(gdata, property_name)
     property_of_obs = np.array([default if group < 0 else property_of_group[group]
                                 for group in group_of_obs])
     ut.set_o_data(adata, to_property_name, property_of_obs)
@@ -83,7 +83,7 @@ def project_obs_to_obs(
     if to_property_name is None:
         to_property_name = property_name
 
-    property_of_from = ut.get_o_dense(adata, property_name)
+    property_of_from = ut.get_o_numpy(adata, property_name)
     property_of_name = {name: property_of_from[index]
                         for index, name in enumerate(adata.obs_names)}
     property_of_to = np.array([property_of_name.get(name, default)
@@ -120,8 +120,8 @@ def project_obs_to_group(
     if to_property_name is None:
         to_property_name = property_name
 
-    property_of_obs = ut.get_o_dense(adata, property_name)
-    group_of_obs = ut.get_o_dense(adata, group)
+    property_of_obs = ut.get_o_numpy(adata, property_name)
+    group_of_obs = ut.get_o_numpy(adata, group)
     assert gdata.n_obs == (np.max(group_of_obs) + 1)
     property_of_group = \
         np.array([method(property_of_obs[group_of_obs == group])
@@ -160,10 +160,11 @@ def project_obs_obs_to_group_group(
         to_property_name = property_name
 
     property_of_obs_obs = ut.get_oo_proper(adata, property_name)
-    group_of_obs = ut.get_o_dense(adata, group)
+    group_of_obs = ut.get_o_numpy(adata, group)
     assert gdata.n_obs == (np.max(group_of_obs) + 1)
     property_of_group_group = \
-        np.empty((gdata.n_obs, gdata.n_obs), dtype=property_of_obs_obs.dtype)
+        np.empty((gdata.n_obs, gdata.n_obs),
+                 dtype=str(property_of_obs_obs.dtype))
 
     # TODO: This is a slow implementation.
     for row_group in range(gdata.n_obs):

@@ -6,8 +6,7 @@ Deviants
 import logging
 from typing import List, Optional, Tuple, Union
 
-import numpy as np  # type: ignore
-import pandas as pd  # type: ignore
+import numpy as np
 import scipy.sparse as sparse  # type: ignore
 import scipy.stats as stats  # type: ignore
 from anndata import AnnData
@@ -113,7 +112,7 @@ def find_deviant_cells(
     assert cells_count > 0
 
     ut.log_use(LOG, adata, candidates, per='o', name='candidates')
-    candidate_of_cells = ut.get_o_dense(adata, candidates)
+    candidate_of_cells = ut.get_o_numpy(adata, candidates)
 
     data = ut.get_vo_proper(adata, what, layout='row_major')
     totals_of_cells = ut.sum_per(data, per='row')
@@ -168,20 +167,20 @@ def find_deviant_cells(
     ut.log_mask(LOG, level, 'deviant_cells', votes_of_deviant_cells)
     ut.log_mask(LOG, level, 'deviant_genes', votes_of_deviant_genes)
 
-    return pd.Series(votes_of_deviant_cells, index=adata.obs_names), \
-        pd.Series(votes_of_deviant_genes, index=adata.var_names)
+    return ut.to_pandas_series(votes_of_deviant_cells, index=adata.obs_names), \
+        ut.to_pandas_series(votes_of_deviant_genes, index=adata.var_names)
 
 
 @ut.timed_call('.collect_fold_factors')
 def _collect_fold_factors(
     *,
     data: ut.ProperMatrix,
-    candidate_of_cells: ut.DenseVector,
-    totals_of_cells: ut.DenseVector,
+    candidate_of_cells: ut.NumpyVector,
+    totals_of_cells: ut.NumpyVector,
     min_gene_fold_factor: float,
-) -> Tuple[List[ut.CompressedMatrix], List[ut.DenseVector]]:
+) -> Tuple[List[ut.CompressedMatrix], List[ut.NumpyVector]]:
     list_of_fold_factors: List[ut.CompressedMatrix] = []
-    list_of_cell_index_of_rows: List[ut.DenseVector] = []
+    list_of_cell_index_of_rows: List[ut.NumpyVector] = []
 
     cells_count, genes_count = data.shape
     candidates_count = np.max(candidate_of_cells) + 1
@@ -222,7 +221,7 @@ def _collect_fold_factors(
         assert totals_of_candidate_genes.size == genes_count
 
         fractions_of_candidate_genes = \
-            ut.to_dense_vector(totals_of_candidate_genes
+            ut.to_numpy_vector(totals_of_candidate_genes
                                / np.sum(totals_of_candidate_genes))
 
         _, dense, compressed = ut.to_proper_matrices(data_of_candidate)
@@ -274,7 +273,7 @@ def _collect_fold_factors(
 def _construct_fold_factors(
     cells_count: int,
     list_of_fold_factors: List[ut.CompressedMatrix],
-    list_of_cell_index_of_rows: List[ut.DenseVector],
+    list_of_cell_index_of_rows: List[ut.NumpyVector],
 ) -> Optional[ut.CompressedMatrix]:
     cell_index_of_rows = np.concatenate(list_of_cell_index_of_rows)
     if cell_index_of_rows.size == 0:
@@ -300,7 +299,7 @@ def _filter_genes(
     fold_factors: ut.CompressedMatrix,
     min_gene_fold_factor: float,
     max_gene_fraction: Optional[float] = None,
-) -> ut.DenseVector:
+) -> ut.NumpyVector:
     ut.timed_parameters(cells=cells_count, genes=genes_count,
                         fold_factors=fold_factors.nnz)
     max_fold_factors_of_genes = ut.max_per(fold_factors, per='column')
@@ -342,8 +341,8 @@ def _fold_ranks(
     *,
     cells_count: int,
     fold_factors: ut.CompressedMatrix,
-    deviant_gene_indices: ut.DenseVector,
-) -> ut.DenseMatrix:
+    deviant_gene_indices: ut.NumpyVector,
+) -> ut.NumpyMatrix:
     assert fold_factors.getformat() == 'csc'
 
     deviant_genes_count = deviant_gene_indices.size
@@ -376,10 +375,10 @@ def _filter_cells(
     *,
     cells_count: int,
     genes_count: int,
-    deviant_genes_fold_ranks: ut.DenseMatrix,
-    deviant_gene_indices: ut.DenseVector,
+    deviant_genes_fold_ranks: ut.NumpyMatrix,
+    deviant_gene_indices: ut.NumpyVector,
     max_cell_fraction: Optional[float],
-) -> Tuple[ut.DenseVector, ut.DenseVector]:
+) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
     min_fold_ranks_of_cells = np.min(deviant_genes_fold_ranks, axis=1)
     assert min_fold_ranks_of_cells.size == cells_count
 

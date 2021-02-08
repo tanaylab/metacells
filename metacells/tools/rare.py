@@ -7,8 +7,7 @@ import logging
 from re import Pattern
 from typing import Collection, Dict, List, Optional, Tuple, Union
 
-import numpy as np  # type: ignore
-import pandas as pd  # type: ignore
+import numpy as np
 import scipy.cluster.hierarchy as sch  # type: ignore
 import scipy.spatial.distance as scd  # type: ignore
 from anndata import AnnData
@@ -50,7 +49,7 @@ def find_rare_gene_modules(
     min_related_gene_fold_factor: float = pr.rare_min_related_gene_fold_factor,
     min_cell_module_total: int = pr.rare_min_cell_module_total,
     inplace: bool = True,
-) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame, ut.DenseVector]]:
+) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame, ut.NumpyVector]]:
     '''
     Detect rare genes modules based ``of`` some data (by default, the focus).
 
@@ -153,7 +152,7 @@ def find_rare_gene_modules(
     allowed_genes_mask = ~forbidden_genes_mask.values
 
     rare_module_of_cells = np.full(adata.n_obs, -1, dtype='int32')
-    list_of_names_of_genes_of_modules: List[ut.DenseVector] = []
+    list_of_names_of_genes_of_modules: List[ut.NumpyVector] = []
 
     candidates = \
         _pick_candidates(adata_of_all_genes_of_all_cells=adata,
@@ -235,8 +234,8 @@ def _pick_candidates(
     max_gene_cell_fraction: float,
     min_gene_maximum: int,
     min_genes_of_modules: int,
-    allowed_genes_mask: ut.DenseVector,
-) -> Optional[Tuple[AnnData, ut.DenseVector]]:
+    allowed_genes_mask: ut.NumpyVector,
+) -> Optional[Tuple[AnnData, ut.NumpyVector]]:
     LOG.debug('  max_gene_cell_fraction: %s',
               ut.fraction_description(max_gene_cell_fraction))
 
@@ -275,17 +274,17 @@ def _genes_similarity(
     candidate_data: AnnData,
     what: Union[str, ut.Matrix],
     method: str,
-) -> ut.DenseMatrix:
+) -> ut.NumpyMatrix:
     similarity = \
         compute_var_var_similarity(candidate_data, what,
                                    method=method, inplace=False)
     assert similarity is not None
-    return ut.to_dense_matrix(similarity)
+    return ut.to_numpy_matrix(similarity, only_extract=True)
 
 
 @ut.timed_call('.cluster_genes')
 def _cluster_genes(
-    similarities_between_candidate_genes: ut.DenseMatrix,
+    similarities_between_candidate_genes: ut.NumpyMatrix,
     genes_cluster_method: str,
 ) -> List[Tuple[int, int]]:
     with ut.timed_step('scipy.pdist'):
@@ -305,8 +304,8 @@ def _cluster_genes(
 @ut.timed_call('.identify_genes')
 def _identify_genes(
     *,
-    candidate_genes_indices: ut.DenseVector,
-    similarities_between_candidate_genes: ut.DenseMatrix,
+    candidate_genes_indices: ut.NumpyVector,
+    similarities_between_candidate_genes: ut.NumpyMatrix,
     min_module_correlation: float,
     linkage: List[Tuple[int, int]],
 ) -> List[List[int]]:
@@ -356,7 +355,7 @@ def _related_genes(
     adata_of_all_genes_of_all_cells: AnnData,
     what: Union[str, ut.Matrix] = '__x__',
     rare_gene_indices_of_modules: List[List[int]],
-    allowed_genes_mask: ut.DenseVector,
+    allowed_genes_mask: ut.NumpyVector,
     min_genes_of_modules: int,
     min_gene_maximum: int,
     min_cells_of_modules: int,
@@ -493,7 +492,7 @@ def _identify_cells(
     min_cell_module_total: int,
     min_cells_of_modules: int,
     max_cells_of_modules: int,
-    rare_module_of_cells: ut.DenseVector,
+    rare_module_of_cells: ut.NumpyVector,
 ) -> None:
     max_strength_of_cells = np.zeros(adata_of_all_genes_of_all_cells.n_obs)
 
@@ -540,8 +539,8 @@ def _compress_modules(
     target_metacell_size: int,
     min_modules_size_factor: float,
     related_gene_indices_of_modules: List[List[int]],
-    rare_module_of_cells: ut.DenseVector,
-    list_of_names_of_genes_of_modules: List[ut.DenseVector],
+    rare_module_of_cells: ut.NumpyVector,
+    list_of_names_of_genes_of_modules: List[ut.NumpyVector],
 ) -> None:
     min_umis_of_modules = target_metacell_size * min_modules_size_factor
 
@@ -597,10 +596,10 @@ def _results(
     *,
     adata: AnnData,
     level: int,
-    rare_module_of_cells: ut.DenseVector,
-    list_of_names_of_genes_of_modules: List[ut.DenseVector],
+    rare_module_of_cells: ut.NumpyVector,
+    list_of_names_of_genes_of_modules: List[ut.NumpyVector],
     inplace: bool
-) -> Optional[Tuple[pd.DataFrame, pd.DataFrame, ut.DenseVector]]:
+) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame, ut.NumpyVector]]:
     assert np.max(rare_module_of_cells) \
         == len(list_of_names_of_genes_of_modules) - 1
 
@@ -608,7 +607,8 @@ def _results(
         np.array(list_of_names_of_genes_of_modules, dtype='object')
 
     rare_module_of_genes = np.full(adata.n_vars, -1, dtype='int32')
-    genes_series = pd.Series(rare_module_of_genes, index=adata.var_names)
+    genes_series = \
+        ut.to_pandas_series(rare_module_of_genes, index=adata.var_names)
     for module_index, list_of_names_of_genes_of_module in enumerate(list_of_names_of_genes_of_modules):
         genes_series[list_of_names_of_genes_of_module] = module_index
 
@@ -623,8 +623,8 @@ def _results(
         ut.set_o_data(adata, 'rare_cell', rare_module_of_cells >= 0)
         return None
 
-    obs_metrics = pd.DataFrame(index=adata.obs_names)
-    var_metrics = pd.DataFrame(index=adata.var_names)
+    obs_metrics = ut.to_pandas_frame(index=adata.obs_names)
+    var_metrics = ut.to_pandas_frame(index=adata.var_names)
 
     obs_metrics['cells_rare_gene_module'] = rare_module_of_cells
     obs_metrics['rare_cell'] = rare_module_of_cells >= 0

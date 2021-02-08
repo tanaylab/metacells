@@ -6,8 +6,7 @@ Dissolve
 import logging
 from typing import Optional, Union
 
-import numpy as np  # type: ignore
-import pandas as pd  # type: ignore
+import numpy as np
 from anndata import AnnData
 
 import metacells.parameters as pr
@@ -94,7 +93,7 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
     dissolved_of_cells = np.zeros(adata.n_obs, dtype='bool')
 
     ut.log_use(LOG, adata, candidates, per='o', name='candidates')
-    candidate_of_cells = ut.get_o_dense(adata, candidates)
+    candidate_of_cells = ut.get_o_numpy(adata, candidates)
     candidate_of_cells = np.copy(candidate_of_cells)
     raw_candidates_count = np.max(candidate_of_cells) + 1
     LOG.debug('  candidates: %s', raw_candidates_count)
@@ -103,13 +102,13 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
 
     ut.log_use(LOG, adata, deviants, per='o', name='deviants')
     if deviants is None:
-        deviant_of_cells: Optional[ut.DenseVector] = None
+        deviant_of_cells: Optional[ut.NumpyVector] = None
     else:
-        deviant_of_cells = ut.get_o_dense(adata, deviants)
+        deviant_of_cells = ut.get_o_numpy(adata, deviants)
 
     ut.log_use(LOG, adata, cell_sizes, per='o', name='cell_sizes')
     if cell_sizes is not None:
-        cell_sizes = ut.get_o_dense(adata, cell_sizes)
+        cell_sizes = ut.get_o_numpy(adata, cell_sizes)
     assert not isinstance(cell_sizes, str)
 
     if deviant_of_cells is not None:
@@ -179,7 +178,7 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
         LOG.log(level, '  %s: %s', to,
                 ut.ratio_description(metacells_count, raw_candidates_count))
 
-    obs_frame = pd.DataFrame(index=adata.obs_names)
+    obs_frame = ut.to_pandas_frame(index=adata.obs_names)
     obs_frame['dissolved'] = dissolved_of_cells
     obs_frame[to] = metacell_of_cells
     return obs_frame
@@ -190,14 +189,14 @@ def _keep_candidate(
     candidate_index: int,
     *,
     data: ut.ProperMatrix,
-    cell_sizes: Optional[ut.DenseVector],
-    fraction_of_genes: ut.DenseVector,
+    cell_sizes: Optional[ut.NumpyVector],
+    fraction_of_genes: ut.NumpyVector,
     min_metacell_cells: int,
     min_robust_size: Optional[float],
     min_convincing_size: Optional[float],
     min_convincing_gene_fold_factor: float,
     candidates_count: int,
-    candidate_cell_indices: ut.DenseVector,
+    candidate_cell_indices: ut.NumpyVector,
 ) -> bool:
     genes_count = data.shape[1]
 
@@ -232,7 +231,7 @@ def _keep_candidate(
         return False
 
     candidate_data = data[candidate_cell_indices, :]
-    candidate_data_of_genes = ut.to_dense_vector(candidate_data.sum(axis=0))
+    candidate_data_of_genes = ut.to_numpy_vector(candidate_data.sum(axis=0))
     assert candidate_data_of_genes.size == genes_count
     candidate_total = np.sum(candidate_data_of_genes)
     candidate_expected_of_genes = fraction_of_genes * candidate_total
@@ -242,7 +241,7 @@ def _keep_candidate(
     np.log2(candidate_data_of_genes, out=candidate_data_of_genes)
     convincing_genes_mask = \
         candidate_data_of_genes >= min_convincing_gene_fold_factor
-    keep_candidate = np.any(convincing_genes_mask)
+    keep_candidate = bool(np.any(convincing_genes_mask))
 
     if LOG.isEnabledFor(logging.DEBUG):
         convincing_gene_indices = \

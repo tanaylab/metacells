@@ -6,7 +6,7 @@ Excess R^2
 import logging
 from typing import Any, List, Optional, Set, TypeVar, Union
 
-import numpy as np  # type: ignore
+import numpy as np
 from anndata import AnnData
 
 import metacells.parameters as pr
@@ -78,11 +78,11 @@ def compute_type_compatible_sizes(
 
     if len(adatas) == 1:
         ut.set_o_data(adatas[0], 'compatible_size',
-                      ut.get_o_dense(adatas[0], size))
+                      ut.get_o_numpy(adatas[0], size))
         return
 
-    metacell_sizes_of_data = [ut.get_o_dense(adata, size) for adata in adatas]
-    metacell_types_of_data = [ut.get_o_dense(adata, kind) for adata in adatas]
+    metacell_sizes_of_data = [ut.get_o_numpy(adata, size) for adata in adatas]
+    metacell_types_of_data = [ut.get_o_numpy(adata, kind) for adata in adatas]
 
     unique_types: Set[Any] = set()
     for metacell_types in metacell_types_of_data:
@@ -137,7 +137,7 @@ def compute_type_compatible_sizes(
 
             last_position_of_each = next_position_of_each
 
-            next_position_of_each = \
+            next_position_of_each[:] = \
                 [np.sum(metacell_quantile <= next_quantile)
                  for metacell_quantile
                  in metacell_quantile_of_each]
@@ -290,7 +290,7 @@ def compute_excess_r2(
     data = ut.get_vo_proper(adata, what, layout='row_major')
 
     ut.log_use(LOG, adata, metacells, per='o', name='metacells')
-    metacell_of_cells = ut.get_o_dense(adata, metacells)
+    metacell_of_cells = ut.get_o_numpy(adata, metacells)
 
     metacells_count = np.max(metacell_of_cells) + 1
     assert metacells_count > 0
@@ -298,8 +298,8 @@ def compute_excess_r2(
     LOG.debug('  mdata: %s', ut.get_name(mdata) or '<adata>')
 
     if compatible_size is not None:
-        compatible_size_of_metacells: Optional[ut.DenseVector] = \
-            ut.get_o_dense(mdata, compatible_size)
+        compatible_size_of_metacells: Optional[ut.NumpyVector] = \
+            ut.get_o_numpy(mdata, compatible_size)
     else:
         compatible_size_of_metacells = None
 
@@ -353,7 +353,7 @@ def compute_excess_r2(
                    normalized_variance_per_gene_per_metacell)
 
 
-def _log_r2(values: Optional[ut.DenseVector]) -> str:
+def _log_r2(values: Optional[ut.NumpyVector]) -> str:
     assert values is not None
     return '%s <- %s' % (ut.mask_description(~np.isnan(values)), np.nanmean(values))
 
@@ -363,18 +363,18 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
     metacells_count: int,
     *,
     compatible_size: Optional[int],
-    metacell_of_cells: ut.DenseVector,
+    metacell_of_cells: ut.NumpyVector,
     data: ut.ProperMatrix,
     downsample_cell_quantile: float,
     random_seed: int,
     shuffles_count: int,
     min_gene_total: float,
     top_gene_rank: int,
-    excess_r2_per_gene_per_metacell: ut.DenseMatrix,
-    top_r2_per_gene_per_metacell: ut.DenseMatrix,
-    top_shuffled_r2_per_gene_per_metacell: ut.DenseMatrix,
-    variance_per_gene_per_metacell: ut.DenseMatrix,
-    normalized_variance_per_gene_per_metacell: ut.DenseMatrix,
+    excess_r2_per_gene_per_metacell: ut.NumpyMatrix,
+    top_r2_per_gene_per_metacell: ut.NumpyMatrix,
+    top_shuffled_r2_per_gene_per_metacell: ut.NumpyMatrix,
+    variance_per_gene_per_metacell: ut.NumpyMatrix,
+    normalized_variance_per_gene_per_metacell: ut.NumpyMatrix,
 ) -> None:
     LOG.debug('  - metacell: %s / %s (%.2f%%)',
               metacell_index, metacells_count,
@@ -412,13 +412,10 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
 
     downsampled_data_columns = \
         ut.to_layout(downsampled_data_rows, layout='column_major')
-    total_per_gene = \
-        ut.to_dense_vector(ut.sum_per(downsampled_data_columns, per='column'))
+    total_per_gene = ut.sum_per(downsampled_data_columns, per='column')
 
-    min_per_gene = \
-        ut.to_dense_vector(ut.min_per(downsampled_data_columns, per='column'))
-    max_per_gene = \
-        ut.to_dense_vector(ut.max_per(downsampled_data_columns, per='column'))
+    min_per_gene = ut.min_per(downsampled_data_columns, per='column')
+    max_per_gene = ut.max_per(downsampled_data_columns, per='column')
     correlated_genes_mask = \
         (total_per_gene >= min_gene_total) & (min_per_gene < max_per_gene)
     correlated_genes_count = np.sum(correlated_genes_mask)
@@ -448,14 +445,14 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
     assert normalized_variance_per_gene_per_metacell is not None
     assert correlated_data.shape == (cells_count, correlated_genes_count)
 
-    if ut.SparseMatrix.am(correlated_data):
-        correlated_squared_data = correlated_data.multiply(correlated_data)
+    sparse = ut.maybe_sparse_matrix(correlated_data)
+    if sparse is not None:
+        correlated_squared_data = sparse.multiply(sparse)
     else:
         correlated_squared_data = correlated_data * correlated_data
 
     correlated_total_squared_per_gene = \
-        ut.to_dense_vector(ut.sum_per(correlated_squared_data,
-                                      per='column'))
+        ut.sum_per(correlated_squared_data, per='column')
 
     correlated_total_per_gene = total_per_gene[correlated_gene_indices]
     correlated_variance_per_gene = \
@@ -475,8 +472,9 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
         correlated_normalized_variance_per_gene
 
     assert ut.matrix_layout(correlated_data) == 'column_major'
-    if ut.SparseMatrix.am(correlated_data):
-        shuffled_data = correlated_data.copy()
+    sparse = ut.maybe_sparse_matrix(correlated_data)
+    if sparse is not None:
+        shuffled_data = sparse.copy()
     else:
         shuffled_data = np.copy(correlated_data)
     assert ut.matrix_layout(shuffled_data) == 'column_major'

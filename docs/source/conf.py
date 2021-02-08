@@ -50,8 +50,8 @@ nitpick_ignore = [
     ('py:class', 'StepTiming'),
     ('py:class', 'T'),
     ('py:class', 'utt.CompressedMatrix'),
-    ('py:class', 'utt.DenseMatrix'),
     ('py:class', 'utt.ImproperMatrix'),
+    ('py:class', 'utt.NumpyMatrix'),
     ('py:class', 'utt.ProperMatrix'),
 ]
 

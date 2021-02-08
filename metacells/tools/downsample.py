@@ -6,8 +6,7 @@ Downsample
 import logging
 from typing import Optional, Union
 
-import numpy as np  # type: ignore
-import pandas as pd  # type: ignore
+import numpy as np
 from anndata import AnnData
 
 import metacells.parameters as pr
@@ -86,10 +85,5 @@ def downsample_cells(
         ut.set_vo_data(adata, 'downsampled', downsampled)
         return None
 
-    if ut.SparseMatrix.am(downsampled):
-        return pd.DataFrame.from_spmatrix(downsampled,
-                                          index=adata.obs_names,
-                                          columns=adata.var_names)
-
-    return pd.DataFrame(downsampled,
-                        index=adata.obs_names, columns=adata.var_names)
+    return ut.to_pandas_frame(downsampled,
+                              index=adata.obs_names, columns=adata.var_names)

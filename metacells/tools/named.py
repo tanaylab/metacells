@@ -7,8 +7,7 @@ import logging
 from re import Pattern
 from typing import Collection, Optional, Union
 
-import numpy as np  # type: ignore
-import pandas as pd  # type: ignore
+import numpy as np
 from anndata import AnnData
 
 import metacells.utilities as ut
@@ -68,4 +67,4 @@ def find_named_genes(
 
     ut.log_mask(LOG, level, 'named_genes', genes_mask)
 
-    return pd.Series(genes_mask, index=adata.var_names)
+    return ut.to_pandas_series(genes_mask, index=adata.var_names)

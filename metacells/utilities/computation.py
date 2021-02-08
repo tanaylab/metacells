@@ -16,7 +16,7 @@ from typing import (Any, Callable, Collection, List, Optional, Tuple, TypeVar,
                     Union, overload)
 from warnings import catch_warnings, filterwarnings, warn
 
-import numpy as np  # type: ignore
+import numpy as np
 import pandas as pd  # type: ignore
 import scipy.sparse as sp  # type: ignore
 
@@ -96,11 +96,11 @@ def to_layout(
 
 @overload
 def to_layout(
-    matrix: utt.DenseMatrix,
+    matrix: utt.NumpyMatrix,
     layout: str,
     *,
     symmetric: bool = False
-) -> utt.DenseMatrix: ...
+) -> utt.NumpyMatrix: ...
 
 
 @overload
@@ -156,21 +156,23 @@ def to_layout(
         return proper
 
     is_frozen = utt.frozen(proper)
+    result: utt.ProperMatrix
 
     if dense is not None:
         order = utt.DENSE_FAST_FLAG[layout][0]
         with utm.timed_step('numpy.ravel'):
             utm.timed_parameters(rows=dense.shape[0], columns=dense.shape[1])
-            result = np.reshape(np.ravel(dense, order=order),
-                                dense.shape, order=order)
+            result = np.reshape(np.ravel(dense, order=order),  # type: ignore
+                                dense.shape, order=order)  # type: ignore
 
     else:
         assert compressed is not None
         to_format = utt.SPARSE_FAST_FORMAT[layout]
         from_format = utt.SPARSE_SLOW_FORMAT[layout]
         assert compressed.getformat() == from_format
-        result = relayout_compressed(compressed)
-        assert result.getformat() == to_format
+        compressed = relayout_compressed(compressed)
+        assert compressed.getformat() == to_format
+        result = compressed
 
     if is_frozen:
         utt.freeze(result)
@@ -178,12 +180,10 @@ def to_layout(
 
 
 @utm.timed_call()
-def relayout_compressed(matrix: utt.CompressedMatrix) -> utt.CompressedMatrix:
+def relayout_compressed(compressed: utt.CompressedMatrix) -> utt.CompressedMatrix:
     '''
     Efficient parallel conversion of a CSR/CSC ``matrix`` to a CSC/CSR matrix.
     '''
-    compressed = utt.CompressedMatrix.be(matrix)
-
     axis = ('csr', 'csc').index(compressed.getformat())
 
     if compressed.nnz < 2:
@@ -290,23 +290,23 @@ def _ensure_layout_for(operation: str, matrix: utt.Matrix,
         warn(operating_on_matrix_of_wrong_layout)
         return
 
-    dense = utt.DenseMatrix.maybe(matrix)
-    if dense is not None:
-        operating_on_dense_matrix_of_inefficient_strides = \
-            f'{operation} of {per}s of a dense matrix with inefficient strides: {dense.strides}'
+    sparse = utt.maybe_sparse_matrix(matrix)
+    if sparse is not None:
+        operating_on_sparse_matrix_of_inefficient_format = \
+            f'{operation} of {per}s of a sparse matrix with inefficient format: {sparse.getformat()}'
         if not allow_inefficient:
             raise NotImplementedError(  #
-                operating_on_dense_matrix_of_inefficient_strides)
-        warn(operating_on_dense_matrix_of_inefficient_strides)
+                operating_on_sparse_matrix_of_inefficient_format)
+        warn(operating_on_sparse_matrix_of_inefficient_format)
         return
 
-    sparse = utt.SparseMatrix.be(matrix)
-    operating_on_sparse_matrix_of_inefficient_format = \
-        f'{operation} of {per}s of a sparse matrix with inefficient format: {sparse.getformat()}'
+    dense = utt.to_numpy_matrix(matrix, only_extract=True)
+    operating_on_numpy_matrix_of_inefficient_strides = \
+        f'{operation} of {per}s of a numpy matrix with inefficient strides: {dense.strides}'
     if not allow_inefficient:
         raise NotImplementedError(  #
-            operating_on_sparse_matrix_of_inefficient_format)
-    warn(operating_on_sparse_matrix_of_inefficient_format)
+            operating_on_numpy_matrix_of_inefficient_strides)
+    warn(operating_on_numpy_matrix_of_inefficient_strides)
 
 
 def _ensure_per_for(operation: str, matrix: utt.Matrix, per: Optional[str]) -> str:
@@ -316,9 +316,9 @@ def _ensure_per_for(operation: str, matrix: utt.Matrix, per: Optional[str]) -> s
 
 
 def _get_dense_for(operation: str, matrix: utt.Matrix,
-                   per: Optional[str]) -> Tuple[str, utt.DenseMatrix]:
+                   per: Optional[str]) -> Tuple[str, utt.NumpyMatrix]:
     per = _ensure_per(matrix, per)
-    dense = utt.to_dense_matrix(matrix, default_layout=f'{per}_major')
+    dense = utt.to_numpy_matrix(matrix, default_layout=f'{per}_major')
     _ensure_layout_for(operation, dense, per)
     return per, dense
 
@@ -328,7 +328,7 @@ def corrcoef(
     matrix: utt.Matrix,
     *,
     per: Optional[str],
-) -> utt.DenseMatrix:
+) -> utt.NumpyMatrix:
     '''
     Similar to for ``np.corrcoef``, but also works for a sparse ``matrix``.
 
@@ -395,7 +395,7 @@ def logistics(
     location: float = 0.8,
     scale: float = 5,
     per: Optional[str]
-) -> utt.DenseMatrix:
+) -> utt.NumpyMatrix:
     '''
     Compute a similarity matrix, similar to for ``np.corrcoef``, but uses the logistics function.
 
@@ -463,11 +463,11 @@ def log_data(  # pylint: disable=too-many-branches
 
         The result is always dense, as even for sparse data, the log is rarely zero.
     '''
-    dense: utt.DenseShaped
+    dense: np.ndarray
     if shaped.ndim == 1:
-        dense = utt.to_dense_vector(shaped, copy=True)
+        dense = utt.to_numpy_vector(shaped, copy=True)
     else:
-        dense = utt.to_dense_matrix(shaped, copy=True)  # type: ignore
+        dense = utt.to_numpy_matrix(shaped, copy=True)  # type: ignore
 
     if normalization > 0:
         dense += normalization
@@ -478,17 +478,15 @@ def log_data(  # pylint: disable=too-many-branches
 
     if base is None:
         log_function = np.log
-        rebase = False
     elif base == 2:
         log_function = np.log2
-        rebase = False
+        base = None
     elif base == 10:
         log_function = np.log10
-        rebase = False
+        base = None
     else:
         assert base > 0
         log_function = np.log
-        rebase = True
 
     if normalization == 0:
         log_function(dense, out=dense, where=where)
@@ -496,7 +494,7 @@ def log_data(  # pylint: disable=too-many-branches
     else:
         log_function(dense, out=dense)
 
-    if rebase:
+    if base is not None:
         dense /= np.log(base)
 
     if normalization < 0:
@@ -544,12 +542,12 @@ def downsample_matrix(
 
 
 def _downsample_dense_matrix(
-    matrix: utt.DenseMatrix,
+    matrix: utt.NumpyMatrix,
     per: str,
     samples: int,
     inplace: bool,
     random_seed: int
-) -> utt.DenseMatrix:
+) -> utt.NumpyMatrix:
     if inplace:
         output = matrix
     elif per == 'row':
@@ -595,8 +593,8 @@ def _downsample_dense_matrix(
     assert elements_count == matrix.shape[1]
 
     if results_count == 1:
-        input_array = utt.to_dense_vector(matrix, copy=None)
-        output_array = utt.to_dense_vector(output, copy=None)
+        input_array = utt.to_numpy_vector(matrix, copy=None)
+        output_array = utt.to_numpy_vector(output, copy=None)
         extension_name = 'downsample_array_%s_t_%s_t' \
             % (input_array.dtype, output_array.dtype)
         extension = getattr(xt, extension_name)
@@ -675,7 +673,7 @@ def downsample_vector(
     vector: utt.Vector,
     samples: int,
     *,
-    output: Optional[utt.DenseVector] = None,
+    output: Optional[utt.NumpyVector] = None,
     random_seed: int = 0
 ) -> None:
     '''
@@ -705,10 +703,10 @@ def downsample_vector(
     '''
 
     if output is None:
-        array = utt.to_dense_vector(vector, copy=None)
+        array = utt.to_numpy_vector(vector, copy=None)
         output = array
     else:
-        array = utt.to_dense_vector(vector)
+        array = utt.to_numpy_vector(vector)
         assert output.shape == array.shape
 
     extension_name = 'downsample_array_%s_t_%s_t' % (array.dtype, output.dtype)
@@ -722,9 +720,9 @@ def downsample_vector(
 @utm.timed_call()
 def matrix_rows_auroc(
     matrix: utt.Matrix,
-    columns_subset: utt.DenseVector,
-    columns_scale: Optional[utt.DenseVector] = None,
-) -> utt.DenseVector:
+    columns_subset: utt.NumpyVector,
+    columns_scale: Optional[utt.NumpyVector] = None,
+) -> utt.NumpyVector:
     '''
     Given a matrix and a subset of the columns, return a vector containing for each row the area
     under the receiver operating characteristic (AUROC) for the row, that is, the probability that a
@@ -744,11 +742,11 @@ def matrix_rows_auroc(
 
     rows_auroc = np.empty(rows_count, dtype='float64')
 
-    columns_subset = utt.to_dense_vector(columns_subset)
+    columns_subset = utt.to_numpy_vector(columns_subset)
     if columns_subset.dtype == 'bool':
         assert columns_subset.size == columns_count
     else:
-        mask: utt.DenseVector = np.full(columns_count, False)
+        mask: utt.NumpyVector = np.full(columns_count, False)
         mask[columns_subset] = True
         columns_subset = mask
 
@@ -772,7 +770,7 @@ def matrix_rows_auroc(
 
 
 @utm.timed_call()
-def mean_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
+def mean_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     '''
     Compute the mean value ``per`` (``row`` or ``column``) of some ``matrix``.
 
@@ -792,7 +790,7 @@ def mean_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
 
 
 @utm.timed_call()
-def nanmean_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
+def nanmean_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     '''
     Compute the mean value ``per`` (``row`` or ``column``) of some ``matrix``, ignoring ``None``
     values, if any.
@@ -816,7 +814,7 @@ def nanmean_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
 
 
 @utm.timed_call()
-def max_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
+def max_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     '''
     Compute the maximal value ``per`` (``row`` or ``column``) of some ``matrix``.
 
@@ -828,16 +826,16 @@ def max_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
     per = _ensure_per_for('max', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
-    sparse = utt.SparseMatrix.maybe(matrix)
+    sparse = utt.maybe_sparse_matrix(matrix)
     if sparse is not None:
         return _reduce_matrix('max', sparse, per, lambda sparse: sparse.max(axis=1 - axis))
 
-    dense = utt.to_dense_matrix(matrix)
+    dense = utt.to_numpy_matrix(matrix, only_extract=True)
     return _reduce_matrix('max', dense, per, lambda dense: np.max(dense, axis=1 - axis))
 
 
 @utm.timed_call()
-def nanmax_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
+def nanmax_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     '''
     Compute the maximal value ``per`` (``row`` or ``column``) of some ``matrix``, ignoring ``None``
     values, if any.
@@ -861,7 +859,7 @@ def nanmax_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
 
 
 @utm.timed_call()
-def min_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
+def min_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     '''
     Compute the minimal value ``per`` (``row`` or ``column``) of some ``matrix``.
 
@@ -873,16 +871,16 @@ def min_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
     per = _ensure_per_for('nanmax', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
-    sparse = utt.SparseMatrix.maybe(matrix)
+    sparse = utt.maybe_sparse_matrix(matrix)
     if sparse is not None:
         return _reduce_matrix('min', sparse, per, lambda sparse: sparse.min(axis=1 - axis))
 
-    dense = utt.to_dense_matrix(matrix)
+    dense = utt.to_numpy_matrix(matrix, only_extract=True)
     return _reduce_matrix('min', dense, per, lambda dense: np.min(dense, axis=1 - axis))
 
 
 @utm.timed_call()
-def nanmin_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
+def nanmin_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     '''
     Compute the minimal value ``per`` (``row`` or ``column``) of some ``matrix``,
     ignoring ``None`` values, if any.
@@ -906,7 +904,7 @@ def nanmin_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
 
 
 @utm.timed_call()
-def nnz_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
+def nnz_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     '''
     Compute the number of non-zero values ``per`` (``row`` or ``column``) of some ``matrix``.
 
@@ -918,16 +916,17 @@ def nnz_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
     per = _ensure_per_for('nnz', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
-    sparse = utt.SparseMatrix.maybe(matrix)
+    sparse = utt.maybe_sparse_matrix(matrix)
     if sparse is not None:
         return _reduce_matrix('nnz', sparse, per, lambda sparse: sparse.getnnz(axis=1 - axis))
 
-    dense = utt.to_dense_matrix(matrix)
-    return _reduce_matrix('nnz', dense, per, lambda dense: np.count_nonzero(dense, axis=1 - axis))
+    dense = utt.to_numpy_matrix(matrix, only_extract=True)
+    return _reduce_matrix('nnz', dense, per, lambda dense:
+                          utt.mustbe_numpy_vector(np.count_nonzero(dense, axis=1 - axis)))
 
 
 @utm.timed_call()
-def sum_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
+def sum_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     '''
     Compute the total of the values ``per`` (``row`` or ``column``) of some ``matrix``.
 
@@ -939,16 +938,17 @@ def sum_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
     per = _ensure_per_for('sum', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
-    sparse = utt.SparseMatrix.maybe(matrix)
+    sparse = utt.maybe_sparse_matrix(matrix)
     if sparse is not None:
         return _reduce_matrix('sum', sparse, per, lambda sparse: sparse.sum(axis=1 - axis))
 
-    dense = utt.to_dense_matrix(matrix)
-    return _reduce_matrix('sum', dense, per, lambda dense: np.sum(dense, axis=1 - axis))
+    dense = utt.to_numpy_matrix(matrix, only_extract=True)
+    return _reduce_matrix('sum', dense, per, lambda dense:
+                          utt.mustbe_numpy_vector(np.sum(dense, axis=1 - axis)))
 
 
 @utm.timed_call()
-def sum_squared_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
+def sum_squared_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     '''
     Compute the total of the squared values ``per`` (``row`` or ``column``) of some ``matrix``.
 
@@ -966,20 +966,20 @@ def sum_squared_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVecto
     per = _ensure_per_for('sum_squared', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
-    sparse = utt.SparseMatrix.maybe(matrix)
+    sparse = utt.maybe_sparse_matrix(matrix)
     if sparse is not None:
         return \
             _reduce_matrix('sum_squared', sparse, per,
                            lambda sparse:
                            sparse.multiply(sparse).sum(axis=1 - axis))
 
-    dense = utt.to_dense_matrix(matrix)
+    dense = utt.to_numpy_matrix(matrix, only_extract=True)
     return _reduce_matrix('sum_squared', dense, per,
                           lambda dense: np.square(dense).sum(axis=1 - axis))
 
 
 @utm.timed_call()
-def rank_per(matrix: utt.Matrix, rank: int, *, per: Optional[str]) -> utt.DenseVector:
+def rank_per(matrix: utt.Matrix, rank: int, *, per: Optional[str]) -> utt.NumpyVector:
     '''
     Get the ``rank`` element ``per`` (``row`` or ``column``) of some ``matrix``.
 
@@ -1006,7 +1006,7 @@ def rank_per(matrix: utt.Matrix, rank: int, *, per: Optional[str]) -> utt.DenseV
 
 
 @utm.timed_call()
-def quantile_per(matrix: utt.Matrix, quantile: float, *, per: Optional[str]) -> utt.DenseVector:
+def quantile_per(matrix: utt.Matrix, quantile: float, *, per: Optional[str]) -> utt.NumpyVector:
     '''
     Get the ``quantile`` element ``per`` (``row`` or ``column``) of some ``matrix``.
 
@@ -1029,7 +1029,7 @@ def quantile_per(matrix: utt.Matrix, quantile: float, *, per: Optional[str]) -> 
 
 
 @utm.timed_call()
-def nanquantile_per(matrix: utt.Matrix, quantile: float, *, per: Optional[str]) -> utt.DenseVector:
+def nanquantile_per(matrix: utt.Matrix, quantile: float, *, per: Optional[str]) -> utt.NumpyVector:
     '''
     Get the ``quantile`` element ``per`` (``row`` or ``column``) of some ``matrix``, ignoring
     ``None`` values.
@@ -1060,6 +1060,7 @@ def scale_by(matrix: utt.Matrix, scale: utt.Vector, *, by: str) -> utt.ProperMat
     '''
     axis = utt.PER_OF_AXIS.index(by)
     assert len(scale) == matrix.shape[axis]
+    scale = utt.to_numpy_vector(scale)
 
     _, dense, compressed = \
         utt.to_proper_matrices(matrix, default_layout=f'{by}_major')
@@ -1097,6 +1098,8 @@ def fraction_by(matrix: utt.Matrix, *,
     proper = utt.to_proper_matrix(matrix, default_layout=f'{by}_major')
     if sums is None:
         sums = sum_per(proper, per=by)
+    else:
+        sums = utt.to_numpy_vector(sums)
     zeros_mask = sums == 0
     scale = np.reciprocal(sums, where=~zeros_mask)
     scale[zeros_mask] = 0
@@ -1104,7 +1107,7 @@ def fraction_by(matrix: utt.Matrix, *,
 
 
 @utm.timed_call()
-def fraction_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
+def fraction_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     '''
     Get the fraction ``per`` (``row`` or ``column``) out of the total of some ``matrix``.
 
@@ -1118,7 +1121,7 @@ def fraction_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
 
 
 @utm.timed_call()
-def variance_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
+def variance_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     '''
     Get the variance ``per`` (``row`` or ``column``) of some ``matrix``.
 
@@ -1140,7 +1143,7 @@ def variance_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
 
 
 @utm.timed_call()
-def normalized_variance_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.DenseVector:
+def normalized_variance_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     '''
     Get the normalized variance (variance / mean) ``per`` (``row`` or ``column``) of some ``matrix``.
 
@@ -1166,7 +1169,7 @@ def relative_variance_per(
     *,
     per: Optional[str],
     window_size: int,
-) -> utt.DenseVector:
+) -> utt.NumpyVector:
     '''
     Return the (normalized_variance - median_normalized_variance_of_similar) of the values
     ``per`` (``row`` or ``column``) of some ``matrix``.
@@ -1192,7 +1195,7 @@ def sum_matrix(matrix: utt.Matrix) -> Any:
     '''
     Compute the sum of all values in a matrix.
     '''
-    return np.sum(matrix)
+    return np.sum(matrix)  # type: ignore
 
 
 @utm.timed_call()
@@ -1202,7 +1205,7 @@ def nnz_matrix(matrix: utt.Matrix) -> Any:
 
     If this is a sparse matrix, this counts the number of structural non-zeros.
     '''
-    sparse = utt.SparseMatrix.maybe(matrix)
+    sparse = utt.maybe_sparse_matrix(matrix)
     if sparse is not None:
         return sparse.nnz
     return np.sum(matrix != 0)
@@ -1213,7 +1216,7 @@ def mean_matrix(matrix: utt.Matrix) -> Any:
     '''
     Compute the sum of all values in a matrix.
     '''
-    return np.mean(matrix)
+    return np.mean(matrix)  # type: ignore
 
 
 @utm.timed_call()
@@ -1284,18 +1287,20 @@ def _reduce_matrix(
     _name: str,
     matrix: M,
     per: str,
-    reducer: Callable[[M], utt.DenseVector],
-) -> utt.DenseVector:
+    reducer: Callable[[M], utt.NumpyVector],
+) -> utt.NumpyVector:
     assert matrix.ndim == 2
     axis = utt.PER_OF_AXIS.index(per)
     results_count = matrix.shape[1 - axis]
 
-    if utt.SparseMatrix.am(matrix):
+    compressed = utt.maybe_compressed_matrix(matrix)
+    if compressed is None:
         timed_step = '.sparse'
         elements_count: float = matrix.shape[axis]
     else:
-        _, dense, compressed = utt.to_proper_matrices(matrix,
-                                                      default_layout=utt.LAYOUT_OF_AXIS[axis])
+        _, dense, compressed = \
+            utt.to_proper_matrices(matrix,
+                                   default_layout=utt.LAYOUT_OF_AXIS[axis])
 
         if dense is not None:
             elements_count = dense.shape[axis]
@@ -1317,7 +1322,7 @@ def _reduce_matrix(
 
     with utm.timed_step(timed_step):
         utm.timed_parameters(results=results_count, elements=elements_count)
-        return utt.to_dense_vector(reducer(matrix))
+        return utt.to_numpy_vector(reducer(matrix))
 
 
 @utm.timed_call()
@@ -1325,11 +1330,11 @@ def bincount_vector(
     vector: utt.Vector,
     *,
     minlength: int = 0,
-) -> utt.DenseVector:
+) -> utt.NumpyVector:
     '''
     Drop-in replacement for ``np.bincount``, which is timed and also works on pandas data.
     '''
-    dense = utt.to_dense_vector(vector)
+    dense = utt.to_numpy_vector(vector)
     result = np.bincount(dense, minlength=minlength)
     utm.timed_parameters(size=dense.size, bins=result.size)
     return result
@@ -1343,7 +1348,7 @@ def most_frequent(
     Return the most frequent value in a vactor.
     '''
     unique, positions = \
-        np.unique(utt.to_dense_vector(vector), return_inverse=True)
+        np.unique(utt.to_numpy_vector(vector), return_inverse=True)
     counts = np.bincount(positions)
     maxpos = np.argmax(counts)
     return unique[maxpos]
@@ -1357,7 +1362,7 @@ def fraction_of_grouped(
     Return a function that returns the fraction of the grouped values equal to a specific value.
     '''
     def compute(vector: utt.Vector) -> Any:
-        return np.sum(utt.to_dense_vector(vector) == value) / len(vector)
+        return np.sum(utt.to_numpy_vector(vector) == value) / len(vector)
     return compute
 
 
@@ -1376,8 +1381,8 @@ def sliding_window_function(
     *,
     function: str,
     window_size: int,
-    order_by: Optional[utt.DenseVector] = None,
-) -> utt.DenseVector:
+    order_by: Optional[utt.NumpyVector] = None,
+) -> utt.NumpyVector:
     """
     Return an array of the same size as the input ``array``, where each entry is the result of
     applying the ``function`` (one of {functions}) to a sliding window of size ``window_size``
@@ -1393,7 +1398,7 @@ def sliding_window_function(
         The window size must be an odd positive integer. If an even value is specified, it is
         automatically increased by one.
     """
-    dense = utt.to_dense_vector(vector)
+    dense = utt.to_numpy_vector(vector)
 
     if window_size % 2 == 0:
         window_size += 1
@@ -1420,8 +1425,8 @@ def sliding_window_function(
         np.repeat(max_index, half_window_size),
     ])
 
-    extended_series = pd.Series(dense[extended_order_indices])
-    rolling_windows = extended_series.rolling(window_size)
+    extended_series = utt.to_pandas_series(dense[extended_order_indices])
+    rolling_windows = extended_series.rolling(window_size)  # type: ignore
 
     compute = ROLLING_FUNCTIONS[function]
     computed = compute(rolling_windows).values
@@ -1439,7 +1444,7 @@ def patterns_matches(
     patterns: Union[str, Pattern, Collection[Union[str, Pattern]]],
     strings: Collection[str],
     invert: bool = False,
-) -> utt.DenseVector:
+) -> utt.NumpyVector:
     '''
     Given a collection of ``strings``, return a numpy boolean mask specifying which of them match
     the given regular expression ``patterns``.
@@ -1465,7 +1470,7 @@ def patterns_matches(
 
 
 @utm.timed_call()
-def compress_indices(indices: utt.Vector) -> utt.DenseVector:
+def compress_indices(indices: utt.Vector) -> utt.NumpyVector:
     '''
     Given a vector of ``indices`` per element, return a vector where the indices are consecutive.
 
@@ -1477,7 +1482,7 @@ def compress_indices(indices: utt.Vector) -> utt.DenseVector:
 
 
 @utm.timed_call()
-def bin_pack(element_sizes: utt.Vector, max_bin_size: float) -> utt.DenseVector:
+def bin_pack(element_sizes: utt.Vector, max_bin_size: float) -> utt.NumpyVector:
     '''
     Given a vector of ``element_sizes`` return a vector containing the bin number for each element,
     such that the total size of each bin is up to and as close to the ``max_bin_size``.
@@ -1486,7 +1491,7 @@ def bin_pack(element_sizes: utt.Vector, max_bin_size: float) -> utt.DenseVector:
     elements around to minimize the l2 norm of the wasted space in each bin.
     '''
     size_of_bins: List[float] = []
-    element_sizes = utt.to_dense_vector(element_sizes)
+    element_sizes = utt.to_numpy_vector(element_sizes)
     descending_size_indices = np.argsort(element_sizes)[::-1]
     bin_of_elements = np.empty(element_sizes.size, dtype='int')
 
@@ -1540,9 +1545,9 @@ def bin_pack(element_sizes: utt.Vector, max_bin_size: float) -> utt.DenseVector:
 
 @utm.timed_call()
 def bin_fill(  # pylint: disable=too-many-statements,too-many-branches
-    element_sizes:
-    utt.Vector, min_bin_size: float
-) -> utt.DenseVector:
+    element_sizes: utt.Vector,
+    min_bin_size: float
+) -> utt.NumpyVector:
     '''
     Given a vector of ``element_sizes`` return a vector containing the bin number for each element,
     such that the total size of each bin is at most and as close to the ``min_bin_size``.
@@ -1550,7 +1555,8 @@ def bin_fill(  # pylint: disable=too-many-statements,too-many-branches
     This uses the first-fit decreasing algorithm for finding an initial solution and then moves
     elements around to minimize the l2 norm of the wasted space in each bin.
     '''
-    total_size = np.sum(utt.to_dense_vector(element_sizes))
+    element_sizes = utt.to_numpy_vector(element_sizes)
+    total_size = np.sum(element_sizes)
     assert min_bin_size > 0
 
     size_of_bins = [0.0]
@@ -1561,7 +1567,6 @@ def bin_fill(  # pylint: disable=too-many-statements,too-many-branches
             return np.zeros(element_sizes.size, dtype='int')
 
         size_of_bins = []
-        element_sizes = utt.to_dense_vector(element_sizes)
         descending_size_indices = np.argsort(element_sizes)[::-1]
         bin_of_elements = np.empty(element_sizes.size, dtype='int')
 
@@ -1637,7 +1642,7 @@ def sum_groups(
     groups: utt.Vector,
     *,
     per: Optional[str]
-) -> Optional[Tuple[utt.Matrix, utt.DenseVector]]:
+) -> Optional[Tuple[utt.Matrix, utt.NumpyVector]]:
     '''
     Given a ``matrix``, and a vector of ``groups`` ``per`` row or column, return a matrix with a row
     or column per group, containing the sum of the groups rows or columns, and a vector of sizes
@@ -1653,7 +1658,7 @@ def sum_groups(
     '''
     per = _ensure_per_for('sum_groups', matrix, per)
 
-    groups = utt.to_dense_vector(groups)
+    groups = utt.to_numpy_vector(groups)
     groups_count = np.max(groups) + 1
 
     if groups_count == 0:
@@ -1661,14 +1666,14 @@ def sum_groups(
 
     efficient_layout = per + '_major'
 
-    sparse = utt.SparseMatrix.maybe(matrix)
+    sparse = utt.maybe_sparse_matrix(matrix)
     if sparse is not None:
         if utt.matrix_layout(matrix) == efficient_layout:
             timed_step = '.compressed-efficient'
         else:
             timed_step = '.compressed-inefficient'
     else:
-        matrix = utt.to_dense_matrix(matrix)
+        matrix = utt.to_numpy_matrix(matrix, only_extract=True)
         if utt.matrix_layout(matrix) == efficient_layout:
             timed_step = '.dense-efficient'
         else:
@@ -1682,7 +1687,8 @@ def sum_groups(
     with utm.timed_step(timed_step):
         utm.timed_parameters(groups=groups_count, entities=matrix.shape[0],
                              elements=matrix.shape[1])
-        results = np.empty((groups_count, matrix.shape[1]), matrix.dtype)
+        results = \
+            np.empty((groups_count, matrix.shape[1]), dtype=str(matrix.dtype))
 
         for group_index in range(groups_count):
             group_mask = groups == group_index
@@ -1691,7 +1697,7 @@ def sum_groups(
             group_sizes[group_index] = group_size
             group_matrix = matrix[group_mask, :]
             results[group_index, :] = \
-                utt.to_dense_vector(group_matrix.sum(axis=0))
+                utt.to_numpy_vector(group_matrix.sum(axis=0))
 
     if per == 'column':
         results = results.transpose()
@@ -1755,7 +1761,7 @@ def cover_coordinates(
     cover_fraction: float = 1/3,
     noise_fraction: float = 1.0,
     random_seed: int = 0,
-) -> Tuple[utt.DenseVector, utt.DenseVector]:
+) -> Tuple[utt.NumpyVector, utt.NumpyVector]:
     '''
     Given x/y coordinates of points, move them so that the total area covered by them is
     ``cover_fraction`` (default: {cover_fraction}) of the total area of their bounding box,
@@ -1765,10 +1771,13 @@ def cover_coordinates(
 
     Returns new x/y coordinates vectors.
     '''
+    x_coordinates = utt.to_numpy_vector(x_coordinates)
+    y_coordinates = utt.to_numpy_vector(y_coordinates)
+
     points_count = len(x_coordinates)
     assert x_coordinates.dtype == y_coordinates.dtype
-    x_coordinates = utt.to_dense_vector(x_coordinates, copy=True)
-    y_coordinates = utt.to_dense_vector(y_coordinates, copy=True)
+    x_coordinates = utt.to_numpy_vector(x_coordinates, copy=True)
+    y_coordinates = utt.to_numpy_vector(y_coordinates, copy=True)
     spaced_x_coordinates = \
         np.full(points_count, -0.1, dtype=x_coordinates.dtype)
     spaced_y_coordinates = \

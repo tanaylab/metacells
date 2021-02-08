@@ -6,7 +6,7 @@ Piles
 from math import ceil, floor
 from typing import List
 
-import numpy as np  # type: ignore
+import numpy as np
 
 import metacells.utilities.timing as utm
 import metacells.utilities.typing as utt
@@ -23,7 +23,7 @@ def random_piles(
     target_pile_size: int,
     *,
     random_seed: int = 0,
-) -> utt.DenseVector:
+) -> utt.NumpyVector:
     '''
     Split ``elements_count`` elements into piles of a size roughly equal to ``target_pile_size``.
 
@@ -55,7 +55,7 @@ def random_piles(
         else:
             piles_count = many_piles_count
 
-    pile_of_elements_list: List[utt.DenseVector] = []
+    pile_of_elements_list: List[utt.NumpyVector] = []
 
     minimal_pile_size = floor(elements_count / piles_count)
     extra_elements = elements_count - minimal_pile_size * piles_count
@@ -75,9 +75,9 @@ def random_piles(
 
 @utm.timed_call()
 def group_piles(
-    group_of_elements: utt.DenseVector,
-    group_of_groups: utt.DenseVector,
-) -> utt.DenseVector:
+    group_of_elements: utt.NumpyVector,
+    group_of_groups: utt.NumpyVector,
+) -> utt.NumpyVector:
     '''
     Group some elements into piles by grouping them, and then grouping the groups.
 

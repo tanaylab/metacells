@@ -106,11 +106,11 @@ responsible to ensure that the names of manually set data are also unique.
 import logging
 from logging import Logger
 from typing import (Any, Callable, Collection, Dict, List, MutableMapping,
-                    NamedTuple, Optional, Sized, Tuple, Union)
+                    NamedTuple, Optional, Tuple, Union)
 from warnings import warn
 
 import anndata as ad
-import numpy as np  # type: ignore
+import numpy as np
 import pandas as pd  # type: ignore
 from anndata import AnnData
 
@@ -141,11 +141,11 @@ __all__ = [
 
     'set_o_data',
     'get_o_series',
-    'get_o_dense',
+    'get_o_numpy',
 
     'set_v_data',
     'get_v_series',
-    'get_v_dense',
+    'get_v_numpy',
 
     'set_oo_data',
     'get_oo_data',
@@ -180,7 +180,7 @@ __all__ = [
 LOG = logging.getLogger(__name__)
 
 
-Annotations = Union[MutableMapping[Any, Any], pd.DataFrame]
+Annotations = Union[MutableMapping[Any, Any], utt.PandasFrame]
 
 
 def setup(
@@ -212,12 +212,11 @@ def setup(
     X = adata.X
     if not utt.frozen(X):  # type: ignore
         utt.freeze(X)  # type: ignore
-    X = utt.BaseShaped.be(X)
     assert X is not None
-    assert X.ndim == 2
+    assert getattr(X, 'ndim') == 2
     assert '__x__' not in adata.layers
 
-    compressed = utt.CompressedMatrix.maybe(X)
+    compressed = utt.maybe_compressed_matrix(X)
     if compressed is not None:
         if not compressed.has_sorted_indices:
             warn('%s does not have sorted indices' % (name or 'adata'))
@@ -318,8 +317,8 @@ def safe_slicing_derived(
 def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-statements
     adata: AnnData,
     *,
-    obs: Optional[Union[Sized, utt.Vector]] = None,
-    vars: Optional[Union[Sized, utt.Vector]] = None,
+    obs: utt.Vector = None,
+    vars: utt.Vector = None,
     name: Optional[str] = None,
     track_obs: Optional[str] = None,
     track_var: Optional[str] = None,
@@ -358,13 +357,11 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
         if len(obs) < adata.n_obs:
             is_same_obs = False
 
-        shaped = utt.BaseShaped.maybe(obs)
-        if shaped is not None:
-            obs = utt.to_dense_vector(shaped)  # type: ignore
-            if obs.dtype == 'bool':
-                assert obs.size == adata.n_obs
-                assert np.any(obs)
-                is_same_obs = np.all(obs)
+        obs = utt.to_numpy_vector(obs)
+        if obs.dtype == 'bool':
+            assert obs.size == adata.n_obs
+            assert np.any(obs)
+            is_same_obs = bool(np.all(obs))
 
     is_same_vars: Optional[bool] = None
     if vars is None:
@@ -375,13 +372,11 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
         if len(vars) < adata.n_vars:
             is_same_vars = False
 
-        shaped = utt.BaseShaped.maybe(vars)
-        if shaped is not None:
-            vars = utt.to_dense_vector(shaped)  # type: ignore
-            if vars.dtype == 'bool':
-                assert vars.size == adata.n_vars
-                assert np.any(vars)
-                is_same_vars = np.all(vars)
+        vars = utt.to_numpy_vector(vars)
+        if vars.dtype == 'bool':
+            assert vars.size == adata.n_vars
+            assert np.any(vars)
+            is_same_vars = bool(np.all(vars))
 
     if is_same_obs and is_same_vars:
         with utm.timed_step('adata.copy'):
@@ -398,10 +393,10 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
         if hasattr(adata, '__derived__'):
             if is_same_obs is None:
                 is_same_obs = bdata.n_obs == adata.n_obs \
-                    and np.all(bdata.obs_names == adata.obs_names)
+                    and bool(np.all(bdata.obs_names == adata.obs_names))
             if is_same_obs and is_same_vars is None:
                 is_same_vars = bdata.n_obs == adata.n_vars \
-                    and np.all(bdata.var_names == adata.var_names)
+                    and bool(np.all(bdata.var_names == adata.var_names))
             if is_same_obs and is_same_vars:
                 setattr(bdata, '__derived__', getattr(adata, '__derived__'))
 
@@ -590,16 +585,16 @@ def get_o_series(
     '''
     data = _get_shaped_data(adata, 'o', adata.obs,
                             shape=(adata.n_obs,), what=what)
-    series = utt.PandasSeries.maybe(data)
+    series = utt.maybe_pandas_series(data)
     if series is None:
-        series = pd.Series(utt.to_dense_vector(data), index=adata.obs_names)
+        series = utt.to_pandas_series(data, index=adata.obs_names)
     return series
 
 
-def get_o_dense(
+def get_o_numpy(
     adata: AnnData,
     what: Union[str, utt.Vector],
-) -> utt.DenseVector:
+) -> utt.NumpyVector:
     '''
     Lookup per-observation (cell) data in ``adata`` by its ``name`` as a Numpy array.
 
@@ -608,7 +603,7 @@ def get_o_dense(
     '''
     data = _get_shaped_data(adata, 'o', adata.obs,
                             shape=(adata.n_obs,), what=what)
-    return utt.to_dense_vector(data)
+    return utt.to_numpy_vector(data)
 
 
 def get_v_series(
@@ -623,16 +618,16 @@ def get_v_series(
     '''
     data = _get_shaped_data(adata, 'v', adata.var,
                             shape=(adata.n_vars,), what=what)
-    series = utt.PandasSeries.maybe(data)
+    series = utt.maybe_pandas_series(data)
     if series is None:
-        series = pd.Series(utt.to_dense_vector(data), index=adata.var_names)
+        series = utt.to_pandas_series(data, index=adata.var_names)
     return series
 
 
-def get_v_dense(
+def get_v_numpy(
     adata: AnnData,
     what: Union[str, utt.Vector]
-) -> utt.DenseVector:
+) -> utt.NumpyVector:
     '''
     Lookup per-variable (gene) data in ``adata`` by its ``name`` as a numpy array.
 
@@ -641,7 +636,7 @@ def get_v_dense(
     '''
     data = _get_shaped_data(adata, 'v', adata.var,
                             shape=(adata.n_vars,), what=what)
-    return utt.to_dense_vector(data)
+    return utt.to_numpy_vector(data)
 
 
 @utd.expand_doc()
@@ -677,10 +672,11 @@ def get_oo_frame(
     Same as :py:func:`get_oo_data` but returns a pandas data frame.
     '''
     data = get_oo_data(adata, what, layout=layout)
-    frame = utt.PandasFrame.maybe(data)
+    frame = utt.maybe_pandas_frame(data)
     if frame is None:
-        frame = pd.DataFrame(utt.to_proper_matrix(data),
-                             index=adata.obs_names, columns=adata.obs_names)
+        frame = utt.to_pandas_frame(utt.to_proper_matrix(data),
+                                    index=adata.obs_names,
+                                    columns=adata.obs_names)
     return frame
 
 
@@ -731,10 +727,11 @@ def get_vv_frame(
     Same as :py:func:`get_vv_data` but returns a pandas data frame.
     '''
     data = get_vv_data(adata, what, layout=layout)
-    frame = utt.PandasFrame.maybe(data)
+    frame = utt.maybe_pandas_frame(data)
     if frame is None:
-        frame = pd.DataFrame(utt.to_proper_matrix(data),
-                             index=adata.var_names, columns=adata.var_names)
+        frame = utt.to_pandas_frame(utt.to_proper_matrix(data),
+                                    index=adata.var_names,
+                                    columns=adata.var_names)
     return frame
 
 
@@ -786,11 +783,11 @@ def get_oa_frame(
     Same as :py:func:`get_oa_data` but returns a pandas data frame.
     '''
     data = get_oa_data(adata, what, layout=layout)
-    frame = utt.PandasFrame.maybe(data)
+    frame = utt.maybe_pandas_frame(data)
     if frame is None:
-        frame = pd.DataFrame(utt.to_proper_matrix(data), index=adata.obs_names)
-    if columns is not None:
-        frame.columns = columns
+        frame = utt.to_pandas_frame(utt.to_proper_matrix(data),
+                                    index=adata.obs_names,
+                                    columns=columns)
     return frame
 
 
@@ -842,11 +839,11 @@ def get_va_frame(
     Same as :py:func:`get_va_data` but returns a pandas data frame.
     '''
     data = get_va_data(adata, what, layout=layout)
-    frame = utt.PandasFrame.maybe(data)
+    frame = utt.maybe_pandas_frame(data)
     if frame is None:
-        frame = pd.DataFrame(utt.to_proper_matrix(data), index=adata.var_names)
-    if columns is not None:
-        frame.columns = columns
+        frame = utt.to_pandas_frame(utt.to_proper_matrix(data),
+                                    index=adata.var_names,
+                                    columns=columns)
     return frame
 
 
@@ -905,10 +902,11 @@ def get_vo_frame(
     Same as :py:func:`get_vo_data` but returns a pandas data frame.
     '''
     data = get_vo_data(adata, what, layout=layout)
-    frame = utt.PandasFrame.maybe(data)
+    frame = utt.maybe_pandas_frame(data)
     if frame is None:
-        frame = pd.DataFrame(utt.to_proper_matrix(data),
-                             index=adata.obs_names, columns=adata.var_names)
+        frame = utt.to_pandas_frame(utt.to_proper_matrix(data),
+                                    index=adata.obs_names,
+                                    columns=adata.var_names)
     return frame
 
 
@@ -938,6 +936,7 @@ def _get_layout_data(
     data = _get_shaped_data(adata, per, annotations, shape=shape, what=what)
     if not isinstance(what, str):
         if not utt.is_layout(data, layout):
+            assert layout is not None
             data = utc.to_layout(what, layout=layout)
         return data
 
@@ -978,19 +977,17 @@ def _get_shaped_data(
     if isinstance(what, str):
         if per == 'vo' and what == '__x__':
             data = _fix_data(adata.X)
-        elif (isinstance(annotations, pd.DataFrame) and what in annotations.columns) \
-                or what in annotations:
-            data = _fix_data(annotations[what])
         else:
-            raise _unknown_data(adata, what, per)
+            if what not in annotations:  # type: ignore
+                raise _unknown_data(adata, what, per)
+            data = _fix_data(annotations[what])
 
         if not utt.frozen(data):
             utt.freeze(data)
 
     else:
-        assert what.shape == shape
-        if len(shape) == 1:
-            data = utt.to_dense_vector(what)
+        if utt.is_1d(what):
+            data = utt.to_numpy_vector(what)
         else:
             data = utt.to_proper_matrix(what)  # type: ignore
 
@@ -1002,71 +999,6 @@ def _fix_data(data: Any) -> Any:
     if isinstance(data, ad._core.sparse_dataset.SparseDataset):  # pylint: disable=protected-access
         return data.value
     return data
-
-
-@utd.expand_doc()
-def del_data(
-    adata: AnnData,
-    name: str,
-    *,
-    per: Optional[str] = None,
-    layout: Optional[str] = None,
-    must_exist: bool = False,
-) -> None:
-    '''
-    Delete some data from the ``adata``.
-
-    If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` (cells) or
-    ``column_major`` (genes). This will only delete the cached layout-specific data, if any. If
-    ``layout`` is not specified, both the data and any cached layout-specific data will be deleted.
-
-    If ``must_exist`` (default: {must_exist}), will ``raise`` if the data does not currently exist.
-
-    .. note::
-
-        You can't delete the ``__x__`` (that is, the ``X`` pseudo-layer). Deleting the focus
-        (default) data changes the focus to become whatever is in ``X``.
-
-    .. todo::
-
-        It would be better to replace :py:func:`del_data` with intercepting ``del`` of the
-        ``AnnData`` fields, but we do not own them.
-    '''
-    if name.endswith(':__row_major__'):
-        assert layout is None
-        layout = 'row_major'
-        name = name[:-14]
-    elif name.endswith(':__column_major__'):
-        assert layout is None
-        layout = 'column_major'
-        name = name[:-17]
-
-    if per is None:
-        per = data_per(adata, name)
-        assert per is not None
-
-    _log_del_data(adata, per, name, layout)
-
-    if per == 'vo':
-        assert name != '__x__'
-
-    annotation = _annotation_per(adata, per)
-
-    if layout is not None:
-        layout_name = '%s:__%s__' % (name, layout)
-        if layout_name in adata.layers:
-            del annotation[layout_name]
-        elif must_exist:
-            assert layout_name in annotation
-        return
-
-    if must_exist:
-        assert name in annotation
-
-    for suffix in ('', ':__row_major__', ':__column_major__'):
-        suffixed_name = name + suffix
-        if suffixed_name in annotation:
-            del annotation[suffixed_name]
 
 
 def _annotation_per(  # pylint: disable=too-many-return-statements
@@ -1134,7 +1066,7 @@ def set_m_data(
 def set_o_data(
     adata: AnnData,
     name: str,
-    data: utt.DenseVector,
+    data: utt.NumpyVector,
     log_value: Optional[Callable[[Any], Optional[str]]] = None,
 ) -> Any:
     '''
@@ -1155,7 +1087,7 @@ def set_o_data(
 def set_v_data(
     adata: AnnData,
     name: str,
-    data: utt.DenseVector,
+    data: utt.NumpyVector,
     log_value: Optional[Callable[[Any], Optional[str]]] = None
 ) -> Any:
     '''
@@ -1361,45 +1293,6 @@ def _log_set_data(  # pylint: disable=too-many-branches
         text = ''.join(texts)
         if text != '  ':
             LOG.log(level, text)
-
-
-def _log_del_data(
-    adata: AnnData,
-    per: str,
-    name: str,
-    layout: Optional[str],
-) -> None:
-    level = logging.DEBUG
-
-#   if '|' in name:
-#       level = logging.DEBUG
-#   else:
-#       level = utl.get_log_level(adata)
-
-    if not LOG.isEnabledFor(level):
-        return
-
-    texts = ['  ']
-
-    if layout is None:
-        texts.append('deleting ')
-    else:
-        texts.append('uncaching ')
-
-    data_name = get_name(adata)
-    if data_name is not None:
-        texts.append(data_name)
-        texts.append('.')
-    texts.append(MEMBER_OF_PER[per])
-    texts.append('.')
-    texts.append(name)
-
-    if layout is not None:
-        texts.append(' ')
-        texts.append(layout)
-        texts.append(' layout')
-
-    LOG.log(level, ''.join(texts))
 
 
 def _unknown_data(adata: AnnData, name: str, per: Optional[str] = None) -> KeyError:
