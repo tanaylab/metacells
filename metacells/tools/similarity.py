@@ -46,8 +46,7 @@ def compute_obs_obs_similarity(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
-    are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes.
 
     **Returns**
 
@@ -94,8 +93,7 @@ def compute_var_var_similarity(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
-    are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes.
 
     The ``method`` (default: {method}) can be one of:
     * ``pearson`` for computing Pearson correlation.

@@ -90,7 +90,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
 
     **Input**
 
-    The presumably "clean" :py:func:`metacells.utilities.annotation.setup` annotated ``adata``.
+    The presumably "clean" annotated ``adata``.
 
     All the computations will use the ``of`` data (by default, the focus).
 

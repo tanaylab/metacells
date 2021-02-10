@@ -59,8 +59,7 @@ def find_noisy_lonely_genes(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
-    are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes.
 
     **Returns**
 

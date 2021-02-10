@@ -48,8 +48,8 @@ def extract_feature_data(
 
     **Input**
 
-    A presumably "clean" :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where
-    the observations are cells and the variables are genes.
+    A presumably "clean" Annotated ``adata``, where the observations are cells and the variables are
+    genes.
 
     All the computations will use the ``of`` data (by default, the focus).
 

@@ -43,8 +43,7 @@ def group_obs_data(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` ``adata``, where the observations are cells
-    and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes.
 
     **Returns**
 
@@ -80,14 +79,10 @@ def group_obs_data(
     gdata = AnnData(summed_data)
     gdata.var_names = adata.var_names
 
-    if name is not None:
-        if name.startswith('.'):
-            base_name = ut.get_name(adata)
-            if base_name is None:
-                name = name[1:]
-            else:
-                name = base_name + name
-    ut.setup(gdata, name=name, tmp=tmp)
+    ut.set_name(gdata, ut.get_name(adata))
+    ut.set_name(gdata, name)
+    if tmp:
+        gdata.uns['__tmp__'] = True
 
     ut.set_o_data(gdata, 'grouped', cell_counts,
                   log_value=ut.sizes_description)
@@ -114,9 +109,8 @@ def group_obs_annotation(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
-    are cells and the variables are genes, and the ``gdata`` containing the per-metacells summed
-    data.
+    Annotated ``adata``, where the observations are cells and the variables are genes, and the
+    ``gdata`` containing the per-metacells summed data.
 
     **Returns**
 

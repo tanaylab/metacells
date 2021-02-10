@@ -43,8 +43,7 @@ def find_properly_sampled_cells(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
-    are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes.
 
     **Returns**
 
@@ -129,8 +128,7 @@ def find_properly_sampled_genes(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
-    are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes.
 
     **Returns**
 

@@ -215,8 +215,7 @@ def compute_excess_r2(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
-    are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes.
 
     In addition, ``mdata`` is assumed to have one observation for each metacell, and use the same
     genes as ``adata``.

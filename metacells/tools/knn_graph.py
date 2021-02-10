@@ -44,8 +44,7 @@ def compute_obs_obs_knn_graph(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
-    are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes.
 
     **Returns**
 
@@ -133,8 +132,7 @@ def compute_var_var_knn_graph(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
-    are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes.
 
     **Returns**
 

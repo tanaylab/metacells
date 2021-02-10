@@ -38,8 +38,7 @@ def compute_distinct_folds(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
-    are (mata)cells and the variables are genes.
+    Annotated ``adata``, where the observations are (mata)cells and the variables are genes.
 
     **Returns**
 
@@ -114,9 +113,9 @@ def find_distinct_genes(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
-    are (mata)cells and the variables are genes, including a per-observation-per-variable annotated
-    folds data, {what}), e.g. as computed by :py:func:`compute_distinct_folds`.
+    Annotated ``adata``, where the observations are (mata)cells and the variables are genes,
+    including a per-observation-per-variable annotated folds data, {what}), e.g. as computed by
+    :py:func:`compute_distinct_folds`.
 
     **Returns**
 
@@ -181,8 +180,7 @@ def compute_subset_distinct_genes(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, where the observations
-    are (mata)cells and the variables are genes.
+    Annotated ``adata``, where the observations are (mata)cells and the variables are genes.
 
     **Returns**
 

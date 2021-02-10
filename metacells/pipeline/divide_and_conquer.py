@@ -517,7 +517,7 @@ def divide_and_conquer_pipeline(
 
     **Input**
 
-    The presumably "clean" :py:func:`metacells.utilities.annotation.setup` annotated ``adata``.
+    The presumably "clean" annotated ``adata``.
 
     All the computations will use the ``of`` data (by default, the focus).
 
@@ -856,7 +856,7 @@ def compute_divide_and_conquer_metacells(
 
     **Input**
 
-    The presumably "clean" :py:func:`metacells.utilities.annotation.setup` annotated ``adata``.
+    The presumably "clean" annotated ``adata``.
 
     All the computations will use the ``of`` data (by default, the focus).
 

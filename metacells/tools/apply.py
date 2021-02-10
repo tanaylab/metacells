@@ -60,10 +60,9 @@ def apply_obs_annotations(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, and a slice
-    of it ``sdata``, where the ``indices`` is either the vector of full indices of the
-    slice observations, or the name of a per-observation annotation of ``sdata`` that
-    contains this vector.
+    Annotated ``adata``, and a slice of it ``sdata``, where the ``indices`` is either the vector of
+    full indices of the slice observations, or the name of a per-observation annotation of ``sdata``
+    that contains this vector.
 
     **Computation Parameters**
 
@@ -109,9 +108,8 @@ def apply_var_annotations(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` annotated ``adata``, and a slice
-    of it ``sdata``, where the ``indices`` is either the vector of full indices of the
-    slice variables, or the name of a per-variable annotation of ``sdata`` that
+    Annotated ``adata``, and a slice of it ``sdata``, where the ``indices`` is either the vector of
+    full indices of the slice variables, or the name of a per-variable annotation of ``sdata`` that
     contains this vector.
 
     **Computation Parameters**

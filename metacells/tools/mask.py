@@ -32,8 +32,7 @@ def combine_masks(  # pylint: disable=too-many-branches
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` ``adata``, where the observations are cells
-    and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes.
 
     **Returns**
 

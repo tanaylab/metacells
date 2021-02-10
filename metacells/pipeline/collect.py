@@ -33,9 +33,8 @@ def collect_metacells(
 
     **Input**
 
-    A :py:func:`metacells.utilities.annotation.setup` annotated (presumably "clean") ``adata``,
-    where the observations are cells and the variables are genes, and the "clean" ``cdata`` we have
-    computed metacells for.
+    Annotated (presumably "clean") ``adata``, where the observations are cells and the variables are
+    genes, and the "clean" ``cdata`` we have computed metacells for.
 
     **Returns**
 

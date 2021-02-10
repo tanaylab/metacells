@@ -14,8 +14,8 @@ To achieve this, we track for each ``AnnData`` whether it is a temporary object,
 top-level informative messages, and uses ``DEBUG`` for everything else.
 
 We also allow each ``AnnData`` object to have an optional name for logging. Both this name and
-whether the data is temporary are specified when we :py:func:`metacells.utilities.annotation.setup`
-or :py:func:`metacells.utilities.annotation.slice` some data.
+whether the data is temporary are specified when we ``setup`` or
+:py:func:`metacells.utilities.annotation.slice` some data.
 '''
 
 import logging
@@ -110,7 +110,7 @@ def setup_logger(
     time: bool = True,
     process: Optional[bool] = None,
     name: Optional[str] = None,
-    short_level_names: bool = False,
+    short_level_names: bool = True,
 ) -> Logger:
     '''
     Setup logging to stderr at some ``level`` (default: {level}).

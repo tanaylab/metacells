@@ -31,8 +31,6 @@ def _load(path: str) -> Tuple[AnnData, Dict[str, Any]]:
     with mc.ut.timed_step('read'):
         adata = sc.read(path)
 
-    mc.ut.setup(adata)
-
     LOADED[path] = (adata, expected)
     return adata, expected
 
@@ -83,11 +81,12 @@ def test_direct_pipeline() -> None:
                             expected['gene_max_top_shuffled_r2'],
                             expected['gene_max_excess_r2']]
 
-        top_r2 = mc.ut.get_vo_data(mdata, 'top_r2', layout='column_major')
+        top_r2 = mc.ut.get_vo_proper(mdata, 'top_r2', layout='column_major')
         top_shuffled_r2 = \
-            mc.ut.get_vo_data(mdata, 'top_shuffled_r2', layout='column_major')
+            mc.ut.get_vo_proper(mdata, 'top_shuffled_r2',
+                                layout='column_major')
         excess_r2 = \
-            mc.ut.get_vo_data(mdata, 'excess_r2', layout='column_major')
+            mc.ut.get_vo_proper(mdata, 'excess_r2', layout='column_major')
         actual_results = [
             np.nanmean(mc.ut.nanmax_per(top_r2, per='column')),
             np.nanmean(mc.ut.nanmax_per(top_shuffled_r2, per='column')),

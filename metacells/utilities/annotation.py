@@ -46,7 +46,7 @@ are three sources of (implementation) code complexity here:
     layers are secondary at best.
 
     The managed ``AnnData`` therefore keeps a second special metadata property ``__x__`` which must
-    :py:func:`metacells.utilities.annotation.setup`, and pretends that the value of ``X`` is just
+    ``setup``, and pretends that the value of ``X`` is just
     another layer. This gives rise to some edge cases (e.g., one can't delete the ``X`` layer).
 
 2.  Layout-optimized data.
@@ -119,8 +119,6 @@ import metacells.utilities.timing as utm
 import metacells.utilities.typing as utt
 
 __all__ = [
-    'setup',
-
     'slice',
 
     'SlicingMask',
@@ -146,27 +144,22 @@ __all__ = [
     'get_v_numpy',
 
     'set_oo_data',
-    'get_oo_data',
     'get_oo_frame',
     'get_oo_proper',
 
     'set_vv_data',
-    'get_vv_data',
     'get_vv_frame',
     'get_vv_proper',
 
     'set_oa_data',
-    'get_oa_data',
     'get_oa_frame',
     'get_oa_proper',
 
     'set_va_data',
-    'get_va_data',
     'get_va_frame',
     'get_va_proper',
 
     'set_vo_data',
-    'get_vo_data',
     'get_vo_frame',
     'get_vo_proper',
 
@@ -178,54 +171,6 @@ LOG = logging.getLogger(__name__)
 
 
 Annotations = Union[MutableMapping[Any, Any], utt.PandasFrame]
-
-
-def setup(
-    adata: AnnData,
-    *,
-    name: Optional[str] = None,
-    tmp: bool = False
-) -> None:
-    '''
-    Set up the annotated ``adata`` for use by the ``metacells`` package.
-
-    The optional ``name``, if specified, is attached to log messages about setting annotation data.
-
-    If ``tmp`` is set, logging of modifications to the result will use the ``DEBUG`` logging level.
-    By default, logging of modifications is done using the ``INFO`` logging level.
-
-    This should be called after populating the ``X`` data for the first time (e.g., by importing the
-    data). All the rest of the code in the package assumes this was done.
-
-    .. note::
-
-        This assumes it is safe to arbitrarily slice all the currently existing data.
-
-    .. note::
-
-        When using the layer utilities, do not directly read or write the value of ``X``. Instead
-        use :py:func:`metacells.utilities.annotation.get_vo_data`.
-    '''
-    X = adata.X
-    if not utt.frozen(X):  # type: ignore
-        utt.freeze(X)  # type: ignore
-    assert X is not None
-    assert getattr(X, 'ndim') == 2
-    assert '__x__' not in adata.layers
-
-    compressed = utt.maybe_compressed_matrix(X)
-    if compressed is not None:
-        if not compressed.has_sorted_indices:
-            warn('%s does not have sorted indices' % (name or 'adata'))
-        if not compressed.has_canonical_format:
-            warn('%s does not have canonical format' % (name or 'adata'))
-
-    if tmp:
-        adata.uns['__tmp__'] = True
-    if name is not None:
-        adata.uns['__name__'] = name
-        LOG.log(utl.get_log_level(adata),
-                '  created %s shape %s', name, adata.shape)
 
 
 class SlicingMask(NamedTuple):
@@ -438,19 +383,19 @@ def get_data(  # pylint: disable=too-many-return-statements
     if per == 'vo' \
             or (per is None
                 and (name == '__x__' or name in adata.layers)):
-        return get_vo_data(adata, name, layout=layout)
+        return _get_vo_data(adata, name, layout=layout)
 
     if per == 'oo' or (per is None and name in adata.obsp):
-        return get_oo_data(adata, name, layout=layout)
+        return _get_oo_data(adata, name, layout=layout)
 
     if per == 'vv' or (per is None and name in adata.varp):
-        return get_vv_data(adata, name, layout=layout)
+        return _get_vv_data(adata, name, layout=layout)
 
     if per == 'oa' or (per is None and name in adata.obsm):
-        return get_oa_data(adata, name, layout=layout)
+        return _get_oa_data(adata, name, layout=layout)
 
     if per == 'va' or (per is None and name in adata.varm):
-        return get_va_data(adata, name, layout=layout)
+        return _get_va_data(adata, name, layout=layout)
 
     assert layout is None
 
@@ -646,7 +591,7 @@ def get_v_numpy(
 
 
 @utd.expand_doc()
-def get_oo_data(
+def _get_oo_data(
     adata: AnnData,
     what: Union[str, utt.Matrix],
     *,
@@ -675,9 +620,9 @@ def get_oo_frame(
     layout: Optional[str] = None,
 ) -> utt.PandasFrame:
     '''
-    Same as :py:func:`get_oo_data` but returns a pandas data frame.
+    Same as ``get_oo_data`` but returns a pandas data frame.
     '''
-    data = get_oo_data(adata, what, layout=layout)
+    data = _get_oo_data(adata, what, layout=layout)
     frame = utt.maybe_pandas_frame(data)
     if frame is None:
         frame = utt.to_pandas_frame(utt.to_proper_matrix(data),
@@ -693,15 +638,15 @@ def get_oo_proper(
     layout: Optional[str] = None,
 ) -> utt.ProperMatrix:
     '''
-    Same as :py:func:`get_oo_data` but returns a numpy
+    Same as ``get_oo_data`` but returns a numpy
     :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
-    return utt.to_proper_matrix(get_oo_data(adata, what, layout=layout),
-                                default_layout=layout or 'row_major')
+    data = _get_oo_data(adata, what, layout=layout)
+    return utt.to_proper_matrix(data, default_layout=layout or 'row_major')
 
 
 @utd.expand_doc()
-def get_vv_data(
+def _get_vv_data(
     adata: AnnData,
     what: Union[str, utt.Matrix],
     *,
@@ -730,9 +675,9 @@ def get_vv_frame(
     layout: Optional[str] = None,
 ) -> utt.PandasFrame:
     '''
-    Same as :py:func:`get_vv_data` but returns a pandas data frame.
+    Same as ``get_vv_data`` but returns a pandas data frame.
     '''
-    data = get_vv_data(adata, what, layout=layout)
+    data = _get_vv_data(adata, what, layout=layout)
     frame = utt.maybe_pandas_frame(data)
     if frame is None:
         frame = utt.to_pandas_frame(utt.to_proper_matrix(data),
@@ -748,15 +693,15 @@ def get_vv_proper(
     layout: Optional[str] = None,
 ) -> utt.ProperMatrix:
     '''
-    Same as :py:func:`get_vv_data` but returns a numpy
+    Same as ``get_vv_data`` but returns a numpy
     :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
-    return utt.to_proper_matrix(get_vv_data(adata, what, layout=layout),
-                                default_layout=layout or 'row_major')
+    data = _get_vv_data(adata, what, layout=layout)
+    return utt.to_proper_matrix(data, default_layout=layout or 'row_major')
 
 
 @utd.expand_doc()
-def get_oa_data(
+def _get_oa_data(
     adata: AnnData,
     what: Union[str, utt.Matrix],
     *,
@@ -786,9 +731,9 @@ def get_oa_frame(
     layout: Optional[str] = None,
 ) -> utt.PandasFrame:
     '''
-    Same as :py:func:`get_oa_data` but returns a pandas data frame.
+    Same as ``get_oa_data`` but returns a pandas data frame.
     '''
-    data = get_oa_data(adata, what, layout=layout)
+    data = _get_oa_data(adata, what, layout=layout)
     frame = utt.maybe_pandas_frame(data)
     if frame is None:
         frame = utt.to_pandas_frame(utt.to_proper_matrix(data),
@@ -804,15 +749,15 @@ def get_oa_proper(
     layout: Optional[str] = None,
 ) -> utt.ProperMatrix:
     '''
-    Same as :py:func:`get_oa_data` but returns a numpy
+    Same as ``get_oa_data`` but returns a numpy
     :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
-    return utt.to_proper_matrix(get_oa_data(adata, what, layout=layout),
-                                default_layout=layout or 'row_major')
+    data = _get_oa_data(adata, what, layout=layout)
+    return utt.to_proper_matrix(data, default_layout=layout or 'row_major')
 
 
 @utd.expand_doc()
-def get_va_data(
+def _get_va_data(
     adata: AnnData,
     what: Union[str, utt.Matrix],
     *,
@@ -842,9 +787,9 @@ def get_va_frame(
     layout: Optional[str] = None,
 ) -> utt.PandasFrame:
     '''
-    Same as :py:func:`get_va_data` but returns a pandas data frame.
+    Same as ``get_va_data`` but returns a pandas data frame.
     '''
-    data = get_va_data(adata, what, layout=layout)
+    data = _get_va_data(adata, what, layout=layout)
     frame = utt.maybe_pandas_frame(data)
     if frame is None:
         frame = utt.to_pandas_frame(utt.to_proper_matrix(data),
@@ -860,17 +805,17 @@ def get_va_proper(
     layout: Optional[str] = None,
 ) -> utt.ProperMatrix:
     '''
-    Same as :py:func:`get_va_data` but returns a numpy
+    Same as ``get_va_data`` but returns a numpy
     :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
-    return utt.to_proper_matrix(get_va_data(adata, what, layout=layout),
-                                default_layout=layout or 'row_major')
+    data = _get_va_data(adata, what, layout=layout)
+    return utt.to_proper_matrix(data, default_layout=layout or 'row_major')
 
 
 @utd.expand_doc()
-def get_vo_data(
+def _get_vo_data(
     adata: AnnData,
-    what: Union[str, utt.Matrix, None] = None,
+    what: Union[str, utt.Matrix],
     *,
     layout: Optional[str] = None,
 ) -> utt.Matrix:
@@ -900,14 +845,14 @@ def get_vo_data(
 
 def get_vo_frame(
     adata: AnnData,
-    what: Union[str, utt.Matrix, None] = None,
+    what: Union[str, utt.Matrix] = '__x__',
     *,
     layout: Optional[str] = None,
 ) -> utt.PandasFrame:
     '''
-    Same as :py:func:`get_vo_data` but returns a pandas data frame.
+    Same as ``get_vo_data`` but returns a pandas data frame.
     '''
-    data = get_vo_data(adata, what, layout=layout)
+    data = _get_vo_data(adata, what, layout=layout)
     frame = utt.maybe_pandas_frame(data)
     if frame is None:
         frame = utt.to_pandas_frame(utt.to_proper_matrix(data),
@@ -918,16 +863,16 @@ def get_vo_frame(
 
 def get_vo_proper(
     adata: AnnData,
-    what: Union[str, utt.Matrix, None] = None,
+    what: Union[str, utt.Matrix] = '__x__',
     *,
     layout: Optional[str] = None,
 ) -> utt.ProperMatrix:
     '''
-    Same as :py:func:`get_vo_data` but returns a numpy
+    Same as ``get_vo_data`` but returns a numpy
     :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
-    return utt.to_proper_matrix(get_vo_data(adata, what, layout=layout),
-                                default_layout=layout or 'row_major')
+    data = _get_vo_data(adata, what, layout=layout)
+    return utt.to_proper_matrix(data, default_layout=layout or 'row_major')
 
 
 def _get_sum_data(adata: AnnData, per: str, what: Union[str, utt.Shaped]) -> utt.NumpyVector:
@@ -1052,12 +997,17 @@ def _annotation_per(  # pylint: disable=too-many-return-statements
     raise ValueError('unknown per: %s' % per)
 
 
-def set_name(adata: AnnData, name: str) -> None:
+def set_name(adata: AnnData, name: Optional[str]) -> None:
     '''
     Set the ``name`` of the data (for log messages).
 
     If the name starts with ``.`` it is appended to the current name.
     '''
+    if name is None:
+        if '__name__' in adata.uns:
+            del adata.uns['__name__']
+        return
+
     if name[0] == '.':
         old_name = get_name(adata)
         if old_name is None:
