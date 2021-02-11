@@ -1,6 +1,8 @@
 '''
 Piles
 -----
+
+Utilities for splitting a large number of cells into piles for the divide-and-conquer algorithm.
 '''
 
 from math import ceil, floor
@@ -79,16 +81,18 @@ def group_piles(
     group_of_groups: utt.NumpyVector,
 ) -> utt.NumpyVector:
     '''
-    Group some elements into piles by grouping them, and then grouping the groups.
+    Group some elements into piles after first grouping them, and then grouping the groups.
 
-    Given the ``group_of_elements`` and for each such group, its larger ``group_of_groups``,
-    compute the pile index of each element to be the group of the group it belongs to,
-    and return a vector of the pile index of each element.
+    Given the ``group_of_elements`` and for each such group, its larger ``group_of_groups``, compute
+    the pile index of each element to be the group of the group it belongs to, and return a vector
+    of the pile index of each element.
 
     .. note::
 
-        Neither the ``group_of_elements`` nor the ``group_of_groups`` may contain "outsiders", that
+        Neither the ``group_of_elements`` nor the ``group_of_groups`` may contain "iutliers", that
         is, they must assign an valid group index to each element and group.
     '''
+    assert np.min(group_of_elements) == 0
+    assert np.min(group_of_groups) == 0
     group_of_group_of_elements = group_of_groups[group_of_elements]
     return group_of_group_of_elements

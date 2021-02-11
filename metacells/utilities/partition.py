@@ -1,6 +1,8 @@
 '''
 Partition
 ---------
+
+Utilities for computing "good" partitions of a graph (typically a KNN-graph).
 '''
 
 from typing import Callable, Optional, Tuple
@@ -56,7 +58,7 @@ try:
     #:
     #: A numpy integer array holding the community index of each node, in no particular order. The
     #: community indices are expected to be consecutive, starting with 0. This is used instead of
-    #: categorical data to make it easier to do further processing of the data.
+    #: categorical data to make it easier to further process the data.
     PartitionMethod = Callable[[NamedArg(utt.ProperMatrix, 'edge_weights'),
                                 DefaultNamedArg(Optional[utt.NumpyVector],
                                                 'node_sizes'),
@@ -136,8 +138,8 @@ def leiden_surprise_quality(
     partition_of_nodes: utt.NumpyVector
 ) -> float:
     '''
-    Return the quality score for a partition of nodes using the
-    the ``SurpriseVertexPartition`` goal function.
+    Return the quality score for a partition of nodes using the the ``SurpriseVertexPartition`` goal
+    function.
     '''
     mask = partition_of_nodes[partition_of_nodes >= 0]
     partition_of_nodes = partition_of_nodes[mask]

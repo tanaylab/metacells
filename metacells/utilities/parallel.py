@@ -2,14 +2,14 @@
 Parallel
 --------
 
-Due to the notorious GIL, using multiple Python threads is useless. This leaves us
-with two options for using multiple CPUs:
+Due to the notorious GIL, using multiple Python threads is useless. This leaves us with two options
+for using multiple CPUs:
 
 * Use multiple threads in the internal C++ implementation of some Python functions;
-  this is done by both numpy and the C++ extension functions provided here, and works for reasonably
-  small sized work, such as sorting each of the rows of a large matrix.
+  this is done by both numpy and the C++ extension functions provided here, and works even for
+  reasonably small sized work, such as sorting each of the rows of a large matrix.
 
-* Use Python multi-processing. This is costly and only works for large sized work, such as
+* Use Python multi-processing. This is costly and works only for large sized work, such as
   computing metacells for different piles.
 
 Each of these two approaches works tolerably well on its own, even though both are sub-optimal. The
@@ -26,27 +26,28 @@ ensure we have at most 50 threads, used even if parallel tasks spawn nested para
 memory would be shared so there would be zero-cost in accessing large data structures from different
 threads.
 
-You would expect that, a decade after multi-core CPUs became available, this would have been solved
-"out of the box", by the current frameworks agreeing to cooperate with each other. However, somehow
-this isn't seen as important by the people maintaining these frameworks; in fact, most of them don't
-properly handle nested parallelism within their own framework, never mind playing well with others.
+You would expect that, two decades after multi-core CPUs became available, this would have been
+solved "out of the box" by the current frameworks agreeing to cooperate with each other. However,
+somehow this isn't seen as important by the people maintaining these frameworks; in fact, most of
+them don't properly handle nested parallelism within their own framework, never mind playing well
+with others.
 
 So in practice, while new languages (such as Julia and Rust) provide this out of the box, old
 languages (such as Python and C++) are stuck in a swamp. In our case, numpy uses some underlying
-parallel threads framework, our own extensions use OpenMP parallel threads, and we are forced to use
-the Python-multi-processing framework itself oname top of both, where each of these frameworks is blind
-to the rest.
+parallel threads framework, our own extensions uses OpenMP parallel threads, and we are forced to
+use the Python-multi-processing framework itself on top of both, where each of these frameworks is
+blind to the rest.
 
 As a crude band-aid, there are ways to force both whatever-numpy-uses and OpenMP to use a specific
 number of threads. So, when we use multi-processing, we limit each sub-process to use less internal
 threads, such that the total will be at most 50. This is even less optimal, but at least it doesn't
 bring the server to its knees trying to deal with a total load of 2500 processes.
 
-.. note::
-
-    Even if only using internal threads, it seems that the total CPU time grows significantly when
-    using multiple threads. The total elapsed time is reduced, but since the total is increased,
-    the gain isn't nearly as much as one would have hoped.
+A final twist on all this is that hyper-threading is (worse than) useless for heavy compute threads.
+We therefore by default only use one thread per physical cores. Python in its infinite wisdom does
+not provide a standard way to access the number of physical cores, so we rely on
+:py:mod:`metacells.utilities.hardware_info` to guess this amount. This "should" work on Linux,
+FreeBSD, Mac OSX and Windows, but YMMV.
 
 .. todo::
 
@@ -64,6 +65,7 @@ from threadpoolctl import threadpool_limits  # type: ignore
 
 import metacells.extensions as xt  # type: ignore
 import metacells.utilities.documentation as utd
+import metacells.utilities.hardware_info as uth
 import metacells.utilities.timing as utm
 
 __all__ = [
@@ -91,20 +93,18 @@ PARALLEL_FUNCTION: Optional[Callable[[int], Any]] = None
 
 def set_cpus_count(cpus: int) -> None:
     '''
-    Set the (maximal) number of CPUs to use in parallel.
+    Set the (maximal) number of CPUs to use in parallel. A value of ``0`` means using all the
+    available CPUs. Note that if hyper-threading is enabled, this would be less than the
+    number of logical processors in the system. This is intentional as there's no value
+    in running multiple heavy computations on hyper-threads of the same CPU.
 
-    By default, we use all the available hardware threads. Override this by setting the
+    The default value is ``0``, that is, using all the CPUs. Override this by setting the
     ``METACELLS_CPUS_COUNT`` environment variable or by invoking this function from the main thread.
-
-    A value of ``-1`` uses half of the available threads to combat hyper-threading, ``0`` uses all
-    the available threads, and otherwise the value is the number of threads to use.
     '''
     assert IS_MAIN_PROCESS
 
-    if cpus == -1:
-        cpus = max((os.cpu_count() or 1) // 2, 1)
-    elif cpus == 0:
-        cpus = os.cpu_count() or 1
+    if cpus == 0:
+        cpus = uth.hardware_info().get('cpus', os.cpu_count())
 
     assert cpus > 0
 
@@ -146,9 +146,9 @@ def parallel_map(
     For our simple pipelines, only the main process is allowed to execute functions in parallel
     processes, that is, we do not support nested ``parallel_map`` calls.
 
-    This uses :py:func:`get_cpus_count` processes. If ``max_cpus`` (default: {max_cpus}) is not
-    zero, it further reduces the number of processes used: if it is ``-1`` then only half will
-    be used, to combat hyper-threading, otherwise at most the specified number will be used.
+    This uses :py:func:`get_cpus_count` processes. If ``max_cpus`` (default: {max_cpus}) is
+    zero, use all available CPUs. Otherwise, further reduces the number of processes used
+    to at most the specified value.
 
     If this ends up using a single process, runs the function serially. Otherwise, fork new
     processes to execute the function invocations (using ``multiprocessing.Pool.map``).
@@ -170,8 +170,6 @@ def parallel_map(
     global PROCESSES_COUNT
     PROCESSES_COUNT = min(CPUS_COUNT, invocations)
     if max_cpus != 0:
-        if max_cpus == -1:
-            max_cpus = max((get_cpus_count() or 1) // 2, 1)
         assert max_cpus > 0
         PROCESSES_COUNT = min(PROCESSES_COUNT, max_cpus)
 
@@ -189,7 +187,7 @@ def parallel_map(
     PARALLEL_FUNCTION = function
     IS_MAIN_PROCESS = None
     try:
-        utm.flush()
+        utm.flush_timing()
         with utm.timed_step('parallel_map'):
             utm.timed_parameters(index=MAP_INDEX, processes=PROCESSES_COUNT)
             with Pool(PROCESSES_COUNT) as pool:

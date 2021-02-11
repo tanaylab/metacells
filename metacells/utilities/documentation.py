@@ -1,6 +1,8 @@
 '''
 Documentation
 -------------
+
+Utilities for documenting Python functions.
 '''
 
 from inspect import Parameter, signature

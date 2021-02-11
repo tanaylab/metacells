@@ -1,6 +1,12 @@
 '''
 Timing
 ------
+
+The first step in achieving reasonable performance is identifying where most of the time is being
+spent. The functions in this module allow to easily collect timing information about the relevant
+functions in a controlled way, with low overhead, as opposed to collecting information about all
+functions which has higher overheads and produces mountains of mostly irrelevant data.
+
 '''
 
 import logging
@@ -18,7 +24,7 @@ import metacells.utilities.documentation as utd
 
 __all__ = [
     'collect_timing',
-    'flush',
+    'flush_timing',
     'in_parallel_map',
     'log_steps',
     'timed_step',
@@ -58,12 +64,23 @@ def collect_timing(
     By default, we do not. Override this by setting the ``METACELLS_COLLECT_TIMING`` environment
     variable to ``true``, or by invoking this function from the main thread.
 
-    By default, the ``path`` is {path}, the mode is {mode} and the buffering is {buffering}.
-    Override this by setting the ``METACELL_TIMING_PATH``, ``METACELL_TIMING_MODE`` and/or the
-    ``METACELL_TIMING_BUFFERING`` environment variables, or by invoking this function from the main
-    thread.
+    By default, the data is written to the ``path`` is {path}, which is opened with the mode is
+    {mode} and using the buffering is {buffering}. Override this by setting the
+    ``METACELL_TIMING_PATH``, ``METACELL_TIMING_MODE`` and/or the ``METACELL_TIMING_BUFFERING``
+    environment variables, or by invoking this function from the main thread.
 
     This will flush and close the previous timing file, if any.
+
+    The file is written in CSV format (without headers). The first three fields are:
+
+    * The invocation context (a ``.``-separated path of "relevant" function/step names).
+
+    * The elapsed time (in nanoseconds) in this context (not counting nested contexts).
+
+    * The CPU time (in nanoseconds) in this context (not counting nested contexts).
+
+    This may be followed by a series of ``name,value`` pairs describing parameters of interest for
+    this context, such as data sizes and layouts, to help understand the performance of the code.
     '''
     assert current_thread().name in ('#0', 'MainThread')
 
@@ -93,7 +110,7 @@ def collect_timing(
     COLLECT_TIMING = collect
 
 
-def flush() -> None:
+def flush_timing() -> None:
     '''
     Flush the timing information, if we are collecting it.
     '''
@@ -110,6 +127,13 @@ def in_parallel_map(map_index: int, process_index: int) -> None:
     ``<timing>.<map>.<process>.csv`` (where ``<timing>`` is from the original path, ``<map>`` is the
     serial number of the :py:func:`metacells.utilities.parallel.parallel_map` invocation, and
     ``<process>`` is the serial number of the process in the map).
+
+    Collecting the timing of separate sub-processes to separate files allows us to freely write to
+    them without locks and synchronizations which improves the performance (reduces the overhead of
+    collecting timing information).
+
+    You can just concatenate the files when the run is complete, or use a tool which automatically
+    collects the data from all the files, such as :py:mod:`metacells.scripts.timing`.
     '''
     if COLLECT_TIMING:
         assert TIMING_PATH.endswith('.csv')
@@ -121,15 +145,15 @@ def log_steps(log: bool) -> None:
     '''
     Whether to log every step invocation.
 
-    By default, we do not. Override this by setting the ``METACELLS_LOG_ALL_STEPS`` environment variable
-    to ``true`` or by invoking this function from the main thread.
+    By default, we do not. Override this by setting the ``METACELLS_LOG_ALL_STEPS`` environment
+    variable to ``true`` or by invoking this function from the main thread.
 
     .. note::
 
         This only works if :py:func:`collect_timing` was set. It is a crude instrument to hunt for
         deadlocks, very-long-running numpy functions, and the like. Basically, if the program is
-        taking 100% CPU and you have no idea what it is doing, turning this on would give you some
-        idea of where it is stuck.
+        taking 100% CPU and you have no idea what it is doing, turning this on and looking at the
+        last logged step name would give you some idea of where it is stuck.
     '''
     global LOG_ALL_STEPS
     LOG_ALL_STEPS = log
@@ -274,7 +298,8 @@ def timed_step(name: str) -> Iterator[None]:
         with ut.timed_step("foo"):
             some_computation()
 
-    For every invocation, the program will append a line similar to:
+    If we are collecting timing information, then for every invocation, the program will append a
+    line similar to:
 
     .. code:: text
 
@@ -373,8 +398,8 @@ def timed_parameters(**kwargs: Any) -> None:
     :py:func:`metacells.utilities.timing.timed_step`.
 
     The specified arguments are appended at the end of the generated ``timing.csv`` line. For
-    example, ``timed_parameters(foo=2, bar=3)`` would add ``foo,2,bar,3`` to the line
-    in ``timing.csv``.
+    example, ``timed_parameters(foo=2, bar=3)`` would add ``foo,2,bar,3`` to the line in
+    ``timing.csv``.
 
     This allows tracking parameters which affect invocation time (such as array sizes), to help
     identify the causes for the long-running operations.
@@ -391,9 +416,17 @@ CALLABLE = TypeVar('CALLABLE')
 
 def timed_call(name: Optional[str] = None) -> Callable[[CALLABLE], CALLABLE]:
     '''
-    Automatically wrap each function invocation with
+    Automatically wrap each invocation of the decorated function with
     :py:func:`metacells.utilities.timing.timed_step` using the ``name`` (by default, the function's
     ``__qualname__``).
+
+    Expected usage is:
+
+    .. code:: python
+
+        @ut.timed_call()
+        def some_function(...):
+            ...
     '''
     if COLLECT_TIMING:
         def wrap(function: Callable) -> Callable:
@@ -418,7 +451,7 @@ def context() -> str:
 
     .. note::
 
-        * The context will be empty unless we are collecting timing.
+        The context will be the empty string unless we are actually collecting timing.
     '''
     steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
     if not steps_stack:
@@ -429,7 +462,7 @@ def context() -> str:
 def current_step() -> Optional[StepTiming]:
     '''
     The timing collector for the innermost (current)
-    :py:func:`metacells.utilities.timing.timed_step`.
+    :py:func:`metacells.utilities.timing.timed_step`, if any.
     '''
     if not COLLECT_TIMING:
         return None

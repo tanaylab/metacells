@@ -21,6 +21,9 @@ Utilities
 .. automodule:: metacells.utilities.parallel
     :members:
 
+.. automodule:: metacells.utilities.hardware_info
+    :members:
+
 .. automodule:: metacells.utilities.timing
     :members:
 
