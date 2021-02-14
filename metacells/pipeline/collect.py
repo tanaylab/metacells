@@ -26,7 +26,6 @@ def collect_metacells(
     *,
     name: str = 'metacells',
     tmp: bool = False,
-    intermediate: bool = True,
 ) -> AnnData:
     '''
     Collect computed metacells data.
@@ -42,13 +41,13 @@ def collect_metacells(
     the focus) of the cells for each metacell, which contains the following annotations:
 
     Variable (Gene) Annotations
-        ``excluded_gene`` (if ``intermediate``)
+        ``excluded_gene``
             A mask of the genes which were excluded by name.
 
-        ``clean_gene`` (if ``intermediate``)
+        ``clean_gene``
             A boolean mask of the clean genes.
 
-        ``forbidden_gene`` (if ``intermediate``)
+        ``forbidden_gene``
             A boolean mask of genes which are forbidden from being chosen as "feature" genes based
             on their name. This is ``False`` for non-"clean" genes.
 
@@ -59,7 +58,7 @@ def collect_metacells(
 
         If using divide-and-conquer:
 
-        ``pre_feature`` (if ``intermediate``), ``feature``
+        ``pre_feature``, ``feature``
             The number of times the gene was used as a feature when computing the preliminary and
             final metacells. This is zero for non-"clean" genes.
 
@@ -67,7 +66,7 @@ def collect_metacells(
         ``grouped``
             The number of ("clean") cells grouped into each metacell.
 
-        ``candidate`` (if ``intermediate``)
+        ``candidate``
             The index of the candidate metacell each cell was assigned to to. This is ``-1`` for
             non-"clean" cells.
 
@@ -87,26 +86,20 @@ def collect_metacells(
         pp.group_obs_data(adata, what, groups='metacell', name=name, tmp=tmp)
     assert mdata is not None
 
-    for annotation_name, always in (('excluded_gene', False),
-                                    ('clean_gene', False),
-                                    ('forbidden_gene', False),
-                                    ('pre_feature_gene', False),
-                                    ('feature_gene', True)):
-        if not always and not intermediate:
-            continue
-        if not ut.has_data(adata, annotation_name) \
-                and (annotation_name.startswith('pre_')
-                     or annotation_name in ('excluded_gene', 'clean_gene')):
+    for annotation_name in ('excluded_gene',
+                            'clean_gene',
+                            'forbidden_gene',
+                            'pre_feature_gene',
+                            'feature_gene'):
+        if not ut.has_data(adata, annotation_name):
             continue
         value_per_gene = ut.get_v_numpy(adata, annotation_name)
         ut.set_v_data(mdata, annotation_name, value_per_gene,
                       log_value=ut.mask_description)
 
-    if intermediate:
-        for annotation_name, always in (('pile', False),
-                                        ('candidate', True)):
-            if always or ut.has_data(adata, annotation_name):
-                pp.group_obs_annotation(adata, mdata, groups='metacell',
-                                        name=annotation_name, method='unique')
+    for annotation_name in ('pile', 'candidate'):
+        if ut.has_data(adata, annotation_name):
+            pp.group_obs_annotation(adata, mdata, groups='metacell',
+                                    name=annotation_name, method='unique')
 
     return mdata

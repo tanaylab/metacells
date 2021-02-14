@@ -34,7 +34,6 @@ def compute_obs_obs_knn_graph(
     incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
     inplace: bool = True,
-    intermediate: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
     Compute a directed  K-Nearest-Neighbors graph based on similarity data for each pair of
@@ -56,9 +55,6 @@ def compute_obs_obs_knn_graph(
 
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas data frame (indexed by the observation names).
-
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
 
     **Computation Parameters**
 
@@ -107,7 +103,7 @@ def compute_obs_obs_knn_graph(
                                        balanced_ranks_factor=balanced_ranks_factor,
                                        incoming_degree_factor=incoming_degree_factor,
                                        outgoing_degree_factor=outgoing_degree_factor,
-                                       inplace=inplace, intermediate=intermediate)
+                                       inplace=inplace)
 
 
 @ut.timed_call()
@@ -121,7 +117,6 @@ def compute_var_var_knn_graph(
     incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
     inplace: bool = True,
-    intermediate: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
     Compute a directed  K-Nearest-Neighbors graph based on similarity data for each pair of
@@ -144,9 +139,6 @@ def compute_var_var_knn_graph(
 
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas data frame (indexed by the variable names).
-
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
 
     **Computation Parameters**
 
@@ -195,7 +187,7 @@ def compute_var_var_knn_graph(
                                        balanced_ranks_factor=balanced_ranks_factor,
                                        incoming_degree_factor=incoming_degree_factor,
                                        outgoing_degree_factor=outgoing_degree_factor,
-                                       inplace=inplace, intermediate=intermediate)
+                                       inplace=inplace)
 
 
 def _compute_elements_knn_graph(
@@ -208,7 +200,6 @@ def _compute_elements_knn_graph(
     incoming_degree_factor: float = 3.0,
     outgoing_degree_factor: float = 1.0,
     inplace: bool = True,
-    intermediate: bool = True,
 ) -> Optional[ut.PandasFrame]:
     assert elements in ('obs', 'var')
     assert balanced_ranks_factor > 0.0
@@ -248,15 +239,15 @@ def _compute_elements_knn_graph(
     LOG.debug('  size: %s', similarity.shape[0])
 
     outgoing_ranks = _rank_outgoing(similarity, k, balanced_ranks_factor)
-    store_matrix(outgoing_ranks, 'outgoing_ranks', intermediate)
+    store_matrix(outgoing_ranks, 'outgoing_ranks', True)
 
     balanced_ranks = _balance_ranks(outgoing_ranks)
-    store_matrix(balanced_ranks, 'balanced_ranks', intermediate)
+    store_matrix(balanced_ranks, 'balanced_ranks', True)
 
     pruned_ranks = _prune_ranks(balanced_ranks, k,
                                 incoming_degree_factor,
                                 outgoing_degree_factor)
-    store_matrix(pruned_ranks, 'pruned_ranks', intermediate)
+    store_matrix(pruned_ranks, 'pruned_ranks', True)
 
     outgoing_weights = _weigh_edges(pruned_ranks)
     store_matrix(outgoing_weights, 'outgoing_weights', inplace, level)

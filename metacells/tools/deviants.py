@@ -34,7 +34,6 @@ def find_deviant_cells(
     max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
     inplace: bool = True,
-    intermediate: bool = True,
 ) -> Optional[Tuple[ut.PandasSeries, ut.PandasSeries]]:
     '''
     Find cells which are have significantly different gene expression from the metacells they are
@@ -59,9 +58,6 @@ def find_deviant_cells(
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as two pandas series (indexed by the observation and
     variable names).
-
-    If ``intermediate`` (default: {intermediate}), keep all all the intermediate data (e.g. sums)
-    for future reuse. Otherwise, discard it.
 
     **Computation Parameters**
 
@@ -140,9 +136,6 @@ def find_deviant_cells(
                           fold_factors=fold_factors,
                           min_gene_fold_factor=min_gene_fold_factor,
                           max_gene_fraction=max_gene_fraction)
-
-        if intermediate:
-            ut.set_vo_data(adata, 'fold_factor', fold_factors)
 
         deviant_genes_fold_ranks = \
             _fold_ranks(cells_count=cells_count,

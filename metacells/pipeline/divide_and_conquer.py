@@ -76,9 +76,6 @@ class ResultAnnotation(NamedTuple):
     #: The annotation name.
     name: str
 
-    #: Whether we always report it, or only if ``intermediate``.
-    always: bool
-
     #: The default per-cell value before we collect results.
     default: Any
 
@@ -90,58 +87,58 @@ class ResultAnnotation(NamedTuple):
 
 
 GENE_ANNOTATIONS = [
-    ResultAnnotation(name='pre_high_fraction_gene', always=False,
+    ResultAnnotation(name='pre_high_fraction_gene',
                      default=0, dtype='int32', log_value=ut.mask_description),
-    ResultAnnotation(name='high_fraction_gene', always=False,
+    ResultAnnotation(name='high_fraction_gene',
                      default=0, dtype='int32', log_value=ut.mask_description),
-    ResultAnnotation(name='pre_high_relative_variance_gene', always=False,
+    ResultAnnotation(name='pre_high_relative_variance_gene',
                      default=0, dtype='int32', log_value=ut.mask_description),
-    ResultAnnotation(name='high_relative_variance_gene', always=False,
+    ResultAnnotation(name='high_relative_variance_gene',
                      default=0, dtype='int32', log_value=ut.mask_description),
-    ResultAnnotation(name='forbidden_gene', always=False,
+    ResultAnnotation(name='forbidden_gene',
                      default=False, dtype='bool', log_value=None),
-    ResultAnnotation(name='pre_feature_gene', always=False,
+    ResultAnnotation(name='pre_feature_gene',
                      default=0, dtype='int32', log_value=ut.mask_description),
-    ResultAnnotation(name='feature_gene', always=True,
+    ResultAnnotation(name='feature_gene',
                      default=0, dtype='int32', log_value=ut.mask_description),
-    ResultAnnotation(name='pre_gene_deviant_votes', always=False,
+    ResultAnnotation(name='pre_gene_deviant_votes',
                      default=0, dtype='int32', log_value=ut.mask_description),
-    ResultAnnotation(name='gene_deviant_votes', always=False,
+    ResultAnnotation(name='gene_deviant_votes',
                      default=0, dtype='int32', log_value=ut.mask_description),
 ]
 
 
 CELL_ANNOTATIONS = [
-    ResultAnnotation(name='pre_cell_directs', always=False,
+    ResultAnnotation(name='pre_cell_directs',
                      default=0, dtype='int32', log_value=None),
-    ResultAnnotation(name='cell_directs', always=False,
+    ResultAnnotation(name='cell_directs',
                      default=0, dtype='int32', log_value=None),
-    ResultAnnotation(name='pre_pile', always=False,
+    ResultAnnotation(name='pre_pile',
                      default=-1, dtype='int32', log_value=ut.groups_description),
-    ResultAnnotation(name='pile', always=False,
+    ResultAnnotation(name='pile',
                      default=0, dtype='int32', log_value=ut.groups_description),
-    ResultAnnotation(name='pre_candidate', always=False,
+    ResultAnnotation(name='pre_candidate',
                      default=-1, dtype='int32', log_value=ut.groups_description),
-    ResultAnnotation(name='candidate', always=False,
+    ResultAnnotation(name='candidate',
                      default=-1, dtype='int32', log_value=ut.groups_description),
-    ResultAnnotation(name='pre_cell_deviant_votes', always=False,
+    ResultAnnotation(name='pre_cell_deviant_votes',
                      default=0, dtype='int32', log_value=ut.mask_description),
-    ResultAnnotation(name='cell_deviant_votes', always=False,
+    ResultAnnotation(name='cell_deviant_votes',
                      default=0, dtype='int32', log_value=ut.mask_description),
-    ResultAnnotation(name='pre_dissolved', always=False,
+    ResultAnnotation(name='pre_dissolved',
                      default=False, dtype='bool', log_value=ut.mask_description),
-    ResultAnnotation(name='dissolved', always=False,
+    ResultAnnotation(name='dissolved',
                      default=False, dtype='bool', log_value=ut.mask_description),
-    ResultAnnotation(name='pre_metacell', always=False,
+    ResultAnnotation(name='pre_metacell',
                      default=-1, dtype='int32', log_value=ut.groups_description),
-    ResultAnnotation(name='metacell', always=True,
+    ResultAnnotation(name='metacell',
                      default=-1, dtype='int32', log_value=ut.groups_description),
-    ResultAnnotation(name='outlier', always=False,
+    ResultAnnotation(name='outlier',
                      default=True, dtype='bool', log_value=ut.mask_description),
 ]
 
 
-class SubsetResults:  # pylint: disable=too-many-instance-attributes
+class SubsetResults:
     '''
     Results of computing metacells for a subset of the cells.
 
@@ -157,7 +154,6 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
         is_direct: bool,
         pre_target: Optional[str],
         final_target: str,
-        intermediate: bool,
     ) -> None:
         '''
         Extract the results from ``adata`` which is a subset of the "complete" (clean) data.
@@ -181,9 +177,6 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
         #: Where to collect the final annotations (either ``preliminary`` or ``rare``/``final``).
         self.final_target = final_target
 
-        #: Whether to include intermediate results.
-        self.intermediate = intermediate
-
         if is_direct:
             #: The number of :py:func:`metacells.pipeline.direct.compute_direct_metacells`
             #: invocations in the preliminary phase.
@@ -200,14 +193,13 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
         #: The per-gene data.
         #:
         #: This must cover all the genes of the "complete" (clean) data. It must contain a
-        #: ``feature_gene`` column, and optionally the intermediate ``high_fraction_gene``,
+        #: ``feature_gene`` column, and optionally the ``high_fraction_gene``,
         #: ``high_relative_variance_gene``, ``forbidden_gene`` and ``gene_deviant_votes`` columns.
         self.genes_frame = ut.to_pandas_frame(index=range(adata.n_vars))
 
         for gene_annotation in GENE_ANNOTATIONS:
-            if (not self.intermediate and not gene_annotation.always) \
-                    or (self.pre_target is None
-                        and gene_annotation.name.startswith('pre_')):
+            if self.pre_target is None \
+                    and gene_annotation.name.startswith('pre_'):
                 continue
 
             self.genes_frame[gene_annotation.name] = \
@@ -218,19 +210,16 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
         #: The per-cell data.
         #:
         #: The index contains the indices of the cells in the "complete" (clean) data. It must
-        #: contain a ``metacell`` column, and optionally the intermediate ``candidate``,
-        #: ``cell_deviant_votes``, ``dissolved`` and ``outlier`` columns.
+        #: contain a ``metacell`` column, and optionally the ``candidate``, ``cell_deviant_votes``,
+        #: ``dissolved`` and ``outlier`` columns.
         self.cells_frame = ut.to_pandas_frame(index=cell_indices)
 
         for cell_annotation in CELL_ANNOTATIONS:
-            # pylint: disable=too-many-boolean-expressions
-            if (not intermediate and not cell_annotation.always) \
-                    or (self.pre_target is None
-                        and cell_annotation.name.startswith('pre_')) \
-                    or (self.is_direct
-                        and cell_annotation.name in ('cell_directs', 'pile')):
+            if (self.pre_target is None
+                    and cell_annotation.name.startswith('pre_')) \
+                or (self.is_direct
+                    and cell_annotation.name in ('cell_directs', 'pile')):
                 continue
-            # pylint: enable=too-many-boolean-expressions
 
             self.cells_frame[cell_annotation.name] = \
                 ut.get_o_numpy(adata, cell_annotation.name)
@@ -259,9 +248,6 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
                       lambda directs: directs + self.directs)
 
         for gene_annotation in GENE_ANNOTATIONS:
-            if not self.intermediate and not gene_annotation.always:
-                continue
-
             if gene_annotation.name.startswith('pre_'):
                 if self.pre_target is None:
                     continue
@@ -297,9 +283,6 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
         cell_indices = self.cells_frame.index.values
 
         for cell_annotation in CELL_ANNOTATIONS:
-            if not self.intermediate and not cell_annotation.always:
-                continue
-
             if cell_annotation.name.startswith('pre_'):
                 if self.pre_target is None:
                     continue
@@ -358,7 +341,6 @@ class SubsetResults:  # pylint: disable=too-many-instance-attributes
 def _initialize_results(
     adata: AnnData,
     *,
-    intermediate: bool,
     pre_metacells: bool = False,
 ) -> None:
     ut.log_pipeline_step(LOG, adata, 'initialize_results')
@@ -368,8 +350,6 @@ def _initialize_results(
 
     # pylint: disable=cell-var-from-loop
     for gene_annotation in GENE_ANNOTATIONS:
-        if not intermediate and not gene_annotation.always:
-            continue
         ut.set_v_data(adata,
                       gene_annotation.name,
                       np.full(adata.n_vars,
@@ -380,9 +360,7 @@ def _initialize_results(
 
     # pylint: disable=cell-var-from-loop
     for cell_annotation in CELL_ANNOTATIONS:
-        if (not intermediate and not gene_annotation.always) \
-                and not (pre_metacells
-                         and cell_annotation.name == 'pre_metacells'):
+        if not (pre_metacells and cell_annotation.name == 'pre_metacells'):
             continue
         ut.set_o_data(adata,
                       cell_annotation.name,
@@ -396,7 +374,6 @@ def _initialize_results(
 @ut.timed_call('.direct_results')
 def _patch_direct_results(
     adata: AnnData,
-    intermediate: bool
 ) -> None:
     ut.log_pipeline_step(LOG, adata, 'direct_results')
 
@@ -405,8 +382,6 @@ def _patch_direct_results(
 
     # pylint: disable=cell-var-from-loop
     for gene_annotation in GENE_ANNOTATIONS:
-        if not intermediate and not gene_annotation.always:
-            continue
         if not ut.has_data(adata, gene_annotation.name):
             ut.set_v_data(adata,
                           gene_annotation.name,
@@ -426,9 +401,6 @@ def _patch_direct_results(
                       value,
                       log_value=gene_annotation.log_value)
     # pylint: enable=cell-var-from-loop
-
-    if not intermediate:
-        return
 
     # pylint: disable=cell-var-from-loop
     for cell_annotation in CELL_ANNOTATIONS:
@@ -500,7 +472,6 @@ def divide_and_conquer_pipeline(
     dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     random_seed: int = pr.random_seed,
-    intermediate: bool = True,
 ) -> None:
     '''
     Complete pipeline using divide-and-conquer to compute the metacells for the whole data.
@@ -546,25 +517,25 @@ def divide_and_conquer_pipeline(
         ``rare_genes``
             A boolean mask for the genes in any of the rare gene modules.
 
-        ``pre_high_fraction_gene``, ``high_fraction_gene`` (if ``intermediate``)
+        ``pre_high_fraction_gene``, ``high_fraction_gene``
             The number of times the gene was marked as having a high expression level when computing
             the preliminary and final metacells. This is zero for non-"clean" genes.
 
-        ``pre_high_relative_variance_gene``, ``high_relative_variance_gene`` (if ``intermediate``)
+        ``pre_high_relative_variance_gene``, ``high_relative_variance_gene``
             The number of times the gene was marked as having a high normalized variance relative to
             other genes with a similar expression level when when computing the preliminary and
             final metacells. This is zero for non-"clean" genes.
 
-        ``forbidden_gene`` (if ``intermediate``)
+        ``forbidden_gene``
             A boolean mask of genes which are forbidden from being chosen as "feature" genes based
             on their name. This is ``False`` for non-"clean" genes.
 
-        ``pre_feature_gene`` (if ``intermediate``), ``feature_gene``
+        ``pre_feature_gene``, ``feature_gene``
             The number of times the gene was used as a feature when computing the preliminary and
             final metacells. If we end up directly computing the metacells, the preliminary value
             will be all-zero, and the final value will be one for feature genes, zero otherwise.
 
-        ``pre_gene_deviant_votes``, ``gene_deviant_votes`` (if ``intermediate``)
+        ``pre_gene_deviant_votes``, ``gene_deviant_votes``
             The total number of cells each gene marked as deviant (if zero, the gene did not mark
             any cell as deviant) when computing the preliminary and final metacells. This will be
             zero for non-"feature" genes.
@@ -577,46 +548,43 @@ def divide_and_conquer_pipeline(
         ``rare_cells``
             A boolean mask for the (few) cells that express a rare gene module.
 
-        ``pre_cell_directs``, ``cell_directs`` (if ``intermediate``)
+        ``pre_cell_directs``, ``cell_directs``
             The number of times we invoked
             :py:func:`metacells.pipeline.direct.compute_direct_metacells` to try and group this cell
             when computing the preliminary and final metacells. If we end up directly computing the
             metacells, the preliminary value will be zero. Otherwise this will be at least one, with
             higher values for cells which we tried to group again in the outlier pile(s).
 
-        ``pre_pile``, ``pile`` (if ``intermediate``)
+        ``pre_pile``, ``pile``
             The index of the pile the cell was in in the last invocation of
             :py:func:`metacells.pipeline.direct.compute_direct_metacells` when computing the
             preliminary and final metacells. This is ``-1`` for non-"clean" cells. The preliminary
             value is likewise ``-1`` if we end up directly computing the metacells.
 
-        ``pre_candidate``, ``candidate`` (if ``intermediate``)
+        ``pre_candidate``, ``candidate``
             The index of the candidate metacell each cell was assigned to to in the last grouping
             attempt when computing the preliminary and final metacells. This is ``-1`` for
             non-"clean" cells.
 
-        ``pre_cell_deviant_votes``, ``cell_deviant_votes`` (if ``intermediate``)
+        ``pre_cell_deviant_votes``, ``cell_deviant_votes``
             The number of genes that were the reason the cell was marked as deviant in the last
             grouping attempt when computing the preliminary and final metacells (if zero, the cell
             is not deviant). This is zero for non-"clean" cells.
 
-        ``pre_dissolved``, ``dissolved`` (if ``intermediate``)
+        ``pre_dissolved``, ``dissolved``
             A boolean mask of the cells contained in a dissolved metacell in the last grouping
             attempt when computing the preliminary and final metacells. This is ``False`` for
             non-"clean" cells.
 
-        ``pre_metacell`` (if ``intermediate``), ``metacell``
+        ``pre_metacell``, ``metacell``
             The integer index of the preliminary and final metacell each cell belongs to. The
             metacells are in no particular order. This is ``-1`` for outlier cells and ``-2`` for
             non-"clean" cells.
 
-        ``outlier`` (if ``intermediate``)
+        ``outlier``
             A boolean mask of the cells not assigned to any final metacell. We assign every
             ("clean") cell to a preliminary metacell so there is no point in providing a
             ``pre_outlier`` mask (it would be identical to the ``clean_cell`` mask).
-
-    If ``intermediate`` (default: {intermediate}), also keep all all the intermediate data (e.g.
-    sums) for future reuse. Otherwise, discard it.
 
     **Computation Parameters**
 
@@ -724,8 +692,7 @@ def divide_and_conquer_pipeline(
                                     dissolve_min_convincing_gene_fold_factor=rare_dissolve_min_convincing_gene_fold_factor,
                                     dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                     cell_sizes=cell_sizes,
-                                    random_seed=random_seed,
-                                    intermediate=intermediate)
+                                    random_seed=random_seed)
 
             with ut.timed_step('.collect_piles'):
                 for rare_index, rare_results in enumerate(subset_results):
@@ -737,7 +704,7 @@ def divide_and_conquer_pipeline(
 
                     if not did_apply_subset:
                         did_apply_subset = True
-                        _initialize_results(adata, intermediate=intermediate)
+                        _initialize_results(adata)
 
                     LOG.debug('collect results for rare gene module %s/%s',
                               rare_index, rare_modules_count)
@@ -786,16 +753,14 @@ def divide_and_conquer_pipeline(
                                          dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
                                          dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                          cell_sizes=cell_sizes,
-                                         random_seed=random_seed,
-                                         intermediate=intermediate)
+                                         random_seed=random_seed)
 
     if did_apply_subset:
         LOG.debug('collect results for common cells')
         common_results = SubsetResults(cdata,
                                        is_direct=False,
                                        pre_target='preliminary',
-                                       final_target='final',
-                                       intermediate=intermediate)
+                                       final_target='final')
         common_results.collect(adata, counts)
 
 
@@ -836,7 +801,6 @@ def compute_divide_and_conquer_metacells(
     dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     random_seed: int = pr.random_seed,
-    intermediate: bool = True,
 ) -> None:
     '''
     Compute metacells using the divide-and-conquer method.
@@ -874,70 +838,67 @@ def compute_divide_and_conquer_metacells(
             (probabilities).
 
     Variable (Gene) Annotations
-        ``pre_high_fraction_gene``, ``high_fraction_gene`` (if ``intermediate``)
+        ``pre_high_fraction_gene``, ``high_fraction_gene``
             The number of times the gene was marked as having a high expression level when computing
             the preliminary and final metacells. This is zero for non-"clean" genes.
 
-        ``pre_high_relative_variance_gene``, ``high_relative_variance_gene`` (if ``intermediate``)
+        ``pre_high_relative_variance_gene``, ``high_relative_variance_gene``
             The number of times the gene was marked as having a high normalized variance relative to
             other genes with a similar expression level when when computing the preliminary and
             final metacells. This is zero for non-"clean" genes.
 
-        ``forbidden_gene`` (if ``intermediate``)
+        ``forbidden_gene``
             A boolean mask of genes which are forbidden from being chosen as "feature" genes based
             on their name. This is ``False`` for non-"clean" genes.
 
-        ``pre_feature_gene`` (if ``intermediate``), ``feature_gene``
+        ``pre_feature_gene``, ``feature_gene``
             The number of times the gene was used as a feature when computing the preliminary and
             final metacells. If we end up directly computing the metacells, the preliminary value
             will be all-zero, and the final value will be one for feature genes, zero otherwise.
 
-        ``pre_gene_deviant_votes``, ``gene_deviant_votes`` (if ``intermediate``)
+        ``pre_gene_deviant_votes``, ``gene_deviant_votes``
             The total number of cells each gene marked as deviant (if zero, the gene did not mark
             any cell as deviant) when computing the preliminary and final metacells. This will be
             zero for non-"feature" genes.
 
     Observations (Cell) Annotations
-        ``pre_cell_directs``, ``cell_directs`` (if ``intermediate``)
+        ``pre_cell_directs``, ``cell_directs``
             The number of times we invoked
             :py:func:`metacells.pipeline.direct.compute_direct_metacells` to try and group this cell
             when computing the preliminary and final metacells. If we end up directly computing the
             metacells, the preliminary value will be zero. Otherwise this will be at least one, with
             higher values for cells which we tried to group again in the outlier pile(s).
 
-        ``pre_pile``, ``pile`` (if ``intermediate``)
+        ``pre_pile``, ``pile``
             The index of the pile the cell was in in the last invocation of
             :py:func:`metacells.pipeline.direct.compute_direct_metacells` when computing the
             preliminary and final metacells. This is ``-1`` for non-"clean" cells. The preliminary
             value is likewise ``-1`` if we end up directly computing the metacells.
 
-        ``pre_candidate``, ``candidate`` (if ``intermediate``)
+        ``pre_candidate``, ``candidate``
             The index of the candidate metacell each cell was assigned to to in the last grouping
             attempt when computing the preliminary and final metacells. This is ``-1`` for
             non-"clean" cells.
 
-        ``pre_cell_deviant_votes``, ``cell_deviant_votes`` (if ``intermediate``)
+        ``pre_cell_deviant_votes``, ``cell_deviant_votes``
             The number of genes that were the reason the cell was marked as deviant in the last
             grouping attempt when computing the preliminary and final metacells (if zero, the cell
             is not deviant). This is zero for non-"clean" cells.
 
-        ``pre_dissolved``, ``dissolved`` (if ``intermediate``)
+        ``pre_dissolved``, ``dissolved``
             A boolean mask of the cells contained in a dissolved metacell in the last grouping
             attempt when computing the preliminary and final metacells. This is ``False`` for
             non-"clean" cells.
 
-        ``pre_metacell`` (if ``intermediate``), ``metacell``
+        ``pre_metacell``, ``metacell``
             The integer index of the preliminary and final metacell each cell belongs to. The
             metacells are in no particular order. This is ``-1`` for outlier cells and ``-2`` for
             non-"clean" cells.
 
-        ``outlier`` (if ``intermediate``)
+        ``outlier``
             A boolean mask of the cells not assigned to any final metacell. We assign every
             ("clean") cell to a preliminary metacell so there is no point in providing a
             ``pre_outlier`` mask (it would be identical to the ``clean_cell`` mask).
-
-    If ``intermediate`` (default: {intermediate}), also keep all all the intermediate data (e.g.
-    sums) for future reuse. Otherwise, discard it.
 
     **Computation Parameters**
 
@@ -1007,12 +968,11 @@ def compute_divide_and_conquer_metacells(
                                      dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
                                      dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                      cell_sizes=cell_sizes,
-                                     random_seed=random_seed,
-                                     intermediate=intermediate)
-            _patch_direct_results(adata, intermediate)
+                                     random_seed=random_seed)
+            _patch_direct_results(adata)
         return
 
-    _initialize_results(adata, intermediate=intermediate, pre_metacells=True)
+    _initialize_results(adata, pre_metacells=True)
 
     with ut.timed_step('.preliminary_metacells'):
         _compute_piled_metacells(adata, what,
@@ -1050,8 +1010,7 @@ def compute_divide_and_conquer_metacells(
                                  dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
                                  dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                  cell_sizes=cell_sizes,
-                                 random_seed=random_seed,
-                                 intermediate=intermediate)
+                                 random_seed=random_seed)
 
     with ut.timed_step('.metacell_piles'):
         ut.log_operation(LOG, adata, 'metacell_piles', what)
@@ -1094,8 +1053,7 @@ def compute_divide_and_conquer_metacells(
                                              dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
                                              dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                              cell_sizes='grouped',
-                                             random_seed=random_seed,
-                                             intermediate=intermediate)
+                                             random_seed=random_seed)
         preliminary_metacell_of_cells = ut.get_o_numpy(adata, 'pre_metacell')
 
         pile_of_preliminary_metacells = ut.get_o_numpy(mdata, 'metacell')
@@ -1140,8 +1098,7 @@ def compute_divide_and_conquer_metacells(
                                  dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
                                  dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                  cell_sizes=cell_sizes,
-                                 random_seed=random_seed,
-                                 intermediate=intermediate)
+                                 random_seed=random_seed)
 
 
 def _compute_piled_metacells(
@@ -1183,7 +1140,6 @@ def _compute_piled_metacells(
     dissolve_min_metacell_cells: int,
     cell_sizes: Optional[Union[str, ut.Vector]],
     random_seed: int,
-    intermediate: bool,
 ) -> None:
     ut.log_operation(LOG, adata, phase + '_metacells', what)
     piles_count = np.max(pile_of_cells) + 1
@@ -1221,8 +1177,7 @@ def _compute_piled_metacells(
                             dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
                             dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                             cell_sizes=cell_sizes,
-                            random_seed=random_seed,
-                            intermediate=intermediate)
+                            random_seed=random_seed)
 
     assert len(subset_results) == piles_count
 
@@ -1297,8 +1252,7 @@ def _compute_piled_metacells(
         outliers_results = SubsetResults(odata,
                                          is_direct=False,
                                          pre_target=None,
-                                         final_target=phase,
-                                         intermediate=intermediate)
+                                         final_target=phase)
         outliers_results.collect(adata, counts)
 
 
@@ -1336,7 +1290,6 @@ def _run_parallel_piles(
     dissolve_min_metacell_cells: int,
     cell_sizes: Optional[Union[str, ut.Vector]],
     random_seed: int,
-    intermediate: bool,
 ) -> List[SubsetResults]:
     def _compute_pile_metacells(pile_index: int) -> SubsetResults:
         pile_cells_mask = pile_of_cells == pile_index
@@ -1372,11 +1325,8 @@ def _run_parallel_piles(
                                  dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                  cell_sizes=cell_sizes,
                                  random_seed=random_seed)
-        return SubsetResults(pdata,
-                             is_direct=True,
-                             pre_target=None,
-                             final_target=phase,
-                             intermediate=intermediate)
+        return SubsetResults(pdata, is_direct=True,
+                             pre_target=None, final_target=phase)
 
     @ut.timed_call('compute_pile_metacells')
     def _return_pile_results(pile_index: int) -> SubsetResults:

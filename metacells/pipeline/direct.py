@@ -26,7 +26,7 @@ LOG = logging.getLogger(__name__)
 
 @ut.timed_call()
 @ut.expand_doc()
-def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-statements
+def compute_direct_metacells(
     adata: AnnData,
     what: Union[str, ut.Matrix] = '__x__',
     *,
@@ -57,7 +57,6 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
     dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     random_seed: int = pr.random_seed,
-    intermediate: bool = True,
 ) -> None:
     '''
     Directly compute metacells.
@@ -99,34 +98,34 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
     Sets the following annotations in ``adata``:
 
     Variable (Gene) Annotations
-        ``high_fraction_gene`` (if ``intermediate``)
+        ``high_fraction_gene``
             A boolean mask of genes with "high" expression level.
 
-        ``high_relative_variance_gene`` (if ``intermediate``)
+        ``high_relative_variance_gene``
             A boolean mask of genes with "high" normalized variance, relative to other genes with a
             similar expression level.
 
-        ``forbidden_gene`` (if ``intermediate``)
+        ``forbidden_gene``
             A boolean mask of genes which are forbidden from being chosen as "feature" genes based
             on their name.
 
         ``feature_gene``
             A boolean mask of the "feature" genes.
 
-        ``gene_deviant_votes`` (if ``intermediate``)
+        ``gene_deviant_votes``
             The number of cells each gene marked as deviant (if zero, the gene did not mark any cell
             as deviant). This will be zero for non-"feature" genes.
 
     Observation (Cell) Annotations
-        ``candidate`` (if ``intermediate``)
+        ``candidate``
             The index of the candidate metacell each cell was assigned to to. This is ``-1`` for
             non-"clean" cells.
 
-        ``cell_deviant_votes`` (if ``intermediate``)
+        ``cell_deviant_votes``
             The number of genes that were the reason the cell was marked as deviant (if zero, the
             cell is not deviant).
 
-        ``dissolved`` (if ``intermediate``)
+        ``dissolved``
             A boolean mask of the cells contained in a dissolved metacell.
 
         ``metacell``
@@ -134,11 +133,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
             particular order. Cells with no metacell assignment ("outliers") are given a metacell
             index of ``-1``.
 
-        ``outlier`` (if ``intermediate``)
+        ``outlier``
             A boolean mask of the cells contained in no metacell.
-
-    If ``intermediate`` (default: {intermediate}), also keep all all the intermediate data (e.g.
-    sums) for future reuse. Otherwise, discard it.
 
     **Computation Parameters**
 
@@ -272,29 +268,24 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
 
     candidate_of_cells = ut.get_o_numpy(fdata, 'candidate')
 
-    if intermediate:
-        ut.set_o_data(adata, 'candidate', candidate_of_cells,
-                      log_value=ut.groups_description)
-        outgoing_weights = \
-            ut.get_oo_proper(fdata, 'obs_outgoing_weights')
-        ut.set_oo_data(adata, 'obs_outgoing_weights', outgoing_weights)
+    ut.set_o_data(adata, 'candidate', candidate_of_cells,
+                  log_value=ut.groups_description)
 
     if must_complete_cover:
         assert np.min(candidate_of_cells) == 0
 
-        if intermediate:
-            deviant_votes_of_genes = np.zeros(adata.n_vars, dtype='float32')
-            deviant_votes_of_cells = np.zeros(adata.n_obs, dtype='float32')
-            dissolved_of_cells = np.zeros(adata.n_obs, dtype='bool')
+        deviant_votes_of_genes = np.zeros(adata.n_vars, dtype='float32')
+        deviant_votes_of_cells = np.zeros(adata.n_obs, dtype='float32')
+        dissolved_of_cells = np.zeros(adata.n_obs, dtype='bool')
 
-            ut.set_v_data(adata, 'gene_deviant_votes', deviant_votes_of_genes,
-                          log_value=ut.mask_description)
+        ut.set_v_data(adata, 'gene_deviant_votes', deviant_votes_of_genes,
+                      log_value=ut.mask_description)
 
-            ut.set_o_data(adata, 'cell_deviant_votes', deviant_votes_of_cells,
-                          log_value=ut.mask_description)
+        ut.set_o_data(adata, 'cell_deviant_votes', deviant_votes_of_cells,
+                      log_value=ut.mask_description)
 
-            ut.set_o_data(adata, 'dissolved', dissolved_of_cells,
-                          log_value=ut.mask_description)
+        ut.set_o_data(adata, 'dissolved', dissolved_of_cells,
+                      log_value=ut.mask_description)
 
         ut.set_o_data(adata, 'metacell', candidate_of_cells,
                       log_value=ut.groups_description)
@@ -315,7 +306,6 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
                               min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
                               min_metacell_cells=dissolve_min_metacell_cells)
 
-    if intermediate:
         metacell_of_cells = ut.get_o_numpy(adata, 'metacell')
 
         outlier_of_cells = metacell_of_cells < 0
