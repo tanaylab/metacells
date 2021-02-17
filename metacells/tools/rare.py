@@ -3,7 +3,6 @@ Rare
 ----
 '''
 
-import logging
 from re import Pattern
 from typing import Collection, Dict, List, Optional, Tuple, Union
 
@@ -23,9 +22,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def find_rare_gene_modules(
@@ -136,8 +133,6 @@ def find_rare_gene_modules(
        (default: {target_metacell_size}) times the ``min_modules_size_factor`` (default:
        {min_modules_size_factor}).
     '''
-    level = ut.get_log_level(adata)
-    LOG.log(level, 'find_rare_gene_modules...')
     assert min_cells_of_modules > 0
     assert min_genes_of_modules > 0
 
@@ -146,9 +141,8 @@ def find_rare_gene_modules(
                          patterns=forbidden_gene_patterns)
     assert forbidden_genes_mask is not None
 
-    LOG.debug('  genes forbidden by name: %s',
-              np.sum(forbidden_genes_mask.values))
     allowed_genes_mask = ~forbidden_genes_mask.values
+    ut.log_calc('allowed_genes_mask', allowed_genes_mask)
 
     rare_module_of_cells = np.full(adata.n_obs, -1, dtype='int32')
     list_of_names_of_genes_of_modules: List[ut.NumpyVector] = []
@@ -162,7 +156,6 @@ def find_rare_gene_modules(
                          allowed_genes_mask=allowed_genes_mask)
     if candidates is None:
         return _results(adata=adata,
-                        level=level,
                         rare_module_of_cells=rare_module_of_cells,
                         list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules,
                         inplace=inplace)
@@ -183,12 +176,9 @@ def find_rare_gene_modules(
                         linkage=linkage,
                         min_module_correlation=min_module_correlation)
 
-    LOG.debug('  target_pile_size: %s', target_pile_size)
-    LOG.debug('  max_cells_of_random_pile: %s', max_cells_of_random_pile)
-    LOG.debug('  cells_count: %s', adata.n_obs)
     max_cells_of_modules = \
         int(max_cells_of_random_pile * adata.n_obs / target_pile_size)
-    LOG.debug('  max_cells_of_modules: %s', max_cells_of_modules)
+    ut.log_calc('max_cells_of_modules', max_cells_of_modules)
 
     related_gene_indices_of_modules = \
         _related_genes(adata_of_all_genes_of_all_cells=adata,
@@ -212,6 +202,7 @@ def find_rare_gene_modules(
     _compress_modules(adata_of_all_genes_of_all_cells=adata,
                       what=what,
                       min_cells_of_modules=min_cells_of_modules,
+                      max_cells_of_modules=max_cells_of_modules,
                       target_metacell_size=target_metacell_size,
                       min_modules_size_factor=min_modules_size_factor,
                       related_gene_indices_of_modules=related_gene_indices_of_modules,
@@ -219,7 +210,6 @@ def find_rare_gene_modules(
                       list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules)
 
     return _results(adata=adata,
-                    level=level,
                     rare_module_of_cells=rare_module_of_cells,
                     list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules,
                     inplace=inplace)
@@ -235,9 +225,6 @@ def _pick_candidates(
     min_genes_of_modules: int,
     allowed_genes_mask: ut.NumpyVector,
 ) -> Optional[Tuple[AnnData, ut.NumpyVector]]:
-    LOG.debug('  max_gene_cell_fraction: %s',
-              ut.fraction_description(max_gene_cell_fraction))
-
     data = ut.get_vo_proper(adata_of_all_genes_of_all_cells, what,
                             layout='column_major')
     nnz_cells_of_genes = ut.nnz_per(data, per='column')
@@ -247,22 +234,20 @@ def _pick_candidates(
     nnz_cell_fraction_mask_of_genes = \
         nnz_cell_fraction_of_genes <= max_gene_cell_fraction
 
-    LOG.debug('  min_gene_maximum: %s', min_gene_maximum)
     max_umis_of_genes = ut.max_per(data, per='column')
     max_umis_mask_of_genes = max_umis_of_genes >= min_gene_maximum
 
     candidates_mask_of_genes = \
         max_umis_mask_of_genes & nnz_cell_fraction_mask_of_genes & allowed_genes_mask
+    ut.log_calc('candidate_genes', candidates_mask_of_genes)
 
     candidate_genes_indices = np.where(candidates_mask_of_genes)[0]
-
     candidate_genes_count = candidate_genes_indices.size
-    LOG.debug('  candidate_genes_count: %s', candidate_genes_count)
     if candidate_genes_count < min_genes_of_modules:
         return None
 
     candidate_data = \
-        ut.slice(adata_of_all_genes_of_all_cells, name='candidates', tmp=True,
+        ut.slice(adata_of_all_genes_of_all_cells, name='.candidate_genes',
                  vars=candidate_genes_indices)
     return candidate_data, candidate_genes_indices
 
@@ -291,8 +276,6 @@ def _cluster_genes(
         distances = scd.pdist(similarities_between_candidate_genes)
 
     with ut.timed_step('scipy.linkage'):
-        LOG.debug('  genes_cluster_method: %s',
-                  genes_cluster_method)
         ut.timed_parameters(size=distances.shape[0],
                             method=genes_cluster_method)
         linkage = sch.linkage(distances, method=genes_cluster_method)
@@ -313,8 +296,6 @@ def _identify_genes(
     combined_candidate_indices = \
         {index: [index] for index in range(candidate_genes_count)}
 
-    LOG.debug('  min_module_correlation: %s',
-              min_module_correlation)
     for link_index, link_data in enumerate(linkage):
         link_index += candidate_genes_count
 
@@ -349,7 +330,7 @@ def _identify_genes(
 
 
 @ut.timed_call('.related_genes')
-def _related_genes(
+def _related_genes(  # pylint: disable=too-many-branches,too-many-statements
     *,
     adata_of_all_genes_of_all_cells: AnnData,
     what: Union[str, ut.Matrix] = '__x__',
@@ -361,15 +342,12 @@ def _related_genes(
     max_cells_of_modules: int,
     min_related_gene_fold_factor: float,
 ) -> List[List[int]]:
-    LOG.debug('  min_related_gene_fold_factor: %s',
-              min_related_gene_fold_factor)
-    LOG.debug('  min_genes_of_modules: %s', min_genes_of_modules)
-
     total_all_cells_umis_of_all_genes = \
         ut.get_v_numpy(adata_of_all_genes_of_all_cells, what, sum=True)
 
     related_data_of_genes: Dict[int, Tuple[bool, float, float, int]] = {}
 
+    ut.log_calc('genes for modules:')
     modules_count = 0
     for rare_gene_indices_of_module in rare_gene_indices_of_modules:
         if len(rare_gene_indices_of_module) < min_genes_of_modules:
@@ -378,105 +356,119 @@ def _related_genes(
         module_index = modules_count
         modules_count += 1
 
-        LOG.debug('  module %s rare genes: %s',
-                  module_index,
-                  ' '.join(sorted(adata_of_all_genes_of_all_cells.var_names[rare_gene_indices_of_module])))
+        with ut.log_step('- module', module_index):
+            ut.log_calc('rare_gene_names',
+                        sorted(adata_of_all_genes_of_all_cells.var_names[rare_gene_indices_of_module]))
 
-        adata_of_module_genes_of_all_cells = \
-            ut.slice(adata_of_all_genes_of_all_cells,
-                     vars=rare_gene_indices_of_module)
+            adata_of_module_genes_of_all_cells = \
+                ut.slice(adata_of_all_genes_of_all_cells,
+                         name=f'.module{module_index}.rare_genes',
+                         vars=rare_gene_indices_of_module)
 
-        total_module_genes_umis_of_all_cells = \
-            ut.get_o_numpy(adata_of_module_genes_of_all_cells, what, sum=True)
+            total_module_genes_umis_of_all_cells = \
+                ut.get_o_numpy(adata_of_module_genes_of_all_cells,
+                               what, sum=True)
 
-        mask_of_expressed_cells = total_module_genes_umis_of_all_cells > 0
+            mask_of_expressed_cells = total_module_genes_umis_of_all_cells > 0
 
-        expressed_cells_count = np.sum(mask_of_expressed_cells)
-        LOG.debug('  module %s expressed cells: %s',
-                  module_index, np.sum(mask_of_expressed_cells))
+            expressed_cells_count = np.sum(mask_of_expressed_cells)
 
-        if expressed_cells_count > max_cells_of_modules:
-            LOG.debug('  module %s has too many cells', module_index)
-            continue
+            if expressed_cells_count > max_cells_of_modules:
+                if ut.logging_calc():
+                    ut.log_calc('expressed_cells',
+                                ut.mask_description(mask_of_expressed_cells)
+                                + ' (too many)')
+                continue
 
-        if expressed_cells_count < min_cells_of_modules:
-            LOG.debug('  module %s has too few cells', module_index)
-            continue
+            if expressed_cells_count < min_cells_of_modules:
+                if ut.logging_calc():
+                    ut.log_calc('expressed_cells',
+                                ut.mask_description(mask_of_expressed_cells)
+                                + ' (too few)')
+                continue
 
-        adata_of_all_genes_of_expressed_cells_of_module = \
-            ut.slice(adata_of_all_genes_of_all_cells,
-                     obs=mask_of_expressed_cells)
+            ut.log_calc('expressed_cells', mask_of_expressed_cells)
 
-        total_expressed_cells_umis_of_all_genes = \
-            ut.get_v_numpy(adata_of_all_genes_of_expressed_cells_of_module,
-                           what, sum=True)
+            adata_of_all_genes_of_expressed_cells_of_module = \
+                ut.slice(adata_of_all_genes_of_all_cells,
+                         name=f'.module{module_index}.rare_cells',
+                         obs=mask_of_expressed_cells)
 
-        data = ut.get_vo_proper(adata_of_all_genes_of_expressed_cells_of_module, what,
-                                layout='column_major')
-        max_expressed_cells_umis_of_all_genes = ut.max_per(data, per='column')
+            total_expressed_cells_umis_of_all_genes = \
+                ut.get_v_numpy(adata_of_all_genes_of_expressed_cells_of_module,
+                               what, sum=True)
 
-        total_background_cells_umis_of_all_genes = \
-            total_all_cells_umis_of_all_genes - total_expressed_cells_umis_of_all_genes
+            data = ut.get_vo_proper(adata_of_all_genes_of_expressed_cells_of_module, what,
+                                    layout='column_major')
+            max_expressed_cells_umis_of_all_genes = \
+                ut.max_per(data, per='column')
 
-        expressed_cells_fraction_of_all_genes = \
-            total_expressed_cells_umis_of_all_genes \
-            / sum(total_expressed_cells_umis_of_all_genes)
+            total_background_cells_umis_of_all_genes = \
+                total_all_cells_umis_of_all_genes - total_expressed_cells_umis_of_all_genes
 
-        background_cells_fraction_of_all_genes = \
-            total_background_cells_umis_of_all_genes \
-            / sum(total_background_cells_umis_of_all_genes)
+            expressed_cells_fraction_of_all_genes = \
+                total_expressed_cells_umis_of_all_genes \
+                / sum(total_expressed_cells_umis_of_all_genes)
 
-        mask_of_related_genes = \
-            allowed_genes_mask \
-            & (max_expressed_cells_umis_of_all_genes >= min_gene_maximum) \
-            & (expressed_cells_fraction_of_all_genes
-               >= background_cells_fraction_of_all_genes
-               * (2 ** min_related_gene_fold_factor))
+            background_cells_fraction_of_all_genes = \
+                total_background_cells_umis_of_all_genes \
+                / sum(total_background_cells_umis_of_all_genes)
 
-        related_gene_indices = np.where(mask_of_related_genes)[0]
-        assert np.all(mask_of_related_genes[rare_gene_indices_of_module])
+            mask_of_related_genes = \
+                allowed_genes_mask \
+                & (max_expressed_cells_umis_of_all_genes >= min_gene_maximum) \
+                & (expressed_cells_fraction_of_all_genes
+                   >= background_cells_fraction_of_all_genes
+                   * (2 ** min_related_gene_fold_factor))
 
-        LOG.debug('  module %s candidate genes: %s',
-                  module_index,
-                  ' '.join(sorted(adata_of_all_genes_of_all_cells.var_names[related_gene_indices])))
+            related_gene_indices = np.where(mask_of_related_genes)[0]
+            assert np.all(mask_of_related_genes[rare_gene_indices_of_module])
 
-        for gene_index in related_gene_indices:
-            current_gene_data = \
-                related_data_of_genes.get(gene_index,
-                                          (False, 0.0, 0.0, module_index))
+            if ut.logging_calc():
+                ut.log_calc('candidate_gene_names',
+                            sorted(adata_of_all_genes_of_all_cells.var_names[related_gene_indices]))
 
-            if gene_index in rare_gene_indices_of_module:
-                gene_data = (True, 0.0, 0.0, module_index)
-                assert not current_gene_data[0]
-            elif background_cells_fraction_of_all_genes[gene_index] == 0:
-                gene_data = \
-                    (False,
-                     expressed_cells_fraction_of_all_genes[gene_index],
-                     0.0,
-                     module_index)
-            else:
-                gene_data = \
-                    (False,
-                     0.0,
-                     expressed_cells_fraction_of_all_genes[gene_index]
-                     / background_cells_fraction_of_all_genes[gene_index],
-                     module_index)
+            for gene_index in related_gene_indices:
+                current_gene_data = \
+                    related_data_of_genes.get(gene_index,
+                                              (False, 0.0, 0.0, module_index))
 
-            if gene_data > current_gene_data:
-                related_data_of_genes[gene_index] = gene_data
+                if gene_index in rare_gene_indices_of_module:
+                    gene_data = (True, 0.0, 0.0, module_index)
+                    assert not current_gene_data[0]
+                elif background_cells_fraction_of_all_genes[gene_index] == 0:
+                    gene_data = \
+                        (False,
+                         expressed_cells_fraction_of_all_genes[gene_index],
+                         0.0,
+                         module_index)
+                else:
+                    gene_data = \
+                        (False,
+                         0.0,
+                         expressed_cells_fraction_of_all_genes[gene_index]
+                         / background_cells_fraction_of_all_genes[gene_index],
+                         module_index)
+
+                if gene_data > current_gene_data:
+                    related_data_of_genes[gene_index] = gene_data
 
     related_gene_indices_of_modules: List[List[int]] = [[]] * modules_count
 
+    ut.log_calc('related genes for modules:')
     for module_index in range(modules_count):
         related_gene_indices_of_module = [gene_index
                                           for gene_index, gene_data
                                           in related_data_of_genes.items()
                                           if gene_data[3] == module_index]
         related_gene_indices_of_modules[module_index] = related_gene_indices_of_module
-        if len(related_gene_indices_of_module) > 0:
-            LOG.debug('  module %s related genes: %s',
-                      module_index,
-                      ' '.join(sorted(adata_of_all_genes_of_all_cells.var_names[related_gene_indices_of_module])))
+        if ut.logging_calc():
+            with ut.log_step('- module', module_index,
+                             formatter=lambda module_index:
+                             ut.ratio_description(module_index,
+                                                  modules_count)):
+                ut.log_calc('related_gene_names',
+                            sorted(adata_of_all_genes_of_all_cells.var_names[related_gene_indices_of_module]))
 
     return related_gene_indices_of_modules
 
@@ -494,37 +486,52 @@ def _identify_cells(
 ) -> None:
     max_strength_of_cells = np.zeros(adata_of_all_genes_of_all_cells.n_obs)
 
+    ut.log_calc('cells for modules:')
+    modules_count = len(related_gene_indices_of_modules)
     for module_index, related_gene_indices_of_module \
             in enumerate(related_gene_indices_of_modules):
         if len(related_gene_indices_of_module) == 0:
             continue
 
-        adata_of_related_genes_of_all_cells = \
-            ut.slice(adata_of_all_genes_of_all_cells,
-                     vars=related_gene_indices_of_module)
-        total_related_genes_of_all_cells = \
-            ut.get_o_numpy(adata_of_related_genes_of_all_cells, what, sum=True)
+        with ut.log_step('- module', module_index,
+                         formatter=lambda module_index:
+                         ut.ratio_description(module_index, modules_count)):
+            adata_of_related_genes_of_all_cells = \
+                ut.slice(adata_of_all_genes_of_all_cells,
+                         name=f'.module{module_index}.related_genes',
+                         vars=related_gene_indices_of_module)
+            total_related_genes_of_all_cells = \
+                ut.get_o_numpy(adata_of_related_genes_of_all_cells,
+                               what, sum=True)
 
-        mask_of_strong_cells_of_module = \
-            total_related_genes_of_all_cells >= min_cell_module_total
+            mask_of_strong_cells_of_module = \
+                total_related_genes_of_all_cells >= min_cell_module_total
 
-        strong_cells_count = np.sum(mask_of_strong_cells_of_module)
-        LOG.debug('  module %s strong cells: %s',
-                  module_index, strong_cells_count)
+            strong_cells_count = np.sum(mask_of_strong_cells_of_module)
 
-        if strong_cells_count > max_cells_of_modules:
-            LOG.debug('  module %s has too many cells', module_index)
-            related_gene_indices_of_module.clear()
-            continue
+            if strong_cells_count > max_cells_of_modules:
+                if ut.logging_calc():
+                    ut.log_calc('strong_cells',
+                                ut.mask_description(  #
+                                    mask_of_strong_cells_of_module)
+                                + ' (too many)')
+                related_gene_indices_of_module.clear()
+                continue
 
-        if strong_cells_count < min_cells_of_modules:
-            LOG.debug('  module %s has too few cells', module_index)
-            related_gene_indices_of_module.clear()
-            continue
+            if strong_cells_count < min_cells_of_modules:
+                if ut.logging_calc():
+                    ut.log_calc('strong_cells',
+                                ut.mask_description(  #
+                                    mask_of_strong_cells_of_module)
+                                + ' (too few)')
+                related_gene_indices_of_module.clear()
+                continue
 
-        mask_of_strong_cells_of_module &= \
-            total_related_genes_of_all_cells >= max_strength_of_cells
-        rare_module_of_cells[mask_of_strong_cells_of_module] = module_index
+            ut.log_calc('strong_cells', mask_of_strong_cells_of_module)
+
+            mask_of_strong_cells_of_module &= \
+                total_related_genes_of_all_cells >= max_strength_of_cells
+            rare_module_of_cells[mask_of_strong_cells_of_module] = module_index
 
 
 @ut.timed_call('.compress_modules')
@@ -533,6 +540,7 @@ def _compress_modules(
     adata_of_all_genes_of_all_cells: AnnData,
     what: Union[str, ut.Matrix] = '__x__',
     min_cells_of_modules: int,
+    max_cells_of_modules: int,
     target_metacell_size: int,
     min_modules_size_factor: float,
     related_gene_indices_of_modules: List[List[int]],
@@ -540,58 +548,79 @@ def _compress_modules(
     list_of_names_of_genes_of_modules: List[ut.NumpyVector],
 ) -> None:
     min_umis_of_modules = target_metacell_size * min_modules_size_factor
-
-    LOG.debug('  min_cells_of_modules: %s', min_cells_of_modules)
-    LOG.debug('  target_metacell_size: %s', target_metacell_size)
-    LOG.debug('  min_modules_size_factor: %s', min_modules_size_factor)
-    LOG.debug('  min_umis_of_modules: %s', min_umis_of_modules)
+    ut.log_calc('min_umis_of_modules', min_umis_of_modules)
 
     total_all_genes_of_all_cells = \
         ut.get_o_numpy(adata_of_all_genes_of_all_cells, what, sum=True)
 
+    cell_counts_of_modules: List[int] = []
+
+    ut.log_calc('compress modules:')
     next_module_index = 0
+    modules_count = len(related_gene_indices_of_modules)
     for module_index, gene_indices_of_module in enumerate(related_gene_indices_of_modules):
         if len(gene_indices_of_module) == 0:
             continue
 
-        module_cells_mask = rare_module_of_cells == module_index
-        module_cells_count = np.sum(module_cells_mask)
-        module_umis_count = \
-            np.sum(total_all_genes_of_all_cells[module_cells_mask])
+        with ut.log_step('- module', module_index,
+                         formatter=lambda module_index:
+                         ut.ratio_description(module_index, modules_count)):
+            module_cells_mask = rare_module_of_cells == module_index
+            module_cells_count = np.sum(module_cells_mask)
+            module_umis_count = \
+                np.sum(total_all_genes_of_all_cells[module_cells_mask])
 
-        LOG.debug('  module %s cells: %s UMIs: %s', module_index,
-                  module_cells_count, module_umis_count)
+            if module_cells_count < min_cells_of_modules:
+                if ut.logging_calc():
+                    ut.log_calc('cells',
+                                str(module_cells_count) + ' (too few)')
+                rare_module_of_cells[module_cells_mask] = -1
+                continue
 
-        if module_umis_count < min_cells_of_modules:
-            LOG.debug('  module %s has too few cells', module_index)
-            rare_module_of_cells[module_cells_mask] = -1
-            continue
+            if module_cells_count > max_cells_of_modules:
+                if ut.logging_calc():
+                    ut.log_calc('cells',
+                                str(module_cells_count) + ' (too many)')
+                rare_module_of_cells[module_cells_mask] = -1
+                continue
 
-        if module_umis_count < min_umis_of_modules:
-            LOG.debug('  module %s has too few UMIs', module_index)
-            rare_module_of_cells[module_cells_mask] = -1
-            continue
+            ut.log_calc('cells', module_cells_count)
 
-        if module_index != next_module_index:
-            LOG.debug('  module %s is renamed to module %s',
-                      module_index, next_module_index)
-            rare_module_of_cells[module_cells_mask] = next_module_index
-            module_index = next_module_index
+            if module_umis_count < min_umis_of_modules:
+                if ut.logging_calc():
+                    ut.log_calc('UMIs', str(module_umis_count) + ' (too few)')
+                rare_module_of_cells[module_cells_mask] = -1
+                continue
 
-        next_module_index += 1
+            ut.log_calc('UMIs', module_umis_count)
 
-        list_of_names_of_genes_of_modules.append(np.array(  #
-            adata_of_all_genes_of_all_cells.var_names[gene_indices_of_module]))
+            if module_index != next_module_index:
+                ut.log_calc('is reindexed to', next_module_index)
+                rare_module_of_cells[module_cells_mask] = next_module_index
+                module_index = next_module_index
 
-        LOG.debug('  final module %s cells: %s genes: %s',
-                  module_index, module_cells_count,
-                  ' '.join(sorted(list_of_names_of_genes_of_modules[-1])))
+            next_module_index += 1
+
+            if ut.logging_calc():
+                cell_counts_of_modules.append(np.sum(module_cells_mask))
+            list_of_names_of_genes_of_modules.append(np.array(  #
+                sorted(adata_of_all_genes_of_all_cells.var_names[gene_indices_of_module])))
+
+    if ut.logging_calc():
+        ut.log_calc('final modules:')
+        modules_count = len(list_of_names_of_genes_of_modules)
+        for module_index, (module_cells_count, module_gene_names) \
+                in enumerate(zip(cell_counts_of_modules, list_of_names_of_genes_of_modules)):
+            with ut.log_step('- module', module_index,
+                             formatter=lambda module_index:
+                             ut.ratio_description(module_index, modules_count)):
+                ut.log_calc('cells', module_cells_count)
+                ut.log_calc('genes', module_gene_names)
 
 
 def _results(
     *,
     adata: AnnData,
-    level: int,
     rare_module_of_cells: ut.NumpyVector,
     list_of_names_of_genes_of_modules: List[ut.NumpyVector],
     inplace: bool
@@ -612,10 +641,10 @@ def _results(
         ut.set_m_data(adata, 'rare_gene_modules',
                       array_of_names_of_genes_of_modules)
         ut.set_v_data(adata, 'genes_rare_gene_module', rare_module_of_genes,
-                      log_value=ut.groups_description)
+                      formatter=ut.groups_description)
         ut.set_v_data(adata, 'rare_gene', rare_module_of_genes >= 0)
         ut.set_o_data(adata, 'cells_rare_gene_module', rare_module_of_cells,
-                      log_value=ut.groups_description)
+                      formatter=ut.groups_description)
         ut.set_o_data(adata, 'rare_cell', rare_module_of_cells >= 0)
         return None
 
@@ -627,10 +656,12 @@ def _results(
     var_metrics['genes_rare_gene_module'] = rare_module_of_genes
     var_metrics['rare_gene'] = rare_module_of_genes >= 0
 
-    if LOG.isEnabledFor(level):
-        LOG.log(level, '  rare_gene_modules: %s',
-                len(list_of_names_of_genes_of_modules))
-        ut.log_mask(LOG, level, 'rare_cells', rare_module_of_cells >= 0)
-        ut.log_mask(LOG, level, 'rare_genes', rare_module_of_genes >= 0)
+    ut.log_return('rare_gene_modules', len(list_of_names_of_genes_of_modules))
+    ut.log_return('genes_rare_gene_module', rare_module_of_genes,
+                  formatter=ut.groups_description)
+    ut.log_return('rare_genes', rare_module_of_genes >= 0)
+    ut.log_return('cells_rare_gene_module', rare_module_of_cells,
+                  formatter=ut.groups_description)
+    ut.log_return('rare_cells', rare_module_of_cells >= 0)
 
     return obs_metrics, var_metrics, array_of_names_of_genes_of_modules

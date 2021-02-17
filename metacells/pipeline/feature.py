@@ -3,7 +3,6 @@ Feature
 -------
 '''
 
-import logging
 from re import Pattern
 from typing import Collection, Optional, Union
 
@@ -19,9 +18,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def extract_feature_data(
@@ -29,7 +26,6 @@ def extract_feature_data(
     what: Union[str, ut.Matrix] = '__x__',
     *,
     name: Optional[str] = '.feature',
-    tmp: bool = False,
     downsample_cell_quantile: float = pr.feature_downsample_cell_quantile,
     min_gene_fraction: float = pr.feature_min_gene_fraction,
     min_gene_relative_variance: float = pr.feature_min_gene_relative_variance,
@@ -95,10 +91,8 @@ def extract_feature_data(
        This is stored in an intermediate per-variable (gene) ``forbidden_genes`` boolean mask.
 
     5. Invoke :py:func:`metacells.preprocessing.filter.filter_data` to slice just the selected
-       "feature" genes using the ``name`` (default: {name}) and ``tmp`` (default: {tmp}).
+       "feature" genes using the ``name`` (default: {name}).
     '''
-    ut.log_pipeline_step(LOG, adata, 'extract_feature_data')
-
     tl.downsample_cells(adata, what,
                         downsample_cell_quantile=downsample_cell_quantile,
                         random_seed=random_seed)
@@ -116,7 +110,7 @@ def extract_feature_data(
                             names=forbidden_gene_names,
                             patterns=forbidden_gene_patterns)
 
-    results = pp.filter_data(adata, name=name, tmp=tmp,
+    results = pp.filter_data(adata, name=name,
                              mask_var='feature_gene',
                              var_masks=['high_fraction_gene',
                                         'high_relative_variance_gene',

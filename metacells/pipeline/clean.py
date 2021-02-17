@@ -8,7 +8,6 @@ metacells. The steps provided here are expected to be generically useful, but as
 data sets may require custom cleaning steps on a case-by-case basis.
 '''
 
-import logging
 from re import Pattern
 from typing import Collection, List, Optional, Union
 
@@ -28,9 +27,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def analyze_clean_genes(
@@ -85,8 +82,6 @@ def analyze_clean_genes(
        ``excluded_gene_patterns`` (default: {excluded_gene_patterns}). This is stored in a
        per-variable (gene) ``excluded_genes`` boolean mask.
     '''
-    ut.log_pipeline_step(LOG, adata, 'analyze_clean_genes')
-
     tl.find_properly_sampled_genes(adata,
                                    min_gene_total=properly_sampled_min_gene_total)
 
@@ -140,6 +135,7 @@ def pick_clean_genes(  # pylint: disable=dangerous-default-value
     tl.combine_masks(adata, masks, to=to)
 
 
+@ut.logged()
 @ut.timed_call()
 def analyze_clean_cells(
     adata: AnnData,
@@ -178,12 +174,11 @@ def analyze_clean_cells(
        ``properly_sampled_min_cell_total`` (no default), ``properly_sampled_max_cell_total`` (no
        default) and ``properly_sampled_max_excluded_genes_fraction`` (no default).
     '''
-    ut.log_pipeline_step(LOG, adata, 'analyze_clean_cells')
-
     excluded_adata: Optional[AnnData] = None
     if properly_sampled_max_excluded_genes_fraction is not None:
-        excluded_genes = pp.filter_data(adata, name='dirty_genes', tmp=True,
-                                        var_masks=['~clean_gene'])
+        excluded_genes = \
+            pp.filter_data(adata, name='dirty_genes',
+                           var_masks=['~clean_gene'])
         if excluded_genes is not None:
             excluded_adata = excluded_genes[0]
 
@@ -233,6 +228,7 @@ def pick_clean_cells(  # pylint: disable=dangerous-default-value
     tl.combine_masks(adata, masks, to=to)
 
 
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def extract_clean_data(
@@ -241,7 +237,6 @@ def extract_clean_data(
     var_mask: str = 'clean_gene',
     *,
     name: Optional[str] = '.clean',
-    tmp: bool = False,
 ) -> Optional[AnnData]:
     '''
     Extract a "clean" subset of the ``adata`` to compute metacells for.
@@ -262,13 +257,11 @@ def extract_clean_data(
     **Computation Parameters**
 
     1. This simply :py:func:`metacells.preprocessing.filter.filter_data` to slice just the
-       ``obs_mask`` (default: {obs_mask}) and ``var_mask`` (default: {var_mask}) data
-       using the ``name`` (default: {name}) and ``tmp`` (default: {tmp}), and
-       tracking the original ``full_cell_index`` and ``full_gene_index``.
+       ``obs_mask`` (default: {obs_mask}) and ``var_mask`` (default: {var_mask}) data using the
+       ``name`` (default: {name}), and tracking the original ``full_cell_index`` and
+       ``full_gene_index``.
     '''
-    ut.log_pipeline_step(LOG, adata, 'extract_clean_data')
-
-    results = pp.filter_data(adata, name=name, tmp=tmp,
+    results = pp.filter_data(adata, name=name,
                              track_obs='full_cell_index',
                              track_var='full_gene_index',
                              obs_masks=[obs_mask],

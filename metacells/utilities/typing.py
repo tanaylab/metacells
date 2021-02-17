@@ -893,37 +893,37 @@ def is_canonical(shaped: Shaped) -> bool:  # pylint: disable=too-many-return-sta
     return True
 
 
-@utm.timed_call('sparse.eliminate_zeros')
 def eliminate_zeros(compressed: CompressedMatrix) -> None:
     '''
     Eliminate zeros in a compressed matrix.
     '''
-    with unfrozen(compressed):
-        utm.timed_parameters(before=compressed.nnz)
-        compressed.eliminate_zeros()
-        utm.timed_parameters(after=compressed.nnz)
+    with utm.timed_step('sparse.eliminate_zeros'):
+        with unfrozen(compressed):
+            utm.timed_parameters(before=compressed.nnz)
+            compressed.eliminate_zeros()
+            utm.timed_parameters(after=compressed.nnz)
 
 
-@utm.timed_call('sparse.sort_indices')
 def sort_indices(compressed: CompressedMatrix) -> None:
     '''
     Ensure the indices are sorted in each row/column.
     '''
-    with unfrozen(compressed):
-        utm.timed_parameters(before=compressed.nnz)
-        compressed.sort_indices()
-        utm.timed_parameters(after=compressed.nnz)
+    with utm.timed_step('sparse.sort_indices'):
+        with unfrozen(compressed):
+            utm.timed_parameters(before=compressed.nnz)
+            compressed.sort_indices()
+            utm.timed_parameters(after=compressed.nnz)
 
 
-@utm.timed_call('sparse.sum_duplicates')
 def sum_duplicates(compressed: CompressedMatrix) -> None:
     '''
     Eliminate duplicates in a compressed matrix.
     '''
-    with unfrozen(compressed):
-        utm.timed_parameters(before=compressed.nnz)
-        compressed.sum_duplicates()
-        utm.timed_parameters(after=compressed.nnz)
+    with utm.timed_step('sparse.sum_duplicates'):
+        with unfrozen(compressed):
+            utm.timed_parameters(before=compressed.nnz)
+            compressed.sum_duplicates()
+            utm.timed_parameters(after=compressed.nnz)
 
 
 def shaped_checksum(shaped: Shaped) -> float:

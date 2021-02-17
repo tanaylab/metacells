@@ -3,7 +3,6 @@ Distincts
 ---------
 '''
 
-import logging
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -20,9 +19,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def compute_distinct_folds(
@@ -65,8 +62,6 @@ def compute_distinct_folds(
 
     4. Compute the log (base 2) of the result and use it as the fold factor.
     '''
-    ut.log_operation(LOG, adata, 'compute_distinct_folds', what)
-
     columns_data = ut.get_vo_proper(adata, what, layout='column_major')
     fractions_of_genes_in_data = ut.fraction_per(columns_data, per='column')
     fractions_of_genes_in_data += normalization
@@ -98,6 +93,7 @@ def compute_distinct_folds(
                               index=adata.obs_names, columns=adata.var_names)
 
 
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def find_distinct_genes(
@@ -136,7 +132,6 @@ def find_distinct_genes(
 
     2. Keep the ``distinct_genes_count`` (default: {distinct_genes_count}) top fold factors.
     '''
-    ut.log_operation(LOG, adata, 'find_distinct_genes', what)
     assert 0 < distinct_genes_count < adata.n_vars
 
     distinct_gene_indices = \
@@ -158,6 +153,7 @@ def find_distinct_genes(
         ut.to_pandas_frame(distinct_gene_folds, index=adata.obs_names)
 
 
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def compute_subset_distinct_genes(
@@ -206,8 +202,6 @@ def compute_subset_distinct_genes(
 
     3. Compute the AUROC for each gene for the scaled data based on this mask.
     '''
-    ut.log_operation(LOG, adata, 'compute_subset_distinct_genes', what)
-
     if isinstance(subset, str):
         subset = ut.get_o_numpy(adata, subset)
 
@@ -217,20 +211,13 @@ def compute_subset_distinct_genes(
         subset = mask
 
     scale_of_cells: Optional[ut.NumpyVector] = None
-
-    if isinstance(normalize, bool) and normalize:
+    if not isinstance(normalize, bool):
+        scale_of_cells = \
+            ut.maybe_o_numpy(adata, normalize, formatter=ut.sizes_description)
+    elif normalize:
         scale_of_cells = ut.get_o_numpy(adata, what, sum=True)
-
-    elif isinstance(normalize, bool) or normalize is None:
-        assert not normalize
-        LOG.debug('normalize: None')
-
     else:
-        ut.log_use(LOG, adata, normalize, name='normalize', per='o')
-        scale_of_cells = ut.get_o_numpy(adata, normalize)
-
-    if scale_of_cells is not None:
-        assert scale_of_cells.size == adata.n_obs
+        scale_of_cells = None
 
     matrix = ut.get_vo_proper(adata, what, layout='column_major').transpose()
     distinct_of_genes = ut.matrix_rows_auroc(matrix, subset, scale_of_cells)

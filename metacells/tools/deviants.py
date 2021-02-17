@@ -3,7 +3,6 @@ Deviants
 --------
 '''
 
-import logging
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -20,9 +19,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged(candidates=ut.groups_description)
 @ut.timed_call()
 @ut.expand_doc()
 def find_deviant_cells(
@@ -101,18 +98,14 @@ def find_deviant_cells(
     assert 0 < max_gene_fraction < 1
     assert 0 < max_cell_fraction < 1
 
-    level = ut.log_operation(LOG, adata, 'find_deviant_cells', what)
-
     cells_count, genes_count = adata.shape
     assert cells_count > 0
 
-    ut.log_use(LOG, adata, candidates, per='o', name='candidates')
-    candidate_of_cells = ut.get_o_numpy(adata, candidates)
+    candidate_of_cells = ut.get_o_numpy(adata, candidates,
+                                        formatter=ut.groups_description)
 
     totals_of_cells = ut.get_o_numpy(adata, what, sum=True)
     assert totals_of_cells.size == cells_count
-
-    LOG.debug('  min_gene_fold_factor: %s', min_gene_fold_factor)
 
     data = ut.get_vo_proper(adata, what, layout='row_major')
     list_of_fold_factors, list_of_cell_index_of_rows = \
@@ -150,14 +143,16 @@ def find_deviant_cells(
                           max_cell_fraction=max_cell_fraction)
 
     if inplace:
-        ut.set_o_data(adata, 'cell_deviant_votes', votes_of_deviant_cells,
-                      log_value=ut.mask_description)
         ut.set_v_data(adata, 'gene_deviant_votes', votes_of_deviant_genes,
-                      log_value=ut.mask_description)
+                      formatter=ut.mask_description)
+        ut.set_o_data(adata, 'cell_deviant_votes', votes_of_deviant_cells,
+                      formatter=ut.mask_description)
         return None
 
-    ut.log_mask(LOG, level, 'deviant_cells', votes_of_deviant_cells)
-    ut.log_mask(LOG, level, 'deviant_genes', votes_of_deviant_genes)
+    ut.log_return('gene_deviant_votes', votes_of_deviant_genes,
+                  formatter=ut.mask_description)
+    ut.log_return('cell_deviant_votes', votes_of_deviant_cells,
+                  formatter=ut.mask_description)
 
     return ut.to_pandas_series(votes_of_deviant_cells, index=adata.obs_names), \
         ut.to_pandas_series(votes_of_deviant_genes, index=adata.var_names)
@@ -300,18 +295,15 @@ def _filter_genes(
     mask_of_deviant_genes = max_fold_factors_of_genes >= min_gene_fold_factor
     deviant_gene_fraction = np.sum(mask_of_deviant_genes) / genes_count
 
-    LOG.debug('  deviant_gene_fraction: %s',
-              ut.fraction_description(deviant_gene_fraction))
-
     if max_gene_fraction is not None \
             and deviant_gene_fraction > max_gene_fraction:
+        if ut.logging_calc():
+            ut.log_calc('candidate_deviant_genes', mask_of_deviant_genes)
+
         quantile_gene_fold_factor = np.quantile(max_fold_factors_of_genes,
                                                 1 - max_gene_fraction)
         assert quantile_gene_fold_factor is not None
-
-        LOG.debug('  max_gene_fraction: %s',
-                  ut.fraction_description(max_gene_fraction))
-        LOG.debug('  quantile_gene_fold_factor: %s', quantile_gene_fold_factor)
+        ut.log_calc('quantile_gene_fold_factor', quantile_gene_fold_factor)
 
         if quantile_gene_fold_factor > min_gene_fold_factor:
             min_gene_fold_factor = quantile_gene_fold_factor
@@ -320,11 +312,10 @@ def _filter_genes(
             fold_factors.data[fold_factors.data < min_gene_fold_factor] = 0
             ut.eliminate_zeros(fold_factors)
 
-    deviant_gene_indices = np.where(mask_of_deviant_genes)[0]
-    LOG.debug('  deviant_genes: %s',
-              ut.ratio_description(deviant_gene_indices.size,
-                                   genes_count))
+    if ut.logging_calc():
+        ut.log_calc('deviant_genes', mask_of_deviant_genes)
 
+    deviant_gene_indices = np.where(mask_of_deviant_genes)[0]
     return deviant_gene_indices
 
 
@@ -380,39 +371,32 @@ def _filter_cells(
     deviants_cells_count = sum(mask_of_deviant_cells)
     deviant_cell_fraction = deviants_cells_count / cells_count
 
-    LOG.debug('  deviant_cell: %s',
-              ut.ratio_description(deviants_cells_count, cells_count))
+    if ut.logging_calc():
+        ut.log_calc('deviant_cells', mask_of_deviant_cells)
 
     if max_cell_fraction is not None \
             and deviant_cell_fraction > max_cell_fraction:
-        LOG.debug('  max_cell_fraction: %s',
-                  ut.fraction_description(max_cell_fraction))
+
         quantile_cells_fold_rank = np.quantile(min_fold_ranks_of_cells,
                                                max_cell_fraction)
         assert quantile_cells_fold_rank is not None
 
-        LOG.debug('  quantile_cells_fold_rank: %s', quantile_cells_fold_rank)
+        ut.log_calc('quantile_cells_fold_rank', quantile_cells_fold_rank)
 
         if quantile_cells_fold_rank < threshold_cells_fold_rank:
             threshold_cells_fold_rank = quantile_cells_fold_rank
-            mask_of_deviant_cells = min_fold_ranks_of_cells < threshold_cells_fold_rank
 
-        if LOG.isEnabledFor(logging.DEBUG):
-            LOG.debug('  deviant_cell: %s',
-                      ut.mask_description(mask_of_deviant_cells))
-
+    ut.log_calc('threshold_cells_fold_rank', threshold_cells_fold_rank)
     deviant_votes = deviant_genes_fold_ranks < threshold_cells_fold_rank
-    votes_of_deviant_cells = np.sum(deviant_votes, axis=1)
+
+    votes_of_deviant_cells = \
+        ut.sum_per(ut.to_layout(deviant_votes, 'row_major'), per='row')
     assert votes_of_deviant_cells.size == cells_count
-    votes_of_deviant_genes = np.sum(deviant_votes, axis=0)
+
+    votes_of_deviant_genes = ut.sum_per(deviant_votes, per='column')
     assert votes_of_deviant_genes.size == deviant_gene_indices.size
 
     votes_of_all_genes = np.zeros(genes_count, dtype='int32')
     votes_of_all_genes[deviant_gene_indices] = votes_of_deviant_genes
-
-    if LOG.isEnabledFor(logging.DEBUG):
-        LOG.debug('  deviant_genes: %s',
-                  ut.ratio_description(np.sum(votes_of_all_genes > 0),
-                                       genes_count))
 
     return votes_of_deviant_cells, votes_of_all_genes

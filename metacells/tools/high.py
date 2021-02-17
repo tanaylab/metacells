@@ -3,7 +3,6 @@ High
 ----
 '''
 
-import logging
 from typing import Optional, Union
 
 from anndata import AnnData
@@ -18,9 +17,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def find_high_fraction_genes(
@@ -58,23 +55,20 @@ def find_high_fraction_genes(
     2. Select the genes whose fraction is at least ``min_gene_fraction`` (default:
        {min_gene_fraction}).
     '''
-    level = ut.log_operation(LOG, adata, 'find_high_fraction_genes', what)
-
     data = ut.get_vo_proper(adata, what, layout='column_major')
     fraction_of_genes = ut.fraction_per(data, per='column')
 
-    LOG.debug('  min_gene_fraction: %s', min_gene_fraction)
     genes_mask = fraction_of_genes >= min_gene_fraction
 
     if inplace:
         ut.set_v_data(adata, 'high_fraction_gene', genes_mask)
         return None
 
-    ut.log_mask(LOG, level, 'high_fraction_genes', genes_mask)
-
+    ut.log_return('high_fraction_genes', genes_mask)
     return ut.to_pandas_series(genes_mask, index=adata.var_names)
 
 
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def find_high_normalized_variance_genes(
@@ -115,16 +109,10 @@ def find_high_normalized_variance_genes(
     2. Select the genes whose normalized variance is at least
        ``min_gene_normalized_variance`` (default: {min_gene_normalized_variance}).
     '''
-    level = \
-        ut.log_operation(LOG, adata,
-                         'find_high_normalized_variance_genes', what)
-
     data = ut.get_vo_proper(adata, what, layout='column_major')
     normalized_variance_of_genes = \
         ut.normalized_variance_per(data, per='column')
 
-    LOG.debug('  min_gene_normalized_variance: %s',
-              min_gene_normalized_variance)
     genes_mask = \
         normalized_variance_of_genes >= min_gene_normalized_variance
 
@@ -132,11 +120,11 @@ def find_high_normalized_variance_genes(
         ut.set_v_data(adata, 'high_normalized_variance_gene', genes_mask)
         return None
 
-    ut.log_mask(LOG, level, 'high_normalized_variance_genes', genes_mask)
-
+    ut.log_return('high_normalized_variance_genes', genes_mask)
     return ut.to_pandas_series(genes_mask, index=adata.var_names)
 
 
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def find_high_relative_variance_genes(
@@ -181,21 +169,15 @@ def find_high_relative_variance_genes(
     2. Select the genes whose relative variance is at least
        ``min_gene_relative_variance`` (default: {min_gene_relative_variance}).
     '''
-    level = \
-        ut.log_operation(LOG, adata, 'find_high_relative_variance_genes', what)
-
     data = ut.get_vo_proper(adata, what, layout='column_major')
     relative_variance_of_genes = \
         ut.relative_variance_per(data, per='column', window_size=window_size)
 
-    LOG.debug('  min_gene_relative_variance: %s',
-              min_gene_relative_variance)
     genes_mask = relative_variance_of_genes >= min_gene_relative_variance
 
     if inplace:
         ut.set_v_data(adata, 'high_relative_variance_gene', genes_mask)
         return None
 
-    ut.log_mask(LOG, level, 'high_relative_variance_genes', genes_mask)
-
+    ut.log_return('high_relative_variance_genes', genes_mask)
     return ut.to_pandas_series(genes_mask, index=adata.var_names)

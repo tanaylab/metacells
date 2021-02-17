@@ -2,6 +2,7 @@
 Test applying functions to real data.
 '''
 
+# import logging
 from glob import glob
 from typing import Any, Dict, Tuple
 
@@ -14,8 +15,8 @@ import metacells as mc
 
 # pylint: disable=missing-function-docstring
 
-
 np.seterr(all='raise')
+# mc.ut.setup_logger(level=logging.DEBUG, time=False)
 mc.ut.allow_inefficient_layout(False)
 
 LOADED: Dict[str, Tuple[AnnData, Dict[str, Any]]] = {}
@@ -54,9 +55,6 @@ def test_find_rare_gene_modules() -> None:
 def test_direct_pipeline() -> None:
     for path in glob('../metacells-test-data/*.h5ad'):
         adata, expected = _load(path)
-#       import logging
-#       mc.ut.setup_logger(level=logging.DEBUG, time=False,
-#                          short_level_names=True)
 
         pdata = adata[range(6000), :].copy()
 

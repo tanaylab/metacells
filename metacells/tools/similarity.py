@@ -3,7 +3,6 @@ Cross-Similarity
 ----------------
 '''
 
-import logging
 from typing import Optional, Union
 
 from anndata import AnnData
@@ -17,9 +16,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def compute_obs_obs_similarity(
@@ -76,6 +73,7 @@ def compute_obs_obs_similarity(
                                         inplace=inplace)
 
 
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def compute_var_var_similarity(
@@ -148,18 +146,11 @@ def _compute_elements_similarity(
     assert method in ('pearson', 'repeated_pearson',
                       'logistics', 'logistics_pearson')
 
-    ut.log_operation(LOG, adata,
-                     'compute_%s_%s_similarity' % (elements, elements),
-                     what if isinstance(what, str) else '<data>')
-
-    LOG.debug('  method: %s', method)
-
     data = ut.get_vo_proper(adata, what, layout=f'{per}_major')
 
     if method.startswith('logistics'):
-        LOG.debug('  location: %s', location)
-        LOG.debug('  scale: %s', scale)
-        similarity = ut.logistics(data, per=per)
+        similarity = \
+            ut.logistics(data, location=location, scale=scale, per=per)
     else:
         similarity = ut.corrcoef(data, per=per)
 

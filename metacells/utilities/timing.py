@@ -9,7 +9,6 @@ functions which has higher overheads and produces mountains of mostly irrelevant
 
 '''
 
-import logging
 import os
 import sys
 from contextlib import contextmanager
@@ -21,6 +20,7 @@ from typing import (IO, Any, Callable, Dict, Iterator, List, NamedTuple,
                     Optional, TypeVar)
 
 import metacells.utilities.documentation as utd
+import metacells.utilities.logging as utl
 
 __all__ = [
     'collect_timing',
@@ -43,7 +43,6 @@ TIMING_MODE = 'a'
 TIMING_BUFFERING = 1
 TIMING_FILE: Optional[IO] = None
 
-LOG = logging.getLogger(__name__)
 LOG_ALL_STEPS = False
 
 THREAD_LOCAL = thread_local()
@@ -330,7 +329,7 @@ def timed_step(name: str) -> Iterator[None]:
 
     try:
         if LOG_ALL_STEPS:
-            LOG.debug('{[( %s', step_timing.context)
+            utl.logger().debug('{[( %s', step_timing.context)
 
         yield_point = Counters.now()
         yield None
@@ -352,7 +351,7 @@ def timed_step(name: str) -> Iterator[None]:
         assert total_times.elapsed_ns >= 0
         assert total_times.cpu_ns >= 0
         if LOG_ALL_STEPS:
-            LOG.debug('}]) %s', step_timing.context)
+            utl.logger().debug('}]) %s', step_timing.context)
 
         steps_stack.pop()
 
@@ -470,3 +469,6 @@ def current_step() -> Optional[StepTiming]:
     if steps_stack is None or len(steps_stack) == 0:
         return None
     return steps_stack[-1]
+
+
+# This is a circular dependency so having it at the end allows the exported symbols to be seen.

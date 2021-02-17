@@ -3,8 +3,6 @@ Layout
 ------
 '''
 
-import logging
-
 import numpy as np
 import scipy.sparse as sp  # type: ignore
 import umap  # type: ignore
@@ -19,9 +17,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def umap_by_distances(
@@ -55,8 +51,6 @@ def umap_by_distances(
     1. Invoke UMAP to compute the layout using ``min_dist`` (default: {min_dist}) and ``k``
        (default: {k}).
     '''
-    ut.log_operation(LOG, adata, 'umap_by_distances')
-
     distances_matrix = ut.get_oo_proper(adata, distances)
 
     # UMAP implementation dies when given a dense matrix.
@@ -102,6 +96,7 @@ def umap_by_distances(
     ut.set_o_data(adata, f'{prefix}_y', y_coordinates)
 
 
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def spread_coordinates(
@@ -137,11 +132,6 @@ def spread_coordinates(
        minimal distance between the
        points, using the ``random_seed`` (default: {random_seed}).
     '''
-    ut.log_operation(LOG, adata, 'spread_coordinates')
-
-    LOG.info('cover_fraction: %s', cover_fraction)
-    LOG.info('noise_fraction: %s', noise_fraction)
-
     assert 0 < cover_fraction < 1
     assert noise_fraction >= 0
 

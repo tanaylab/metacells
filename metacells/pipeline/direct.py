@@ -3,7 +3,6 @@ Direct
 ------
 '''
 
-import logging
 from re import Pattern
 from typing import Collection, Optional, Union
 
@@ -21,9 +20,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def compute_direct_metacells(
@@ -201,10 +198,11 @@ def compute_direct_metacells(
        and
        ``dissolve_min_metacell_cells`` (default: ``dissolve_min_metacell_cells``).
     '''
-    total_per_cell = ut.get_o_numpy(adata, what, sum=True)
+    total_per_cell = \
+        ut.get_o_numpy(adata, what, sum=True)
 
     fdata = \
-        extract_feature_data(adata, what, tmp=True,
+        extract_feature_data(adata, what,
                              downsample_cell_quantile=feature_downsample_cell_quantile,
                              min_gene_relative_variance=feature_min_gene_relative_variance,
                              min_gene_fraction=feature_min_gene_fraction,
@@ -215,22 +213,12 @@ def compute_direct_metacells(
     if fdata is None:
         raise ValueError('Empty feature data, giving up')
 
-    ut.log_pipeline_step(LOG, fdata, 'compute_direct_metacells')
-
-    ut.log_use(LOG, adata, cell_sizes, per='o', name='cell_sizes')
-    if cell_sizes is None:
-        pass
-    elif isinstance(cell_sizes, str):
-        cell_sizes = ut.get_o_numpy(adata, cell_sizes)
-    else:
-        cell_sizes = ut.to_numpy_vector(cell_sizes)
+    cell_sizes = \
+        ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
 
     data = ut.get_vo_proper(fdata, what, layout='row_major')
     data = ut.fraction_by(data, sums=total_per_cell, by='row')
     if cells_similarity_log_data:
-        LOG.debug('  log of: %s base: 2 normalization: 1/%s',
-                  what if isinstance(what, str) else '<data>',
-                  1/cells_similarity_log_normalization)
         data = ut.log_data(data, base=2,
                            normalization=cells_similarity_log_normalization)
 
@@ -243,13 +231,13 @@ def compute_direct_metacells(
             total_cell_sizes = float(np.sum(cell_sizes))
         knn_k = round(total_cell_sizes / target_metacell_size)
 
-    LOG.debug('  knn_k: %s', knn_k)
     if knn_k == 0:
-        LOG.debug('  too small, try a single metacell')
+        ut.log_calc('knn_k: 0 (too small, try single metacell)')
         ut.set_o_data(fdata, 'candidate',
                       np.full(fdata.n_obs, 0, dtype='int32'),
-                      log_value=lambda _: '* <- 0')
+                      formatter=lambda _: '* <- 0')
     else:
+        ut.log_calc('knn_k', knn_k)
         tl.compute_obs_obs_knn_graph(fdata,
                                      k=knn_k,
                                      balanced_ranks_factor=knn_balanced_ranks_factor,
@@ -266,10 +254,11 @@ def compute_direct_metacells(
                                        min_metacell_cells=candidates_min_metacell_cells,
                                        random_seed=random_seed)
 
-    candidate_of_cells = ut.get_o_numpy(fdata, 'candidate')
+    candidate_of_cells = \
+        ut.get_o_numpy(fdata, 'candidate', formatter=ut.groups_description)
 
     ut.set_o_data(adata, 'candidate', candidate_of_cells,
-                  log_value=ut.groups_description)
+                  formatter=ut.groups_description)
 
     if must_complete_cover:
         assert np.min(candidate_of_cells) == 0
@@ -279,16 +268,16 @@ def compute_direct_metacells(
         dissolved_of_cells = np.zeros(adata.n_obs, dtype='bool')
 
         ut.set_v_data(adata, 'gene_deviant_votes', deviant_votes_of_genes,
-                      log_value=ut.mask_description)
+                      formatter=ut.mask_description)
 
         ut.set_o_data(adata, 'cell_deviant_votes', deviant_votes_of_cells,
-                      log_value=ut.mask_description)
+                      formatter=ut.mask_description)
 
         ut.set_o_data(adata, 'dissolved', dissolved_of_cells,
-                      log_value=ut.mask_description)
+                      formatter=ut.mask_description)
 
         ut.set_o_data(adata, 'metacell', candidate_of_cells,
-                      log_value=ut.groups_description)
+                      formatter=ut.groups_description)
 
     else:
         tl.find_deviant_cells(adata,
@@ -306,8 +295,9 @@ def compute_direct_metacells(
                               min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
                               min_metacell_cells=dissolve_min_metacell_cells)
 
-        metacell_of_cells = ut.get_o_numpy(adata, 'metacell')
+        metacell_of_cells = \
+            ut.get_o_numpy(adata, 'metacell', formatter=ut.groups_description)
 
         outlier_of_cells = metacell_of_cells < 0
         ut.set_o_data(adata, 'outlier', outlier_of_cells,
-                      log_value=ut.mask_description)
+                      formatter=ut.mask_description)

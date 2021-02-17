@@ -3,7 +3,6 @@ Excess R^2
 ----------
 '''
 
-import logging
 from typing import Any, List, Optional, Set, TypeVar, Union
 
 import numpy as np
@@ -18,12 +17,10 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
 T = TypeVar('T')
 
 
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def compute_type_compatible_sizes(
@@ -73,15 +70,15 @@ def compute_type_compatible_sizes(
 
     5. Loop until all metacells are assigned a "compatible" size.
     '''
-    level = max(ut.get_log_level(adata) for adata in adatas)
-    LOG.log(level, 'compute_compatible_sizes ...')
-
     if len(adatas) == 1:
         ut.set_o_data(adatas[0], 'compatible_size',
-                      ut.get_o_numpy(adatas[0], size))
+                      ut.get_o_numpy(adatas[0], size,
+                                     formatter=ut.sizes_description))
         return
 
-    metacell_sizes_of_data = [ut.get_o_numpy(adata, size) for adata in adatas]
+    metacell_sizes_of_data = \
+        [ut.get_o_numpy(adata, size, formatter=ut.sizes_description)
+         for adata in adatas]
     metacell_types_of_data = [ut.get_o_numpy(adata, kind) for adata in adatas]
 
     unique_types: Set[Any] = set()
@@ -177,6 +174,7 @@ def compute_type_compatible_sizes(
         ut.set_o_data(adata, 'compatible_size', compatible_size)
 
 
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def compute_excess_r2(
@@ -283,22 +281,20 @@ def compute_excess_r2(
     6 The difference, for each gene, between the gene's top R^2, and the gene's (averaged) top
       shuffled R^2, is the gene's excess R^2 for this metacell.
     '''
-    ut.log_operation(LOG, adata, 'compute_excess_r2', what)
     assert shuffles_count > 0
 
     data = ut.get_vo_proper(adata, what, layout='row_major')
 
-    ut.log_use(LOG, adata, metacells, per='o', name='metacells')
-    metacell_of_cells = ut.get_o_numpy(adata, metacells)
+    metacell_of_cells = \
+        ut.get_o_numpy(adata, metacells, formatter=ut.groups_description)
 
     metacells_count = np.max(metacell_of_cells) + 1
     assert metacells_count > 0
 
-    LOG.debug('  mdata: %s', ut.get_name(mdata) or '<adata>')
-
     if compatible_size is not None:
         compatible_size_of_metacells: Optional[ut.NumpyVector] = \
-            ut.get_o_numpy(mdata, compatible_size)
+            ut.get_o_numpy(mdata, compatible_size,
+                           formatter=ut.sizes_description)
     else:
         compatible_size_of_metacells = None
 
@@ -314,31 +310,31 @@ def compute_excess_r2(
     normalized_variance_per_gene_per_metacell = \
         np.full(mdata.shape, None, dtype='float')
 
-    LOG.debug('  downsample_cell_quantile: %s',
-              downsample_cell_quantile)
-    LOG.debug('  min_gene_total: %s', min_gene_total)
-    LOG.debug('  top_gene_rank: %s', top_gene_rank)
-
     for metacell_index in range(metacells_count):
-        if compatible_size_of_metacells is not None:
-            compatible_size_of_metacell = compatible_size_of_metacells[metacell_index]
-        else:
-            compatible_size_of_metacell = None
+        with ut.log_step('- metacell', metacell_index,
+                         formatter=lambda metacell_index:
+                         ut.ratio_description(metacell_index,
+                                              metacells_count)):
+            if compatible_size_of_metacells is not None:
+                compatible_size_of_metacell = \
+                    compatible_size_of_metacells[metacell_index]
+            else:
+                compatible_size_of_metacell = None
 
-        _collect_metacell_excess(metacell_index, metacells_count,
-                                 compatible_size=compatible_size_of_metacell,
-                                 metacell_of_cells=metacell_of_cells,
-                                 data=data,
-                                 downsample_cell_quantile=downsample_cell_quantile,
-                                 random_seed=random_seed,
-                                 shuffles_count=shuffles_count,
-                                 top_gene_rank=top_gene_rank,
-                                 min_gene_total=min_gene_total,
-                                 excess_r2_per_gene_per_metacell=excess_r2_per_gene_per_metacell,
-                                 top_r2_per_gene_per_metacell=top_r2_per_gene_per_metacell,
-                                 top_shuffled_r2_per_gene_per_metacell=top_shuffled_r2_per_gene_per_metacell,
-                                 variance_per_gene_per_metacell=variance_per_gene_per_metacell,
-                                 normalized_variance_per_gene_per_metacell=normalized_variance_per_gene_per_metacell)
+            _collect_metacell_excess(metacell_index,
+                                     compatible_size=compatible_size_of_metacell,
+                                     metacell_of_cells=metacell_of_cells,
+                                     data=data,
+                                     downsample_cell_quantile=downsample_cell_quantile,
+                                     random_seed=random_seed,
+                                     shuffles_count=shuffles_count,
+                                     top_gene_rank=top_gene_rank,
+                                     min_gene_total=min_gene_total,
+                                     excess_r2_per_gene_per_metacell=excess_r2_per_gene_per_metacell,
+                                     top_r2_per_gene_per_metacell=top_r2_per_gene_per_metacell,
+                                     top_shuffled_r2_per_gene_per_metacell=top_shuffled_r2_per_gene_per_metacell,
+                                     variance_per_gene_per_metacell=variance_per_gene_per_metacell,
+                                     normalized_variance_per_gene_per_metacell=normalized_variance_per_gene_per_metacell)
 
     ut.set_vo_data(mdata, 'excess_r2', excess_r2_per_gene_per_metacell)
     top_r2_per_gene_per_metacell[top_r2_per_gene_per_metacell < -5] = None
@@ -359,7 +355,6 @@ def _log_r2(values: Optional[ut.NumpyVector]) -> str:
 
 def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-branches
     metacell_index: int,
-    metacells_count: int,
     *,
     compatible_size: Optional[int],
     metacell_of_cells: ut.NumpyVector,
@@ -375,22 +370,19 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
     variance_per_gene_per_metacell: ut.NumpyMatrix,
     normalized_variance_per_gene_per_metacell: ut.NumpyMatrix,
 ) -> None:
-    LOG.debug('  - metacell: %s / %s (%.2f%%)',
-              metacell_index, metacells_count,
-              metacell_index * 100 / metacells_count)
-    LOG.debug('    random_seed: %s', random_seed)
-
     metacell_mask = metacell_of_cells == metacell_index
     metacell_indices = np.where(metacell_mask)[0]
 
     if compatible_size is None:
-        LOG.debug('    cells: %s', len(metacell_indices))
+        if ut.logging_calc():
+            ut.log_calc(f'cells: {len(metacell_indices)}')
     else:
         assert 0 < compatible_size <= len(metacell_indices)
         if compatible_size < len(metacell_indices):
             np.random.seed(random_seed)
-            LOG.debug('    cells: %s / %s', compatible_size,
-                      len(metacell_indices))
+            if ut.logging_calc():
+                ut.log_calc(  #
+                    f'cells: {ut.ratio_description(compatible_size, len(metacell_indices))}')
             metacell_indices = np.random.choice(metacell_indices,
                                                 size=compatible_size,
                                                 replace=False)
@@ -405,7 +397,8 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
 
     total_per_cell = ut.sum_per(metacell_data, per='row')
     samples = round(np.quantile(total_per_cell, downsample_cell_quantile))
-    LOG.debug('    samples: %s', samples)
+    if ut.logging_calc():
+        ut.log_calc(f'samples: {samples}')
     downsampled_data_rows = \
         ut.downsample_matrix(metacell_data, per='row', samples=samples)
 
@@ -418,9 +411,9 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
     correlated_genes_mask = \
         (total_per_gene >= min_gene_total) & (min_per_gene < max_per_gene)
     correlated_genes_count = np.sum(correlated_genes_mask)
-    if LOG.isEnabledFor(logging.DEBUG):
-        LOG.debug('    correlate genes: %s',
-                  ut.mask_description(correlated_genes_mask))
+    if ut.logging_calc():
+        ut.log_calc(  #
+            f'correlate genes: {ut.mask_description(correlated_genes_mask)}')
     if correlated_genes_count < 2:
         return
 

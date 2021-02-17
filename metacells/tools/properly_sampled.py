@@ -3,7 +3,6 @@ Properly Sampled
 ----------------
 '''
 
-import logging
 from typing import Optional, Union
 
 import numpy as np
@@ -18,9 +17,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def find_properly_sampled_cells(
@@ -67,8 +64,6 @@ def find_properly_sampled_cells(
        cells whose sum of the excluded data divided by the total data is more than the specified
        threshold.
     '''
-    level = ut.log_operation(LOG, adata, 'find_properly_sampled_cells', what)
-
     assert (max_excluded_genes_fraction is None) == (excluded_adata is None)
 
     total_of_cells = ut.get_o_numpy(adata, what, sum=True)
@@ -76,17 +71,13 @@ def find_properly_sampled_cells(
     cells_mask = np.full(adata.n_obs, True, dtype='bool')
 
     if min_cell_total is not None:
-        LOG.debug('  min_cell_total: %s', min_cell_total)
         cells_mask = cells_mask & (total_of_cells >= min_cell_total)
 
     if max_cell_total is not None:
-        LOG.debug('  max_cell_total: %s', max_cell_total)
         cells_mask = cells_mask & (total_of_cells <= max_cell_total)
 
     if excluded_adata is not None:
         assert max_excluded_genes_fraction is not None
-        LOG.debug('  max_excluded_genes_fraction: %s',
-                  max_excluded_genes_fraction)
         excluded_data = ut.get_vo_proper(excluded_adata, layout='row_major')
         excluded_of_cells = ut.sum_per(excluded_data, per='row')
         if np.min(total_of_cells) == 0:
@@ -100,11 +91,11 @@ def find_properly_sampled_cells(
         ut.set_o_data(adata, 'properly_sampled_cell', cells_mask)
         return None
 
-    ut.log_mask(LOG, level, 'properly_sampled_cell', cells_mask)
-
+    ut.log_return('properly_sampled_cell', cells_mask)
     return ut.to_pandas_series(cells_mask, index=adata.obs_names)
 
 
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def find_properly_sampled_genes(
@@ -144,17 +135,13 @@ def find_properly_sampled_genes(
     1. Exclude all genes whose total data is less than the ``min_gene_total`` (default:
        {min_gene_total}).
     '''
-    level = ut.log_operation(LOG, adata, 'find_properly_sampled_genes', what)
-
     total_of_genes = ut.get_v_numpy(adata, what, sum=True)
 
-    LOG.debug('  min_gene_total: %s', min_gene_total)
     genes_mask = total_of_genes >= min_gene_total
 
     if inplace:
         ut.set_v_data(adata, 'properly_sampled_gene', genes_mask)
         return None
 
-    ut.log_mask(LOG, level, 'properly_sampled_gene', genes_mask)
-
+    ut.log_return('properly_sampled_gene', genes_mask)
     return ut.to_pandas_series(genes_mask, index=adata.obs_names)

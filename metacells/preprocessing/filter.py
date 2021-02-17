@@ -3,7 +3,6 @@ Filter
 ------
 '''
 
-import logging
 from typing import List, Optional, Tuple
 
 import numpy as np
@@ -17,11 +16,8 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
-@ut.expand_doc()
 def filter_data(  # pylint: disable=dangerous-default-value
     adata: AnnData,
     obs_masks: List[str] = [],
@@ -34,7 +30,6 @@ def filter_data(  # pylint: disable=dangerous-default-value
     track_obs: Optional[str] = None,
     track_var: Optional[str] = None,
     name: Optional[str] = None,
-    tmp: bool = False,
 ) -> Optional[Tuple[AnnData, ut.PandasSeries, ut.PandasSeries]]:
     '''
     Filter (slice) the data based on previously-computed masks.
@@ -59,10 +54,6 @@ def filter_data(  # pylint: disable=dangerous-default-value
     If ``name`` is not specified, the data will be unnamed. Otherwise, if it starts with a ``.``, it
     will be appended to the current name (if any). Otherwise, ``name`` is the new name.
 
-    If ``tmp`` (default: {tmp}) is set, logging of modifications to the result will use the
-    ``DEBUG`` logging level. By default, logging of modifications is done using the ``INFO`` logging
-    level.
-
     If ``mask_obs`` and/or ``mask_var`` are specified, store the mask of the selected data as a
     per-observation and/or per-variable annotation of the full ``adata``.
 
@@ -80,8 +71,6 @@ def filter_data(  # pylint: disable=dangerous-default-value
        Otherwise, return a slice of the full data containing just the observations and variables
        specified by the final masks.
     '''
-    ut.log_operation(LOG, adata, 'filter_data')
-
     if len(obs_masks) == 0:
         obs_mask = np.full(adata.n_obs, True, dtype='bool')
         if mask_obs is not None:
@@ -91,9 +80,10 @@ def filter_data(  # pylint: disable=dangerous-default-value
             tl.combine_masks(adata, obs_masks, invert=invert_obs, to=mask_obs)
         if mask is None:
             assert mask_obs is not None
-            obs_mask = ut.get_o_numpy(adata, mask_obs)
+            obs_mask = ut.get_o_numpy(adata, mask_obs,
+                                      formatter=ut.mask_description) > 0
         else:
-            obs_mask = ut.to_numpy_vector(mask, only_extract=True)
+            obs_mask = ut.to_numpy_vector(mask, only_extract=True) > 0
 
     if len(var_masks) == 0:
         var_mask = np.full(adata.n_vars, True, dtype='bool')
@@ -104,14 +94,15 @@ def filter_data(  # pylint: disable=dangerous-default-value
             tl.combine_masks(adata, var_masks, invert=invert_var, to=mask_var)
         if mask is None:
             assert mask_var is not None
-            var_mask = ut.get_v_numpy(adata, mask_var)
+            var_mask = ut.get_v_numpy(adata, mask_var,
+                                      formatter=ut.mask_description) > 0
         else:
-            var_mask = ut.to_numpy_vector(mask, only_extract=True)
+            var_mask = ut.to_numpy_vector(mask, only_extract=True) > 0
 
     if not np.any(obs_mask) or not np.any(var_mask):
         return None
 
-    fdata = ut.slice(adata, name=name, tmp=tmp,
+    fdata = ut.slice(adata, name=name,
                      obs=obs_mask, vars=var_mask,
                      track_obs=track_obs, track_var=track_var)
 

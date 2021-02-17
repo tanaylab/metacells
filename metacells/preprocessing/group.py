@@ -3,8 +3,7 @@ Group
 -----
 '''
 
-import logging
-from typing import Any, Optional, Union
+from typing import Any, Callable, Optional, Union
 
 import numpy as np
 from anndata import AnnData
@@ -17,18 +16,14 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
-@ut.expand_doc()
 def group_obs_data(
     adata: AnnData,
     what: Union[str, ut.Matrix] = '__x__',
     *,
     groups: Union[str, ut.Vector],
     name: Optional[str] = None,
-    tmp: bool = False,
 ) -> Optional[AnnData]:
     '''
     Compute new data which has the sum ``of`` some data of the observations (cells) for each group.
@@ -60,15 +55,9 @@ def group_obs_data(
 
     If ``name`` is not specified, the data will be unnamed. Otherwise, if it starts with a ``.``, it
     will be appended to the current name (if any). Otherwise, ``name`` is the new name.
-
-    If ``tmp`` (default: {tmp}) is set, logging of modifications to the result will use the
-    ``DEBUG`` logging level. By default, logging of modifications is done using the ``INFO`` logging
-    level.
     '''
-    ut.log_operation(LOG, adata, 'group_obs_data')
-
-    ut.log_use(LOG, adata, groups, per='o', name='groups')
-    group_of_cells = ut.get_o_numpy(adata, groups)
+    group_of_cells = ut.get_o_numpy(adata, groups,
+                                    formatter=ut.groups_description)
 
     data = ut.get_vo_proper(adata, what, layout='row_major')
     results = ut.sum_groups(data, group_of_cells, per='row')
@@ -81,15 +70,14 @@ def group_obs_data(
 
     ut.set_name(gdata, ut.get_name(adata))
     ut.set_name(gdata, name)
-    if tmp:
-        gdata.uns['__tmp__'] = True
 
     ut.set_o_data(gdata, 'grouped', cell_counts,
-                  log_value=ut.sizes_description)
+                  formatter=ut.sizes_description)
 
     return gdata
 
 
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def group_obs_annotation(
@@ -98,6 +86,7 @@ def group_obs_annotation(
     *,
     groups: Union[str, ut.Vector],
     name: str,
+    formatter: Optional[Callable[[Any], Any]] = None,
     method: str = 'majority',
     min_value_fraction: float = 0.5,
     conflict: Optional[Any] = None,
@@ -143,17 +132,11 @@ def group_obs_annotation(
             {min_value_fraction}) of the cells, use the ``conflict`` (default: {conflict}) value
             instead.
     '''
-    ut.log_operation(LOG, adata, 'group_obs_annotation')
-
-    ut.log_use(LOG, adata, groups, per='o', name='groups')
-    group_of_cells = ut.get_o_numpy(adata, groups)
-
-    ut.log_use(LOG, adata, name, per='o', name='values')
-    values_of_cells = ut.get_o_numpy(adata, name)
+    group_of_cells = ut.get_o_numpy(adata, groups,
+                                    formatter=ut.groups_description)
+    values_of_cells = ut.get_o_numpy(adata, name, formatter=formatter)
 
     value_of_groups = np.empty(gdata.n_obs, dtype=values_of_cells.dtype)
-
-    LOG.debug('  method: %s', method)
 
     assert method in ('unique', 'majority')
 

@@ -3,7 +3,6 @@ K-Nearest-Neighbors Graph
 -------------------------
 '''
 
-import logging
 from typing import Optional, Union
 
 import numpy as np
@@ -20,9 +19,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def compute_obs_obs_knn_graph(
@@ -106,6 +103,7 @@ def compute_obs_obs_knn_graph(
                                        inplace=inplace)
 
 
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def compute_var_var_knn_graph(
@@ -206,11 +204,6 @@ def _compute_elements_knn_graph(
     assert incoming_degree_factor > 0.0
     assert outgoing_degree_factor > 0.0
 
-    level = \
-        ut.log_operation(LOG, adata,
-                         'compute_%s_%s_knn_graph' % (elements, elements),
-                         what)
-
     if elements == 'obs':
         get_data = ut.get_oo_proper
         set_data = ut.set_oo_data
@@ -218,25 +211,27 @@ def _compute_elements_knn_graph(
         get_data = ut.get_vv_proper
         set_data = ut.set_vv_data
 
-    def store_matrix(matrix: ut.CompressedMatrix, name: str, when: bool,
-                     store_log_level: int = logging.DEBUG) -> None:
+    def store_matrix(  #
+        matrix: ut.CompressedMatrix,
+        name: str,
+        when: bool
+    ) -> None:
         if when:
             name = elements + '_' + name
             set_data(adata, name, matrix,
-                     log_value=lambda matrix:
+                     formatter=lambda matrix:
                      ut.ratio_description(matrix.nnz,
                                           matrix.shape[0] * matrix.shape[1]))
-        else:
-            LOG.log(store_log_level, ' %s_%s: %s', elements, name,
-                    ut.ratio_description(matrix.nnz,
-                                         matrix.shape[0] * matrix.shape[1]))
+        elif ut.logging_calc():
+            ut.log_calc(f'{elements}_{name}',
+                        ut.ratio_description(matrix.nnz,
+                                             matrix.shape[0] * matrix.shape[1]))
 
     similarity = ut.to_proper_matrix(get_data(adata, what))
     similarity = ut.to_layout(similarity, 'row_major', symmetric=True)
     similarity = ut.to_numpy_matrix(similarity)
 
-    LOG.debug('  k: %s', k)
-    LOG.debug('  size: %s', similarity.shape[0])
+    ut.log_calc('similarity', similarity)
 
     outgoing_ranks = _rank_outgoing(similarity, k, balanced_ranks_factor)
     store_matrix(outgoing_ranks, 'outgoing_ranks', True)
@@ -250,7 +245,7 @@ def _compute_elements_knn_graph(
     store_matrix(pruned_ranks, 'pruned_ranks', True)
 
     outgoing_weights = _weigh_edges(pruned_ranks)
-    store_matrix(outgoing_weights, 'outgoing_weights', inplace, level)
+    store_matrix(outgoing_weights, 'outgoing_weights', inplace)
 
     if inplace:
         return None
@@ -273,10 +268,9 @@ def _rank_outgoing(
     assert similarity.shape == (size, size)
     similarity = np.copy(similarity)
 
-    LOG.debug('  balanced_ranks_factor: %s', balanced_ranks_factor)
-    degree = int(round(k * balanced_ranks_factor))
-    degree = min(degree, size - 1)
-    LOG.debug('  degree: %s', degree)
+    ranks_degree = int(round(k * balanced_ranks_factor))
+    ranks_degree = min(ranks_degree, size - 1)
+    ut.log_calc('ranks_degree', ranks_degree)
 
     with ut.timed_step('numpy.amin'):
         ut.timed_parameters(size=size * size)
@@ -297,15 +291,15 @@ def _rank_outgoing(
                                          shape=similarity.shape)
     preserved_matrix.has_canonical_format = True
 
-    assert degree * size < 2 ** 31
+    assert ranks_degree * size < 2 ** 31
     indptr = np.arange(size + 1, dtype='int32')
-    indptr *= degree
-    indices = np.empty(degree * size, dtype='int32')
-    ranks = np.empty(degree * size, dtype='float32')
+    indptr *= ranks_degree
+    indices = np.empty(ranks_degree * size, dtype='int32')
+    ranks = np.empty(ranks_degree * size, dtype='float32')
 
     with ut.timed_step('extensions.collect_outgoing'):
-        ut.timed_parameters(size=size, keep=degree)
-        xt.collect_outgoing(degree, similarity, indices, ranks)
+        ut.timed_parameters(size=size, keep=ranks_degree)
+        xt.collect_outgoing(ranks_degree, similarity, indices, ranks)
 
     outgoing_ranks = \
         sparse.csr_matrix((ranks, indices, indptr), shape=similarity.shape)
@@ -350,15 +344,13 @@ def _prune_ranks(
 ) -> ut.CompressedMatrix:
     size = balanced_ranks.shape[0]
 
-    LOG.debug('  incoming_degree_factor: %s', incoming_degree_factor)
     incoming_degree = int(round(k * incoming_degree_factor))
     incoming_degree = min(incoming_degree, size - 1)
-    LOG.debug('  incoming_degree: %s', incoming_degree)
+    ut.log_calc('incoming_degree', incoming_degree)
 
-    LOG.debug('  outgoing_degree_factor: %s', outgoing_degree_factor)
     outgoing_degree = int(round(k * outgoing_degree_factor))
     outgoing_degree = min(outgoing_degree, size - 1)
-    LOG.debug('  outgoing_degree: %s', outgoing_degree)
+    ut.log_calc('outgoing_degree', outgoing_degree)
 
     max_degree = max(incoming_degree, outgoing_degree)
 

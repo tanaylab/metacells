@@ -3,7 +3,6 @@ Collect
 -------
 '''
 
-import logging
 from typing import Union
 
 from anndata import AnnData
@@ -16,16 +15,13 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
-@ut.timed_call('collect_metacells')
+@ut.logged()
+@ut.timed_call()
 def collect_metacells(
     adata: AnnData,
     what: Union[str, ut.Matrix] = '__x__',
     *,
     name: str = 'metacells',
-    tmp: bool = False,
 ) -> AnnData:
     '''
     Collect computed metacells data.
@@ -80,10 +76,7 @@ def collect_metacells(
 
     2. Pass all relevant per-gene and per-cell annotations to the result.
     '''
-    ut.log_pipeline_step(LOG, adata, 'collect_metacells')
-
-    mdata = \
-        pp.group_obs_data(adata, what, groups='metacell', name=name, tmp=tmp)
+    mdata = pp.group_obs_data(adata, what, groups='metacell', name=name)
     assert mdata is not None
 
     for annotation_name in ('excluded_gene',
@@ -93,9 +86,10 @@ def collect_metacells(
                             'feature_gene'):
         if not ut.has_data(adata, annotation_name):
             continue
-        value_per_gene = ut.get_v_numpy(adata, annotation_name)
+        value_per_gene = ut.get_v_numpy(adata, annotation_name,
+                                        formatter=ut.mask_description)
         ut.set_v_data(mdata, annotation_name, value_per_gene,
-                      log_value=ut.mask_description)
+                      formatter=ut.mask_description)
 
     for annotation_name in ('pile', 'candidate'):
         if ut.has_data(adata, annotation_name):

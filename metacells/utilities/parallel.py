@@ -3,7 +3,7 @@ Parallel
 --------
 
 Due to the notorious GIL, using multiple Python threads is useless. This leaves us with two options
-for using multiple CPUs:
+for using multiple processors:
 
 * Use multiple threads in the internal C++ implementation of some Python functions;
   this is done by both numpy and the C++ extension functions provided here, and works even for
@@ -26,7 +26,7 @@ ensure we have at most 50 threads, used even if parallel tasks spawn nested para
 memory would be shared so there would be zero-cost in accessing large data structures from different
 threads.
 
-You would expect that, two decades after multi-core CPUs became available, this would have been
+You would expect that, two decades after multi-core systems became available, this would have been
 solved "out of the box" by the current frameworks agreeing to cooperate with each other. However,
 somehow this isn't seen as important by the people maintaining these frameworks; in fact, most of
 them don't properly handle nested parallelism within their own framework, never mind playing well
@@ -54,7 +54,6 @@ FreeBSD, Mac OSX and Windows, but YMMV.
     Look into using TBB instead of OpenMP for the inner threads for better efficiency.
 '''
 import ctypes
-import logging
 import os
 import sys
 from multiprocessing import Pool, Value
@@ -66,19 +65,17 @@ from threadpoolctl import threadpool_limits  # type: ignore
 import metacells.extensions as xt  # type: ignore
 import metacells.utilities.documentation as utd
 import metacells.utilities.hardware_info as uth
+import metacells.utilities.logging as utl
 import metacells.utilities.timing as utm
 
 __all__ = [
-    'set_cpus_count',
-    'get_cpus_count',
+    'set_processors_count',
+    'get_processors_count',
     'parallel_map',
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
-CPUS_COUNT = 0
+PROCESSORS_COUNT = 0
 
 MAIN_PROCESS_PID = os.getpid()
 IS_MAIN_PROCESS: Optional[bool] = True
@@ -91,42 +88,44 @@ NEXT_PROCESS_INDEX = Value(ctypes.c_int32, lock=True)
 PARALLEL_FUNCTION: Optional[Callable[[int], Any]] = None
 
 
-def set_cpus_count(cpus: int) -> None:
+def set_processors_count(processors: int) -> None:
     '''
-    Set the (maximal) number of CPUs to use in parallel. A value of ``0`` means using all the
-    available CPUs. Note that if hyper-threading is enabled, this would be less than the
-    number of logical processors in the system. This is intentional as there's no value
-    in running multiple heavy computations on hyper-threads of the same CPU.
+    Set the (maximal) number of processors to use in parallel.
 
-    The default value is ``0``, that is, using all the CPUs. Override this by setting the
-    ``METACELLS_CPUS_COUNT`` environment variable or by invoking this function from the main thread.
+    The default value of ``0`` means using all the available physical processors. Note that if
+    hyper-threading is enabled, this would be less than the number of logical processors in the
+    system. This is intentional as there's no value - actually, negative value - in running multiple
+    heavy computations on hyper-threads of the same physical processor.
+
+    Otherwise, the value is the actual (positive) number of processors to use. Override this by
+    setting the ``METACELLS_PROCESSORS_COUNT`` environment variable or by invoking this function
+    from the main thread.
     '''
     assert IS_MAIN_PROCESS
 
-    if cpus == 0:
-        cpus = uth.hardware_info().get('cpus', os.cpu_count())
+    if processors == 0:
+        processors = uth.hardware_info().get('cpus', os.cpu_count())
 
-    assert cpus > 0
+    assert processors > 0
 
-    global CPUS_COUNT
-    CPUS_COUNT = cpus
+    global PROCESSORS_COUNT
+    PROCESSORS_COUNT = processors
 
-    LOG.debug('CPUS_COUNT: %s', CPUS_COUNT)
-    threadpool_limits(limits=CPUS_COUNT)
-    xt.set_threads_count(CPUS_COUNT)
+    threadpool_limits(limits=PROCESSORS_COUNT)
+    xt.set_threads_count(PROCESSORS_COUNT)
 
 
 if not 'sphinx' in sys.argv[0]:
-    set_cpus_count(int(os.environ.get('METACELLS_CPUS_COUNT',
-                                      str(os.cpu_count()))))
+    set_processors_count(int(os.environ.get('METACELLS_PROCESSORS_COUNT',
+                                            str(os.cpu_count()))))
 
 
-def get_cpus_count() -> int:
+def get_processors_count() -> int:
     '''
-    Return the number of CPUs we are allowed to use.
+    Return the number of PROCESSORs we are allowed to use.
     '''
-    assert CPUS_COUNT > 0
-    return CPUS_COUNT
+    assert PROCESSORS_COUNT > 0
+    return PROCESSORS_COUNT
 
 
 T = TypeVar('T')
@@ -137,7 +136,7 @@ def parallel_map(
     function: Callable[[int], T],
     invocations: int,
     *,
-    max_cpus: int = 0,
+    max_processors: int = 0,
 ) -> Iterable[T]:
     '''
     Execute ``function``, in parallel, ``invocations`` times. Each invocation is given the
@@ -146,9 +145,9 @@ def parallel_map(
     For our simple pipelines, only the main process is allowed to execute functions in parallel
     processes, that is, we do not support nested ``parallel_map`` calls.
 
-    This uses :py:func:`get_cpus_count` processes. If ``max_cpus`` (default: {max_cpus}) is
-    zero, use all available CPUs. Otherwise, further reduces the number of processes used
-    to at most the specified value.
+    This uses :py:func:`get_processors_count` processes. If ``max_processors`` (default:
+    {max_processors}) is zero, use all available processors. Otherwise, further reduces the number
+    of processes used to at most the specified value.
 
     If this ends up using a single process, runs the function serially. Otherwise, fork new
     processes to execute the function invocations (using ``multiprocessing.Pool.map``).
@@ -168,10 +167,10 @@ def parallel_map(
     assert IS_MAIN_PROCESS
 
     global PROCESSES_COUNT
-    PROCESSES_COUNT = min(CPUS_COUNT, invocations)
-    if max_cpus != 0:
-        assert max_cpus > 0
-        PROCESSES_COUNT = min(PROCESSES_COUNT, max_cpus)
+    PROCESSES_COUNT = min(PROCESSORS_COUNT, invocations)
+    if max_processors != 0:
+        assert max_processors > 0
+        PROCESSES_COUNT = min(PROCESSES_COUNT, max_processors)
 
     if PROCESSES_COUNT == 1:
         return [function(index) for index in range(invocations)]
@@ -211,17 +210,17 @@ def _invocation(index: int) -> Any:
 
         current_thread().name = '#%s.%s' % (MAP_INDEX, PROCESS_INDEX)
 
-        global CPUS_COUNT
-        start_cpu_index = \
-            round(CPUS_COUNT * PROCESS_INDEX / PROCESSES_COUNT)
-        stop_cpu_index = \
-            round(CPUS_COUNT * (PROCESS_INDEX + 1) / PROCESSES_COUNT)
-        CPUS_COUNT = stop_cpu_index - start_cpu_index
+        global PROCESSORS_COUNT
+        start_processor_index = \
+            round(PROCESSORS_COUNT * PROCESS_INDEX / PROCESSES_COUNT)
+        stop_processor_index = \
+            round(PROCESSORS_COUNT * (PROCESS_INDEX + 1) / PROCESSES_COUNT)
+        PROCESSORS_COUNT = stop_processor_index - start_processor_index
 
-        assert CPUS_COUNT > 0
-        LOG.debug('CPUS_COUNT: %s', CPUS_COUNT)
-        threadpool_limits(limits=CPUS_COUNT)
-        xt.set_threads_count(CPUS_COUNT)
+        assert PROCESSORS_COUNT > 0
+        utl.logger().debug('PROCESSORS: %s', PROCESSORS_COUNT)
+        threadpool_limits(limits=PROCESSORS_COUNT)
+        xt.set_threads_count(PROCESSORS_COUNT)
 
     assert PARALLEL_FUNCTION is not None
     return PARALLEL_FUNCTION(index)

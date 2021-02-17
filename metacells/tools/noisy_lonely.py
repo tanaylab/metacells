@@ -3,7 +3,6 @@ Noisy Lonely
 ------------
 '''
 
-import logging
 from typing import Optional, Union
 
 import numpy as np
@@ -22,9 +21,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def find_noisy_lonely_genes(
@@ -88,18 +85,14 @@ def find_noisy_lonely_genes(
     5. Find the noisy "lonely" genes whose maximal correlation is at most
        ``max_gene_similarity`` (default: {max_gene_similarity}) with all other genes.
     '''
-    level = ut.log_operation(LOG, adata, 'find_noisy_lonely_genes', what)
-
-    LOG.debug('  max_sampled_cells: %s', max_sampled_cells)
     if max_sampled_cells < adata.n_obs:
         np.random.seed(random_seed)
         cell_indices = \
             np.random.choice(np.arange(adata.n_obs),
                              size=max_sampled_cells, replace=False)
-        bdata = ut.slice(adata, obs=cell_indices, name='.sampled', tmp=True)
+        bdata = ut.slice(adata, obs=cell_indices, name='.sampled')
     else:
-        bdata = adata.copy()
-        bdata.uns['__tmp__'] = True
+        bdata = ut.copy_adata(adata)
 
     downsample_cells(bdata, what,
                      downsample_cell_quantile=downsample_cell_quantile,
@@ -110,7 +103,7 @@ def find_noisy_lonely_genes(
     find_high_normalized_variance_genes(bdata, 'downsampled',
                                         min_gene_normalized_variance=min_gene_normalized_variance)
 
-    results = pp.filter_data(bdata, name='noisy', tmp=True,
+    results = pp.filter_data(bdata, name='noisy',
                              track_var='sampled_gene_index',
                              var_masks=['high_fraction_gene',
                                         'high_normalized_variance_gene'])
@@ -120,8 +113,6 @@ def find_noisy_lonely_genes(
     noisy_lonely_genes_mask = np.full(adata.n_vars, False)
 
     if ndata is not None:
-        LOG.debug('  max_gene_similarity: %s', max_gene_similarity)
-
         gene_gene_similarity_frame = \
             compute_var_var_similarity(ndata, 'downsampled', inplace=False)
         assert gene_gene_similarity_frame is not None
@@ -138,13 +129,13 @@ def find_noisy_lonely_genes(
 
         noisy_lonely_genes_mask[lonely_genes_indices] = True
 
-    LOG.debug('  noisy lonely gene names: %s',
-              sorted(list(adata.var_names[noisy_lonely_genes_mask])))
+    if ut.logging_calc():
+        ut.log_calc('noisy_lonely_gene_names',
+                    sorted(list(adata.var_names[noisy_lonely_genes_mask])))
 
     if inplace:
         ut.set_v_data(adata, 'noisy_lonely_gene', noisy_lonely_genes_mask)
         return None
 
-    ut.log_mask(LOG, level, 'noisy_lonely_genes', noisy_lonely_genes_mask)
-
+    ut.log_return('noisy_lonely_genes', noisy_lonely_genes_mask)
     return ut.to_pandas_series(noisy_lonely_genes_mask, index=adata.var_names)

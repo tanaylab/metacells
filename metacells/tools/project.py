@@ -3,7 +3,6 @@ Project
 -------
 '''
 
-import logging
 from typing import Any, Callable, Optional
 
 import numpy as np
@@ -19,9 +18,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 def project_group_to_obs(
     *,
@@ -29,6 +26,7 @@ def project_group_to_obs(
     gdata: AnnData,
     group: str,
     property_name: str,
+    formatter: Optional[Callable[[Any], Any]] = None,
     to_property_name: Optional[str] = None,
     default: Any = None,
 ) -> None:
@@ -45,24 +43,26 @@ def project_group_to_obs(
     property for the group it belongs to. If the ``group`` annotation contains a negative number
     instead of a valid group index, the ``default`` value is used.
     '''
-    ut.log_operation(LOG, adata, 'project_group_to_obs')
-
     if to_property_name is None:
         to_property_name = property_name
 
-    group_of_obs = ut.get_o_numpy(adata, group)
-    property_of_group = ut.get_o_numpy(gdata, property_name)
+    group_of_obs = \
+        ut.get_o_numpy(adata, group, formatter=ut.groups_description)
+    property_of_group = \
+        ut.get_o_numpy(gdata, property_name, formatter=formatter)
     property_of_obs = np.array([default if group < 0 else property_of_group[group]
                                 for group in group_of_obs])
     ut.set_o_data(adata, to_property_name, property_of_obs)
 
 
+@ut.logged()
 @ut.timed_call()
 def project_obs_to_obs(
     *,
     adata: AnnData,
     bdata: AnnData,
     property_name: str,
+    formatter: Optional[Callable[[Any], Any]] = None,
     to_property_name: Optional[str] = None,
     default: Any = None,
 ) -> None:
@@ -78,12 +78,11 @@ def project_obs_to_obs(
     observation with the same name in ``adata``. If no such observation exists, the ``default``
     value is used.
     '''
-    ut.log_operation(LOG, adata, 'project_obs_to_obs')
-
     if to_property_name is None:
         to_property_name = property_name
 
-    property_of_from = ut.get_o_numpy(adata, property_name)
+    property_of_from = \
+        ut.get_o_numpy(adata, property_name, formatter=formatter)
     property_of_name = {name: property_of_from[index]
                         for index, name in enumerate(adata.obs_names)}
     property_of_to = np.array([property_of_name.get(name, default)
@@ -91,6 +90,7 @@ def project_obs_to_obs(
     ut.set_o_data(bdata, to_property_name, property_of_to)
 
 
+@ut.logged()
 @ut.timed_call()
 def project_obs_to_group(
     *,
@@ -98,6 +98,7 @@ def project_obs_to_group(
     gdata: AnnData,
     group: str,
     property_name: str,
+    formatter: Optional[Callable[[Any], Any]] = None,
     to_property_name: Optional[str] = None,
     method: Callable[[ut.Vector], Any] = ut.most_frequent,
 ) -> None:
@@ -115,13 +116,12 @@ def project_obs_to_group(
     The aggregation method (by default, :py:func:`metacells.utilities.computation.most_frequent`) is
     any function taking an array of values and returning a single value.
     '''
-    ut.log_operation(LOG, adata, 'project_obs_to_group')
-
     if to_property_name is None:
         to_property_name = property_name
 
-    property_of_obs = ut.get_o_numpy(adata, property_name)
-    group_of_obs = ut.get_o_numpy(adata, group)
+    group_of_obs = \
+        ut.get_o_numpy(adata, group, formatter=ut.groups_description)
+    property_of_obs = ut.get_o_numpy(adata, property_name, formatter=formatter)
     assert gdata.n_obs == (np.max(group_of_obs) + 1)
     property_of_group = \
         np.array([method(property_of_obs[group_of_obs == group])
@@ -129,6 +129,7 @@ def project_obs_to_group(
     ut.set_o_data(gdata, to_property_name, property_of_group)
 
 
+@ut.logged()
 @ut.timed_call()
 def project_obs_obs_to_group_group(
     *,
@@ -136,6 +137,7 @@ def project_obs_obs_to_group_group(
     gdata: AnnData,
     group: str,
     property_name: str,
+    formatter: Optional[Callable[[Any], Any]] = None,
     to_property_name: Optional[str] = None,
     method: Callable[[ut.Matrix], Any] = ut.nanmean_matrix,
 ) -> None:
@@ -154,13 +156,13 @@ def project_obs_obs_to_group_group(
     The aggregation method (by default, :py:func:`metacells.utilities.computation.nanmean_matrix`)
     is any function taking a matrix of values and returning a single value.
     '''
-    ut.log_operation(LOG, adata, 'project_obs_obs_to_group_group')
-
     if to_property_name is None:
         to_property_name = property_name
 
-    property_of_obs_obs = ut.get_oo_proper(adata, property_name)
-    group_of_obs = ut.get_o_numpy(adata, group)
+    group_of_obs = \
+        ut.get_o_numpy(adata, group, formatter=ut.groups_description)
+    property_of_obs_obs = \
+        ut.get_oo_proper(adata, property_name, formatter=formatter)
     assert gdata.n_obs == (np.max(group_of_obs) + 1)
     property_of_group_group = \
         np.empty((gdata.n_obs, gdata.n_obs),

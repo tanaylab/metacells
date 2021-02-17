@@ -3,7 +3,6 @@ Candidates
 ----------
 '''
 
-import logging
 from dataclasses import dataclass
 from math import ceil, floor
 from typing import List, Optional, Union
@@ -19,12 +18,10 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def compute_candidate_metacells(  # pylint: disable=too-many-branches
+def compute_candidate_metacells(
     adata: AnnData,
     what: Union[str, ut.Matrix] = 'obs_outgoing_weights',
     *,
@@ -111,48 +108,35 @@ def compute_candidate_metacells(  # pylint: disable=too-many-branches
         or eliminate the need for the split and merge steps. However, most partition algorithms do
         not naturally allow for this level of control over the resulting communities.
     '''
-    level = ut.log_operation(LOG, adata, 'compute_candidate_metacells', what)
-
     edge_weights = ut.get_oo_proper(adata, what, layout='row_major')
     assert edge_weights.shape[0] == edge_weights.shape[1]
 
-    LOG.debug('  partition_method: %s', partition_method.__qualname__)
-    ut.log_use(LOG, adata, cell_sizes, per='o', name='cell_sizes', default='1')
-    if cell_sizes is not None:
-        node_sizes: Optional[ut.NumpyVector] = \
-            ut.get_o_numpy(adata, cell_sizes).astype('int32')
-    else:
-        node_sizes = None
+    node_sizes = \
+        ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
+    if node_sizes is not None:
+        node_sizes = node_sizes.astype('int32')
 
     assert target_metacell_size > 0
-    LOG.debug('  target_metacell_size: %s', target_metacell_size)
     max_metacell_size = None
     min_metacell_size = None
 
     if min_split_size_factor is not None:
-        LOG.debug('  min_split_size_factor: %s', min_split_size_factor)
         assert min_split_size_factor > 0
         max_metacell_size = \
             ceil(target_metacell_size * min_split_size_factor) - 1
-        LOG.debug('  max_metacell_size: %s', max_metacell_size)
+    ut.log_calc('max_metacell_size', max_metacell_size)
 
     if max_merge_size_factor is not None:
-        LOG.debug('  max_merge_size_factor: %s', max_merge_size_factor)
         assert max_merge_size_factor > 0
         min_metacell_size = \
             floor(target_metacell_size * max_merge_size_factor) + 1
-        LOG.debug('  min_metacell_size: %s', min_metacell_size)
-
-    if min_metacell_cells is not None:
-        LOG.debug('  min_metacell_cells: %s', min_metacell_cells)
+    ut.log_calc('min_metacell_size', min_metacell_size)
 
     if min_split_size_factor is not None and max_merge_size_factor is not None:
         assert max_merge_size_factor < min_split_size_factor
         assert min_metacell_size is not None
         assert max_metacell_size is not None
         assert min_metacell_size <= max_metacell_size
-
-    LOG.debug('  random_seed: %s', random_seed)
 
     community_of_cells = partition_method(edge_weights=edge_weights,
                                           node_sizes=node_sizes,
@@ -161,8 +145,8 @@ def compute_candidate_metacells(  # pylint: disable=too-many-branches
                                           min_comm_size=min_metacell_size,
                                           min_comm_nodes=min_metacell_cells,
                                           random_seed=random_seed)
-    if LOG.isEnabledFor(logging.DEBUG):
-        LOG.debug('  communities: %s', np.max(community_of_cells) + 1)
+    ut.log_calc('communities', community_of_cells,
+                formatter=ut.groups_description)
 
     if max_metacell_size is not None or min_metacell_size is not None:
         improver = Improver(community_of_cells,
@@ -186,20 +170,18 @@ def compute_candidate_metacells(  # pylint: disable=too-many-branches
 
         community_of_cells = ut.compress_indices(improver.membership)
 
-    if LOG.isEnabledFor(logging.DEBUG):
-        LOG.debug('%s surprise: %s',
-                  ut.get_name(adata),
-                  ut.leiden_surprise_quality(edge_weights=edge_weights,
-                                             partition_of_nodes=community_of_cells))
+    if ut.logging_calc():
+        ut.log_calc('surprise',
+                    ut.leiden_surprise_quality(edge_weights=edge_weights,
+                                               partition_of_nodes=community_of_cells))
 
     if inplace:
         ut.set_o_data(adata, 'candidate', community_of_cells,
-                      log_value=ut.groups_description)
+                      formatter=ut.groups_description)
         return None
 
-    if LOG.isEnabledFor(level):
-        LOG.log(level, '  candidates: %s', np.max(community_of_cells) + 1)
-
+    ut.log_return('candidate', community_of_cells,
+                  formatter=ut.groups_description)
     return ut.to_pandas_series(community_of_cells, index=adata.obs_names)
 
 
@@ -459,11 +441,11 @@ class Improver:  # pylint: disable=too-many-instance-attributes
         did_improve = \
             (self.too_few, self.too_small) < (before_too_few, before_too_small)
         if did_improve:
-            LOG.debug('  merged %s too-small into %s larger communities',
-                      len(merged_communities), merged_communities_count)
+            ut.log_calc(f'merged {len(merged_communities)} too-small communities '
+                        f'into {merged_communities_count} larger communities')
         else:
-            LOG.debug('  could not merge %s too-small communities',
-                      len(merged_communities))
+            ut.log_calc(  #
+                f'could not merge {len(merged_communities)} too-small communities')
 
         return did_improve
 
@@ -498,14 +480,14 @@ class Improver:  # pylint: disable=too-many-instance-attributes
 
             split_communities_count = np.max(split_nodes_membership) + 1
             if split_communities_count == 1:
-                LOG.debug('  could not split a too-large community')
+                ut.log_calc('could not split too-large community')
 
                 split_community.monolithic = True
                 position += 1
                 continue
 
-            LOG.debug('  split too-large community into %s smaller communities',
-                      split_communities_count)
+            ut.log_calc(f'split too-large community '
+                        f'into {split_communities_count} smaller communities')
 
             did_split = True
 
@@ -550,8 +532,8 @@ class Improver:  # pylint: disable=too-many-instance-attributes
             self.membership[self.membership == small_community_index] = \
                 merged_community_index
 
-        LOG.debug('  packed %s too-small communities into %s larger communities',
-                  len(list_of_small_community_indices), bins_count)
+        ut.log_calc(f'packed {len(list_of_small_community_indices)} too-small communities '
+                    f'into {bins_count} larger communities')
 
         self.add(bins_count)
 
@@ -613,7 +595,7 @@ class Improver:  # pylint: disable=too-many-instance-attributes
             self.membership[self.membership == few_community_index] = \
                 merged_community_index
 
-        LOG.debug('  filled %s too-few communities into %s larger communities',
-                  len(list_of_few_community_indices), bins_count)
+        ut.log_calc(f'filled {len(list_of_few_community_indices)} too-few communities '
+                    f'into {bins_count} larger communities')
 
         self.add(bins_count)

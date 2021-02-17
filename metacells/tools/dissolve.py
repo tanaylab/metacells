@@ -3,7 +3,6 @@ Dissolve
 --------
 '''
 
-import logging
 from typing import Optional, Union
 
 import numpy as np
@@ -17,16 +16,13 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.expand_doc()
 @ut.timed_call()
-def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
+def dissolve_metacells(
     adata: AnnData,
     what: Union[str, ut.Matrix] = '__x__',
     *,
-    to: str = 'metacell',
     candidates: Union[str, ut.Vector] = 'candidate',
     deviants: Optional[Union[str, ut.Vector]] = 'cell_deviant_votes',
     target_metacell_size: int = pr.target_metacell_size,
@@ -47,7 +43,7 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
     **Returns**
 
     Observation (Cell) Annotations
-        ``<to>`` (default: {to})
+        ``metacell``
             The integer index of the metacell each cell belongs to. The metacells are in no
             particular order. Cells with no metacell assignment are given a metacell index of
             ``-1``.
@@ -87,35 +83,24 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
 
     6 . Any remaining metacell is dissolved into "outlier" cells.
     '''
-    level = ut.log_operation(LOG, adata, 'dissolve_metacells', what)
-
     dissolved_of_cells = np.zeros(adata.n_obs, dtype='bool')
 
-    ut.log_use(LOG, adata, candidates, per='o', name='candidates')
-    candidate_of_cells = ut.get_o_numpy(adata, candidates)
+    candidate_of_cells = ut.get_o_numpy(adata, candidates,
+                                        formatter=ut.groups_description)
     candidate_of_cells = np.copy(candidate_of_cells)
-    raw_candidates_count = np.max(candidate_of_cells) + 1
-    LOG.debug('  candidates: %s', raw_candidates_count)
 
-    LOG.debug('  min_metacell_cells: %s', min_metacell_cells)
-
-    ut.log_use(LOG, adata, deviants, per='o', name='deviants')
-    if deviants is None:
-        deviant_of_cells: Optional[ut.NumpyVector] = None
-    else:
-        deviant_of_cells = ut.get_o_numpy(adata, deviants)
-
-    ut.log_use(LOG, adata, cell_sizes, per='o', name='cell_sizes')
-    if cell_sizes is not None:
-        cell_sizes = ut.get_o_numpy(adata, cell_sizes)
-    assert not isinstance(cell_sizes, str)
+    deviant_of_cells = \
+        ut.maybe_o_numpy(adata, deviants, formatter=ut.mask_description)
+    if deviant_of_cells is not None:
+        deviant_of_cells = deviant_of_cells > 0
+    cell_sizes = \
+        ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
 
     if deviant_of_cells is not None:
         candidate_of_cells[deviant_of_cells > 0] = -1
     candidate_of_cells = ut.compress_indices(candidate_of_cells)
     candidates_count = np.max(candidate_of_cells) + 1
 
-    LOG.debug('  target_metacell_size: %s', target_metacell_size)
     data = ut.get_vo_proper(adata, what, layout='column_major')
     fraction_of_genes = ut.fraction_per(data, per='column')
 
@@ -123,17 +108,14 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
         min_robust_size = None
     else:
         min_robust_size = target_metacell_size * min_robust_size_factor
-    LOG.debug('  min_robust_size: %s', min_robust_size)
+    ut.log_calc('min_robust_size', min_robust_size)
 
     if min_convincing_size_factor is None:
         min_convincing_size = None
     else:
         min_convincing_size = \
             target_metacell_size * min_convincing_size_factor
-    LOG.debug('  min_convincing_size: %s', min_convincing_size)
-    if min_convincing_size_factor is not None:
-        LOG.debug('  min_convincing_gene_fold_factor: %s',
-                  min_convincing_gene_fold_factor)
+    ut.log_calc('min_convincing_size', min_convincing_size)
 
     did_dissolve = False
     for candidate_index in range(candidates_count):
@@ -158,32 +140,25 @@ def dissolve_metacells(  # pylint: disable=too-many-branches,too-many-statements
     else:
         metacell_of_cells = candidate_of_cells
 
-    if LOG.isEnabledFor(level):
-        metacells_count = np.max(metacell_of_cells) + 1
-    else:
-        metacells_count = -1
-
     if inplace:
         ut.set_o_data(adata, 'dissolved', dissolved_of_cells,
-                      log_value=ut.mask_description)
+                      formatter=ut.mask_description)
 
-        ut.set_o_data(adata, to, metacell_of_cells,
-                      log_value=ut.groups_description)
+        ut.set_o_data(adata, 'metacell', metacell_of_cells,
+                      formatter=ut.groups_description)
         return None
 
-    if LOG.isEnabledFor(level):
-        LOG.log(level, '  dissolved: %s',
-                ut.mask_description(dissolved_of_cells))
-        LOG.log(level, '  %s: %s', to,
-                ut.ratio_description(metacells_count, raw_candidates_count))
+    ut.log_return('dissolved', dissolved_of_cells)
+    ut.log_return('metacell', metacell_of_cells,
+                  formatter=ut.groups_description)
 
     obs_frame = ut.to_pandas_frame(index=adata.obs_names)
     obs_frame['dissolved'] = dissolved_of_cells
-    obs_frame[to] = metacell_of_cells
+    obs_frame['metacell'] = metacell_of_cells
     return obs_frame
 
 
-def _keep_candidate(
+def _keep_candidate(  # pylint: disable=too-many-branches
     adata: AnnData,
     candidate_index: int,
     *,
@@ -205,28 +180,36 @@ def _keep_candidate(
         candidate_total_size = np.sum(cell_sizes[candidate_cell_indices])
 
     if candidate_cell_indices.size < min_metacell_cells:
-        LOG.debug('  - candidate: %s / %s cells: %s size: %s is: little',
-                  candidate_index, candidates_count,
-                  candidate_cell_indices.size, candidate_total_size)
+        if ut.logging_calc():
+            ut.log_calc(f'- candidate: {ut.ratio_description(candidate_index, candidates_count)} '
+                        f'cells: {candidate_cell_indices.size} '
+                        f'size: {candidate_total_size:g} '
+                        f'is: little')
         return False
 
     if min_robust_size is not None \
             and candidate_total_size >= min_robust_size:
-        LOG.debug('  - candidate: %s / %s cells: %s size: %s is: robust',
-                  candidate_index, candidates_count,
-                  candidate_cell_indices.size, candidate_total_size)
+        if ut.logging_calc():
+            ut.log_calc(f'- candidate: {ut.ratio_description(candidate_index, candidates_count)} '
+                        f'cells: {candidate_cell_indices.size} '
+                        f'size: {candidate_total_size:g} '
+                        f'is: robust')
         return True
 
     if min_convincing_size is None:
-        LOG.debug('  - candidate: %s / %s cells: %s size: %s is: accepted',
-                  candidate_index, candidates_count,
-                  candidate_cell_indices.size, candidate_total_size)
+        if ut.logging_calc():
+            ut.log_calc(f'- candidate: {ut.ratio_description(candidate_index, candidates_count)} '
+                        f'cells: {candidate_cell_indices.size} '
+                        f'size: {candidate_total_size:g} '
+                        f'is: accepted')
         return True
 
     if candidate_total_size < min_convincing_size:
-        LOG.debug('  - candidate: %s / %s cells: %s size: %s is: unconvincing',
-                  candidate_index, candidates_count,
-                  candidate_cell_indices.size, candidate_total_size)
+        if ut.logging_calc():
+            ut.log_calc(f'- candidate: {ut.ratio_description(candidate_index, candidates_count)} '
+                        f'cells: {candidate_cell_indices.size} '
+                        f'size: {candidate_total_size:g} '
+                        f'is: unconvincing')
         return False
 
     candidate_data = data[candidate_cell_indices, :]
@@ -242,21 +225,21 @@ def _keep_candidate(
         candidate_data_of_genes >= min_convincing_gene_fold_factor
     keep_candidate = bool(np.any(convincing_genes_mask))
 
-    if LOG.isEnabledFor(logging.DEBUG):
-        convincing_gene_indices = \
-            np.where(convincing_genes_mask)[0]
+    if ut.logging_calc():
+        convincing_gene_indices = np.where(convincing_genes_mask)[0]
         if keep_candidate:
-            LOG.debug('  - candidate: %s / %s cells: %s size: %s is: convincing because %s',
-                      candidate_index, candidates_count,
-                      candidate_cell_indices.size,
-                      candidate_total_size,
-                      ', '.join(['%s: %s' % (name, fold_factor)
-                                 for name, fold_factor
-                                 in zip(adata.var_names[convincing_gene_indices],
-                                        candidate_data_of_genes[convincing_gene_indices])]))
+            ut.log_calc(f'- candidate: {ut.ratio_description(candidate_index, candidates_count)} '
+                        f'cells: {candidate_cell_indices.size} '
+                        f'size: {candidate_total_size:g} '
+                        f'is: convincing because:')
+            for fold_factor, name \
+                in reversed(sorted(zip(candidate_data_of_genes[convincing_gene_indices],
+                                       adata.var_names[convincing_gene_indices]))):
+                ut.log_calc(f'    {name}: {ut.fold_description(fold_factor)}')
         else:
-            LOG.debug('  - candidate: %s / %s cells: %s size: %s is: not convincing',
-                      candidate_index, candidates_count,
-                      candidate_cell_indices.size, candidate_total_size)
+            ut.log_calc(f'- candidate: {ut.ratio_description(candidate_index, candidates_count)} '
+                        f'cells: {candidate_cell_indices.size} '
+                        f'size: {candidate_total_size:g} '
+                        f'is: not convincing')
 
     return keep_candidate

@@ -3,7 +3,6 @@ Named
 -----
 '''
 
-import logging
 from re import Pattern
 from typing import Collection, Optional, Union
 
@@ -17,9 +16,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def find_named_genes(
@@ -43,8 +40,6 @@ def find_named_genes(
 
     Otherwise, it returns it as a pandas series (indexed by the variable, that is gene, names).
     '''
-    level = ut.log_operation(LOG, adata, 'find_named_genes')
-
     if names is None:
         names_mask = np.zeros(adata.n_vars, dtype='bool')
     else:
@@ -65,6 +60,5 @@ def find_named_genes(
         ut.set_v_data(adata, to, genes_mask)
         return None
 
-    ut.log_mask(LOG, level, 'named_genes', genes_mask)
-
+    ut.log_return('named_genes', genes_mask)
     return ut.to_pandas_series(genes_mask, index=adata.var_names)

@@ -3,7 +3,6 @@ Downsample
 ----------
 '''
 
-import logging
 from typing import Optional, Union
 
 import numpy as np
@@ -17,9 +16,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def downsample_cells(
@@ -68,14 +65,10 @@ def downsample_cells(
     2. Downsample each cell so that it has at most the selected number of samples. Use the
        ``random_seed`` to allow making this replicable.
     '''
-    ut.log_operation(LOG, adata, 'downsample_cells', what)
-
     total_per_cell = ut.get_o_numpy(adata, what, sum=True)
-    LOG.debug('  downsample_cell_quantile: %s', downsample_cell_quantile)
 
     samples = round(np.quantile(total_per_cell, downsample_cell_quantile))
-    LOG.debug('  samples: %s', samples)
-    LOG.debug('  random_seed: %s', random_seed)
+    ut.log_calc('samples', samples)
 
     data = ut.get_vo_proper(adata, what, layout='row_major')
     downsampled = ut.downsample_matrix(data, per='row', samples=samples,

@@ -3,7 +3,6 @@ Apply
 -----
 '''
 
-import logging
 from typing import Any, Callable, Dict, NamedTuple, Optional, Union
 
 import numpy as np
@@ -20,9 +19,6 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
 class DefaultValues(NamedTuple):
     '''
     Default values to use in :py:func:`apply_obs_annotations` and :py:func:`apply_var_annotations`.
@@ -33,6 +29,9 @@ class DefaultValues(NamedTuple):
 
     #: The default value to use for the full data.
     full: Any
+
+    def __str__(self) -> str:
+        return f'slice: {self.slice} full: {self.full}'
 
 
 class Skip:
@@ -47,6 +46,7 @@ class Raise:
     '''
 
 
+@ut.logged(annotations=str)
 @ut.timed_call()
 def apply_obs_annotations(
     adata: AnnData,
@@ -91,10 +91,10 @@ def apply_obs_annotations(
 
     4. Apply the slice data values to the entries of the full data identified by the ``indices``.
     '''
-    ut.log_operation(LOG, adata, 'apply_var_annotations')
     _apply_annotations(adata, sdata, 'o', annotations, indices)
 
 
+@ut.logged(annotations=str)
 @ut.timed_call()
 def apply_var_annotations(
     adata: AnnData,
@@ -139,7 +139,6 @@ def apply_var_annotations(
 
     4. Apply the slice data values to the entries of the full data identified by the ``indices``.
     '''
-    ut.log_operation(LOG, adata, 'apply_var_annotations')
     _apply_annotations(adata, sdata, 'v', annotations, indices)
 
 
@@ -152,8 +151,6 @@ def _apply_annotations(  # pylint: disable=too-many-branches
 ) -> None:
     full_name = ut.get_name(adata)
     slice_name = ut.get_name(sdata)
-    if slice_name is not None:
-        LOG.debug('  from: %s', slice_name)
 
     assert per in ('o', 'v')
 
@@ -162,20 +159,18 @@ def _apply_annotations(  # pylint: disable=too-many-branches
         full_size = adata.n_obs
         slice_data = sdata.obs
         slice_size = sdata.n_obs
+        full_indices = ut.get_o_numpy(sdata, indices)
     else:
         full_data = adata.var
         full_size = adata.n_vars
         slice_data = sdata.var
         slice_size = sdata.n_vars
-
-    ut.log_use(LOG, adata, indices, per='o', name='full_indices')
-    full_indices = ut.get_o_numpy(adata, indices)
-    assert full_indices.size == slice_size
+        full_indices = ut.get_v_numpy(sdata, indices)
 
     for name, default_values in annotations.items():
         slice_value = slice_data.get(name)
         if slice_value is not None:
-            log_value: Optional[Callable[[Any], str]] = None
+            formatter: Optional[Callable[[Any], str]] = None
         else:
             if default_values.slice == Skip or isinstance(default_values.slice, Skip):
                 continue
@@ -188,7 +183,7 @@ def _apply_annotations(  # pylint: disable=too-many-branches
 
             slice_value = default_values.slice
 
-            def log_value(_: Any) -> str:
+            def formatter(_: Any) -> str:
                 # pylint: disable=cell-var-from-loop
                 return '%s <- %s' % (slice_size, slice_value)
             # pylint: enable=cell-var-from-loop
@@ -213,6 +208,6 @@ def _apply_annotations(  # pylint: disable=too-many-branches
 
         full_value[full_indices] = slice_value
         if per == 'o':
-            ut.set_o_data(adata, name, full_value, log_value=log_value)
+            ut.set_o_data(adata, name, full_value, formatter=formatter)
         else:
-            ut.set_v_data(adata, name, full_value, log_value=log_value)
+            ut.set_v_data(adata, name, full_value, formatter=formatter)

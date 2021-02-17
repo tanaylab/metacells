@@ -3,7 +3,6 @@ Mask
 ----
 '''
 
-import logging
 from typing import List, Optional
 
 from anndata import AnnData
@@ -15,9 +14,7 @@ __all__ = [
 ]
 
 
-LOG = logging.getLogger(__name__)
-
-
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def combine_masks(  # pylint: disable=too-many-branches
@@ -47,7 +44,6 @@ def combine_masks(  # pylint: disable=too-many-branches
 
     2. If ``invert`` (default: {invert}), invert the result combined mask.
     '''
-    level = ut.log_operation(LOG, adata, 'combine_masks')
     assert len(masks) > 0
 
     per: Optional[str] = None
@@ -69,10 +65,12 @@ def combine_masks(  # pylint: disable=too-many-branches
 
         if mask_name in adata.obs:
             mask_per = 'o'
-            mask = ut.get_o_numpy(adata, mask_name)
+            mask = ut.get_o_numpy(adata, mask_name,
+                                  formatter=ut.mask_description) > 0
         elif mask_name in adata.var:
             mask_per = 'v'
-            mask = ut.get_v_numpy(adata, mask_name)
+            mask = ut.get_v_numpy(adata, mask_name,
+                                  formatter=ut.mask_description) > 0
         else:
             if must_exist:
                 raise KeyError(f'unknown mask data: {mask_name}')
@@ -93,16 +91,14 @@ def combine_masks(  # pylint: disable=too-many-branches
                     ValueError('mixing per-observation and per-variable masks')
             combined_mask = combined_mask & mask
 
-        if LOG.isEnabledFor(logging.DEBUG):
-            LOG.debug('  %s: %s', log_mask_name, ut.mask_description(mask))
+        if ut.logging_calc():
+            ut.log_calc(log_mask_name, mask)
 
     if invert:
         combined_mask = ~combined_mask
 
-    if LOG.isEnabledFor(level):
-        ut.log_mask(LOG, level, 'combined', combined_mask)
-
     if to is None:
+        ut.log_return('combined', combined_mask)
         if per == 'o':
             return ut.to_pandas_series(combined_mask, index=adata.obs_names)
         assert per == 'v'
@@ -112,5 +108,4 @@ def combine_masks(  # pylint: disable=too-many-branches
         ut.set_o_data(adata, to, combined_mask)
     else:
         ut.set_v_data(adata, to, combined_mask)
-
     return None
