@@ -248,7 +248,7 @@ def _pick_candidates(
 
     candidate_data = \
         ut.slice(adata_of_all_genes_of_all_cells, name='.candidate_genes',
-                 vars=candidate_genes_indices)
+                 vars=candidate_genes_indices, top_level=False)
     return candidate_data, candidate_genes_indices
 
 
@@ -363,7 +363,8 @@ def _related_genes(  # pylint: disable=too-many-branches,too-many-statements
             adata_of_module_genes_of_all_cells = \
                 ut.slice(adata_of_all_genes_of_all_cells,
                          name=f'.module{module_index}.rare_genes',
-                         vars=rare_gene_indices_of_module)
+                         vars=rare_gene_indices_of_module,
+                         top_level=False)
 
             total_module_genes_umis_of_all_cells = \
                 ut.get_o_numpy(adata_of_module_genes_of_all_cells,
@@ -392,7 +393,8 @@ def _related_genes(  # pylint: disable=too-many-branches,too-many-statements
             adata_of_all_genes_of_expressed_cells_of_module = \
                 ut.slice(adata_of_all_genes_of_all_cells,
                          name=f'.module{module_index}.rare_cells',
-                         obs=mask_of_expressed_cells)
+                         obs=mask_of_expressed_cells,
+                         top_level=False)
 
             total_expressed_cells_umis_of_all_genes = \
                 ut.get_v_numpy(adata_of_all_genes_of_expressed_cells_of_module,
@@ -465,8 +467,8 @@ def _related_genes(  # pylint: disable=too-many-branches,too-many-statements
         if ut.logging_calc():
             with ut.log_step('- module', module_index,
                              formatter=lambda module_index:
-                             ut.ratio_description(module_index,
-                                                  modules_count)):
+                             ut.progress_description(modules_count,
+                                                     module_index, 'module')):
                 ut.log_calc('related_gene_names',
                             sorted(adata_of_all_genes_of_all_cells.var_names[related_gene_indices_of_module]))
 
@@ -495,11 +497,13 @@ def _identify_cells(
 
         with ut.log_step('- module', module_index,
                          formatter=lambda module_index:
-                         ut.ratio_description(module_index, modules_count)):
+                         ut.progress_description(modules_count,
+                                                 module_index, 'module')):
             adata_of_related_genes_of_all_cells = \
                 ut.slice(adata_of_all_genes_of_all_cells,
                          name=f'.module{module_index}.related_genes',
-                         vars=related_gene_indices_of_module)
+                         vars=related_gene_indices_of_module,
+                         top_level=False)
             total_related_genes_of_all_cells = \
                 ut.get_o_numpy(adata_of_related_genes_of_all_cells,
                                what, sum=True)
@@ -564,7 +568,8 @@ def _compress_modules(
 
         with ut.log_step('- module', module_index,
                          formatter=lambda module_index:
-                         ut.ratio_description(module_index, modules_count)):
+                         ut.progress_description(modules_count,
+                                                 module_index, 'module')):
             module_cells_mask = rare_module_of_cells == module_index
             module_cells_count = np.sum(module_cells_mask)
             module_umis_count = \
@@ -613,7 +618,8 @@ def _compress_modules(
                 in enumerate(zip(cell_counts_of_modules, list_of_names_of_genes_of_modules)):
             with ut.log_step('- module', module_index,
                              formatter=lambda module_index:
-                             ut.ratio_description(module_index, modules_count)):
+                             ut.progress_description(modules_count,
+                                                     module_index, 'module')):
                 ut.log_calc('cells', module_cells_count)
                 ut.log_calc('genes', module_gene_names)
 
@@ -639,7 +645,10 @@ def _results(
 
     if inplace:
         ut.set_m_data(adata, 'rare_gene_modules',
-                      array_of_names_of_genes_of_modules)
+                      array_of_names_of_genes_of_modules,
+                      formatter=lambda matrix:
+                      '[ ' + ', '.join([f'[ {", ".join(list(array))} ]'
+                                        for array in matrix]) + ' ]')
         ut.set_v_data(adata, 'genes_rare_gene_module', rare_module_of_genes,
                       formatter=ut.groups_description)
         ut.set_v_data(adata, 'rare_gene', rare_module_of_genes >= 0)

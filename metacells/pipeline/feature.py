@@ -32,6 +32,7 @@ def extract_feature_data(
     forbidden_gene_names: Optional[Collection[str]] = None,
     forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     random_seed: int = 0,
+    top_level: bool = True,
 ) -> Optional[AnnData]:
     '''
     Extract a "feature" subset of the ``adata`` to compute metacells for.
@@ -110,7 +111,7 @@ def extract_feature_data(
                             names=forbidden_gene_names,
                             patterns=forbidden_gene_patterns)
 
-    results = pp.filter_data(adata, name=name,
+    results = pp.filter_data(adata, name=name, top_level=top_level,
                              mask_var='feature_gene',
                              var_masks=['high_fraction_gene',
                                         'high_relative_variance_gene',

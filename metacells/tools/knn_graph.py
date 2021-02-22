@@ -220,12 +220,12 @@ def _compute_elements_knn_graph(
             name = elements + '_' + name
             set_data(adata, name, matrix,
                      formatter=lambda matrix:
-                     ut.ratio_description(matrix.nnz,
-                                          matrix.shape[0] * matrix.shape[1]))
+                     ut.ratio_description(matrix.shape[0] * matrix.shape[1],
+                                          'element', matrix.nnz, 'nonzero'))
         elif ut.logging_calc():
             ut.log_calc(f'{elements}_{name}',
-                        ut.ratio_description(matrix.nnz,
-                                             matrix.shape[0] * matrix.shape[1]))
+                        ut.ratio_description(matrix.shape[0] * matrix.shape[1],
+                                             'element', matrix.nnz, 'nonzero'))
 
     similarity = ut.to_proper_matrix(get_data(adata, what))
     similarity = ut.to_layout(similarity, 'row_major', symmetric=True)

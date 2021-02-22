@@ -22,6 +22,7 @@ def collect_metacells(
     what: Union[str, ut.Matrix] = '__x__',
     *,
     name: str = 'metacells',
+    top_level: bool = True,
 ) -> AnnData:
     '''
     Collect computed metacells data.
@@ -78,6 +79,8 @@ def collect_metacells(
     '''
     mdata = pp.group_obs_data(adata, what, groups='metacell', name=name)
     assert mdata is not None
+    if top_level:
+        ut.top_level(mdata)
 
     for annotation_name in ('excluded_gene',
                             'clean_gene',

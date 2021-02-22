@@ -202,7 +202,7 @@ def compute_direct_metacells(
         ut.get_o_numpy(adata, what, sum=True)
 
     fdata = \
-        extract_feature_data(adata, what,
+        extract_feature_data(adata, what, top_level=False,
                              downsample_cell_quantile=feature_downsample_cell_quantile,
                              min_gene_relative_variance=feature_min_gene_relative_variance,
                              min_gene_fraction=feature_min_gene_fraction,

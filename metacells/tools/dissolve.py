@@ -181,7 +181,7 @@ def _keep_candidate(  # pylint: disable=too-many-branches
 
     if candidate_cell_indices.size < min_metacell_cells:
         if ut.logging_calc():
-            ut.log_calc(f'- candidate: {ut.ratio_description(candidate_index, candidates_count)} '
+            ut.log_calc(f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
                         f'cells: {candidate_cell_indices.size} '
                         f'size: {candidate_total_size:g} '
                         f'is: little')
@@ -190,7 +190,7 @@ def _keep_candidate(  # pylint: disable=too-many-branches
     if min_robust_size is not None \
             and candidate_total_size >= min_robust_size:
         if ut.logging_calc():
-            ut.log_calc(f'- candidate: {ut.ratio_description(candidate_index, candidates_count)} '
+            ut.log_calc(f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
                         f'cells: {candidate_cell_indices.size} '
                         f'size: {candidate_total_size:g} '
                         f'is: robust')
@@ -198,7 +198,7 @@ def _keep_candidate(  # pylint: disable=too-many-branches
 
     if min_convincing_size is None:
         if ut.logging_calc():
-            ut.log_calc(f'- candidate: {ut.ratio_description(candidate_index, candidates_count)} '
+            ut.log_calc(f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
                         f'cells: {candidate_cell_indices.size} '
                         f'size: {candidate_total_size:g} '
                         f'is: accepted')
@@ -206,7 +206,7 @@ def _keep_candidate(  # pylint: disable=too-many-branches
 
     if candidate_total_size < min_convincing_size:
         if ut.logging_calc():
-            ut.log_calc(f'- candidate: {ut.ratio_description(candidate_index, candidates_count)} '
+            ut.log_calc(f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
                         f'cells: {candidate_cell_indices.size} '
                         f'size: {candidate_total_size:g} '
                         f'is: unconvincing')
@@ -228,7 +228,7 @@ def _keep_candidate(  # pylint: disable=too-many-branches
     if ut.logging_calc():
         convincing_gene_indices = np.where(convincing_genes_mask)[0]
         if keep_candidate:
-            ut.log_calc(f'- candidate: {ut.ratio_description(candidate_index, candidates_count)} '
+            ut.log_calc(f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
                         f'cells: {candidate_cell_indices.size} '
                         f'size: {candidate_total_size:g} '
                         f'is: convincing because:')
@@ -237,7 +237,7 @@ def _keep_candidate(  # pylint: disable=too-many-branches
                                        adata.var_names[convincing_gene_indices]))):
                 ut.log_calc(f'    {name}: {ut.fold_description(fold_factor)}')
         else:
-            ut.log_calc(f'- candidate: {ut.ratio_description(candidate_index, candidates_count)} '
+            ut.log_calc(f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
                         f'cells: {candidate_cell_indices.size} '
                         f'size: {candidate_total_size:g} '
                         f'is: not convincing')

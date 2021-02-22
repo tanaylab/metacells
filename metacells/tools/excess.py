@@ -70,6 +70,7 @@ def compute_type_compatible_sizes(
 
     5. Loop until all metacells are assigned a "compatible" size.
     '''
+    assert len(adatas) > 0
     if len(adatas) == 1:
         ut.set_o_data(adatas[0], 'compatible_size',
                       ut.get_o_numpy(adatas[0], size,
@@ -87,87 +88,89 @@ def compute_type_compatible_sizes(
 
     compatible_size_of_data = [np.full(adata.n_obs, -1) for adata in adatas]
 
-    for metacell_type in unique_types:
-        sorted_metacell_indices_of_data = \
-            [np.argsort(metacell_sizes)[metacell_types == metacell_type]
-             for metacell_sizes, metacell_types
-             in zip(metacell_sizes_of_data, metacell_types_of_data)]
+    for type_index, metacell_type in enumerate(sorted(unique_types)):
+        with ut.log_step(f'- {metacell_type}',
+                         ut.progress_description(len(unique_types),
+                                                 type_index, 'type')):
+            sorted_metacell_indices_of_data = \
+                [np.argsort(metacell_sizes)[metacell_types == metacell_type]
+                 for metacell_sizes, metacell_types
+                 in zip(metacell_sizes_of_data, metacell_types_of_data)]
 
-        metacells_count_of_data = \
-            [len(sorted_metacell_indices)
-             for sorted_metacell_indices
-             in sorted_metacell_indices_of_data]
+            metacells_count_of_data = \
+                [len(sorted_metacell_indices)
+                 for sorted_metacell_indices
+                 in sorted_metacell_indices_of_data]
 
-        def _for_each(value_of_data: List[T]) -> List[T]:
-            return [value
-                    for metacells_count, value
-                    in zip(metacells_count_of_data, value_of_data)
-                    if metacells_count > 0]
+            ut.log_calc('metacell_counts', metacells_count_of_data)
 
-        metacells_count_of_each = _for_each(metacells_count_of_data)
-        if len(metacells_count_of_each) == 0:
-            continue
+            def _for_each(value_of_data: List[T]) -> List[T]:
+                return [value
+                        for metacells_count, value
+                        in zip(metacells_count_of_data, value_of_data)
+                        if metacells_count > 0]
 
-        sorted_metacell_indices_of_each = \
-            _for_each(sorted_metacell_indices_of_data)
-        metacell_sizes_of_each = _for_each(metacell_sizes_of_data)
-        compatible_size_of_each = _for_each(compatible_size_of_data)
+            metacells_count_of_each = _for_each(metacells_count_of_data)
 
-        if len(metacells_count_of_each) == 1:
-            compatible_size_of_each[0][sorted_metacell_indices_of_each[0]] = \
-                metacell_sizes_of_each[0][sorted_metacell_indices_of_each[0]]
+            if len(metacells_count_of_each) == 0:
+                continue
 
-        metacell_quantile_of_each = \
-            [(np.arange(len(sorted_metacell_indices)) + 1) / len(sorted_metacell_indices)
-             for sorted_metacell_indices
-             in sorted_metacell_indices_of_each]
+            sorted_metacell_indices_of_each = \
+                _for_each(sorted_metacell_indices_of_data)
+            metacell_sizes_of_each = _for_each(metacell_sizes_of_data)
+            compatible_size_of_each = _for_each(compatible_size_of_data)
 
-        next_position_of_each = np.full(len(metacell_quantile_of_each), 0)
+            if len(metacells_count_of_each) == 1:
+                compatible_size_of_each[0][sorted_metacell_indices_of_each[0]] = \
+                    metacell_sizes_of_each[0][sorted_metacell_indices_of_each[0]]
 
-        while True:
-            next_quantile_of_each = \
-                [metacell_quantile[next_position]
-                 for metacell_quantile, next_position
-                 in zip(metacell_quantile_of_each, next_position_of_each)]
+            metacell_quantile_of_each = \
+                [(np.arange(len(sorted_metacell_indices)) + 1) / len(sorted_metacell_indices)
+                 for sorted_metacell_indices
+                 in sorted_metacell_indices_of_each]
 
-            next_quantile = max(next_quantile_of_each)
+            next_position_of_each = np.full(len(metacell_quantile_of_each), 0)
 
-            last_position_of_each = next_position_of_each
+            while True:
+                next_quantile_of_each = \
+                    [metacell_quantile[next_position]
+                     for metacell_quantile, next_position
+                     in zip(metacell_quantile_of_each, next_position_of_each)]
+                next_quantile = max(next_quantile_of_each)
 
-            next_position_of_each[:] = \
-                [np.sum(metacell_quantile <= next_quantile)
-                 for metacell_quantile
-                 in metacell_quantile_of_each]
+                last_position_of_each = next_position_of_each.copy()
+                next_position_of_each[:] = \
+                    [np.sum(metacell_quantile <= next_quantile)
+                     for metacell_quantile
+                     in metacell_quantile_of_each]
 
-            positions_of_each = \
-                [range(last_position, next_position)
-                 for last_position, next_position
-                 in zip(last_position_of_each, next_position_of_each)]
+                positions_of_each = \
+                    [range(last_position, next_position)
+                     for last_position, next_position
+                     in zip(last_position_of_each, next_position_of_each)]
 
-            sizes_of_each = \
-                [metacell_sizes[sorted_metacell_indices[positions]]
-                 for metacell_sizes, sorted_metacell_indices, positions
-                 in zip(metacell_sizes_of_each, sorted_metacell_indices_of_each, positions_of_each)]
+                sizes_of_each = \
+                    [metacell_sizes[sorted_metacell_indices[positions]]
+                     for metacell_sizes, sorted_metacell_indices, positions
+                     in zip(metacell_sizes_of_each, sorted_metacell_indices_of_each, positions_of_each)]
 
-            min_size_of_each = \
-                [np.min(sizes)
-                 for sizes, positions
-                 in zip(sizes_of_each, positions_of_each)]
+                min_size_of_each = \
+                    [np.min(sizes)
+                     for sizes, positions
+                     in zip(sizes_of_each, positions_of_each)]
+                min_size = min(min_size_of_each)
 
-            min_size = min(min_size_of_each)
+                for sorted_metacell_indices, positions, compatible_size \
+                        in zip(sorted_metacell_indices_of_each, positions_of_each, compatible_size_of_each):
+                    compatible_size[sorted_metacell_indices[positions]] = min_size
 
-            for sorted_metacell_indices, positions, compatible_size \
-                    in zip(sorted_metacell_indices_of_each, positions_of_each, compatible_size_of_each):
-                compatible_size[sorted_metacell_indices[positions]] = min_size
+                is_done_of_each = [next_position == metacells_count
+                                   for next_position, metacells_count
+                                   in zip(next_position_of_each, metacells_count_of_each)]
+                if all(is_done_of_each):
+                    break
 
-            is_done_of_each = [next_position == metacells_count
-                               for next_position, metacells_count
-                               in zip(next_position_of_each, metacells_count_of_each)]
-
-            if all(is_done_of_each):
-                break
-
-            assert not any(is_done_of_each)
+                assert not any(is_done_of_each)
 
     for adata, compatible_size in zip(adatas, compatible_size_of_data):
         assert np.min(compatible_size) > 0
@@ -313,8 +316,8 @@ def compute_excess_r2(
     for metacell_index in range(metacells_count):
         with ut.log_step('- metacell', metacell_index,
                          formatter=lambda metacell_index:
-                         ut.ratio_description(metacell_index,
-                                              metacells_count)):
+                         ut.progress_description(metacells_count,
+                                                 metacell_index, 'metacell')):
             if compatible_size_of_metacells is not None:
                 compatible_size_of_metacell = \
                     compatible_size_of_metacells[metacell_index]
@@ -375,14 +378,15 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
 
     if compatible_size is None:
         if ut.logging_calc():
-            ut.log_calc(f'cells: {len(metacell_indices)}')
+            ut.log_calc(f'size: {len(metacell_indices)} cells')
     else:
         assert 0 < compatible_size <= len(metacell_indices)
         if compatible_size < len(metacell_indices):
             np.random.seed(random_seed)
             if ut.logging_calc():
-                ut.log_calc(  #
-                    f'cells: {ut.ratio_description(compatible_size, len(metacell_indices))}')
+                ut.log_calc('size: '
+                            + ut.ratio_description(len(metacell_indices), 'cell',
+                                                   compatible_size, 'compatible'))
             metacell_indices = np.random.choice(metacell_indices,
                                                 size=compatible_size,
                                                 replace=False)

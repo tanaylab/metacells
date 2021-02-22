@@ -90,9 +90,10 @@ def find_noisy_lonely_genes(
         cell_indices = \
             np.random.choice(np.arange(adata.n_obs),
                              size=max_sampled_cells, replace=False)
-        bdata = ut.slice(adata, obs=cell_indices, name='.sampled')
+        bdata = ut.slice(adata, obs=cell_indices,
+                         name='.sampled', top_level=False)
     else:
-        bdata = ut.copy_adata(adata)
+        bdata = ut.copy_adata(adata, top_level=False)
 
     downsample_cells(bdata, what,
                      downsample_cell_quantile=downsample_cell_quantile,
@@ -103,7 +104,7 @@ def find_noisy_lonely_genes(
     find_high_normalized_variance_genes(bdata, 'downsampled',
                                         min_gene_normalized_variance=min_gene_normalized_variance)
 
-    results = pp.filter_data(bdata, name='noisy',
+    results = pp.filter_data(bdata, name='noisy', top_level=False,
                              track_var='sampled_gene_index',
                              var_masks=['high_fraction_gene',
                                         'high_normalized_variance_gene'])

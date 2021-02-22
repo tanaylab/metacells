@@ -69,6 +69,7 @@ import metacells.utilities.logging as utl
 import metacells.utilities.timing as utm
 
 __all__ = [
+    'is_main_process',
     'set_processors_count',
     'get_processors_count',
     'parallel_map',
@@ -78,6 +79,7 @@ __all__ = [
 PROCESSORS_COUNT = 0
 
 MAIN_PROCESS_PID = os.getpid()
+
 IS_MAIN_PROCESS: Optional[bool] = True
 
 MAP_INDEX = 0
@@ -86,6 +88,14 @@ PROCESS_INDEX = 0
 PROCESSES_COUNT = 0
 NEXT_PROCESS_INDEX = Value(ctypes.c_int32, lock=True)
 PARALLEL_FUNCTION: Optional[Callable[[int], Any]] = None
+
+
+def is_main_process() -> bool:
+    '''
+    Return whether this is the main process, as opposed to a sub-process spawned by
+    :py:func:`parallel_map`.
+    '''
+    return bool(IS_MAIN_PROCESS)
 
 
 def set_processors_count(processors: int) -> None:
@@ -117,7 +127,7 @@ def set_processors_count(processors: int) -> None:
 
 if not 'sphinx' in sys.argv[0]:
     set_processors_count(int(os.environ.get('METACELLS_PROCESSORS_COUNT',
-                                            str(os.cpu_count()))))
+                                            '0')))
 
 
 def get_processors_count() -> int:

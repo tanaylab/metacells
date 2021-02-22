@@ -177,7 +177,7 @@ def analyze_clean_cells(
     excluded_adata: Optional[AnnData] = None
     if properly_sampled_max_excluded_genes_fraction is not None:
         excluded_genes = \
-            pp.filter_data(adata, name='dirty_genes',
+            pp.filter_data(adata, name='dirty_genes', top_level=False,
                            var_masks=['~clean_gene'])
         if excluded_genes is not None:
             excluded_adata = excluded_genes[0]
@@ -237,6 +237,7 @@ def extract_clean_data(
     var_mask: str = 'clean_gene',
     *,
     name: Optional[str] = '.clean',
+    top_level: bool = True,
 ) -> Optional[AnnData]:
     '''
     Extract a "clean" subset of the ``adata`` to compute metacells for.
@@ -261,7 +262,7 @@ def extract_clean_data(
        ``name`` (default: {name}), and tracking the original ``full_cell_index`` and
        ``full_gene_index``.
     '''
-    results = pp.filter_data(adata, name=name,
+    results = pp.filter_data(adata, name=name, top_level=top_level,
                              track_obs='full_cell_index',
                              track_var='full_gene_index',
                              obs_masks=[obs_mask],

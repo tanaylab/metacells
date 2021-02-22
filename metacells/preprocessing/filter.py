@@ -30,6 +30,7 @@ def filter_data(  # pylint: disable=dangerous-default-value
     track_obs: Optional[str] = None,
     track_var: Optional[str] = None,
     name: Optional[str] = None,
+    top_level: bool = True,
 ) -> Optional[Tuple[AnnData, ut.PandasSeries, ut.PandasSeries]]:
     '''
     Filter (slice) the data based on previously-computed masks.
@@ -102,7 +103,7 @@ def filter_data(  # pylint: disable=dangerous-default-value
     if not np.any(obs_mask) or not np.any(var_mask):
         return None
 
-    fdata = ut.slice(adata, name=name,
+    fdata = ut.slice(adata, name=name, top_level=top_level,
                      obs=obs_mask, vars=var_mask,
                      track_obs=track_obs, track_var=track_var)
 

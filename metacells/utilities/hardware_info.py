@@ -87,7 +87,7 @@ def _linux_hardware_info() -> Dict[str, Any]:
                 cores_per_socket = int(parts[1].strip())
             if parts[0].strip() == 'cpu MHz':
                 frequency = float(parts[1].strip()) / 1000.
-    results['cpus'] = sockets * cores_per_socket
+    results['cpus'] = int(sockets * cores_per_socket)
     # get cpu frequency directly (bypasses freq scaling)
     try:
         with open('/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq') \

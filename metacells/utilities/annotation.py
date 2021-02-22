@@ -129,11 +129,13 @@ __all__ = [
     'set_o_data',
     'get_o_series',
     'get_o_numpy',
+    'get_o_names',
     'maybe_o_numpy',
 
     'set_v_data',
     'get_v_series',
     'get_v_numpy',
+    'get_v_names',
     'maybe_v_numpy',
 
     'set_oo_data',
@@ -173,6 +175,7 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     track_obs: Optional[str] = None,
     track_var: Optional[str] = None,
     share_derived: bool = True,
+    top_level: bool = True,
 ) -> AnnData:
     '''
     Return new annotated data which includes a subset of the full ``adata``.
@@ -196,7 +199,6 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     :py:func:`copy_adata`, and by default this will ``share_derived`` (share the derived data
     cache).
     '''
-
     assert '__x__' not in adata.layers
 
     is_same_obs: Optional[bool] = None
@@ -230,7 +232,8 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
             is_same_vars = bool(np.all(vars))
 
     if is_same_obs and is_same_vars:
-        bdata = copy_adata(adata, name=name, share_derived=share_derived)
+        bdata = copy_adata(adata, name=name, share_derived=share_derived,
+                           top_level=top_level)
 
     else:
         with utm.timed_step('adata.slice'):
@@ -260,6 +263,9 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
                     setattr(adata, '__derived__', {})
                 setattr(bdata, '__derived__', getattr(adata, '__derived__'))
 
+        if top_level:
+            utl.top_level(bdata)
+
     if utl.logging_calc():
         utl.log_calc(  #
             f'slice {get_name(adata, "unnamed")} into {get_name(bdata, "unnamed")} shape {bdata.shape}')
@@ -274,7 +280,13 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
 
 
 @utm.timed_call()
-def copy_adata(adata: AnnData, *, name: Optional[str] = None, share_derived: bool = True) -> AnnData:
+def copy_adata(
+    adata: AnnData,
+    *,
+    name: Optional[str] = None,
+    share_derived: bool = True,
+    top_level: bool = True
+) -> AnnData:
     '''
     Copy annotated data.
 
@@ -307,6 +319,8 @@ def copy_adata(adata: AnnData, *, name: Optional[str] = None, share_derived: boo
         if hasattr(bdata, '__derived__'):
             delattr(bdata, '__derived__')
 
+    if top_level:
+        utl.top_level(bdata)
     return bdata
 
 
@@ -380,16 +394,20 @@ def _get_o_data(
     sum: bool,  # pylint: disable=redefined-builtin
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> Any:
-    log_name = name
-    if isinstance(name, str) and name.endswith('|sum'):
-        name = name[:-4]
-        assert not sum
-        sum = True
+    if not isinstance(name, str):
+        log_name = '<data>'
+    else:
+        if name.endswith('|sum'):
+            name = name[:-4]
+            assert not sum
+            sum = True
+        log_name = name
 
     if sum:
         if formatter is None:
             formatter = utl.sizes_description
         data = _get_vo_sum_data(adata, 'row', name)
+        log_name += '|sum'
     else:
         data = _get_shaped_data(adata, 'o', adata.obs,
                                 shape=(adata.n_obs,), name=name)
@@ -437,6 +455,17 @@ def get_o_numpy(
     return utt.to_numpy_vector(data)
 
 
+def get_o_names(
+    adata: AnnData,
+) -> utt.NumpyVector:
+    '''
+    Return a numpy vector of observation names.
+    '''
+    data = utt.to_numpy_vector(adata.obs_names)
+    utl.log_get(adata, 'o', '__name__', data)
+    return data
+
+
 def maybe_o_numpy(
     adata: AnnData,
     name: Union[str, utt.Shaped, None],
@@ -459,16 +488,20 @@ def _get_v_data(
     sum: bool,  # pylint: disable=redefined-builtin
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> Any:
-    log_name = name
-    if isinstance(name, str) and name.endswith('|sum'):
-        name = name[:-4]
-        assert not sum
-        sum = True
+    if not isinstance(name, str):
+        log_name = '<data>'
+    else:
+        if isinstance(name, str) and name.endswith('|sum'):
+            name = name[:-4]
+            assert not sum
+            sum = True
+        log_name = name
 
     if sum:
         if formatter is None:
             formatter = utl.sizes_description
         data = _get_vo_sum_data(adata, 'column', name)
+        log_name += '|sum'
     else:
         data = _get_shaped_data(adata, 'v', adata.var,
                                 shape=(adata.n_vars,), name=name)
@@ -511,6 +544,17 @@ def get_v_numpy(
     '''
     data = _get_v_data(adata, name, sum=sum, formatter=formatter)
     return utt.to_numpy_vector(data)
+
+
+def get_v_names(
+    adata: AnnData,
+) -> utt.NumpyVector:
+    '''
+    Return a numpy vector of variable names.
+    '''
+    data = utt.to_numpy_vector(adata.var_names)
+    utl.log_get(adata, 'v', '__name__', data)
+    return data
 
 
 def maybe_v_numpy(

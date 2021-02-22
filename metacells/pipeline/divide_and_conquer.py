@@ -105,9 +105,9 @@ GENE_ANNOTATIONS = [
 
 CELL_ANNOTATIONS = [
     ResultAnnotation(name='pre_cell_directs',
-                     default=0, dtype='int32', formatter=None),
+                     default=0, dtype='int32', formatter=ut.sizes_description),
     ResultAnnotation(name='cell_directs',
-                     default=0, dtype='int32', formatter=None),
+                     default=0, dtype='int32', formatter=ut.sizes_description),
     ResultAnnotation(name='pre_pile',
                      default=-1, dtype='int32', formatter=ut.groups_description),
     ResultAnnotation(name='pile',
@@ -224,6 +224,8 @@ class SubsetResults:
         self,
         adata: AnnData,
         counts: Dict[str, int],
+        *,
+        rare: bool = False,
     ) -> None:
         '''
         Collect the results of the subset into the specified ``adata``.
@@ -242,6 +244,8 @@ class SubsetResults:
             directs_target_name = 'directs'
         _modify_value(adata, ut.get_m_data, ut.set_m_data, directs_target_name,
                       lambda directs: directs + self.directs)
+
+        target_name: Optional[str]
 
         for gene_annotation in GENE_ANNOTATIONS:
             if gene_annotation.name.startswith('pre_'):
@@ -279,31 +283,35 @@ class SubsetResults:
         cell_indices = self.cells_frame.index.values
 
         for cell_annotation in CELL_ANNOTATIONS:
-            if cell_annotation.name.startswith('pre_'):
-                if self.pre_target is None:
-                    continue
-                assert self.pre_target == 'preliminary'
-                target_name = cell_annotation.name
-
+            source_name = cell_annotation.name
+            if source_name.startswith('pre_'):
+                if self.pre_target is not None:
+                    assert self.pre_target == 'preliminary'
+                    target_name = source_name
+                elif rare:
+                    target_name = source_name
+                    source_name = source_name[4:]
+                else:
+                    target_name = None
             else:
                 if self.final_target == 'preliminary':
-                    if cell_annotation.name == 'outlier':
+                    if source_name == 'outlier':
                         continue
-                    target_name = 'pre_' + cell_annotation.name
+                    target_name = 'pre_' + source_name
                 else:
-                    target_name = cell_annotation.name
+                    target_name = source_name
 
             if target_name is None:
                 continue
 
-            if 'cell_directs' in cell_annotation.name:
+            if 'cell_directs' in source_name:
                 # pylint: disable=cell-var-from-loop
                 if self.is_direct:
-                    assert cell_annotation.name == 'cell_directs'
+                    assert source_name == 'cell_directs'
                     new_value: Union[int, ut.NumpyVector] = 1
                 else:
-                    new_value = ut.to_numpy_vector(  #
-                        self.cells_frame[cell_annotation.name])
+                    new_value = \
+                        ut.to_numpy_vector(self.cells_frame[source_name])
 
                 _modify_value_subset(adata, ut.get_o_numpy, ut.set_o_data,
                                      target_name, cell_indices,
@@ -314,12 +322,13 @@ class SubsetResults:
                 # pylint: enable=cell-var-from-loop
 
             # pylint: disable=cell-var-from-loop
-            if self.is_direct and 'pile' in cell_annotation.name:
+            if self.is_direct and 'pile' in source_name:
                 new_cells_value = \
                     np.zeros(len(self.cells_frame.index), dtype='int32')
             else:
                 new_cells_value = \
-                    ut.to_numpy_vector(self.cells_frame[cell_annotation.name])
+                    ut.to_numpy_vector(self.cells_frame[source_name],
+                                       copy=rare)
 
             count = counts.get(target_name)
             if count is not None:
@@ -330,15 +339,13 @@ class SubsetResults:
                                  target_name, cell_indices,
                                  lambda _: new_cells_value,
                                  formatter=gene_annotation.formatter)
+
             # pylint: enable=cell-var-from-loop
 
 
-@ut.logged()
 @ut.timed_call('.initialize_results')
 def initialize_results(
     adata: AnnData,
-    *,
-    pre_metacells: bool = False,
 ) -> None:
     '''
     Initialize the result annotations, so we can incrementally collect them to the final value.
@@ -363,8 +370,6 @@ def initialize_results(
 
     # pylint: disable=cell-var-from-loop
     for cell_annotation in CELL_ANNOTATIONS:
-        if not (pre_metacells and cell_annotation.name == 'pre_metacells'):
-            continue
         ut.incremental(adata, 'o', cell_annotation.name,
                        formatter=cell_annotation.formatter)
         ut.set_o_data(adata,
@@ -414,10 +419,7 @@ def patch_direct_results(
     for cell_annotation in CELL_ANNOTATIONS:
         if ut.has_data(adata, cell_annotation.name):
             continue
-        if cell_annotation.name == 'final_cell_directs':
-            default = 1
-        else:
-            default = cell_annotation.default
+        default = cell_annotation.default
         ut.set_o_data(adata,
                       cell_annotation.name,
                       np.full(adata.n_obs, default,
@@ -708,8 +710,8 @@ def divide_and_conquer_pipeline(
                     for rare_index, rare_results in enumerate(subset_results):
                         with ut.log_step('- module', rare_index,
                                          formatter=lambda rare_index:
-                                         ut.ratio_description(rare_index,
-                                                              len(subset_results))):
+                                         ut.progress_description(len(subset_results),
+                                                                 rare_index, 'module')):
                             mask = rare_results.cells_frame['metacell'] >= 0
                             ut.log_calc('rare_grouped_cells', mask)
                             if not np.any(mask):
@@ -722,10 +724,11 @@ def divide_and_conquer_pipeline(
                             cell_indices = rare_results.cells_frame.index.values[mask]
                             normal_cells_mask[cell_indices] = False
 
-                            rare_results.collect(adata, counts)
+                            rare_results.collect(adata, counts, rare=True)
 
         if did_apply_subset:
-            cdata = ut.slice(adata, obs=normal_cells_mask, name='.common',
+            cdata = ut.slice(adata, name='.common', top_level=False,
+                             obs=normal_cells_mask,
                              track_obs='complete_cell_index')
         else:
             cdata = adata
@@ -985,7 +988,7 @@ def compute_divide_and_conquer_metacells(
             patch_direct_results(adata)
         return
 
-    initialize_results(adata, pre_metacells=True)
+    initialize_results(adata)
     try:
         with ut.timed_step('.preliminary_metacells'):
             compute_piled_metacells(adata, what,
@@ -1211,7 +1214,8 @@ def compute_piled_metacells(
         for pile_index, pile_results in enumerate(subset_results):
             with ut.log_step('- pile', pile_index,
                              formatter=lambda pile_index:
-                             ut.ratio_description(pile_index, piles_count)):
+                             ut.progress_description(piles_count,
+                                                     pile_index, 'pile')):
                 pile_results.collect(adata, counts)
 
     assert phase in ('preliminary', 'final')
@@ -1235,7 +1239,8 @@ def compute_piled_metacells(
         if final_max_outliers_levels is not None:
             final_max_outliers_levels = final_max_outliers_levels - 1
         name = '.%s.outliers' % phase
-        odata = ut.slice(adata, obs=outlier_of_cells, name=name,
+        odata = ut.slice(adata, name=name, top_level=False,
+                         obs=outlier_of_cells,
                          track_obs='complete_cell_index')
 
         compute_divide_and_conquer_metacells(odata, what,
@@ -1320,7 +1325,8 @@ def _run_parallel_piles(
         pile_cells_mask = pile_of_cells == pile_index
         assert np.any(pile_cells_mask)
         name = '.%s.pile-%s/%s' % (phase, pile_index, piles_count)
-        pdata = ut.slice(adata, obs=pile_cells_mask, name=name,
+        pdata = ut.slice(adata, name=name, top_level=False,
+                         obs=pile_cells_mask,
                          track_obs='complete_cell_index')
         compute_direct_metacells(pdata, what,
                                  feature_downsample_cell_quantile=feature_downsample_cell_quantile,

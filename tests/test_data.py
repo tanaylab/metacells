@@ -2,7 +2,7 @@
 Test applying functions to real data.
 '''
 
-# import logging
+import logging
 from glob import glob
 from typing import Any, Dict, Tuple
 
@@ -16,8 +16,9 @@ import metacells as mc
 # pylint: disable=missing-function-docstring
 
 np.seterr(all='raise')
-# mc.ut.setup_logger(level=logging.DEBUG, time=False)
+mc.ut.setup_logger(level=logging.WARN)
 mc.ut.allow_inefficient_layout(False)
+mc.ut.set_processors_count(4)
 
 LOADED: Dict[str, Tuple[AnnData, Dict[str, Any]]] = {}
 

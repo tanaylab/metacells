@@ -46,6 +46,7 @@ __all__ = [
     'STEP',
     'PARAM',
     'logged',
+    'top_level',
     'log_return',
     'logging_calc',
     'log_calc',
@@ -56,9 +57,11 @@ __all__ = [
     'log_set',
     'log_get',
     'sizes_description',
+    'fractions_description',
     'groups_description',
     'mask_description',
     'ratio_description',
+    'progress_description',
     'fraction_description',
     'fold_description',
 ]
@@ -94,7 +97,7 @@ class LoggingFormatter(Formatter):
             return record_datetime.strftime(datefmt)
 
         seconds = record_datetime.strftime('%Y-%m-%d %H:%M:%S')
-        msecs = round(record.msecs * 1000)
+        msecs = round(record.msecs)
         return f'{seconds}.{msecs:03d}'
 
 
@@ -124,6 +127,7 @@ class ShortLoggingFormatter(LoggingFormatter):
                              INFO='INF', INF='INF',
                              STEP='STP', STP='STP',
                              PARAM='PRM', PRM='PRM',
+                             HINT='PRM', HNT='PRM',
                              CALC='CLC', CLC='CLC',
                              DEBUG='DBG', DBG='DBG',
                              NOTSET='NOT', NOT='NOT')
@@ -140,12 +144,12 @@ LOG: Optional[Logger] = None
 @utd.expand_doc()
 def setup_logger(
     *,
-    level: int = logging.WARN,
+    level: int = logging.INFO,
     to: IO = sys.stderr,
-    time: bool = True,
+    time: bool = False,
     process: Optional[bool] = None,
     name: Optional[str] = None,
-    short_level_names: bool = True,
+    long_level_names: Optional[bool] = None,
 ) -> Logger:
     '''
     Setup the global :py:func:`logger`.
@@ -154,42 +158,47 @@ def setup_logger(
 
         A second call will fail as the logger will already be set up.
 
+    If ``level`` is not specified, only ``INFO`` messages (setting values in the annotated data)
+    will be logged.
+
+    If ``to`` is not specified, the output is sent to ``sys.stderr``.
+
+    If ``time`` (default: {time}), include a millisecond-resolution timestamp in each message.
+
+    If ``name`` (default: {name}) is specified, it is added to each message.
+
+    If ``process`` (default: {process}), include the process index in each message. The name of the
+    main thread is replaced to ``#0`` to make it more compatible with the sub-process names
+    (``#<map-index>.<sub-process-index>``). If ``None``, and if the logging level is higher than
+    ``INFO``, and :py:func:`metacells.utilities.parallel.get_processors_count` is greater than one,
+    then ``process`` is set - that is, it will be set if we expect to see log messages from multiple
+    sub-processes.
+
     Logging from multiple sub-processes (e.g., using (e.g., using
     :py:func:`metacells.utilities.parallel.parallel_map`) will synchronize using a global lock so
     messages will not get garbled.
 
-    If ``level`` is not specified, only warnings and errors will be logged.
-
-    If ``to`` is not specified, the output is sent to ``sys.stderr``.
-
-    If ``time`` (default: {time}), include a millisecond-resolution timestamp for each message.
-
-    If ``name`` (default: {name}) is specified, it is added to each logged message.
-
-    If ``process`` (default: {process}), include the process index (the main process has the index
-    zero). If ``None``, then is set if :py:func:`metacells.utilities.parallel.get_processors_count`
-    is greater than one (that is, multiprocessing is used).
-
-    If ``short_level_names``, the log level names are shortened to three characters, for consistent
-    formatting of indented (nested) log messages.
-
-    .. note::
-
-        Invoking :py:func:`setup_logger` replaces the name of the main thread to ``#0`` to make it
-        more compatible with the sub-thread names.
+    If ``long_level_names`` (default: {long_level_names}), includes the log level in each message.
+    If is ``False``, the log level names are shortened to three characters, for consistent
+    formatting of indented (nested) log messages. If it is ``None``, no level names are logged at
+    all.
     '''
+    assert utp.is_main_process()
+
     global LOG
     assert LOG is None
 
-    log_format = '%(levelname)s - %(message)s'
-
-    current_thread().name = '#0'
+    if long_level_names is not None:
+        log_format = '%(levelname)s - %(message)s'
+    else:
+        log_format = '%(message)s'
 
     if process is None:
-        process = utp.get_processors_count() > 1
+        process = level < logging.INFO and utp.get_processors_count() > 1
 
     if process:
         log_format = '%(threadName)s - ' + log_format
+        current_thread().name = '#0'
 
     if name is not None:
         log_format = name + ' - ' + log_format
@@ -197,7 +206,7 @@ def setup_logger(
         log_format = '%(asctime)s - ' + log_format
 
     handler = StreamHandler(to)
-    if short_level_names:
+    if long_level_names == False:  # pylint: disable=singleton-comparison
         handler.setFormatter(ShortLoggingFormatter(log_format))
     else:
         handler.setFormatter(LoggingFormatter(log_format))
@@ -226,8 +235,9 @@ def logger() -> Logger:
 
 CALLABLE = TypeVar('CALLABLE')
 
-NESTING_LEVEL = 0
-NESTING_INDENT = '  ' * 1000
+CALL_LEVEL = 0
+INDENT_LEVEL = 0
+INDENT_SPACES = '  ' * 1000
 IS_TOP_LEVEL = True
 
 
@@ -261,10 +271,11 @@ def logged(**kwargs: Callable[[Any], Any]) -> Callable[[CALLABLE], CALLABLE]:
 
         @wraps(function)
         def wrapper(*args: Any, **kwargs: Any) -> Any:  # pylint: disable=too-many-branches
-            global NESTING_LEVEL
+            global CALL_LEVEL
+            global INDENT_LEVEL
             names, values = \
                 _collect_parameters(ordered_parameters, *args, **kwargs)
-            adatas = [value for value in values if isinstance(value, AnnData)]
+            adatas = _collect_adatas(values)
             new_adatas: List[AnnData] = []
 
             try:
@@ -277,8 +288,8 @@ def logged(**kwargs: Callable[[Any], Any]) -> Callable[[CALLABLE], CALLABLE]:
                         IS_TOP_LEVEL = \
                             IS_TOP_LEVEL or getattr(adata, '__is_top_level__')
                     else:
-                        IS_TOP_LEVEL = IS_TOP_LEVEL or NESTING_LEVEL == 0
-                        setattr(adata, '__is_top_level__', NESTING_LEVEL == 0)
+                        IS_TOP_LEVEL = IS_TOP_LEVEL or CALL_LEVEL == 0
+                        setattr(adata, '__is_top_level__', CALL_LEVEL == 0)
                         new_adatas.append(adata)
 
                 if IS_TOP_LEVEL:
@@ -290,9 +301,10 @@ def logged(**kwargs: Callable[[Any], Any]) -> Callable[[CALLABLE], CALLABLE]:
 
                 if logger().isEnabledFor(step_level):
                     logger().log(step_level, '%scall %s:',
-                                 NESTING_INDENT[:2 * NESTING_LEVEL],
+                                 INDENT_SPACES[:2 * INDENT_LEVEL],
                                  function.__qualname__)
-                    NESTING_LEVEL += 1
+                    INDENT_LEVEL += 1
+                CALL_LEVEL += 1
 
                 if logger().isEnabledFor(param_level):
                     for name, value in zip(names, values):
@@ -300,14 +312,15 @@ def logged(**kwargs: Callable[[Any], Any]) -> Callable[[CALLABLE], CALLABLE]:
                                                   formatter_by_name.get(name))
                         if log_value is not None:
                             logger().log(param_level, '%swith %s: %s',
-                                         NESTING_INDENT[:2 * NESTING_LEVEL],
+                                         INDENT_SPACES[:2 * INDENT_LEVEL],
                                          name, log_value)
 
                 return function(*args, **kwargs)
 
             finally:
                 if logger().isEnabledFor(step_level):
-                    NESTING_LEVEL -= 1
+                    INDENT_LEVEL -= 1
+                CALL_LEVEL -= 1
                 IS_TOP_LEVEL = old_is_top_level
                 for adata in new_adatas:
                     delattr(adata, '__is_top_level__')
@@ -336,6 +349,16 @@ def _collect_parameters(
     return names, values
 
 
+def _collect_adatas(values: List[Any]) -> List[AnnData]:
+    adatas: List[AnnData] = []
+    for value in values:
+        if isinstance(value, AnnData):
+            adatas.append(value)
+        if isinstance(value, list):
+            adatas += _collect_adatas(value)
+    return adatas
+
+
 def _format_value(  # pylint: disable=too-many-return-statements,too-many-branches
     value: Any,
     name: str,
@@ -350,19 +373,16 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
             return None
 
     if isinstance(value, AnnData):
-        if hasattr(value, '__name__'):
-            name = getattr(value, '__name__') + ' -'
-        else:
-            name = 'adata'
+        name = value.uns.get('__name__', 'unnamed')
 
         if hasattr(value.X, 'dtype'):
             dtype = getattr(value.X, 'dtype')
         else:
             dtype = 'unknown'
 
-        return f'{name} annotated data of {value.shape} {dtype}s'
+        return f'{name} annotated data with {value.shape[0]} X {value.shape[1]} {dtype}s'
 
-    if isinstance(value, (str, None.__class__)):
+    if isinstance(value, (np.bool_, bool, str, None.__class__)):
         return str(value)
 
     if isinstance(value, (int, float, np.float32, np.float64, np.int32, np.int64)):
@@ -385,21 +405,41 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
         return getattr(value, '__qualname__')
 
     if isinstance(value, (pd.Series, np.ndarray)) and value.ndim == 1 and value.dtype == 'bool':
-        return f'boolean mask of {mask_description(value)}'
+        return mask_description(value)
 
     if hasattr(value, 'ndim'):
         if value.ndim == 2:
-            return f'a matrix of {value.shape} {value.dtype}s'
+            text = f'{value.shape[0]} X {value.shape[1]} {value.dtype}s'
+            sparse = utt.maybe_sparse_matrix(value)
+            if sparse is not None:
+                text += ' ' + ratio_description(value.shape[0] * value.shape[1], 'element',
+                                                sparse.nnz, 'non-zero')
+            return text + f' checksum: {utt.shaped_checksum(value)}'
+
         if value.ndim == 1:
-            if 'U' not in str(value.dtype):
-                return f'a vector of {len(value)} {value.dtype}s'
+            value = utt.to_numpy_vector(value)
+            if len(value) > 100 or 'U' not in str(value.dtype):
+                return f'{len(value)} {value.dtype}s' + f' checksum: {utt.shaped_checksum(value)}'
             value = list(value)
 
     if isinstance(value, list):
-        return f'[ {", ".join([str(element) for element in value])} ]'
+        if len(value) > 100:
+            return f'{len(value)} {value[0].__class__.__name__}s'
+        texts = [element.uns.get('__name__', 'unnamed')
+                 if isinstance(element, AnnData) else str(element)
+                 for element in value]
+        return f'[ {", ".join(texts)} ]'
 
     raise RuntimeError(  #
         f'unknown parameter type: {value.__class__} value: {value}')
+
+
+def top_level(adata: AnnData) -> None:
+    '''
+    Indicate that the annotated data will be returned to the top-level caller, increasing its
+    logging level.
+    '''
+    setattr(adata, '__is_top_level__', True)
 
 
 def log_return(
@@ -413,7 +453,12 @@ def log_return(
 
     If ``formatter`` is specified, use it to override the default logged value formatting.
     '''
-    return _log_value(name, value, 'return', None, INFO, formatter)
+    if CALL_LEVEL == 0:
+        top_log_level = INFO
+    else:
+        top_log_level = CALC
+
+    return _log_value(name, value, 'return', None, top_log_level, formatter)
 
 
 def logging_calc() -> bool:
@@ -449,18 +494,18 @@ def log_step(
     Same as :py:func:`log_calc`, but also further indent all the log messages inside the ``with``
     statement body.
     '''
-    global NESTING_LEVEL
+    global INDENT_LEVEL
 
     if log_calc(name, value, formatter=formatter):
         delta = 1
     else:
         delta = 0
 
-    NESTING_LEVEL += delta
+    INDENT_LEVEL += delta
     try:
         yield
     finally:
-        NESTING_LEVEL -= delta
+        INDENT_LEVEL -= delta
 
 
 #: Convert ``per`` to the name of the ``AnnData`` data member holding it.
@@ -497,6 +542,8 @@ def done_incrementals(adata: AnnData) -> None:
     assert hasattr(adata, '__incremental__')
     by_name: Dict[str, Tuple[str, Optional[Callable[[Any], Any]]]] = \
         getattr(adata, '__incremental__')
+    setattr(adata, '__incremental__', [])
+
     for name, (per, formatter) in by_name.items():
         if name == '__x__':
             value = adata.X
@@ -535,7 +582,7 @@ def log_set(
         and (not hasattr(adata, '__incremental__')
              or not name in getattr(adata, '__incremental__'))
 
-    adata_name = adata.uns.get('__name__', 'adata')
+    adata_name = adata.uns.get('__name__', 'unnamed')
     if name == '__x__':
         name = f'{adata_name}.X'
     else:
@@ -563,8 +610,8 @@ def log_get(
         and (not hasattr(adata, '__incremental__')
              or not name in getattr(adata, '__incremental__'))
 
-    adata_name = adata.uns.get('__name__', 'adata')
-    if name == '__x__':
+    adata_name = adata.uns.get('__name__', 'unnamed')
+    if isinstance(name, str) and name == '__x__':
         name = f'{adata_name}.X'
     else:
         member_name = MEMBER_OF_PER[per]
@@ -580,14 +627,14 @@ def _log_value(
     value: Any,
     kind: str,
     is_top_level: Optional[bool],
-    top_level: int,
+    top_log_level: int,
     formatter: Optional[Callable[[Any], Any]] = None
 ) -> bool:
     if is_top_level is None:
         is_top_level = IS_TOP_LEVEL
 
     if is_top_level:
-        level = top_level
+        level = top_log_level
     else:
         level = DEBUG
 
@@ -595,15 +642,15 @@ def _log_value(
         return False
 
     if value is None:
-        logger().log(level, '%s%s', NESTING_INDENT[:2 * NESTING_LEVEL], name)
+        logger().log(level, '%s%s', INDENT_SPACES[:2 * INDENT_LEVEL], name)
     else:
         log_value = _format_value(value, name, formatter)
         if name[0] == '-':
             logger().log(level, '%s%s: %s',
-                         NESTING_INDENT[:2 * NESTING_LEVEL], name, log_value)
+                         INDENT_SPACES[:2 * INDENT_LEVEL], name, log_value)
         else:
             logger().log(level, '%s%s %s: %s',
-                         NESTING_INDENT[:2 * NESTING_LEVEL], kind, name, log_value)
+                         INDENT_SPACES[:2 * INDENT_LEVEL], kind, name, log_value)
 
     return True
 
@@ -611,37 +658,47 @@ def _log_value(
 def sizes_description(sizes: Union[utt.Vector, str]) -> str:
     '''
     Return a string for logging an array of sizes.
-
-    This returns the mean size.
     '''
     if isinstance(sizes, str):
         return sizes
 
     sizes = utt.to_numpy_vector(sizes)
     mean = np.mean(sizes)
-    return f'vector of {len(sizes)} {sizes.dtype} sizes with mean {mean:.4g}'
+    return f'{len(sizes)} {sizes.dtype}s with mean {mean:.4g}'
+
+
+def fractions_description(sizes: Union[utt.Vector, str]) -> str:
+    '''
+    Return a string for logging an array of fractions (between zero and one).
+    '''
+    if isinstance(sizes, str):
+        return sizes
+
+    sizes = utt.to_numpy_vector(sizes)
+    mean = np.mean(sizes)
+    percent = mean * 100
+    return f'{len(sizes)} {sizes.dtype}s with mean {mean:.4g} ({percent:.4g}%)'
 
 
 def groups_description(groups: Union[utt.Vector, str]) -> str:
     '''
     Return a string for logging an array of group indices.
-
-    This returns the number and mean size of the groups.
     '''
     if isinstance(groups, str):
         return groups
 
     groups = utt.to_numpy_vector(groups)
-    text = f'vector of {len(groups)} {groups.dtype} groups'
     groups_count = np.max(groups) + 1
     outliers_count = np.sum(groups < 0)
-    if groups_count > 0:
-        mean = (len(groups) - outliers_count) / groups_count
-        text += f' with {groups_count} distinct groups with mean size {mean:.4g}'
-    if outliers_count > 0:
-        outliers = ratio_description(outliers_count, groups.size)
-        text += f' and {outliers} outliers'
-    return text
+
+    if groups_count == 0:
+        assert outliers_count == len(groups)
+        return f'{len(groups)} {groups.dtype} elements with all outliers (100%)'
+
+    mean = (len(groups) - outliers_count) / groups_count
+    return ratio_description(len(groups), f'{groups.dtype} element',
+                             outliers_count, 'outliers') + \
+        f' with {groups_count} groups with mean size {mean:.4g}'
 
 
 def mask_description(mask: Union[str, utt.Vector]) -> str:
@@ -654,10 +711,14 @@ def mask_description(mask: Union[str, utt.Vector]) -> str:
         return mask
 
     mask = utt.to_numpy_vector(mask)
-    return ratio_description(np.sum(mask > 0), mask.size)
+    if mask.dtype == 'bool':
+        return ratio_description(mask.size, 'bool',
+                                 np.sum(mask > 0), 'true')
+    return ratio_description(mask.size, str(mask.dtype),
+                             np.sum(mask > 0), 'positive')
 
 
-def ratio_description(numerator: float, denominator: float) -> str:
+def ratio_description(denominator: float, element: str, numerator: float, condition: str) -> str:
     '''
     Return a string for describing a ratio (including a percent representation).
     '''
@@ -670,7 +731,18 @@ def ratio_description(numerator: float, denominator: float) -> str:
         denominator = int(denominator)
 
     percent = (numerator * 100) / denominator
-    return f'{numerator} / {denominator} ({percent:.4g}%)'
+    return f'{numerator} {condition} ({percent:.4g}%) out of {denominator} {element}s'
+
+
+def progress_description(amount: int, index: int, element: str) -> str:
+    '''
+    Return a string for describing progress in a loop.
+    '''
+    assert amount > 0
+    assert 0 <= index < amount
+
+    percent = ((index + 1) * 100) / amount
+    return f'#{index} out of {amount} {element}s ({percent:.4g}%)'
 
 
 def fraction_description(fraction: Optional[float]) -> str:

@@ -51,6 +51,7 @@ same ``numpy.ndaarray`` type. Perhaps in the future numpy would allow for using 
 (with explicit number of dimensions) to allow for more useful type annotations.
 '''
 
+from abc import abstractmethod
 from contextlib import contextmanager
 from typing import (Any, Collection, Iterator, Optional, Sized, Tuple, TypeVar,
                     Union)
@@ -238,7 +239,7 @@ class CompressedMatrix(SparseMatrix, Protocol):
     def sort_indices(self) -> None: ...
 
 
-class PandasIndex(ShapedProtocol, Sized, Protocol):
+class PandasIndex(ShapedProtocol, Collection, Sized, Protocol):
     '''
     A ``mypy`` type for a pandas index.
     '''
@@ -271,6 +272,9 @@ class PandasSeries(ShapedProtocol, Sized, Protocol):
     shape: Tuple[int]
     values: NumpyVector
     index: PandasIndex
+
+    @abstractmethod
+    def sort_values(self, inplace: bool, ascending: bool) -> None: ...
 
 
 # pylint: enable=missing-function-docstring
@@ -596,7 +600,8 @@ def frozen(shaped: Union[ProperShaped, PandasShaped]) -> bool:
             == compressed.data.flags.writeable
         return not compressed.data.flags.writeable
 
-    if isinstance(shaped, (pd.DataFrame, pd.Series)):
+    if isinstance(shaped, (pd.DataFrame, pd.Series,
+                           pd.core.indexes.base.Index)):
         shaped = shaped.values
 
     if isinstance(shaped, pd.core.arrays.categorical.Categorical):
@@ -619,7 +624,8 @@ def freeze(shaped: Union[ProperShaped, PandasShaped]) -> None:
         compressed.data.setflags(write=False)
         return
 
-    if isinstance(shaped, (pd.DataFrame, pd.Series)):
+    if isinstance(shaped, (pd.DataFrame, pd.Series,
+                           pd.core.indexes.base.Index)):
         shaped = shaped.values
 
     if isinstance(shaped, pd.core.arrays.categorical.Categorical):
@@ -643,7 +649,8 @@ def unfreeze(shaped: Union[ProperShaped, PandasShaped]) -> None:
         compressed.data.setflags(write=True)
         return
 
-    if isinstance(shaped, (pd.DataFrame, pd.Series)):
+    if isinstance(shaped, (pd.DataFrame, pd.Series,
+                           pd.core.indexes.base.Index)):
         shaped = shaped.values
 
     if isinstance(shaped, pd.core.arrays.categorical.Categorical):
@@ -737,9 +744,9 @@ def to_numpy_vector(
         dense = np.array(shaped)
 
     elif is_1d(shaped):
-        series = maybe_pandas_series(shaped)
-        if series is not None:
-            shaped = series.values
+        if isinstance(shaped, (pd.DataFrame, pd.Series,
+                               pd.core.indexes.base.Index)):
+            shaped = shaped.values
 
         if isinstance(shaped, pd.core.arrays.categorical.Categorical):
             shaped = np.array(shaped)
@@ -819,9 +826,9 @@ def is_contiguous(vector: Vector) -> bool:
 
     This is only ``True`` for a dense vector.
     '''
-    series = maybe_pandas_series(vector)
-    if series is not None:
-        vector = series.values
+    if isinstance(vector, (pd.DataFrame, pd.Series,
+                           pd.core.indexes.base.Index)):
+        vector = vector.values
 
     if isinstance(vector, pd.core.arrays.categorical.Categorical):
         vector = np.array(vector)
@@ -934,4 +941,4 @@ def shaped_checksum(shaped: Shaped) -> float:
         values = to_numpy_vector(shaped)
     else:
         values = to_numpy_matrix(shaped).flatten()  # type: ignore
-    return np.sum(values.astype('float64') * (1 + np.arange(len(values))))
+    return np.nansum(values.astype('float64') * (1 + np.arange(len(values))))
