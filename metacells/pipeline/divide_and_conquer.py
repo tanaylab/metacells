@@ -1365,6 +1365,9 @@ def _run_parallel_piles(
         gc.collect()
         return results
 
+    with ut.timed_step('.prepare'):
+        ut.get_vo_proper(adata, what, layout='row_major')
+
     with ut.timed_step('.piles'):
         gc.collect()
         return list(ut.parallel_map(_return_pile_results, piles_count,

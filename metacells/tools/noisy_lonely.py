@@ -181,11 +181,17 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
                 == (htvl_genes_count, ht_genes_count)
 
             if ut.logging_calc():
+                i_gene_totals = ut.get_v_numpy(i_data, 'downsampled', sum=True)
+                ht_mask = ut.get_v_numpy(i_data, 'high_total_gene')
+                i_total = np.sum(i_gene_totals)
+                htvl_gene_totals = i_gene_totals[ht_mask][htv_mask][htvl_mask]
                 top_similarity_of_htvl_genes = \
                     ut.top_per(htvl_gene_ht_gene_similarity_matrix,
                                10, per='row')
                 for htvl_index, gene_index in enumerate(base_index_of_htvl_genes):
                     gene_name = adata.var_names[gene_index]
+                    gene_total = htvl_gene_totals[htvl_index]
+                    gene_percent = 100 * gene_total / i_total
                     similar_ht_values = ut.to_numpy_vector(  #
                         top_similarity_of_htvl_genes[htvl_index, :])
                     assert len(similar_ht_values) == ht_genes_count
@@ -194,9 +200,11 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
                     top_similar_ht_indices = base_index_of_ht_genes[top_similar_ht_mask]
                     top_similar_ht_names = adata.var_names[top_similar_ht_indices]
                     ut.log_calc(f'- {gene_name}',
-                                ', '.join([f'{similar_gene_name}: {similar_gene_value}'
-                                           for similar_gene_value, similar_gene_name
-                                           in reversed(sorted(zip(top_similar_ht_values, top_similar_ht_names)))]))
+                                f'total downsampled UMIs: {gene_total} '
+                                + f'({gene_percent:.4g}%), correlated with: '
+                                + ', '.join([f'{similar_gene_name}: {similar_gene_value:.4g}'
+                                             for similar_gene_value, similar_gene_name
+                                             in reversed(sorted(zip(top_similar_ht_values, top_similar_ht_names)))]))
 
     if ut.logging_calc():
         ut.log_calc('noisy_lonely_gene_names',

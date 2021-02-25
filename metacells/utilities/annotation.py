@@ -236,8 +236,18 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
                            top_level=top_level)
 
     else:
-        with utm.timed_step('adata.slice'):
-            bdata = adata[obs, vars].copy()
+        if is_same_vars:
+            replaced = replace_with_layout(adata, 'row_major')
+        elif is_same_obs:
+            replaced = replace_with_layout(adata, 'column_major')
+        else:
+            replaced = {}
+
+        try:
+            with utm.timed_step('adata.slice'):
+                bdata = adata[obs, vars].copy()
+        finally:
+            replace_back(adata, replaced)
 
         set_name(bdata, name)
 
@@ -277,6 +287,39 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
         set_v_data(bdata, track_var, np.arange(adata.n_vars)[vars])
 
     return bdata
+
+
+@utm.timed_call()
+def replace_with_layout(adata: AnnData, layout: str) -> Dict[str, utt.Matrix]:
+    '''
+    Replace raw data with data in a layout appropriate to the slice operation we'll be performing.
+    '''
+    replaced: Dict[str, utt.Matrix] = {}
+
+    matrix: utt.Matrix = adata.X  # type: ignore
+    if not utt.is_layout(matrix, layout):
+        replaced['__x__'] = matrix
+        adata.X = get_vo_proper(adata, '__x__', layout=layout)
+
+    for name in adata.layers:
+        matrix = adata.layers[name]
+        if not utt.is_layout(matrix, layout):
+            replaced[name] = matrix
+            adata.layers[name] = get_vo_proper(adata, name, layout=layout)
+
+    return replaced
+
+
+@utm.timed_call()
+def replace_back(adata: AnnData, replaced: Dict[str, utt.Matrix]) -> None:
+    '''
+    Restore data that was replaced for efficient slicing operations.
+    '''
+    for name, matrix in replaced.items():
+        if name == '__x__':
+            adata.X = matrix
+        else:
+            adata.layers[name] = matrix
 
 
 @utm.timed_call()

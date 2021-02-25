@@ -176,19 +176,24 @@ def to_layout(
     proper, dense, compressed = \
         utt.to_proper_matrices(matrix, default_layout=layout)
 
+    utm.timed_parameters(rows=proper.shape[0], columns=proper.shape[1])
+
     if utt.is_layout(proper, layout):
+        utm.timed_parameters(method='none')
         return proper
 
     if symmetric:
         assert proper.shape[0] == proper.shape[1]
         proper = proper.transpose()
         assert utt.is_layout(proper, layout)
+        utm.timed_parameters(method='transpose')
         return proper
 
     is_frozen = utt.frozen(proper)
     result: utt.ProperMatrix
 
     if dense is not None:
+        utm.timed_parameters(method='reshape')
         order = utt.DENSE_FAST_FLAG[layout][0]
         with utm.timed_step('numpy.ravel'):
             utm.timed_parameters(rows=dense.shape[0], columns=dense.shape[1])
@@ -196,6 +201,7 @@ def to_layout(
                                 dense.shape, order=order)  # type: ignore
 
     else:
+        utm.timed_parameters(method='compressed')
         assert compressed is not None
         to_format = utt.SPARSE_FAST_FORMAT[layout]
         from_format = utt.SPARSE_SLOW_FORMAT[layout]
