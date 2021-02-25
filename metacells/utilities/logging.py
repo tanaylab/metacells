@@ -414,12 +414,13 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
             if sparse is not None:
                 text += ' ' + ratio_description(value.shape[0] * value.shape[1], 'element',
                                                 sparse.nnz, 'non-zero')
-            return text + f' checksum: {utt.shaped_checksum(value)}'
+            return text  # + f' checksum: {utt.shaped_checksum(value)}'
 
         if value.ndim == 1:
             value = utt.to_numpy_vector(value)
             if len(value) > 100 or 'U' not in str(value.dtype):
-                return f'{len(value)} {value.dtype}s' + f' checksum: {utt.shaped_checksum(value)}'
+                # + f' checksum: {utt.shaped_checksum(value)}'
+                return f'{len(value)} {value.dtype}s'
             value = list(value)
 
     if isinstance(value, list):

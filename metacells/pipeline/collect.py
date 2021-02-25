@@ -97,6 +97,7 @@ def collect_metacells(
     for annotation_name in ('pile', 'candidate'):
         if ut.has_data(adata, annotation_name):
             pp.group_obs_annotation(adata, mdata, groups='metacell',
+                                    formatter=ut.groups_description,
                                     name=annotation_name, method='unique')
 
     return mdata

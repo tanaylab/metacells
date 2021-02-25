@@ -11,10 +11,64 @@ import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
+    'find_high_total_genes',
     'find_high_fraction_genes',
     'find_high_normalized_variance_genes',
     'find_high_relative_variance_genes',
 ]
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def find_high_total_genes(
+    adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
+    *,
+    min_gene_total: int,
+    inplace: bool = True,
+) -> Optional[ut.PandasSeries]:
+    '''
+    Find genes which have high total number of UMIs.
+
+    This should typically only be applied to downsampled data to ensure that variance in sampling
+    depth does not affect the result.
+
+    Genes with too-low expression are typically excluded from computations. In particular,
+    genes may have all-zero expression, in which case including them just slows the
+    computations (and triggers numeric edge cases).
+
+    **Input**
+
+    Annotated ``adata``, where the observations are cells and the variables are genes.
+
+    **Returns**
+
+    Variable (Gene) Annotations
+        ``high_total_genes``
+            A boolean mask indicating whether each gene was found to have a high normalized
+            variance.
+
+    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
+    ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
+
+    **Computation Parameters**
+
+    1. Use :py:func:`metacells.utilities.computation.sum_per` to get the total UMIs of each gene.
+
+    2. Select the genes whose fraction is at least ``min_gene_total``.
+    '''
+    data = ut.get_vo_proper(adata, what, layout='column_major')
+    total_of_genes = ut.sum_per(data, per='column')
+
+    genes_mask = total_of_genes >= min_gene_total
+
+    if inplace:
+        ut.set_v_data(adata, 'high_total_gene', genes_mask)
+        return None
+
+    ut.log_return('high_total_genes', genes_mask)
+    return ut.to_pandas_series(genes_mask, index=adata.var_names)
 
 
 @ut.logged()

@@ -807,40 +807,45 @@ sort_compressed_indices(pybind11::array_t<D>& data_array,
 }
 
 static void
-collect_outgoing_row(const size_t row_index,
-                     const size_t degree,
-                     ConstMatrixSlice<float32_t>& similarity_matrix,
-                     ArraySlice<int32_t> output_indices,
-                     ArraySlice<float32_t> output_ranks) {
-    const size_t size = similarity_matrix.rows_count();
+collect_top_row(const size_t row_index,
+                const size_t degree,
+                ConstMatrixSlice<float32_t>& similarity_matrix,
+                ArraySlice<int32_t> output_indices,
+                ArraySlice<float32_t> output_data,
+                bool ranks) {
+    const size_t columns_count = similarity_matrix.columns_count();
     const auto row_similarities = similarity_matrix.get_row(row_index);
 
     const size_t start_position = row_index * degree;
     const size_t stop_position = start_position + degree;
 
+    tmp_positions.resize(columns_count);
+    std::iota(tmp_positions.begin(), tmp_positions.begin() + columns_count, 0);
+
+    std::nth_element(tmp_positions.begin(),
+                     tmp_positions.begin() + degree,
+                     tmp_positions.end(),
+                     [&](const size_t left_column_index, const size_t right_column_index) {
+                         float32_t left_similarity = row_similarities[left_column_index];
+                         float32_t right_similarity = row_similarities[right_column_index];
+                         return left_similarity > right_similarity;
+                     });
+
+    auto row_data = output_data.slice(start_position, stop_position);
     auto row_indices = output_indices.slice(start_position, stop_position);
-    auto row_ranks = output_ranks.slice(start_position, stop_position);
+    std::copy(tmp_positions.begin(), tmp_positions.begin() + degree, row_indices.begin());
+    std::sort(row_indices.begin(), row_indices.end());
 
-    if (degree < size - 1) {
-        tmp_positions.resize(size - 1);
-        std::iota(tmp_positions.begin(), tmp_positions.begin() + row_index, 0);
-        std::iota(tmp_positions.begin() + row_index, tmp_positions.end(), row_index + 1);
+    if (!ranks) {
+#ifdef __INTEL_COMPILER
+#    pragma simd
+#endif
+        for (size_t location = 0; location < degree; ++location) {
+            size_t index = row_indices[location];
+            row_data[location] = row_similarities[index];
+        }
 
-        std::nth_element(tmp_positions.begin(),
-                         tmp_positions.begin() + degree,
-                         tmp_positions.end(),
-                         [&](const size_t left_column_index, const size_t right_column_index) {
-                             float32_t left_similarity = row_similarities[left_column_index];
-                             float32_t right_similarity = row_similarities[right_column_index];
-                             return left_similarity > right_similarity;
-                         });
-
-        std::copy(tmp_positions.begin(), tmp_positions.begin() + degree, row_indices.begin());
-        std::sort(row_indices.begin(), row_indices.end());
-
-    } else {
-        std::iota(row_indices.begin(), row_indices.begin() + row_index, 0);
-        std::iota(row_indices.begin() + row_index, row_indices.begin() + degree, row_index + 1);
+        return;
     }
 
     tmp_positions.resize(degree);
@@ -857,36 +862,34 @@ collect_outgoing_row(const size_t row_index,
 #endif
     for (size_t location = 0; location < degree; ++location) {
         size_t position = tmp_positions[location];
-        row_ranks[position] = location + 1;
+        row_data[position] = location + 1;
     }
 }
 
-/// See the Python `metacell.tools.knn_graph._rank_outgoing` function.
+/// See the Python `metacell.utilities.computation.top_per` function.
 static void
-collect_outgoing(const size_t degree,
-                 const pybind11::array_t<float32_t>& input_similarity_matrix,
-                 pybind11::array_t<int32_t>& output_indices_array,
-                 pybind11::array_t<float32_t>& output_ranks_array) {
+collect_top(const size_t degree,
+            const pybind11::array_t<float32_t>& input_similarity_matrix,
+            pybind11::array_t<int32_t>& output_indices_array,
+            pybind11::array_t<float32_t>& output_data_array,
+            bool ranks) {
     WithoutGil without_gil{};
 
     ConstMatrixSlice<float32_t> similarity_matrix(input_similarity_matrix, "similarity_matrix");
-    FastAssertCompareWhat(similarity_matrix.rows_count(),
-                          ==,
-                          similarity_matrix.columns_count(),
-                          "similarity_matrix");
-    const size_t size = similarity_matrix.rows_count();
+    const size_t rows_count = similarity_matrix.rows_count();
+    const size_t columns_count = similarity_matrix.columns_count();
 
     ArraySlice<int32_t> output_indices(output_indices_array, "output_indices");
-    ArraySlice<float32_t> output_ranks(output_ranks_array, "output_ranks");
+    ArraySlice<float32_t> output_data(output_data_array, "output_data");
 
     FastAssertCompare(0, <, degree);
-    FastAssertCompare(degree, <, size);
+    FastAssertCompare(degree, <, columns_count);
 
-    FastAssertCompare(output_indices.size(), ==, degree * size);
-    FastAssertCompare(output_ranks.size(), ==, degree * size);
+    FastAssertCompare(output_indices.size(), ==, degree * rows_count);
+    FastAssertCompare(output_data.size(), ==, degree * rows_count);
 
-    parallel_loop(size, [&](size_t row_index) {
-        collect_outgoing_row(row_index, degree, similarity_matrix, output_indices, output_ranks);
+    parallel_loop(rows_count, [&](size_t row_index) {
+        collect_top_row(row_index, degree, similarity_matrix, output_indices, output_data, ranks);
     });
 }
 
@@ -947,6 +950,8 @@ collect_pruned(const size_t pruned_degree,
                pybind11::array_t<float32_t>& output_pruned_ranks_array,
                pybind11::array_t<int32_t>& output_pruned_indices_array,
                pybind11::array_t<int32_t>& output_pruned_indptr_array) {
+    WithoutGil without_gil{};
+
     size_t size = input_pruned_ranks_indptr.size() - 1;
     ConstCompressedMatrix<float32_t, int32_t, int32_t> input_pruned_ranks(
         ConstArraySlice<float32_t>(input_pruned_ranks_data, "input_pruned_ranks_data"),
@@ -1809,10 +1814,7 @@ PYBIND11_MODULE(extensions, module) {
                &metacells::auroc_compressed_matrix<D, I, P>, \
                "AUROC for compressed matrix.");
 
-    module.def("collect_outgoing",
-               &metacells::collect_outgoing,
-               "Collect the topmost outgoing edges.");
-
+    module.def("collect_top", &metacells::collect_top, "Collect the topmost elements.");
     module.def("collect_pruned", &metacells::collect_pruned, "Collect the topmost pruned edges.");
     module.def("top_distinct", &metacells::top_distinct, "Collect the topmost distinct genes.");
 

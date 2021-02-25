@@ -12,8 +12,8 @@ import metacells.parameters as pr
 import metacells.preprocessing as pp
 import metacells.utilities as ut
 from metacells.tools.downsample import downsample_cells
-from metacells.tools.high import (find_high_fraction_genes,
-                                  find_high_normalized_variance_genes)
+from metacells.tools.high import (find_high_normalized_variance_genes,
+                                  find_high_total_genes)
 from metacells.tools.similarity import compute_var_var_similarity
 
 __all__ = [
@@ -24,13 +24,14 @@ __all__ = [
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def find_noisy_lonely_genes(
+def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
     adata: AnnData,
     what: Union[str, ut.Matrix] = '__x__',
     *,
+    excluded_genes_mask: Optional[str] = None,
     max_sampled_cells: int = pr.noisy_lonely_max_sampled_cells,
     downsample_cell_quantile: float = pr.noisy_lonely_downsample_cell_quantile,
-    min_gene_fraction: float = pr.noisy_lonely_min_gene_fraction,
+    min_gene_total: int = pr.noisy_lonely_min_gene_total,
     min_gene_normalized_variance: float = pr.noisy_lonely_min_gene_normalized_variance,
     max_gene_similarity: float = pr.noisy_lonely_max_gene_similarity,
     random_seed: int = pr.random_seed,
@@ -72,17 +73,20 @@ def find_noisy_lonely_genes(
     1. If we have more than ``max_sampled_cells`` (default: {max_sampled_cells}), pick this number
        of random cells from the data using the ``random_seed``.
 
-    2. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the surviving
+    2. If we were specified an ``excluded_genes_mask``, this is the name of a per-variable (gene)
+       annotation containing a mask of excluded genes. Get rid of all these excluded genes.
+
+    3. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the surviving
        cells to the same total number of UMIs, using the ``downsample_cell_quantile`` (default:
        {downsample_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
 
-    3. Find "noisy" genes which have a mean fraction of at least ``min_gene_fraction`` (default:
-       {min_gene_fraction}) and a relative variance of at least ``min_gene_normalized_variance``
+    4. Find "noisy" genes which have a total number of UMIs of at least ``min_gene_total`` (default:
+       {min_gene_total}) and a normalized variance of at least ``min_gene_normalized_variance``
        (default: ``min_gene_normalized_variance``).
 
-    4. Cross-correlate the noisy genes.
+    5. Cross-correlate the noisy genes.
 
-    5. Find the noisy "lonely" genes whose maximal correlation is at most
+    6. Find the noisy "lonely" genes whose maximal correlation is at most
        ``max_gene_similarity`` (default: {max_gene_similarity}) with all other genes.
     '''
     if max_sampled_cells < adata.n_obs:
@@ -90,45 +94,109 @@ def find_noisy_lonely_genes(
         cell_indices = \
             np.random.choice(np.arange(adata.n_obs),
                              size=max_sampled_cells, replace=False)
-        bdata = ut.slice(adata, obs=cell_indices,
-                         name='.sampled', top_level=False)
+        s_data = ut.slice(adata, obs=cell_indices,
+                          name='.sampled', top_level=False)
     else:
-        bdata = ut.copy_adata(adata, top_level=False)
+        s_data = ut.copy_adata(adata, top_level=False)
 
-    downsample_cells(bdata, what,
+    track_var: Optional[str] = 'sampled_gene_index'
+
+    if excluded_genes_mask is not None:
+        results = pp.filter_data(s_data, name='included', top_level=False,
+                                 track_var=track_var,
+                                 var_masks=[f'~{excluded_genes_mask}'])
+        track_var = None
+        assert results is not None
+        i_data = results[0]
+        assert i_data is not None
+    else:
+        i_data = s_data
+
+    downsample_cells(i_data, what,
                      downsample_cell_quantile=downsample_cell_quantile,
                      random_seed=random_seed)
 
-    find_high_fraction_genes(bdata, 'downsampled',
-                             min_gene_fraction=min_gene_fraction)
-    find_high_normalized_variance_genes(bdata, 'downsampled',
-                                        min_gene_normalized_variance=min_gene_normalized_variance)
+    find_high_total_genes(i_data, 'downsampled', min_gene_total=min_gene_total)
 
-    results = pp.filter_data(bdata, name='noisy', top_level=False,
-                             track_var='sampled_gene_index',
-                             var_masks=['high_fraction_gene',
-                                        'high_normalized_variance_gene'])
+    results = pp.filter_data(i_data, name='high_total', top_level=False,
+                             track_var=track_var,
+                             var_masks=['high_total_gene'])
+    track_var = None
     assert results is not None
-    ndata = results[0]
+    ht_data = results[0]
 
     noisy_lonely_genes_mask = np.full(adata.n_vars, False)
 
-    if ndata is not None:
-        gene_gene_similarity_frame = \
-            compute_var_var_similarity(ndata, 'downsampled', inplace=False)
-        assert gene_gene_similarity_frame is not None
-        gene_gene_similarity = \
-            ut.to_numpy_matrix(gene_gene_similarity_frame, only_extract=True)
-        np.fill_diagonal(gene_gene_similarity, -1)
+    if ht_data is not None:
+        ht_genes_count = ht_data.shape[1]
 
-        assert ut.matrix_layout(gene_gene_similarity) == 'row_major'
-        max_similarity_of_genes = ut.max_per(gene_gene_similarity, per='row')
+        ht_gene_ht_gene_similarity_frame = \
+            compute_var_var_similarity(ht_data, 'downsampled', inplace=False)
+        assert ht_gene_ht_gene_similarity_frame is not None
 
-        lonely_genes_mask = max_similarity_of_genes < max_gene_similarity
-        base_index_of_genes = ut.get_v_numpy(ndata, 'sampled_gene_index')
-        lonely_genes_indices = base_index_of_genes[lonely_genes_mask]
+        ht_gene_ht_gene_similarity_matrix = \
+            ut.to_numpy_matrix(ht_gene_ht_gene_similarity_frame,
+                               only_extract=True)
+        ht_gene_ht_gene_similarity_matrix = \
+            ut.to_layout(ht_gene_ht_gene_similarity_matrix,
+                         layout='row_major', symmetric=True)
+        np.fill_diagonal(ht_gene_ht_gene_similarity_matrix, -1)
 
-        noisy_lonely_genes_mask[lonely_genes_indices] = True
+        htv_mask_series = \
+            find_high_normalized_variance_genes(ht_data, 'downsampled',
+                                                min_gene_normalized_variance=min_gene_normalized_variance,
+                                                inplace=False)
+        assert htv_mask_series is not None
+        htv_mask = ut.to_numpy_vector(htv_mask_series)
+
+        htv_genes_count = np.sum(htv_mask)
+        assert 0 < htv_genes_count <= ht_genes_count
+
+        htv_gene_ht_gene_similarity_matrix = ht_gene_ht_gene_similarity_matrix[htv_mask, :]
+        assert \
+            ut.matrix_layout(htv_gene_ht_gene_similarity_matrix) == 'row_major'
+        assert htv_gene_ht_gene_similarity_matrix.shape \
+            == (htv_genes_count, ht_genes_count)
+
+        max_similarity_of_htv_genes \
+            = ut.max_per(htv_gene_ht_gene_similarity_matrix, per='row')
+        htvl_mask = max_similarity_of_htv_genes <= max_gene_similarity
+        htvl_genes_count = np.sum(htvl_mask)
+        ut.log_calc('noisy_lonely_genes_count', htvl_genes_count)
+
+        if htvl_genes_count > 0:
+            base_index_of_ht_genes = \
+                ut.get_v_numpy(ht_data, 'sampled_gene_index')
+            base_index_of_htv_genes = base_index_of_ht_genes[htv_mask]
+            base_index_of_htvl_genes = base_index_of_htv_genes[htvl_mask]
+
+            noisy_lonely_genes_mask[base_index_of_htvl_genes] = True
+
+            htvl_gene_ht_gene_similarity_matrix = \
+                htv_gene_ht_gene_similarity_matrix[htvl_mask, :]
+            htvl_gene_ht_gene_similarity_matrix = \
+                ut.to_layout(htvl_gene_ht_gene_similarity_matrix,
+                             layout='row_major')
+            assert htvl_gene_ht_gene_similarity_matrix.shape \
+                == (htvl_genes_count, ht_genes_count)
+
+            if ut.logging_calc():
+                top_similarity_of_htvl_genes = \
+                    ut.top_per(htvl_gene_ht_gene_similarity_matrix,
+                               10, per='row')
+                for htvl_index, gene_index in enumerate(base_index_of_htvl_genes):
+                    gene_name = adata.var_names[gene_index]
+                    similar_ht_values = ut.to_numpy_vector(  #
+                        top_similarity_of_htvl_genes[htvl_index, :])
+                    assert len(similar_ht_values) == ht_genes_count
+                    top_similar_ht_mask = similar_ht_values > 0
+                    top_similar_ht_values = similar_ht_values[top_similar_ht_mask]
+                    top_similar_ht_indices = base_index_of_ht_genes[top_similar_ht_mask]
+                    top_similar_ht_names = adata.var_names[top_similar_ht_indices]
+                    ut.log_calc(f'- {gene_name}',
+                                ', '.join([f'{similar_gene_name}: {similar_gene_value}'
+                                           for similar_gene_value, similar_gene_name
+                                           in reversed(sorted(zip(top_similar_ht_values, top_similar_ht_names)))]))
 
     if ut.logging_calc():
         ut.log_calc('noisy_lonely_gene_names',

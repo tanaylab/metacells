@@ -14,16 +14,13 @@ import metacells.utilities.partition as utp
 random_seed: int = 0
 
 #: The generic minimal "significant" gene fraction. See
-#: :py:const:`noisy_lonely_min_gene_fraction`,
 #: :py:const:`feature_min_gene_fraction`
 #: and
 #: :py:func:`metacells.tools.high.find_high_fraction_genes`.
 significant_gene_fraction: float = 1e-5
 
 #: The generic minimal "significant" gene normalized variance. See
-#: :py:func:`metacells.tools.high.find_high_normalized_variance_genes`
-#: and
-#: :py:const:`noisy_lonely_min_gene_normalized_variance`.
+#: :py:func:`metacells.tools.high.find_high_normalized_variance_genes`.
 significant_gene_normalized_variance: float = 2.5
 
 #: The generic minimal "significant" gene relative variance. See
@@ -34,7 +31,7 @@ significant_gene_relative_variance: float = 0.1
 #: :py:const:`noisy_lonely_max_gene_similarity`
 #: and
 #: :py:const:`rare_min_module_correlation`.
-significant_gene_similarity: float = 0.15
+significant_gene_similarity: float = 0.1
 
 #: The generic "significant" fold factor. See
 #: :py:const:`deviants_min_gene_fold_factor`
@@ -212,19 +209,18 @@ noisy_lonely_max_sampled_cells: int = 10000
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
 noisy_lonely_downsample_cell_quantile: float = downsample_cell_quantile
 
-#: The minimal overall expression of a gene to be considered "noisy". See
-#: :py:const:`significant_gene_fraction`,
-#: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes`
-#: and
-#: :py:func:`metacells.pipeline.clean.extract_clean_data`.
-noisy_lonely_min_gene_fraction: float = significant_gene_fraction
+#: The minimal total UMIs in the downsamples selected cells of a gene to be considered when
+#: computing "lonely" genes. See
+#: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes` and
+#: :py:func:`metacells.tools.high.find_high_total_genes`.
+noisy_lonely_min_gene_total: int = 100
 
 #: The minimal normalized variance of a gene to be considered "noisy". See
 #: :py:const:`significant_gene_normalized_variance`,
 #: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes`
 #: and
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
-noisy_lonely_min_gene_normalized_variance: float = significant_gene_normalized_variance
+noisy_lonely_min_gene_normalized_variance: float = 1.0
 
 #: The maximal similarity between a gene and another gene to be considered "lonely". See
 #: :py:const:`significant_gene_similarity`,
@@ -289,13 +285,11 @@ rare_max_cells_of_random_pile: int = min_metacell_cells * 4
 rare_min_modules_size_factor: float = max_merge_size_factor
 
 #: The minimal average correlation between the genes in a rare gene module. See
+#: :py:func:`metacells.parameters.significant_gene_similarity`,
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-#: Note this is different from the higher
-#: :py:const:`significant_gene_similarity`
-#: which applies to the maximal correlation between some pairs of genes.
-rare_min_module_correlation: float = 0.1
+rare_min_module_correlation: float = significant_gene_similarity
 
 #: The minimal fold factor between rare cells and the rest of the population for a gene to be
 #: considered related to the rare gene module. See

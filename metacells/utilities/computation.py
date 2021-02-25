@@ -53,6 +53,8 @@ __all__ = [
     'sum_per',
     'sum_squared_per',
     'rank_per',
+    'top_per',
+    'prune_per',
     'quantile_per',
     'nanquantile_per',
     'scale_by',
@@ -204,6 +206,8 @@ def to_layout(
 
     if is_frozen:
         utt.freeze(result)
+
+    assert result.shape == matrix.shape
     return result
 
 
@@ -1015,6 +1019,106 @@ def rank_per(matrix: utt.Matrix, rank: int, *, per: Optional[str]) -> utt.NumpyV
     extension = getattr(xt, extension_name)
     extension(dense, output, rank)
     return output
+
+
+@utd.expand_doc()
+@utm.timed_call()
+def top_per(matrix: utt.Matrix, top: int, *, per: Optional[str], ranks: bool = False) -> utt.CompressedMatrix:
+    '''
+    Get the ``top`` elements ``per`` (``row`` or ``column``) of some ``matrix``, as a compressed
+    ``per``-major matrix.
+
+    If ``ranks`` (default: {ranks}), then fill the result with the rank of each element; Otherwise,
+    just keep the original value.
+
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
+    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
+    ``column``, and the matrix must be in the appropriate layout (``row_major`` operating on rows,
+    ``column_major`` for operating on columns).
+
+    .. todo::
+
+        This always uses the dense implementation. Possibly a sparse implementation might be faster.
+    '''
+    per, dense = _get_dense_for('ranking', matrix, per)
+
+    if per == 'column':
+        dense = dense.transpose()
+
+    size = dense.shape[0]
+    assert top < dense.shape[1]
+
+    indptr = np.arange(size + 1, dtype='int32')
+    indptr *= top
+
+    if size == 1:
+        with utm.timed_step('.argpartition'):
+            dense_vector = utt.to_numpy_vector(dense)
+            partition_indices = \
+                np.argpartition(dense_vector, len(dense_vector) - top)
+            indices = partition_indices[-top:].astype('int32')
+            np.sort(indices)
+            data = dense_vector[indices].astype('float32')
+
+    else:
+        indices = np.empty(top * size, dtype='int32')
+        data = np.empty(top * size, dtype='float32')
+
+        with utm.timed_step('extensions.collect_top'):
+            utm.timed_parameters(size=size, keep=top)
+            xt.collect_top(top, dense, indices, data, ranks)
+
+    top_data = sp.csr_matrix((data, indices, indptr), shape=dense.shape)
+    top_data.has_sorted_indices = True
+    top_data.has_canonical_format = True
+
+    if per == 'column':
+        top_data = top_data.transpose()
+
+    return top_data
+
+
+@utm.timed_call()
+def prune_per(compressed: utt.CompressedMatrix, top: int) -> utt.CompressedMatrix:
+    '''
+    Keep just the ``top`` elements of some ``compressed`` matrix, per row for CSR and per column for
+    CSC.
+    '''
+    layout = utt.matrix_layout(compressed)
+    if layout == 'row_major':
+        size = compressed.shape[0]
+    else:
+        assert layout == 'column_major'
+        size = compressed.shape[1]
+
+    assert size * top < 2 ** 31
+    indptr_array = np.empty(1 + size, dtype='int32')
+    indices_array = np.empty(size * top, dtype='int32')
+    data_array = np.empty(size * top, dtype='float32')
+
+    with utm.timed_step('extensions.collect_pruned'):
+        utm.timed_parameters(size=size, nnz=compressed.nnz, keep=top)
+        xt.collect_pruned(top,
+                          compressed.data,
+                          compressed.indices,
+                          compressed.indptr,
+                          data_array,
+                          indices_array,
+                          indptr_array)
+
+    if layout == 'row_major':
+        constructor = sp.csr_matrix
+    else:
+        constructor = sp.csc_matrix
+
+    pruned = constructor((data_array[:indptr_array[-1]],
+                          indices_array[:indptr_array[-1]],
+                          indptr_array),
+                         shape=compressed.shape)
+    pruned.has_sorted_indices = True
+    pruned.has_canonical_format = True
+
+    return pruned
 
 
 @utm.timed_call()

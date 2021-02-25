@@ -6,10 +6,9 @@ K-Nearest-Neighbors Graph
 from typing import Optional, Union
 
 import numpy as np
-import scipy.sparse as sparse  # type: ignore
+import scipy.sparse as sp  # type: ignore
 from anndata import AnnData
 
-import metacells.extensions as xt  # type: ignore
 import metacells.parameters as pr
 import metacells.utilities as ut
 
@@ -286,33 +285,21 @@ def _rank_outgoing(
     preserved_ranks = np.full(2 * size, 1, dtype='float32')
     preserved_row_indices = np.concatenate([all_indices, max_index_of_each])
     preserved_column_indices = np.concatenate([max_index_of_each, all_indices])
-    preserved_matrix = sparse.coo_matrix((preserved_ranks,
-                                          (preserved_row_indices, preserved_column_indices)),
-                                         shape=similarity.shape)
+    preserved_matrix = sp.coo_matrix((preserved_ranks,
+                                      (preserved_row_indices, preserved_column_indices)),
+                                     shape=similarity.shape)
     preserved_matrix.has_canonical_format = True
 
     assert ranks_degree * size < 2 ** 31
-    indptr = np.arange(size + 1, dtype='int32')
-    indptr *= ranks_degree
-    indices = np.empty(ranks_degree * size, dtype='int32')
-    ranks = np.empty(ranks_degree * size, dtype='float32')
-
-    with ut.timed_step('extensions.collect_outgoing'):
-        ut.timed_parameters(size=size, keep=ranks_degree)
-        xt.collect_outgoing(ranks_degree, similarity, indices, ranks)
-
-    outgoing_ranks = \
-        sparse.csr_matrix((ranks, indices, indptr), shape=similarity.shape)
-    outgoing_ranks.has_sorted_indices = True
-    outgoing_ranks.has_canonical_format = True
+    outgoing_ranks = ut.top_per(similarity, ranks_degree, per=None, ranks=True)
 
     with ut.timed_step('.preserve'):
         ut.timed_parameters(collected=outgoing_ranks.nnz,
                             preserved=preserved_matrix.nnz)
         outgoing_ranks = outgoing_ranks.maximum(preserved_matrix)
+        ut.sort_compressed_indices(outgoing_ranks)
 
-    ut.sort_compressed_indices(outgoing_ranks)
-    _assert_sparse(outgoing_ranks, 'csr')
+    _assert_proper_compressed(outgoing_ranks, 'csr')
     return outgoing_ranks
 
 
@@ -323,7 +310,7 @@ def _balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     transposed_ranks = \
         ut.mustbe_compressed_matrix(ut.to_layout(outgoing_ranks.transpose(),
                                                  'row_major'))
-    _assert_sparse(transposed_ranks, 'csr')
+    _assert_proper_compressed(transposed_ranks, 'csr')
 
     with ut.timed_step('.multiply'):
         ut.timed_parameters(size=size, nnz=outgoing_ranks.nnz)
@@ -331,7 +318,7 @@ def _balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
             outgoing_ranks.multiply(transposed_ranks))
 
     ut.sort_compressed_indices(balanced_ranks)
-    _assert_sparse(balanced_ranks, 'csr')
+    _assert_proper_compressed(balanced_ranks, 'csr')
     return balanced_ranks
 
 
@@ -352,8 +339,6 @@ def _prune_ranks(
     outgoing_degree = min(outgoing_degree, size - 1)
     ut.log_calc('outgoing_degree', outgoing_degree)
 
-    max_degree = max(incoming_degree, outgoing_degree)
-
     all_indices = np.arange(size)
     with ut.timed_step('numpy.argmax'):
         ut.timed_parameters(results=size, elements=balanced_ranks.nnz / size)
@@ -365,71 +350,35 @@ def _prune_ranks(
         ut.to_numpy_vector(balanced_ranks[preserved_row_indices,
                                           preserved_column_indices])
     preserved_matrix = \
-        sparse.coo_matrix((preserved_balanced_ranks,
-                           (preserved_row_indices, preserved_column_indices)),
-                          shape=balanced_ranks.shape)
+        sp.coo_matrix((preserved_balanced_ranks,
+                       (preserved_row_indices, preserved_column_indices)),
+                      shape=balanced_ranks.shape)
     preserved_matrix.has_canonical_format = True
-
-    assert size * max_degree < 2 ** 31
-    indptr_array = np.empty(1 + size, dtype='int32')
-    indices_array = np.empty(size * max_degree, dtype='int32')
-    ranks_array = np.empty(size * max_degree, dtype='float32')
 
     pruned_ranks = \
         ut.mustbe_compressed_matrix(ut.to_layout(balanced_ranks,
                                                  'column_major',
                                                  symmetric=True))
-    _assert_sparse(pruned_ranks, 'csc')
+    _assert_proper_compressed(pruned_ranks, 'csc')
 
-    with ut.timed_step('extensions.collect_pruned'):
-        ut.timed_parameters(size=size, keep=incoming_degree)
-        xt.collect_pruned(incoming_degree,
-                          pruned_ranks.data,
-                          pruned_ranks.indices,
-                          pruned_ranks.indptr,
-                          ranks_array,
-                          indices_array,
-                          indptr_array)
-
-    pruned_ranks = sparse.csc_matrix((ranks_array[:indptr_array[-1]],
-                                      indices_array[:indptr_array[-1]],
-                                      indptr_array),
-                                     shape=pruned_ranks.shape)
-    pruned_ranks.has_sorted_indices = True
-    pruned_ranks.has_canonical_format = True
-    _assert_sparse(pruned_ranks, 'csc')
+    pruned_ranks = ut.prune_per(pruned_ranks, incoming_degree)
+    _assert_proper_compressed(pruned_ranks, 'csc')
 
     pruned_ranks = \
         ut.mustbe_compressed_matrix(ut.to_layout(pruned_ranks, 'row_major'))
-    _assert_sparse(pruned_ranks, 'csr')
+    _assert_proper_compressed(pruned_ranks, 'csr')
 
-    with ut.timed_step('extensions.collect_pruned'):
-        ut.timed_parameters(size=size, keep=outgoing_degree)
-        xt.collect_pruned(outgoing_degree,
-                          pruned_ranks.data,
-                          pruned_ranks.indices,
-                          pruned_ranks.indptr,
-                          ranks_array,
-                          indices_array,
-                          indptr_array)
-
-    pruned_ranks = sparse.csr_matrix((ranks_array[:indptr_array[-1]],
-                                      indices_array[:indptr_array[-1]],
-                                      indptr_array),
-                                     shape=pruned_ranks.shape)
-    pruned_ranks.has_sorted_indices = True
-    pruned_ranks.has_canonical_format = True
-    _assert_sparse(pruned_ranks, 'csr')
+    pruned_ranks = ut.prune_per(pruned_ranks, outgoing_degree)
+    _assert_proper_compressed(pruned_ranks, 'csr')
 
     with ut.timed_step('sparse.maximum'):
         ut.timed_parameters(collected=pruned_ranks.nnz,
                             preserved=preserved_matrix.nnz)
         pruned_ranks = pruned_ranks.maximum(preserved_matrix)
+        ut.sort_compressed_indices(pruned_ranks)
+
     pruned_ranks = ut.mustbe_compressed_matrix(pruned_ranks)
-
-    ut.sort_compressed_indices(pruned_ranks)
-
-    _assert_sparse(pruned_ranks, 'csr')
+    _assert_proper_compressed(pruned_ranks, 'csr')
     return pruned_ranks
 
 
@@ -446,7 +395,7 @@ def _weigh_edges(pruned_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     edge_weights = pruned_ranks.multiply(scale_per_row[:, None])
     edge_weights = ut.to_layout(edge_weights, 'row_major')
 
-    assert sparse.issparse(pruned_ranks)
+    assert sp.issparse(pruned_ranks)
     assert edge_weights.dtype == 'float32'
     assert edge_weights.getformat() == 'csr'
     assert edge_weights.has_sorted_indices
@@ -455,8 +404,8 @@ def _weigh_edges(pruned_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     return edge_weights
 
 
-def _assert_sparse(matrix: ut.CompressedMatrix, layout: str) -> None:
-    assert sparse.issparse(matrix)
+def _assert_proper_compressed(matrix: ut.CompressedMatrix, layout: str) -> None:
+    assert sp.issparse(matrix)
     assert matrix.dtype == 'float32'
     assert matrix.getformat() == layout
     assert matrix.has_sorted_indices
