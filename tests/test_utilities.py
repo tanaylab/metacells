@@ -71,7 +71,7 @@ def test_relayout_matrix() -> None:
     assert csr_matrix.getformat() == 'csr'
 
     scipy_csc_matrix = csr_matrix.tocsc()
-    metacells_csc_matrix = ut.relayout_compressed(csr_matrix)
+    metacells_csc_matrix = ut.to_layout(csr_matrix, layout='column_major')
 
     assert scipy_csc_matrix.getformat() == 'csc'
     assert metacells_csc_matrix.getformat() == 'csc'
@@ -81,7 +81,8 @@ def test_relayout_matrix() -> None:
 
     scipy_csr_matrix = scipy_csc_matrix.tocsr()
 
-    metacells_csr_matrix = ut.relayout_compressed(metacells_csc_matrix)
+    metacells_csr_matrix = \
+        ut.to_layout(metacells_csc_matrix, layout='row_major')
 
     assert scipy_csr_matrix.getformat() == 'csr'
     assert metacells_csr_matrix.getformat() == 'csr'

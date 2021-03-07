@@ -215,7 +215,7 @@ def find_rare_gene_modules(
                     inplace=inplace)
 
 
-@ut.timed_call('.pick_candidates')
+@ut.timed_call()
 def _pick_candidates(
     *,
     adata_of_all_genes_of_all_cells: AnnData,
@@ -252,7 +252,7 @@ def _pick_candidates(
     return candidate_data, candidate_genes_indices
 
 
-@ut.timed_call('.genes_similarity')
+@ut.timed_call()
 def _genes_similarity(
     *,
     candidate_data: AnnData,
@@ -266,7 +266,7 @@ def _genes_similarity(
     return ut.to_numpy_matrix(similarity, only_extract=True)
 
 
-@ut.timed_call('.cluster_genes')
+@ut.timed_call()
 def _cluster_genes(
     similarities_between_candidate_genes: ut.NumpyMatrix,
     genes_cluster_method: str,
@@ -283,7 +283,7 @@ def _cluster_genes(
     return linkage
 
 
-@ut.timed_call('.identify_genes')
+@ut.timed_call()
 def _identify_genes(
     *,
     candidate_genes_indices: ut.NumpyVector,
@@ -329,7 +329,7 @@ def _identify_genes(
             in combined_candidate_indices.values()]
 
 
-@ut.timed_call('.related_genes')
+@ut.timed_call()
 def _related_genes(  # pylint: disable=too-many-branches,too-many-statements
     *,
     adata_of_all_genes_of_all_cells: AnnData,
@@ -475,7 +475,7 @@ def _related_genes(  # pylint: disable=too-many-branches,too-many-statements
     return related_gene_indices_of_modules
 
 
-@ut.timed_call('.identify_cells')
+@ut.timed_call()
 def _identify_cells(
     *,
     adata_of_all_genes_of_all_cells: AnnData,
@@ -538,7 +538,7 @@ def _identify_cells(
             rare_module_of_cells[mask_of_strong_cells_of_module] = module_index
 
 
-@ut.timed_call('.compress_modules')
+@ut.timed_call()
 def _compress_modules(
     *,
     adata_of_all_genes_of_all_cells: AnnData,

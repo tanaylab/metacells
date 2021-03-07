@@ -318,10 +318,13 @@ def logged(**kwargs: Callable[[Any], Any]) -> Callable[[CALLABLE], CALLABLE]:
                     step_level = DEBUG
                     param_level = DEBUG
 
+                name = function.__qualname__
+                if name[0] == '_':
+                    name = name[1:]
                 if logger().isEnabledFor(step_level):
                     logger().log(step_level, '%scall %s:',
                                  INDENT_SPACES[:2 * INDENT_LEVEL],
-                                 function.__qualname__)
+                                 name)
                     INDENT_LEVEL += 1
                 CALL_LEVEL += 1
 

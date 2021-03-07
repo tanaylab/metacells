@@ -35,7 +35,6 @@ import metacells.utilities.typing as utt
 __all__ = [
     'allow_inefficient_layout',
     'to_layout',
-    'relayout_compressed',
     'sort_compressed_indices',
 
     'corrcoef',
@@ -206,7 +205,7 @@ def to_layout(
         to_format = utt.SPARSE_FAST_FORMAT[layout]
         from_format = utt.SPARSE_SLOW_FORMAT[layout]
         assert compressed.getformat() == from_format
-        compressed = relayout_compressed(compressed)
+        compressed = _relayout_compressed(compressed)
         assert compressed.getformat() == to_format
         result = compressed
 
@@ -218,7 +217,7 @@ def to_layout(
 
 
 @utm.timed_call()
-def relayout_compressed(compressed: utt.CompressedMatrix) -> utt.CompressedMatrix:
+def _relayout_compressed(compressed: utt.CompressedMatrix) -> utt.CompressedMatrix:
     '''
     Efficient parallel conversion of a CSR/CSC ``matrix`` to a CSC/CSR matrix.
     '''

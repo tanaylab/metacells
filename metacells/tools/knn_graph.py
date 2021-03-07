@@ -257,7 +257,7 @@ def _compute_elements_knn_graph(
     return ut.to_pandas_frame(outgoing_weights, index=names, columns=names)
 
 
-@ ut.timed_call('.rank_outgoing')
+@ ut.timed_call()
 def _rank_outgoing(
     similarity: ut.NumpyMatrix,
     k: int,
@@ -303,7 +303,7 @@ def _rank_outgoing(
     return outgoing_ranks
 
 
-@ ut.timed_call('.balance_ranks')
+@ ut.timed_call()
 def _balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     size = outgoing_ranks.shape[0]
 
@@ -322,7 +322,7 @@ def _balance_ranks(outgoing_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     return balanced_ranks
 
 
-@ ut.timed_call('.prune_ranks')
+@ ut.timed_call()
 def _prune_ranks(
     balanced_ranks: ut.CompressedMatrix,
     k: int,
@@ -382,7 +382,7 @@ def _prune_ranks(
     return pruned_ranks
 
 
-@ut.timed_call('.weigh_edges')
+@ut.timed_call()
 def _weigh_edges(pruned_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
     size = pruned_ranks.shape[0]
 

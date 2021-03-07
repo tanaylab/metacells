@@ -232,7 +232,7 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     return bdata
 
 
-@utm.timed_call(name='.replace_with_layout')
+@utm.timed_call()
 def _replace_with_layout(adata: AnnData, layout: str) -> Dict[str, utt.Matrix]:
     replaced: Dict[str, utt.Matrix] = {}
 
@@ -250,7 +250,7 @@ def _replace_with_layout(adata: AnnData, layout: str) -> Dict[str, utt.Matrix]:
     return replaced
 
 
-@utm.timed_call(name='.replace_back')
+@utm.timed_call()
 def _replace_back(adata: AnnData, replaced: Dict[str, utt.Matrix]) -> None:
     for name, matrix in replaced.items():
         if name == '__x__':

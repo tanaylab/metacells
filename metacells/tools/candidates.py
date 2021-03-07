@@ -160,13 +160,13 @@ def compute_candidate_metacells(
                             min_comm_nodes=min_metacell_cells,
                             random_seed=random_seed)
 
-        improver.improve()
+        improver._improve()  # pylint: disable=protected-access
 
         if min_metacell_size is not None:
-            improver.pack()
+            improver._pack()  # pylint: disable=protected-access
 
         if min_metacell_cells is not None:
-            improver.fill()
+            improver._fill()  # pylint: disable=protected-access
 
         community_of_cells = ut.compress_indices(improver.membership)
 
@@ -332,10 +332,7 @@ class Improver:  # pylint: disable=too-many-instance-attributes
                                               too_small=small, too_large=large,
                                               monolithic=False))
 
-    def remove(self, position: int) -> None:
-        '''
-        Remove an existing community from the list.
-        '''
+    def _remove(self, position: int) -> None:
         community = self.communities[position]
         self.communities[position:position+1] = []
         self.too_few -= community.too_few
@@ -345,14 +342,11 @@ class Improver:  # pylint: disable=too-many-instance-attributes
         assert self.too_small >= 0
         assert self.too_large >= 0
 
-    @ut.timed_call('.improve')
-    def improve(self) -> None:
-        '''
-        Improve the communities by splitting and merging.
-        '''
+    @ut.timed_call()
+    def _improve(self) -> None:
         if self.min_comm_size is not None:
             while self.too_few > 0 or self.too_small > 0:
-                if not self.merge_few_or_small():
+                if not self._merge_few_or_small():
                     break
 
         penalty = (self.too_few, self.too_small + self.too_large + 1)
@@ -362,20 +356,17 @@ class Improver:  # pylint: disable=too-many-instance-attributes
             if self.max_comm_size is not None:
                 did_split = False
                 while self.too_large > 0:
-                    if not self.split_large():
+                    if not self._split_large():
                         break
                     did_split = True
 
                 if did_split and self.min_comm_size is not None:
                     while self.too_few > 0 or self.too_small > 0:
-                        if not self.merge_few_or_small():
+                        if not self._merge_few_or_small():
                             break
 
-    @ut.timed_call('.merge_few_or_small')
-    def merge_few_or_small(self) -> bool:
-        '''
-        Merge too-few or too-small communities.
-        '''
+    @ut.timed_call()
+    def _merge_few_or_small(self) -> bool:
         nodes_count = self.edge_weights.shape[0]
         merged_nodes_mask = np.zeros(nodes_count, dtype='bool')
         location_of_nodes = np.full(nodes_count, -1)
@@ -432,7 +423,7 @@ class Improver:  # pylint: disable=too-many-instance-attributes
         before_too_few = self.too_few
         before_too_small = self.too_small
         for position in reversed(position_of_merged_communities):
-            self.remove(position)
+            self._remove(position)
 
         merged_communities_count = \
             np.max(merged_communities_membership) + 1
@@ -449,11 +440,8 @@ class Improver:  # pylint: disable=too-many-instance-attributes
 
         return did_improve
 
-    @ut.timed_call('.split_large')
-    def split_large(self) -> bool:
-        '''
-        Split too-large communities.
-        '''
+    @ut.timed_call()
+    def _split_large(self) -> bool:
         did_split = False
 
         position = 0
@@ -491,7 +479,7 @@ class Improver:  # pylint: disable=too-many-instance-attributes
 
             did_split = True
 
-            self.remove(position)
+            self._remove(position)
 
             split_nodes_membership += self.next_community_index
             self.membership[split_community.mask] = split_nodes_membership
@@ -499,11 +487,8 @@ class Improver:  # pylint: disable=too-many-instance-attributes
 
         return did_split
 
-    @ut.timed_call('.pack')
-    def pack(self) -> None:
-        '''
-        Bin-pack too-small communities.
-        '''
+    @ut.timed_call()
+    def _pack(self) -> None:
         list_of_small_community_sizes: List[int] = []
         list_of_small_community_indices: List[int] = []
 
@@ -515,7 +500,7 @@ class Improver:  # pylint: disable=too-many-instance-attributes
                 continue
             list_of_small_community_sizes.append(community.size)
             list_of_small_community_indices.append(community.index)
-            self.remove(position)
+            self._remove(position)
 
         if len(list_of_small_community_indices) == 0:
             return
@@ -537,11 +522,8 @@ class Improver:  # pylint: disable=too-many-instance-attributes
 
         self.add(bins_count)
 
-    @ut.timed_call('.fill')
-    def fill(self) -> None:
-        '''
-        Bin-fill too-few communities.
-        '''
+    @ut.timed_call()
+    def _fill(self) -> None:
         assert self.min_comm_nodes is not None
 
         list_of_few_community_nodes: List[int] = []
@@ -557,7 +539,7 @@ class Improver:  # pylint: disable=too-many-instance-attributes
             total_nodes += community.nodes
             list_of_few_community_nodes.append(community.nodes)
             list_of_few_community_indices.append(community.index)
-            self.remove(position)
+            self._remove(position)
 
         if len(list_of_few_community_indices) == 0:
             return
@@ -581,7 +563,7 @@ class Improver:  # pylint: disable=too-many-instance-attributes
                     break
 
             for position in reversed(sorted(positions)):
-                self.remove(position)
+                self._remove(position)
 
         few_community_nodes = np.array(list_of_few_community_nodes)
         few_community_bins = \

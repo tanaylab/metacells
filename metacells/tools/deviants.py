@@ -158,7 +158,7 @@ def find_deviant_cells(
         ut.to_pandas_series(votes_of_deviant_genes, index=adata.var_names)
 
 
-@ut.timed_call('.collect_fold_factors')
+@ut.timed_call()
 def _collect_fold_factors(
     *,
     data: ut.ProperMatrix,
@@ -256,7 +256,7 @@ def _collect_fold_factors(
     return list_of_fold_factors, list_of_cell_index_of_rows
 
 
-@ ut.timed_call('.construct_fold_factors')
+@ ut.timed_call()
 def _construct_fold_factors(
     cells_count: int,
     list_of_fold_factors: List[ut.CompressedMatrix],
@@ -278,7 +278,7 @@ def _construct_fold_factors(
     return fold_factors
 
 
-@ ut.timed_call('.filter_genes')
+@ ut.timed_call()
 def _filter_genes(
     *,
     cells_count: int,
@@ -319,7 +319,7 @@ def _filter_genes(
     return deviant_gene_indices
 
 
-@ ut.timed_call('.fold_ranks')
+@ ut.timed_call()
 def _fold_ranks(
     *,
     cells_count: int,
@@ -353,7 +353,7 @@ def _fold_ranks(
     return deviant_genes_fold_ranks
 
 
-@ ut.timed_call('.filter_cells')
+@ ut.timed_call()
 def _filter_cells(
     *,
     cells_count: int,

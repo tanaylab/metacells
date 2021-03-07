@@ -343,13 +343,10 @@ class SubsetResults:
             # pylint: enable=cell-var-from-loop
 
 
-@ut.timed_call('.initialize_results')
-def initialize_results(
+@ut.timed_call()
+def _initialize_results(
     adata: AnnData,
 ) -> None:
-    '''
-    Initialize the result annotations, so we can incrementally collect them to the final value.
-    '''
     ut.incremental(adata, 'm', 'pre_directs')
     ut.set_m_data(adata, 'pre_directs', 0)
 
@@ -382,13 +379,10 @@ def initialize_results(
 
 
 @ut.logged()
-@ut.timed_call('.patch_direct_results')
-def patch_direct_results(
+@ut.timed_call()
+def _patch_direct_results(
     adata: AnnData,
 ) -> None:
-    '''
-    Patch the result annotations to reflect a single direct computation.
-    '''
     ut.set_m_data(adata, 'pre_directs', 0)
     ut.set_m_data(adata, 'directs', 1)
 
@@ -719,7 +713,7 @@ def divide_and_conquer_pipeline(
 
                             if not did_apply_subset:
                                 did_apply_subset = True
-                                initialize_results(adata)
+                                _initialize_results(adata)
 
                             cell_indices = rare_results.cells_frame.index.values[mask]
                             normal_cells_mask[cell_indices] = False
@@ -985,10 +979,10 @@ def compute_divide_and_conquer_metacells(
                                      dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                      cell_sizes=cell_sizes,
                                      random_seed=random_seed)
-            patch_direct_results(adata)
+            _patch_direct_results(adata)
         return
 
-    initialize_results(adata)
+    _initialize_results(adata)
     try:
         with ut.timed_step('.preliminary_metacells'):
             compute_piled_metacells(adata, what,
@@ -1360,7 +1354,7 @@ def _run_parallel_piles(
                              pre_target=None, final_target=phase)
 
     @ut.timed_call('compute_pile_metacells')
-    def _return_pile_results(pile_index: int) -> SubsetResults:
+    def compute_pile_metacells(pile_index: int) -> SubsetResults:
         results = _compute_pile_metacells(pile_index)
         gc.collect()
         return results
@@ -1370,7 +1364,7 @@ def _run_parallel_piles(
 
     with ut.timed_step('.piles'):
         gc.collect()
-        return list(ut.parallel_map(_return_pile_results, piles_count,
+        return list(ut.parallel_map(compute_pile_metacells, piles_count,
                                     max_processors=get_max_parallel_piles()))
 
 

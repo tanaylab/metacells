@@ -286,7 +286,7 @@ if COLLECT_TIMING:
 
 
 @contextmanager
-def timed_step(name: str) -> Iterator[None]:
+def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
     '''
     Collect timing information for a computation step.
 
@@ -307,8 +307,9 @@ def timed_step(name: str) -> Iterator[None]:
     To a timing log file (default: ``timing.csv``). Additional fields can be appended to the line
     using the ``metacells.utilities.timing.parameters`` function.
 
-    If the ``name`` starts with a ``.``, then it is prefixed with the names of the innermost
-    surrounding step name (which must exist). This is commonly used to time sub-steps of a function.
+    If the ``name`` starts with a ``.`` of a ``_``, then it is prefixed with the names of the
+    innermost surrounding step name (which must exist). This is commonly used to time sub-steps of a
+    function.
     '''
     if not COLLECT_TIMING:
         yield None
@@ -321,6 +322,8 @@ def timed_step(name: str) -> Iterator[None]:
     parent_timing: Optional[StepTiming] = None
     if len(steps_stack) > 0:
         parent_timing = steps_stack[-1]
+    if name[0] == '_':
+        name = f'.{name[1:]}'
     if name[0] == '.':
         assert parent_timing is not None
 
