@@ -27,6 +27,7 @@ def umap_by_distances(
     prefix: str = 'umap',
     k: int = pr.umap_k,
     min_dist: float = pr.umap_min_dist,
+    spread: float = pr.umap_spread,
 ) -> None:
     '''
     Compute layout for the observations using UMAP, based on a distances matrix.
@@ -48,10 +49,12 @@ def umap_by_distances(
 
     **Computation Parameters**
 
-    1. Invoke UMAP to compute the layout using ``min_dist`` (default: {min_dist}) and ``k``
-       (default: {k}).
+    1. Invoke UMAP to compute the layout using ``min_dist`` (default: {min_dist}), ``spread``
+       (default: {spread}) and ``k`` (default: {k}). If the spread is lower than the minimal
+       distance, it is raised.
     '''
     distances_matrix = ut.get_oo_proper(adata, distances)
+    spread = max(min_dist, spread)
 
     # UMAP implementation dies when given a dense matrix.
     distances_csr = sp.csr_matrix(distances_matrix)
@@ -62,6 +65,7 @@ def umap_by_distances(
     try:
         coordinates = umap.UMAP(metric='precomputed',
                                 n_neighbors=n_neighbors,
+                                spread=spread,
                                 min_dist=min_dist).fit_transform(distances_csr)
     except ValueError:
         # UMAP implementation doesn't know how to handle too few edges.
@@ -72,6 +76,7 @@ def umap_by_distances(
         distances_csr.data -= 1.0
         coordinates = umap.UMAP(metric='precomputed',
                                 n_neighbors=n_neighbors,
+                                spread=spread,
                                 min_dist=min_dist).fit_transform(distances_csr)
 
     x_coordinates = ut.to_numpy_vector(coordinates[:, 0], copy=True)

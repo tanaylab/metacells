@@ -5,17 +5,36 @@ Logging
 This provides a useful formatter which includes high-resolution time and thread names, and a set of
 utility functions for effective logging of operations on annotation data.
 
-The main tricky issue is picking the correct level for each log message. In general,
-we want top-level operations, their key parameters, and writing of their results to
-be ``INFO`` - and everything else to be ``DEBUG``.
+Collection of log messages is mostly automated by wrapping relevant function calls and tracing
+setting and getting of data via the :py:mod:`metacells.utilities.annotation` accessors, with the
+occasional explicit logging of a notable intermediate calculated value via :py:func:`log_calc`.
+
+The main tricky issue for logging is picking the correct level for each log message. This module
+provides the following log levels which hopefully provide the end user with a reasonable amount
+of control:
+
+* ``INFO`` will log only setting of the final results as annotations within the top-level
+  ``AnnData`` object(s).
+
+* ``STEP`` will also log the top-level algorithm step(s), which give a very basic insight into
+  what was executed.
+
+* ``PARAM`` will also log the parameters of these steps, which may be important when tuning the
+  behavior of the system for different data sets.
+
+* ``CALC`` will also log notable intermediate calculated results, which again may be important
+  when tuning the behavior of the system for different data sets.
+
+* ``DEBUG`` pulls all the stops and logs all the above, not only for the top-level steps, but
+  also for the nested processing steps. This results in a rather large log file (especially
+  for the recursive divide-and-conquer algorithm). You don't need this except for when
+  you really need this.
 
 To achieve this, we track for each ``AnnData`` whether it is a temporary object, and use the
-``get_log_level`` function below. The code carefully uses this level for the potentially
-top-level informative messages, and uses ``DEBUG`` for everything else.
-
-We also allow each ``AnnData`` object to have an optional name for logging. Both this name and
-whether the data is temporary are specified when we ``setup`` or
-:py:func:`metacells.utilities.annotation.slice` some data.
+``get_log_level`` function below. To improve the log messages, we allow each ``AnnData``
+object to have an optional name for logging. Whenever a temporary ``AnnData`` data is created, its
+name is extended by some descriptive suffix, so we get names like ``full.clean.feature`` to describe
+the feature data extracted out of the clean data extracted out of the full data.
 '''
 
 import logging

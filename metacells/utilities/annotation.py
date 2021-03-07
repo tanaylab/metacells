@@ -1,106 +1,54 @@
-'''Proper)
+'''
 Annotation
 ----------
 
-This tries to deal safely with slicing data layers, observation, variable and unstructured
-annotations, as well as two-dimensional variable and observation annotations.
+In general we are using ``AnnData`` to hold the data being analyzed. However, the interface
+of AnnData leaves some things out which are crucial for the proper working of our algorithm
+(and any other algorithm that works at a scale of millions of cells).
 
-.. todo::
-
-    Discuss the different models with the maintainers of ``AnnData`` to see whether it would be
-    possible to reconcile the two approaches.
-
-Data Model
+Data Types
 ..........
 
-The data model for the managed ``AnnData`` is slightly different from that of the raw ``AnnData``.
-Specifically, the mapping is:
+The generic ``AnnData`` is cheerfully permissive when it comes to the data it contains. That is, when
+accessing data, it isn't clear whether you'll be getting a numpy array or a pandas data series, and
+for 2D data you might be getting all sort of data types (including sparse matrices of various
+formats).
 
-.. table:: Data Model Mapping
-    :align: left
-    :widths: auto
+Python itself is very loose about the interface these data types provide - some operations such as
+``len`` and ``shape`` and accessing an element by integer indices are safe, more advanced operations
+can silently produce the wrong results, and most operations work on a subset of the data types,
+often with wildly incompatible interfaces.
 
-    ======================  =========================================================================
-    Managed                 Raw
-    ======================  =========================================================================
-    metadata                unstructured annotations (``.uns``)
-    per_var_per_obs matrix  union of ``.X`` and ``.layers``
-    per_obs vector          observation annotations (``.obs``)
-    per_var vector          variable annotations (``.var``)
-    per_obs_per_obs matrix  observation pair matrix annotations (``.obsp``)
-    per_var_per_var matrix  variable pair matrix annotations (``.varp``)
-    per_obs_per_any matrix  observation multidimensional annotations (``.obsm``)
-    per_var_per_any matrix  variable multidimensional annotations (``.varm``)
-    ======================  =========================================================================
+To combat this, we have the :py:mod:`metacells.utilities.typing` module which imposes some order on
+the types zoo, and, in addition, we provide here accessor functions which return deterministic
+usable data types, allowing for safe processing of the results. This is combined with the
+py:mod:`metacells.utilities.computation` module which provides a set of operations that work
+consistently on the few data types we use.
 
-Mapping Code Complexity
-.......................
+Data Layout
+...........
 
-The mapping between the models is mostly simply 1-1 which is trivial to implement. However, there
-are three sources of (implementation) code complexity here:
+A related issue is the layout of 2D data. For small matrices, this doesn't matter, but when dealing
+with large matrices (millions of rows/columns), performing a simple operation may takes orders of
+magnitude longer if applied to a matrix of the wrong layout.
 
-1.  Per-variable-per-observation data.
+To make things worse the builtin functions for converting between matrix layouts are pretty
+inefficient so more efficient variants are provided in the py:mod:`metacells.utilities.computation`
+module.
 
-    In contrast, raw ``AnnData`` contains a magic ``.X`` member which is distinct from the rest of
-    the data layers. There is a strong assumption that all work will be done on ``X`` and the other
-    layers are secondary at best.
+The accessors in this module allow for explicitly controlling the layout of the data they return,
+and cache the different layouts of the same annotations of the ``AnnData`` (under the reasonable
+assumption that the original data is not modified). This allows for writing
+guaranteed-to-be-efficient processing code.
 
-    The managed ``AnnData`` therefore keeps a second special metadata property ``__x__`` which must
-    ``setup``, and pretends that the value of ``X`` is just
-    another layer. This gives rise to some edge cases (e.g., one can't delete the ``X`` layer).
+Data Logging
+............
 
-2.  Layout-optimized data.
-
-    For both dense and sparse formats, having the data in a layout that is friendly for the type of
-    processing done on it makes for a big performance difference. For dense data this is "FORTRAN"
-    vs. "C" layouts; for sparse data it is "CSR" vs. "CSC" format.
-
-    Therefore, the managed ``AnnData`` allows for requesting a specific layout, and caches the
-    results. Instead of monkey-patching the ``AnnData`` object, this is done by creating "hidden"
-    layers with suffixed names (``...:__row_major__`` and ``...:__column_major__``).
-
-    Changing the layout of a matrix using the builtin operations is very slow; therefore a parallel
-    C++ extension is provided.
-
-3.  Safe and efficient slicing.
-
-    The managed ``AnnData`` provides a :py:func:`slice` operation that performs fast and safe
-    slicing.
-
-    In general data is assumed to be safe to slice (e.g., ``gene_ids`` can be freely sliced when we
-    select a subset of the genes). However, derived data isn't always safe to slice; e.g.,
-    ``UMIs|sum_per_obs`` is not safe to slice when we select a subset of the variables (it is safe
-    to slice when we select a subset of the observations).
-
-    We denote derived data by its name containing ``|``, chaining the source data and the operation
-    applied to it (e.g., the above ``UMIs|sum_per_obs`` example). The code tracks, for each derived
-    data, whether it is/not safe to slice it along each of the axis.
-
-    In addition, since slicing layout-optimized data is much faster, the code ensures
-    that, as much as possible, slicing is always applied to the proper layout form of the data.
-
-The interaction between the above three features is the cause of most of the implementation
-complexity. The upside is that application code becomes simpler and is more efficient.
-
-Usage Differences
-.................
-
-The managed ``AnnData`` model prefers to consider all data as immutable. That is, if one wants to
-compute the log of some values, the common approach in raw ``AnnData`` is to mutate ``X`` to hold
-the log data, while in the managed ``AnnData`` the approach would be to create a new data layer, so
-that in principle one never needs to mutate any data. This is (not 100%) enforced by
-:py:func:`metacells.utilities.typing.freeze`-ing the data whenever possible.
-
-Data Names
-..........
-
-The names of annotated data must be unique across all the kinds of data, otherwise
-functions such as ``sc.pl.scatter`` get confused and may silently(!) use the wrong
-data.
-
-In general the auto-generated names are tediously long and detailed (e.g.,
-``UMIs|sum_per_obs|log_2_normalization_1``), but ensure that they are properly unique. The caller is
-responsible to ensure that the names of manually set data are also unique.
+A side benefit of exclusively using the accessors provided here is that they participate in the
+automated logging provided by the :py:mod:`metacells.utilities.logging` module. That is, using them
+will automatically log writing the final results of a computation to the user at the ``INFO`` log
+level, while higher logging level give insight into the exact data being read and written by the
+algorithm's nested sub-steps.
 '''
 
 from typing import (Any, Callable, Collection, Dict, List, MutableMapping,
@@ -111,7 +59,6 @@ import numpy as np
 from anndata import AnnData
 
 import metacells.utilities.computation as utc
-import metacells.utilities.documentation as utd
 import metacells.utilities.logging as utl
 import metacells.utilities.timing as utm
 import metacells.utilities.typing as utt
@@ -169,9 +116,9 @@ Annotations = Union[MutableMapping[Any, Any], utt.PandasFrame]
 def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-statements
     adata: AnnData,
     *,
+    name: Optional[str] = None,
     obs: utt.Vector = None,
     vars: utt.Vector = None,
-    name: Optional[str] = None,
     track_obs: Optional[str] = None,
     track_var: Optional[str] = None,
     share_derived: bool = True,
@@ -183,17 +130,13 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     If ``name`` is not specified, the data will be unnamed. Otherwise, if it starts with a ``.``, it
     will be appended to the current name (if any). Otherwise, ``name`` is the new name.
 
-    If ``obs`` and/or ``vars`` are specified, they should include either a boolean
-    mask or a collection of indices to include in the data slice. In the case of an indices array,
-    it is assumed the indices are unique and sorted, that is that their effect is similar to a mask.
+    If ``obs`` and/or ``vars`` are specified, they should be set to either a boolean mask or a
+    collection of indices to include in the data slice. In the case of an indices array, it is
+    assumed the indices are unique and sorted, that is that their effect is similar to a mask.
 
     If ``track_obs`` and/or ``track_var`` are specified, the result slice will include a
     per-observation and/or per-variable annotation containing the indices of the sliced elements in
     the original full data.
-
-    In general, data might become invalid when slicing (e.g., ``UMIs|sum_per_obs`` data is
-    invalidated when slicing some of the variables). Therefore, such data will be removed from the
-    result.
 
     If the slice happens to be the full original data, then this becomes equivalent to
     :py:func:`copy_adata`, and by default this will ``share_derived`` (share the derived data
@@ -237,9 +180,9 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
 
     else:
         if is_same_vars:
-            replaced = replace_with_layout(adata, 'row_major')
+            replaced = _replace_with_layout(adata, 'row_major')
         elif is_same_obs:
-            replaced = replace_with_layout(adata, 'column_major')
+            replaced = _replace_with_layout(adata, 'column_major')
         else:
             replaced = {}
 
@@ -247,7 +190,7 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
             with utm.timed_step('adata.slice'):
                 bdata = adata[obs, vars].copy()
         finally:
-            replace_back(adata, replaced)
+            _replace_back(adata, replaced)
 
         set_name(bdata, name)
 
@@ -289,11 +232,8 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
     return bdata
 
 
-@utm.timed_call()
-def replace_with_layout(adata: AnnData, layout: str) -> Dict[str, utt.Matrix]:
-    '''
-    Replace raw data with data in a layout appropriate to the slice operation we'll be performing.
-    '''
+@utm.timed_call(name='.replace_with_layout')
+def _replace_with_layout(adata: AnnData, layout: str) -> Dict[str, utt.Matrix]:
     replaced: Dict[str, utt.Matrix] = {}
 
     matrix: utt.Matrix = adata.X  # type: ignore
@@ -310,11 +250,8 @@ def replace_with_layout(adata: AnnData, layout: str) -> Dict[str, utt.Matrix]:
     return replaced
 
 
-@utm.timed_call()
-def replace_back(adata: AnnData, replaced: Dict[str, utt.Matrix]) -> None:
-    '''
-    Restore data that was replaced for efficient slicing operations.
-    '''
+@utm.timed_call(name='.replace_back')
+def _replace_back(adata: AnnData, replaced: Dict[str, utt.Matrix]) -> None:
     for name, matrix in replaced.items():
         if name == '__x__':
             adata.X = matrix
@@ -331,7 +268,7 @@ def copy_adata(
     top_level: bool = True
 ) -> AnnData:
     '''
-    Copy annotated data.
+    Return a copy of some annotated ``adata``.
 
     If ``name`` is not specified, the data will be unnamed. Otherwise, if it starts with a ``.``, it
     will be appended to the current name (if any). Otherwise, ``name`` is the new name.
@@ -343,8 +280,8 @@ def copy_adata(
     .. note::
 
         In general we assume annotated data is **not** modified in-place, but it might make sense to
-        create a copy, modify it immediately, and then proceed to process it without further
-        modifications.
+        create a copy (**not** sharing derived data), modify it immediately (before accessing data
+        in a specific layout), and then proceed to process it without further modifications.
     '''
     with utm.timed_step('adata.copy'):
         bdata = adata.copy()
@@ -376,8 +313,8 @@ def has_data(
     Test whether we have the specified data.
 
     If the data is per-variable-per-observation, and ``layout`` is specified (one of ``row_major``
-    and ``column_major``), it returns whether the specific data layout is available without having
-    to compute or re-layout existing data.
+    and ``column_major``), it returns whether the specific data layout is available in the cache,
+    without having to re-layout existing data.
     '''
     assert layout is None or layout in utt.LAYOUT_OF_AXIS
 
@@ -421,7 +358,7 @@ def get_m_data(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> Any:
     '''
-    Lookup metadata (unstructured annotation) in ``adata`` by its ``name``.
+    Get metadata (unstructured annotation) in ``adata`` by its ``name``.
     '''
     data = adata.uns.get(name)
     if data is None:
@@ -466,7 +403,7 @@ def get_o_series(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.PandasSeries:
     '''
-    Lookup per-observation (cell) data in ``adata`` by its ``name`` as a Pandas series.
+    Get per-observation (cell) data in ``adata`` by its ``name`` as a pandas series.
 
     If ``name`` is a string, it is the name of a per-observation annotation to fetch.
     Otherwise, it should be some vector of data of the appropriate size.
@@ -486,7 +423,7 @@ def get_o_numpy(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.NumpyVector:
     '''
-    Lookup per-observation (cell) data in ``adata`` by its ``name`` as a Numpy array.
+    Get per-observation (cell) data in ``adata`` by its ``name`` as a Numpy array.
 
     If ``name`` is a string, it is the name of a per-observation annotation to fetch.
     Otherwise, it should be some vector of data of the appropriate size.
@@ -502,7 +439,7 @@ def get_o_names(
     adata: AnnData,
 ) -> utt.NumpyVector:
     '''
-    Return a numpy vector of observation names.
+    Get a numpy vector of observation names.
     '''
     data = utt.to_numpy_vector(adata.obs_names)
     utl.log_get(adata, 'o', '__name__', data)
@@ -517,7 +454,7 @@ def maybe_o_numpy(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> Optional[utt.NumpyVector]:
     '''
-    Similar to :py:func:`get_o_numpy`, but of ``name`` is ``None``, return ``None``.
+    Similar to :py:func:`get_o_numpy`, but if ``name`` is ``None``, return ``None``.
     '''
     if name is None:
         return None
@@ -560,7 +497,7 @@ def get_v_series(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.PandasSeries:
     '''
-    Lookup per-variable (gene) data in ``adata`` by its ``name`` as a pandas series.
+    Get per-variable (gene) data in ``adata`` by its ``name`` as a pandas series.
 
     If ``name`` is a string, it is the name of a per-variable annotation to fetch.
     Otherwise, it should be some vector of data of the appropriate size.
@@ -580,7 +517,7 @@ def get_v_numpy(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.NumpyVector:
     '''
-    Lookup per-variable (gene) data in ``adata`` by its ``name`` as a numpy array.
+    Get per-variable (gene) data in ``adata`` by its ``name`` as a numpy array.
 
     If ``name`` is a string, it is the name of a per-variable annotation to fetch.
     Otherwise, it should be some vector of data of the appropriate size.
@@ -593,7 +530,7 @@ def get_v_names(
     adata: AnnData,
 ) -> utt.NumpyVector:
     '''
-    Return a numpy vector of variable names.
+    Get a numpy vector of variable names.
     '''
     data = utt.to_numpy_vector(adata.var_names)
     utl.log_get(adata, 'v', '__name__', data)
@@ -608,14 +545,13 @@ def maybe_v_numpy(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> Optional[utt.NumpyVector]:
     '''
-    Similar to :py:func:`get_v_numpy`, but of ``name`` is ``None``, return ``None``.
+    Similar to :py:func:`get_v_numpy`, but if ``name`` is ``None``, return ``None``.
     '''
     if name is None:
         return None
     return get_v_numpy(adata, name, sum=sum, formatter=formatter)
 
 
-@utd.expand_doc()
 def _get_oo_data(
     adata: AnnData,
     name: Union[str, utt.Matrix],
@@ -623,17 +559,6 @@ def _get_oo_data(
     layout: Optional[str] = None,
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.Matrix:
-    '''
-    Lookup per-observation-per-observation (cell) data in ``adata`` by its ``name``.
-
-    If ``name`` is a string, it is the name of a per-variable annotation to fetch.
-    Otherwise, it should be some matrix of data of the appropriate size.
-
-    If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
-    ``column_major`` (genes). This returns the data in a layout optimized for by-observation
-    (row-major / csr) or by-variable (column-major / csc). This is cached in an additional "hidden"
-    annotation whose name is suffixed (e.g. ``...:__row_major__``).
-    '''
     data = _get_layout_data(adata, 'oo', adata.obsp,
                             shape=(adata.n_obs, adata.n_obs),
                             name=name, layout=layout)
@@ -649,7 +574,14 @@ def get_oo_frame(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.PandasFrame:
     '''
-    Same as ``get_oo_data`` but returns a pandas data frame.
+    Get per-observation-per-observation (per-cell-per-cell) data as a pandas data frame.
+
+    If ``name`` is a string, it is the name of a per-variable annotation to fetch.
+    Otherwise, it should be some matrix of data of the appropriate size.
+
+    If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
+    ``column_major``. If this requires relayout of the data, the result is cached in a hidden data
+    member for future reuse.
     '''
     data = _get_oo_data(adata, name, layout=layout, formatter=formatter)
     frame = utt.maybe_pandas_frame(data)
@@ -668,14 +600,12 @@ def get_oo_proper(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.ProperMatrix:
     '''
-    Same as ``get_oo_data`` but returns a numpy
-    :py:const:`metacells.utilities.typing.ProperMatrix`.
+    Same as ``get_oo_data`` but returns a :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
     data = _get_oo_data(adata, name, layout=layout, formatter=formatter)
     return utt.to_proper_matrix(data, default_layout=layout or 'row_major')
 
 
-@utd.expand_doc()
 def _get_vv_data(
     adata: AnnData,
     name: Union[str, utt.Matrix],
@@ -683,17 +613,6 @@ def _get_vv_data(
     layout: Optional[str] = None,
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.Matrix:
-    '''
-    Lookup per-variable-per-variable (gene) data in ``adata``.
-
-    If ``name`` is a string, it is the name of a per-variable annotation to fetch.
-    Otherwise, it should be some matrix of data of the appropriate size.
-
-    If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
-    ``column_major`` (genes). This returns the data in a layout optimized for by-observation
-    (row-major / csr) or by-variable (column-major / csc). This is cached in an additional "hidden"
-    annotation whose name is suffixed (e.g. ``...:__row_major__``).
-    '''
     data = _get_layout_data(adata, 'vv', adata.varp,
                             shape=(adata.n_vars, adata.n_vars),
                             name=name, layout=layout)
@@ -709,7 +628,14 @@ def get_vv_frame(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.PandasFrame:
     '''
-    Same as ``get_vv_data`` but returns a pandas data frame.
+    Get per-variable-per-variable (per-gene-per-gene) data as a pandas data frame.
+
+    If ``name`` is a string, it is the name of a per-variable annotation to fetch.
+    Otherwise, it should be some matrix of data of the appropriate size.
+
+    If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
+    ``column_major``. If this requires relayout of the data, the result is cached in a hidden data
+    member for future reuse.
     '''
     data = _get_vv_data(adata, name, layout=layout, formatter=formatter)
     frame = utt.maybe_pandas_frame(data)
@@ -728,14 +654,12 @@ def get_vv_proper(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.ProperMatrix:
     '''
-    Same as ``get_vv_data`` but returns a numpy
-    :py:const:`metacells.utilities.typing.ProperMatrix`.
+    Same as ``get_vv_data`` but returns a :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
     data = _get_vv_data(adata, name, layout=layout, formatter=formatter)
     return utt.to_proper_matrix(data, default_layout=layout or 'row_major')
 
 
-@utd.expand_doc()
 def _get_oa_data(
     adata: AnnData,
     name: Union[str, utt.Matrix],
@@ -743,17 +667,6 @@ def _get_oa_data(
     layout: Optional[str] = None,
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.Matrix:
-    '''
-    Lookup per-observation-per-any (cell) data in ``adata`` by its ``name``.
-
-    If ``name`` is a string, it is the name of a per-variable annotation to fetch.
-    Otherwise, it should be some matrix of data of the appropriate size.
-
-    If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
-    ``column_major`` (genes). This returns the data in a layout optimized for by-observation
-    (row-major / csr) or by-variable (column-major / csc). This is cached in an additional "hidden"
-    annotation whose name is suffixed (e.g. ``...:__row_major__``).
-    '''
     data = _get_layout_data(adata, 'oa', adata.obsm,
                             shape=(adata.n_obs, 0),
                             name=name, layout=layout)
@@ -770,7 +683,17 @@ def get_oa_frame(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.PandasFrame:
     '''
-    Same as ``get_oa_data`` but returns a pandas data frame.
+    Get per-observation-per-any (per-cell-per-any) data as a pandas data frame.
+
+    Rows are observations (cells), indexed by the observation names (typically cell barcode).
+    Columns are "something" - specify ``columns`` to specify an index.
+
+    If ``name`` is a string, it is the name of a per-variable annotation to fetch.
+    Otherwise, it should be some matrix of data of the appropriate size.
+
+    If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
+    ``column_major``. If this requires relayout of the data, the result is cached in a hidden data
+    member for future reuse.
     '''
     data = _get_oa_data(adata, name, layout=layout, formatter=formatter)
     frame = utt.maybe_pandas_frame(data)
@@ -789,14 +712,12 @@ def get_oa_proper(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.ProperMatrix:
     '''
-    Same as ``get_oa_data`` but returns a numpy
-    :py:const:`metacells.utilities.typing.ProperMatrix`.
+    Same as ``get_oa_data`` but returns a :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
     data = _get_oa_data(adata, name, layout=layout, formatter=formatter)
     return utt.to_proper_matrix(data, default_layout=layout or 'row_major')
 
 
-@utd.expand_doc()
 def _get_va_data(
     adata: AnnData,
     name: Union[str, utt.Matrix],
@@ -804,17 +725,6 @@ def _get_va_data(
     layout: Optional[str] = None,
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.Matrix:
-    '''
-    Lookup per-variable-per-variable (gene) data in ``adata``.
-
-    If ``name`` is a string, it is the name of a per-variable annotation to fetch.
-    Otherwise, it should be some matrix of data of the appropriate size.
-
-    If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
-    ``column_major`` (genes). This returns the data in a layout optimized for by-observation
-    (row-major / csr) or by-variable (column-major / csc). This is cached in an additional "hidden"
-    annotation whose name is suffixed (e.g. ``...:__row_major__``).
-    '''
     data = _get_layout_data(adata, 'va', adata.varm,
                             shape=(adata.n_vars, 0),
                             name=name, layout=layout)
@@ -831,7 +741,17 @@ def get_va_frame(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.PandasFrame:
     '''
-    Same as ``get_va_data`` but returns a pandas data frame.
+    Get per-variable-per-any (per-cell-per-any) data as a pandas data frame.
+
+    Rows are variables (genes), indexed by their names.
+    Columns are "something" - specify ``columns`` to specify an index.
+
+    If ``name`` is a string, it is the name of a per-variable annotation to fetch.
+    Otherwise, it should be some matrix of data of the appropriate size.
+
+    If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
+    ``column_major``. If this requires relayout of the data, the result is cached in a hidden data
+    member for future reuse.
     '''
     data = _get_va_data(adata, name, layout=layout, formatter=formatter)
     frame = utt.maybe_pandas_frame(data)
@@ -850,14 +770,12 @@ def get_va_proper(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.ProperMatrix:
     '''
-    Same as ``get_va_data`` but returns a numpy
-    :py:const:`metacells.utilities.typing.ProperMatrix`.
+    Same as ``get_va_data`` but returns a :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
     data = _get_va_data(adata, name, layout=layout, formatter=formatter)
     return utt.to_proper_matrix(data, default_layout=layout or 'row_major')
 
 
-@utd.expand_doc()
 def _get_vo_data(
     adata: AnnData,
     name: Union[str, utt.Matrix],
@@ -865,20 +783,6 @@ def _get_vo_data(
     layout: Optional[str] = None,
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.Matrix:
-    '''
-    Lookup a per-variable-per-observation matrix (data layer) in ``adata`` by its ``name``.
-
-    If ``name`` is not specified, uses the value of the ``X`` member.
-    If ``name`` is a string, it is the name of a per-variable annotation to fetch.
-    Otherwise, it should be some matrix of data of the appropriate size.
-
-    If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
-    ``column_major`` (genes). This returns the data in a layout optimized for by-observation
-    (row-major / csr) or by-variable (column-major / csc). This is cached in an additional "hidden"
-    layer whose name is suffixed (e.g. ``...:__row_major__``).
-
-    Returns the result data.
-    '''
     if name is None:
         name = '__x__'
 
@@ -897,7 +801,17 @@ def get_vo_frame(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.PandasFrame:
     '''
-    Same as ``get_vo_data`` but returns a pandas data frame.
+    Get per-variable-per-observation (per-gene-per-cell) data as a pandas data frame.
+
+    Rows are observations (cells), indexed by the observation names (typically cell barcode).
+    Columns are variables (genes), indexed by their names.
+
+    If ``name`` is a string, it is the name of a per-variable annotation to fetch.
+    Otherwise, it should be some matrix of data of the appropriate size.
+
+    If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
+    ``column_major``. If this requires relayout of the data, the result is cached in a hidden data
+    member for future reuse.
     '''
     data = _get_vo_data(adata, name, layout=layout, formatter=formatter)
     frame = utt.maybe_pandas_frame(data)
@@ -916,8 +830,7 @@ def get_vo_proper(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> utt.ProperMatrix:
     '''
-    Same as ``get_vo_data`` but returns a numpy
-    :py:const:`metacells.utilities.typing.ProperMatrix`.
+    Same as ``get_vo_data`` but returns a :py:const:`metacells.utilities.typing.ProperMatrix`.
     '''
     data = _get_vo_data(adata, name, layout=layout, formatter=formatter)
     return utt.to_proper_matrix(data, default_layout=layout or 'row_major')
@@ -1053,7 +966,7 @@ def set_name(adata: AnnData, name: Optional[str]) -> None:
     '''
     Set the ``name`` of the data (for log messages).
 
-    If the name starts with ``.`` it is appended to the current name.
+    If the name starts with ``.`` it is appended to the current name, if any.
     '''
     if name is None:
         if '__name__' in adata.uns:
@@ -1086,7 +999,7 @@ def set_m_data(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> Any:
     '''
-    Set unstructured meta-data.
+    Set unstructured data.
 
     If ``formatter`` is specified, its results is used when logging the operation.
     '''
@@ -1102,7 +1015,7 @@ def set_o_data(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> Any:
     '''
-    Set per-observation (cell) meta-data.
+    Set per-observation (cell) data.
 
     If ``formatter`` is specified, its results is used when logging the operation.
     '''
@@ -1124,7 +1037,7 @@ def set_v_data(
     formatter: Optional[Callable[[Any], Any]] = None
 ) -> Any:
     '''
-    Set per-variable (gene) meta-data.
+    Set per-variable (gene) data.
 
     If ``formatter`` is specified, its results is used when logging the operation.
     '''
@@ -1145,7 +1058,7 @@ def set_oo_data(
     formatter: Optional[Callable[[Any], Any]] = None
 ) -> Any:
     '''
-    Set per-observation-per-observation (cell) meta-data.
+    Set per-observation-per-observation (cell) data.
 
     If ``formatter`` is specified, its results is used when logging the operation.
     '''
@@ -1166,7 +1079,7 @@ def set_vv_data(
     formatter: Optional[Callable[[Any], Any]] = None
 ) -> Any:
     '''
-    Set per-variable-per-variable (gene) meta-data.
+    Set per-variable-per-variable (gene) data.
 
     If ``formatter`` is specified, its results is used when logging the operation.
     '''
@@ -1187,7 +1100,7 @@ def set_oa_data(
     formatter: Optional[Callable[[Any], Any]] = None
 ) -> Any:
     '''
-    Set per-observation-per-any (cell) meta-data.
+    Set per-observation-per-any (cell) data.
 
     If ``formatter`` is specified, its results is used when logging the operation.
     '''
@@ -1208,7 +1121,7 @@ def set_va_data(
     formatter: Optional[Callable[[Any], Any]] = None
 ) -> Any:
     '''
-    Set per-variable-per-any (gene) meta-data.
+    Set per-variable-per-any (gene) data.
 
     If ``formatter`` is specified, its results is used when logging the operation.
     '''
@@ -1229,7 +1142,7 @@ def set_vo_data(
     formatter: Optional[Callable[[Any], Any]] = None,
 ) -> Any:
     '''
-    Set per-variable-per-observation (per-gene-per-cell) meta-data.
+    Set per-variable-per-observation (per-gene-per-cell) data.
     '''
     utl.log_set(adata, 'vo', name, data, formatter=formatter)
 

@@ -4,9 +4,9 @@ Timing
 
 The first step in achieving reasonable performance is identifying where most of the time is being
 spent. The functions in this module allow to easily collect timing information about the relevant
-functions in a controlled way, with low overhead, as opposed to collecting information about all
-functions which has higher overheads and produces mountains of mostly irrelevant data.
-
+functions or steps within functions in a controlled way, with low overhead, as opposed to collecting
+information about all functions which has higher overheads and produces mountains of mostly
+irrelevant data.
 '''
 
 import os

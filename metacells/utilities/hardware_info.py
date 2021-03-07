@@ -2,15 +2,16 @@
 Hardware Information
 --------------------
 
-Obtain basic information about the hardware we are running from. Yes, this really should
-be a part of the standard Python library.
+Obtain basic information about the hardware we are running from. Yes, this really should be a part
+of the standard Python library.
 
 We are only doing this to figure out whether hyper-threading is enabled. Better usage would be to
 restrict the amount of parallelization to not exceed the machine's RAM capacity, but the current
 divide-and-conquer implementation isn't that clever for that.
 
 This module has been downloaded (mostly) as-is from `qutip
-<https://github.com/qutip/qutip/blob/master/qutip/hardware_info.py>`_.
+<https://github.com/qutip/qutip/blob/master/qutip/hardware_info.py>`_. It has been slightly tweaked
+to shut ``mypy`` and ``pylint`` up.
 '''
 
 # This file is part of QuTiP: Quantum Toolbox in Python.

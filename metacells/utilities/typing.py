@@ -48,7 +48,8 @@ To put some order in this chaos, the following concepts are used:
 Ironically, now that ``numpy`` added type annotations, the usefulness of the type hints added here
 has decreased, since both :py:const:`NumpyVector` and :py:const:`NumpyMatrix` are aliases to the
 same ``numpy.ndaarray`` type. Perhaps in the future numpy would allow for using ``Annotated`` types
-(with explicit number of dimensions) to allow for more useful type annotations.
+(with explicit number of dimensions, or even - gasp - the element data type) to allow for more
+useful type annotations. Or this could all be ported to Julia and avoid this whole mess.
 '''
 
 from abc import abstractmethod

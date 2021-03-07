@@ -2,7 +2,14 @@
 Partition
 ---------
 
-Utilities for computing "good" partitions of a graph (typically a KNN-graph).
+Utilities for computing "good" partitions of a graph (typically a KNN-graph). These are just
+extremely thin adapters for functions provided by external packages, specifically the `leidenalg`
+package (which had to be extended to support some features we need - now part of the standard
+distribution). It should be "easy" to provide your own wrappers for other algorithms, if needed.
+
+.. todo::
+    A large part of the overall wall-clock-time is spent in computing graph partitions, so parallel
+    implementations would be very useful.
 '''
 
 from typing import Callable, Optional, Tuple

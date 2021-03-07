@@ -3,11 +3,12 @@ Parallel
 --------
 
 Due to the notorious GIL, using multiple Python threads is useless. This leaves us with two options
-for using multiple processors:
+for using multiple processors (which is mandatory for reasonable performance on the large data sets
+we work on):
 
 * Use multiple threads in the internal C++ implementation of some Python functions;
-  this is done by both numpy and the C++ extension functions provided here, and works even for
-  reasonably small sized work, such as sorting each of the rows of a large matrix.
+  this is done by both numpy and the C++ extension functions provided by this package, and works
+  even for reasonably small sized work, such as sorting each of the rows of a large matrix.
 
 * Use Python multi-processing. This is costly and works only for large sized work, such as
   computing metacells for different piles.
@@ -18,7 +19,7 @@ problem starts when we want to combine them. Consider a server with 50 processor
 single pile. Suppose, however, you want to compute metacells for 50 piles, and do so using
 multi-processing. Each and every of the 50 sub-processes will invoke ``corcoeff`` which will spawn
 50 internal threads, resulting in the operating system seeing 2500 processes competing for the same
-50 hardware processors. This "does not end well".
+50 hardware processors. "This does not end well."
 
 The proper solution would be to get rid of the GIL, not use multi-processing, only use multiple
 threads in a pool, and adopt a universal mechanism for running tasks on the threads pool. This will
@@ -32,11 +33,11 @@ somehow this isn't seen as important by the people maintaining these frameworks;
 them don't properly handle nested parallelism within their own framework, never mind playing well
 with others.
 
-So in practice, while new languages (such as Julia and Rust) provide this out of the box, old
-languages (such as Python and C++) are stuck in a swamp. In our case, numpy uses some underlying
-parallel threads framework, our own extensions uses OpenMP parallel threads, and we are forced to
-use the Python-multi-processing framework itself on top of both, where each of these frameworks is
-blind to the rest.
+So in practice, while new languages (such as Julia and Rust) provide this sort of functionality out
+of the box, old languages (such as Python and C++) are stuck in a swamp. In our case, numpy uses
+some underlying parallel threads framework, our own extensions uses OpenMP parallel threads, and we
+are forced to use the Python-multi-processing framework itself on top of both, where each of these
+frameworks is blind to the others.
 
 As a crude band-aid, there are ways to force both whatever-numpy-uses and OpenMP to use a specific
 number of threads. So, when we use multi-processing, we limit each sub-process to use less internal
@@ -52,6 +53,11 @@ FreeBSD, Mac OSX and Windows, but YMMV.
 .. todo::
 
     Look into using TBB instead of OpenMP for the inner threads for better efficiency.
+
+.. todo::
+
+    Re-implement all the package in a language more suitable for scientific computing.
+    Julia is looking like a good combination of convenience and performance...
 '''
 import ctypes
 import os
