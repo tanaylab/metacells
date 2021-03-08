@@ -58,7 +58,7 @@ def collect_timing(
     buffering: int = TIMING_BUFFERING  # pylint: disable=used-prior-global-declaration
 ) -> None:
     '''
-    Specify whether and where to collect timing information.
+    Specify whether, where and how to collect timing information.
 
     By default, we do not. Override this by setting the ``METACELLS_COLLECT_TIMING`` environment
     variable to ``true``, or by invoking this function from the main thread.

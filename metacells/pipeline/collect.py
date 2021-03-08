@@ -7,7 +7,7 @@ from typing import Union
 
 from anndata import AnnData
 
-import metacells.preprocessing as pp
+import metacells.tools as tl
 import metacells.utilities as ut
 
 __all__ = [
@@ -72,12 +72,12 @@ def collect_metacells(
 
     **Computation Parameters**
 
-    1. Invoke :py:func:`metacells.preprocessing.group.group_obs_data` to sum the cells into
+    1. Invoke :py:func:`metacells.tools.group.group_obs_data` to sum the cells into
        metacells.
 
     2. Pass all relevant per-gene and per-cell annotations to the result.
     '''
-    mdata = pp.group_obs_data(adata, what, groups='metacell', name=name)
+    mdata = tl.group_obs_data(adata, what, groups='metacell', name=name)
     assert mdata is not None
     if top_level:
         ut.top_level(mdata)
@@ -96,7 +96,7 @@ def collect_metacells(
 
     for annotation_name in ('pile', 'candidate'):
         if ut.has_data(adata, annotation_name):
-            pp.group_obs_annotation(adata, mdata, groups='metacell',
+            tl.group_obs_annotation(adata, mdata, groups='metacell',
                                     formatter=ut.groups_description,
                                     name=annotation_name, method='unique')
 

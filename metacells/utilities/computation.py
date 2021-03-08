@@ -18,6 +18,7 @@ analysis pipeline.
 '''
 
 import re
+from math import ceil, floor
 from re import Pattern
 from typing import (Any, Callable, Collection, List, Optional, Tuple, TypeVar,
                     Union, overload)
@@ -91,6 +92,9 @@ __all__ = [
 
     'cover_diameter',
     'cover_coordinates',
+
+    'random_piles',
+    'group_piles',
 ]
 
 
@@ -717,7 +721,7 @@ def downsample_vector(
 
     **Input**
 
-    * A numpy ``array`` containing non-negative integer sample counts.
+    * A numpy ``vector`` containing non-negative integer sample counts.
 
     * A desired total number of ``samples``.
 
@@ -931,9 +935,10 @@ def nnz_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
 
     .. note::
 
-        If given a sparse matrix, this returns the number of structural non-zeros. Use
+        If given a sparse matrix, this returns the number of **structural** non-zeros, that is, the
+        number of entries we actually store data for, even if this data is zero. Use
         :py:func:`metacells.utilities.typing.eliminate_zeros` if you suspect the sparse matrix of
-        containing structural zero values.
+        containing structural zero data values.
     '''
     per = _ensure_per_for('nnz', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
@@ -983,7 +988,7 @@ def sum_squared_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVecto
 
         The :py:func:`sum_squared_per` implementation allocates and frees a complete copy of the
         matrix (to hold the squared values). An implementation that directly squares-and-adds the
-        elements would be more efficient and consume less memory.
+        elements would be much more efficient and consume much less memory.
     '''
     per = _ensure_per_for('sum_squared', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
@@ -1012,7 +1017,7 @@ def rank_per(matrix: utt.Matrix, rank: int, *, per: Optional[str]) -> utt.NumpyV
 
     .. todo::
 
-        This always uses the dense implementation. Possibly a sparse implementation might be faster.
+        This always uses the dense implementation. A sparse implementation should be faster.
     '''
     per, dense = _get_dense_for('ranking', matrix, per)
 
@@ -1043,7 +1048,7 @@ def top_per(matrix: utt.Matrix, top: int, *, per: Optional[str], ranks: bool = F
 
     .. todo::
 
-        This always uses the dense implementation. Possibly a sparse implementation might be faster.
+        This always uses the dense implementation. A sparse implementation should be faster.
     '''
     per, dense = _get_dense_for('ranking', matrix, per)
 
@@ -1161,7 +1166,7 @@ def nanquantile_per(matrix: utt.Matrix, quantile: float, *, per: Optional[str]) 
 
     .. todo::
 
-        This always uses the dense implementation. Possibly a sparse implementation might be faster.
+        This always uses the dense implementation. A sparse implementation should be more efficient.
     '''
     per, dense = _get_dense_for('nanquantile', matrix, per)
     axis = 1 - utt.PER_OF_AXIS.index(per)
@@ -1311,7 +1316,7 @@ def relative_variance_per(
 @utm.timed_call()
 def sum_matrix(matrix: utt.Matrix) -> Any:
     '''
-    Compute the sum of all values in a ``matrix``.
+    Compute the sum of all the values in a ``matrix``.
     '''
     return np.sum(matrix)  # type: ignore
 
@@ -1323,9 +1328,10 @@ def nnz_matrix(matrix: utt.Matrix) -> Any:
 
     .. note::
 
-        If given a sparse matrix, this returns the number of structural non-zeros. Use
+        If given a sparse matrix, this returns the number of **structural** non-zeros, that is, the
+        number of entries we actually store data for, even if this data is zero. Use
         :py:func:`metacells.utilities.typing.eliminate_zeros` if you suspect the sparse matrix of
-        containing structural zero values.
+        containing structural zero data values.
     '''
     sparse = utt.maybe_sparse_matrix(matrix)
     if sparse is not None:
@@ -1336,7 +1342,7 @@ def nnz_matrix(matrix: utt.Matrix) -> Any:
 @utm.timed_call()
 def mean_matrix(matrix: utt.Matrix) -> Any:
     '''
-    Compute the sum of all values in a ``matrix``.
+    Compute the mean of all the values in a ``matrix``.
     '''
     return np.mean(matrix)  # type: ignore
 
@@ -1344,7 +1350,7 @@ def mean_matrix(matrix: utt.Matrix) -> Any:
 @utm.timed_call()
 def max_matrix(matrix: utt.Matrix) -> Any:
     '''
-    Compute the maximum of all values in a ``matrix``.
+    Compute the maximum of all the values in a ``matrix``.
     '''
     return np.max(matrix)
 
@@ -1352,7 +1358,7 @@ def max_matrix(matrix: utt.Matrix) -> Any:
 @utm.timed_call()
 def min_matrix(matrix: utt.Matrix) -> Any:
     '''
-    Compute the minimum of all values in a ``matrix``.
+    Compute the minimum of all the values in a ``matrix``.
     '''
     return np.min(matrix)
 
@@ -1360,7 +1366,7 @@ def min_matrix(matrix: utt.Matrix) -> Any:
 @utm.timed_call()
 def nanmean_matrix(matrix: utt.Matrix) -> Any:
     '''
-    Compute the sum of all non-NaN values in a ``matrix``.
+    Compute the mean of all the non-NaN values in a ``matrix``.
     '''
     with catch_warnings():
         filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
@@ -1375,7 +1381,7 @@ def nanmean_matrix(matrix: utt.Matrix) -> Any:
 @utm.timed_call()
 def nanmax_matrix(matrix: utt.Matrix) -> Any:
     '''
-    Compute the maximum of all non-NaN values in a ``matrix``.
+    Compute the maximum of all the non-NaN values in a ``matrix``.
     '''
     with catch_warnings():
         filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
@@ -1390,7 +1396,7 @@ def nanmax_matrix(matrix: utt.Matrix) -> Any:
 @utm.timed_call()
 def nanmin_matrix(matrix: utt.Matrix) -> Any:
     '''
-    Compute the minimum of all non-NaN values in a ``matrix``.
+    Compute the minimum of all the non-NaN values in a ``matrix``.
     '''
     with catch_warnings():
         filterwarnings('ignore', r'All-NaN (slice|axis) encountered')
@@ -1595,9 +1601,10 @@ def patterns_matches(
 @utm.timed_call()
 def compress_indices(indices: utt.Vector) -> utt.NumpyVector:
     '''
-    Given a vector of ``indices`` per element, return a vector where the indices are consecutive.
+    Given a vector of group ``indices`` per element, return a vector where the group indices are
+    consecutive.
 
-    If the indices contain ``-1``, then it is preserved as ``-1`` in the result.
+    If the group indices contain ``-1`` ("outliers"), then it is preserved as ``-1`` in the result.
     '''
     unique, consecutive = np.unique(indices, return_inverse=True)
     consecutive += min(unique[0], 0)
@@ -1773,8 +1780,8 @@ def sum_groups(
     column or row ``per`` group, containing the sum of the groups columns or rows, and a vector of
     sizes (the number of summed columns or rows) ``per`` group.
 
-    Negative group indices are ignored and their data is not included in the result. If there are no
-    non-negative group indices, returns ``None``.
+    Negative group indices ("outliers") are ignored and their data is not included in the result. If
+    there are no non-negative group indices, returns ``None``.
 
     If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
     efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
@@ -1913,3 +1920,82 @@ def cover_coordinates(
               cover_fraction, noise_fraction, random_seed)
 
     return spaced_x_coordinates, spaced_y_coordinates
+
+
+@utm.timed_call()
+def random_piles(
+    elements_count: int,
+    target_pile_size: int,
+    *,
+    random_seed: int = 0,
+) -> utt.NumpyVector:
+    '''
+    Split ``elements_count`` elements into piles of a size roughly equal to ``target_pile_size``.
+
+    Return a vector specifying the pile index of each element.
+
+    Specify a non-zero ``random_seed`` to make this replicable.
+    '''
+    assert target_pile_size > 0
+    piles_count = elements_count / target_pile_size
+
+    few_piles_count = max(floor(piles_count), 1)
+    many_piles_count = ceil(piles_count)
+
+    if few_piles_count == many_piles_count:
+        piles_count = few_piles_count
+
+    else:
+        few_piles_size = elements_count / few_piles_count
+        many_piles_size = elements_count / many_piles_count
+
+        few_piles_factor = few_piles_size / target_pile_size
+        many_piles_factor = target_pile_size / many_piles_size
+
+        assert few_piles_factor >= 1
+        assert many_piles_factor >= 1
+
+        if few_piles_factor < many_piles_factor:
+            piles_count = few_piles_count
+        else:
+            piles_count = many_piles_count
+
+    pile_of_elements_list: List[utt.NumpyVector] = []
+
+    minimal_pile_size = floor(elements_count / piles_count)
+    extra_elements = elements_count - minimal_pile_size * piles_count
+    assert 0 <= extra_elements < piles_count
+
+    if extra_elements > 0:
+        pile_of_elements_list.append(np.arange(extra_elements))
+    for pile_index in range(piles_count):
+        pile_of_elements_list.append(np.full(minimal_pile_size, pile_index))
+
+    pile_of_elements = np.concatenate(pile_of_elements_list)
+    assert pile_of_elements.size == elements_count
+
+    np.random.seed(random_seed)
+    return np.random.permutation(pile_of_elements)
+
+
+@utm.timed_call()
+def group_piles(
+    group_of_elements: utt.NumpyVector,
+    group_of_groups: utt.NumpyVector,
+) -> utt.NumpyVector:
+    '''
+    Group some elements into piles after first grouping them, and then grouping the groups.
+
+    Given the ``group_of_elements`` and for each such group, its larger ``group_of_groups``, compute
+    the pile index of each element to be the group of the group it belongs to, and return a vector
+    of the pile index of each element.
+
+    .. note::
+
+        Neither the ``group_of_elements`` nor the ``group_of_groups`` may contain "iutliers", that
+        is, they must assign an valid group index to each element and group.
+    '''
+    assert np.min(group_of_elements) == 0
+    assert np.min(group_of_groups) == 0
+    group_of_group_of_elements = group_of_groups[group_of_elements]
+    return group_of_group_of_elements

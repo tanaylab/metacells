@@ -1,9 +1,8 @@
 '''
 Default metacell processing pipeline.
 
-The functions here are thin wrappers which invoke a series of steps
-(:py:mod:`metacells.preprocessing` and :py:mod:`metacells.tools`) to provide a complete pipeline for
-computing metacells for your data.
+The functions here are thin wrappers which invoke a series of steps (:py:mod:`metacells.tools`) to
+provide a complete pipeline for computing metacells for your data.
 
 This pipeline can be configured by tweaking the (many) parameters, but for any deeper customization
 (adding and/or removing steps) just provide your own pipeline instead. You can use the

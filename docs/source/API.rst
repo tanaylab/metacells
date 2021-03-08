@@ -8,6 +8,5 @@ API
   pipeline
   tools
   parameters
-  preprocessing
   utilities
   scripts

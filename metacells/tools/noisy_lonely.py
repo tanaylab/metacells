@@ -9,9 +9,9 @@ import numpy as np
 from anndata import AnnData
 
 import metacells.parameters as pr
-import metacells.preprocessing as pp
 import metacells.utilities as ut
 from metacells.tools.downsample import downsample_cells
+from metacells.tools.filter import filter_data
 from metacells.tools.high import (find_high_normalized_variance_genes,
                                   find_high_total_genes)
 from metacells.tools.similarity import compute_var_var_similarity
@@ -102,9 +102,9 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
     track_var: Optional[str] = 'sampled_gene_index'
 
     if excluded_genes_mask is not None:
-        results = pp.filter_data(s_data, name='included', top_level=False,
-                                 track_var=track_var,
-                                 var_masks=[f'~{excluded_genes_mask}'])
+        results = filter_data(s_data, name='included', top_level=False,
+                              track_var=track_var,
+                              var_masks=[f'~{excluded_genes_mask}'])
         track_var = None
         assert results is not None
         i_data = results[0]
@@ -118,9 +118,9 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
 
     find_high_total_genes(i_data, 'downsampled', min_gene_total=min_gene_total)
 
-    results = pp.filter_data(i_data, name='high_total', top_level=False,
-                             track_var=track_var,
-                             var_masks=['high_total_gene'])
+    results = filter_data(i_data, name='high_total', top_level=False,
+                          track_var=track_var,
+                          var_masks=['high_total_gene'])
     track_var = None
     assert results is not None
     ht_data = results[0]

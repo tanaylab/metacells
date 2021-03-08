@@ -15,6 +15,9 @@ General Tools
 Filtering the Data
 ++++++++++++++++++
 
+.. automodule:: metacells.tools.filter
+    :members:
+
 .. automodule:: metacells.tools.mask
     :members:
 
@@ -59,6 +62,9 @@ Computing the Metacells
 
 Evaluating the Metacells
 ++++++++++++++++++++++++
+
+.. automodule:: metacells.tools.group
+    :members:
 
 .. automodule:: metacells.tools.excess
     :members:

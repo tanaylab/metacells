@@ -5,13 +5,12 @@ Logging
 This provides a useful formatter which includes high-resolution time and thread names, and a set of
 utility functions for effective logging of operations on annotation data.
 
-Collection of log messages is mostly automated by wrapping relevant function calls and tracing
+Collection of log messages is mostly automated by wrapping relevant function calls and tracing the
 setting and getting of data via the :py:mod:`metacells.utilities.annotation` accessors, with the
 occasional explicit logging of a notable intermediate calculated value via :py:func:`log_calc`.
 
-The main tricky issue for logging is picking the correct level for each log message. This module
-provides the following log levels which hopefully provide the end user with a reasonable amount
-of control:
+The ging is picking the correct level for each log message. This module provides the following log
+levels which hopefully provide the end user with a reasonable amount of control:
 
 * ``INFO`` will log only setting of the final results as annotations within the top-level
   ``AnnData`` object(s).
@@ -30,11 +29,17 @@ of control:
   for the recursive divide-and-conquer algorithm). You don't need this except for when
   you really need this.
 
-To achieve this, we track for each ``AnnData`` whether it is a temporary object, and use the
-``get_log_level`` function below. To improve the log messages, we allow each ``AnnData``
-object to have an optional name for logging. Whenever a temporary ``AnnData`` data is created, its
-name is extended by some descriptive suffix, so we get names like ``full.clean.feature`` to describe
-the feature data extracted out of the clean data extracted out of the full data.
+To achieve this, we track for each ``AnnData`` whether it is a top-level (user visible) or a
+temporary data object, and whether we are inside a top-level (user invoked) or a nested operation.
+Accessing top-level data and invoking top-level operations is logged at the coarse logging levels,
+anything else is logged at the ``DEBUG`` level.
+
+To improve the log messages, we allow each ``AnnData`` object to have an optional name for logging
+(see :py:func:`metacells.utilities.annotation.set_name` and
+:py:func:`metacells.utilities.annotation.get_name`). Whenever a temporary ``AnnData`` data is
+created, its name is extended by some descriptive suffix, so we get names like
+``full.clean.feature`` to describe the feature data extracted out of the clean data extracted out of
+the full data.
 '''
 
 import logging
@@ -186,11 +191,13 @@ def setup_logger(
 
     If ``name`` (default: {name}) is specified, it is added to each message.
 
-    If ``process`` (default: {process}), include the process index in each message. The name of the
-    main thread is replaced to ``#0`` to make it more compatible with the sub-process names
-    (``#<map-index>.<sub-process-index>``). If ``None``, and if the logging level is higher than
-    ``INFO``, and :py:func:`metacells.utilities.parallel.get_processors_count` is greater than one,
-    then ``process`` is set - that is, it will be set if we expect to see log messages from multiple
+    If ``process`` (default: {process}), include the (sub-)process index in each message. The name
+    of the main process (thread) is replaced to ``#0`` to make it more compatible with the
+    sub-process names (``#<map-index>.<sub-process-index>``).
+
+    If ``process`` is ``None``, and if the logging level is higher than ``INFO``, and
+    :py:func:`metacells.utilities.parallel.get_processors_count` is greater than one, then
+    ``process`` is set - that is, it will be set if we expect to see log messages from multiple
     sub-processes.
 
     Logging from multiple sub-processes (e.g., using (e.g., using
@@ -706,6 +713,10 @@ def fractions_description(sizes: Union[utt.Vector, str]) -> str:
 def groups_description(groups: Union[utt.Vector, str]) -> str:
     '''
     Return a string for logging an array of group indices.
+
+    .. note::
+
+        This assumes that the indices are consecutive, with negative values indicating "outliers".
     '''
     if isinstance(groups, str):
         return groups
@@ -727,8 +738,6 @@ def groups_description(groups: Union[utt.Vector, str]) -> str:
 def mask_description(mask: Union[str, utt.Vector]) -> str:
     '''
     Return a string for logging a boolean mask.
-
-    This returns the number of set entries, the total number of entries, and the percentage.
     '''
     if isinstance(mask, str):
         return mask

@@ -9,7 +9,6 @@ from typing import Collection, Optional, Union
 from anndata import AnnData
 
 import metacells.parameters as pr
-import metacells.preprocessing as pp
 import metacells.tools as tl
 import metacells.utilities as ut
 
@@ -91,7 +90,7 @@ def extract_feature_data(
        {forbidden_gene_names}) and ``forbidden_gene_patterns`` (default: {forbidden_gene_patterns}).
        This is stored in an intermediate per-variable (gene) ``forbidden_genes`` boolean mask.
 
-    5. Invoke :py:func:`metacells.preprocessing.filter.filter_data` to slice just the selected
+    5. Invoke :py:func:`metacells.tools.filter.filter_data` to slice just the selected
        "feature" genes using the ``name`` (default: {name}).
     '''
     tl.downsample_cells(adata, what,
@@ -111,7 +110,7 @@ def extract_feature_data(
                             names=forbidden_gene_names,
                             patterns=forbidden_gene_patterns)
 
-    results = pp.filter_data(adata, name=name, top_level=top_level,
+    results = tl.filter_data(adata, name=name, top_level=top_level,
                              mask_var='feature_gene',
                              var_masks=['high_fraction_gene',
                                         'high_relative_variance_gene',

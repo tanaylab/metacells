@@ -14,7 +14,6 @@ from typing import Collection, List, Optional, Union
 from anndata import AnnData
 
 import metacells.parameters as pr
-import metacells.preprocessing as pp
 import metacells.tools as tl
 import metacells.utilities as ut
 
@@ -182,7 +181,7 @@ def analyze_clean_cells(
     excluded_adata: Optional[AnnData] = None
     if properly_sampled_max_excluded_genes_fraction is not None:
         excluded_genes = \
-            pp.filter_data(adata, name='dirty_genes', top_level=False,
+            tl.filter_data(adata, name='dirty_genes', top_level=False,
                            var_masks=['~clean_gene'])
         if excluded_genes is not None:
             excluded_adata = excluded_genes[0]
@@ -262,12 +261,12 @@ def extract_clean_data(
 
     **Computation Parameters**
 
-    1. This simply :py:func:`metacells.preprocessing.filter.filter_data` to slice just the
+    1. This simply :py:func:`metacells.tools.filter.filter_data` to slice just the
        ``obs_mask`` (default: {obs_mask}) and ``var_mask`` (default: {var_mask}) data using the
        ``name`` (default: {name}), and tracking the original ``full_cell_index`` and
        ``full_gene_index``.
     '''
-    results = pp.filter_data(adata, name=name, top_level=top_level,
+    results = tl.filter_data(adata, name=name, top_level=top_level,
                              track_obs='full_cell_index',
                              track_var='full_gene_index',
                              obs_masks=[obs_mask],

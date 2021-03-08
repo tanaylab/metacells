@@ -3,7 +3,6 @@ Metacells single-cell RNA sequencing.
 '''
 
 from . import pipeline as pl
-from . import preprocessing as pp
 from . import tools as tl
 from . import utilities as ut
 

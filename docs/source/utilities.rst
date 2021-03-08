@@ -12,9 +12,6 @@ Utilities
 .. automodule:: metacells.utilities.partition
     :members:
 
-.. automodule:: metacells.utilities.piles
-    :members:
-
 .. automodule:: metacells.utilities.typing
     :members:
 

@@ -2,14 +2,13 @@
 Filter
 ------
 '''
-
 from typing import List, Optional, Tuple
 
 import numpy as np
 from anndata import AnnData
 
-import metacells.tools as tl
 import metacells.utilities as ut
+from metacells.tools.mask import combine_masks
 
 __all__ = [
     'filter_data',
@@ -50,10 +49,11 @@ def filter_data(  # pylint: disable=dangerous-default-value
 
     An annotated data containing a subset of the observations (cells) and variables (genes).
 
-    If no observations and/or no variables were selected by the filter, return ``None``.
+    If no observations and/or no variables were selected by the filter, returns ``None``.
 
-    If ``name`` is not specified, the data will be unnamed. Otherwise, if it starts with a ``.``, it
-    will be appended to the current name (if any). Otherwise, ``name`` is the new name.
+    If ``name`` is not specified, the returned data will be unnamed. Otherwise, if the name starts
+    with a ``.``, it will be appended to the current name (if any). Otherwise, ``name`` is the new
+    name.
 
     If ``mask_obs`` and/or ``mask_var`` are specified, store the mask of the selected data as a
     per-observation and/or per-variable annotation of the full ``adata``.
@@ -78,7 +78,7 @@ def filter_data(  # pylint: disable=dangerous-default-value
             ut.set_o_data(adata, mask_obs, obs_mask)
     else:
         mask = \
-            tl.combine_masks(adata, obs_masks, invert=invert_obs, to=mask_obs)
+            combine_masks(adata, obs_masks, invert=invert_obs, to=mask_obs)
         if mask is None:
             assert mask_obs is not None
             obs_mask = ut.get_o_numpy(adata, mask_obs,
@@ -92,7 +92,7 @@ def filter_data(  # pylint: disable=dangerous-default-value
             ut.set_o_data(adata, mask_var, var_mask)
     else:
         mask = \
-            tl.combine_masks(adata, var_masks, invert=invert_var, to=mask_var)
+            combine_masks(adata, var_masks, invert=invert_var, to=mask_var)
         if mask is None:
             assert mask_var is not None
             var_mask = ut.get_v_numpy(adata, mask_var,

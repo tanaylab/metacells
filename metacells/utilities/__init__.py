@@ -13,6 +13,5 @@ from .hardware_info import *
 from .logging import *
 from .parallel import *
 from .partition import *
-from .piles import *
 from .timing import *
 from .typing import *

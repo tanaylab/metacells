@@ -14,7 +14,6 @@ import numpy as np
 from anndata import AnnData
 
 import metacells.parameters as pr
-import metacells.preprocessing as pp
 import metacells.tools as tl
 import metacells.utilities as ut
 
@@ -928,7 +927,7 @@ def compute_divide_and_conquer_metacells(
        ``must_complete_cover`` to ``True`` to ensure each cell is placed in some preliminary
        metacell so all cells will be in some pile in the next phase.
 
-    3. Invoke :py:func:`metacells.preprocessing.group.group_obs_data` to sum the cells into
+    3. Invoke :py:func:`metacells.tools.group.group_obs_data` to sum the cells into
        preliminary metacells.
 
     4. Invoke :py:func:`compute_divide_and_conquer_metacells` using the parameters to group the
@@ -1023,7 +1022,7 @@ def compute_divide_and_conquer_metacells(
                                     random_seed=random_seed)
 
         with ut.timed_step('.metacell_piles'):
-            mdata = pp.group_obs_data(adata, what, groups='pre_metacell',
+            mdata = tl.group_obs_data(adata, what, groups='pre_metacell',
                                       name='.preliminary_metacells')
             if mdata is None:
                 raise ValueError('Empty metacells data, giving up')

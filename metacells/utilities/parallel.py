@@ -2,9 +2,9 @@
 Parallel
 --------
 
-Due to the notorious GIL, using multiple Python threads is useless. This leaves us with two options
-for using multiple processors (which is mandatory for reasonable performance on the large data sets
-we work on):
+Due to the notorious GIL, using multiple Python threads is essentially useless. This leaves us with
+two options for using multiple processors, which is mandatory for reasonable performance on the
+large data sets we work on:
 
 * Use multiple threads in the internal C++ implementation of some Python functions;
   this is done by both numpy and the C++ extension functions provided by this package, and works
@@ -21,28 +21,23 @@ multi-processing. Each and every of the 50 sub-processes will invoke ``corcoeff`
 50 internal threads, resulting in the operating system seeing 2500 processes competing for the same
 50 hardware processors. "This does not end well."
 
-The proper solution would be to get rid of the GIL, not use multi-processing, only use multiple
-threads in a pool, and adopt a universal mechanism for running tasks on the threads pool. This will
-ensure we have at most 50 threads, used even if parallel tasks spawn nested parallel tasks, and all
-memory would be shared so there would be zero-cost in accessing large data structures from different
-threads.
-
 You would expect that, two decades after multi-core systems became available, this would have been
-solved "out of the box" by the current frameworks agreeing to cooperate with each other. However,
-somehow this isn't seen as important by the people maintaining these frameworks; in fact, most of
-them don't properly handle nested parallelism within their own framework, never mind playing well
-with others.
+solved "out of the box" by the parallel frameworks (Python, OpenMP, TBB, etc.) all agreeing to
+cooperate with each other. However, somehow this isn't seen as important by the people maintaining
+these frameworks; in fact, most of them don't properly handle nested parallelism within their own
+framework, never mind playing well with others.
 
-So in practice, while new languages (such as Julia and Rust) provide this sort of functionality out
-of the box, old languages (such as Python and C++) are stuck in a swamp. In our case, numpy uses
-some underlying parallel threads framework, our own extensions uses OpenMP parallel threads, and we
-are forced to use the Python-multi-processing framework itself on top of both, where each of these
-frameworks is blind to the others.
+So in practice, while languages built for parallelism (such as Julia and Rust) deal well with nested
+parallel construct, using a mixture of older serial languages (such as Python and C++) puts us in a
+swamp, and "you can't build a castel in a swamp". In our case, numpy uses some underlying parallel
+threads framework, our own extensions uses OpenMP parallel threads, and we are forced to use the
+Python-multi-processing framework itself on top of both, and each of these frameworks is blind to
+the others.
 
-As a crude band-aid, there are ways to force both whatever-numpy-uses and OpenMP to use a specific
-number of threads. So, when we use multi-processing, we limit each sub-process to use less internal
-threads, such that the total will be at most 50. This is even less optimal, but at least it doesn't
-bring the server to its knees trying to deal with a total load of 2500 processes.
+As a crude band-aid, we force both whatever-numpy-uses and OpenMP to use a specific number of
+threads. So, when we use multi-processing, we limit each sub-process to use less internal threads,
+such that the total will be at most 50. This very sub-optimal, but at least it doesn't bring the
+server to its knees trying to deal with a total load of 2500 processes.
 
 A final twist on all this is that hyper-threading is (worse than) useless for heavy compute threads.
 We therefore by default only use one thread per physical cores. Python in its infinite wisdom does
@@ -56,8 +51,8 @@ FreeBSD, Mac OSX and Windows, but YMMV.
 
 .. todo::
 
-    Re-implement all the package in a language more suitable for scientific computing.
-    Julia is looking like a good combination of convenience and performance...
+    Re-implement all the package in a single language more suitable for scientific computing. Julia
+    is looking like a good combination of convenience and performance...
 '''
 import ctypes
 import os
@@ -109,9 +104,9 @@ def set_processors_count(processors: int) -> None:
     Set the (maximal) number of processors to use in parallel.
 
     The default value of ``0`` means using all the available physical processors. Note that if
-    hyper-threading is enabled, this would be less than the number of logical processors in the
-    system. This is intentional as there's no value - actually, negative value - in running multiple
-    heavy computations on hyper-threads of the same physical processor.
+    hyper-threading is enabled, this would be less than (typically half of) the number of logical
+    processors in the system. This is intentional, as there's no value - actually, negative
+    value - in running multiple heavy computations on hyper-threads of the same physical processor.
 
     Otherwise, the value is the actual (positive) number of processors to use. Override this by
     setting the ``METACELLS_PROCESSORS_COUNT`` environment variable or by invoking this function
@@ -168,9 +163,10 @@ def parallel_map(
     If this ends up using a single process, runs the function serially. Otherwise, fork new
     processes to execute the function invocations (using ``multiprocessing.Pool.map``).
 
-    The downside is that this is slow. The upside is that each of these processes starts with a
-    shared memory copy(-on-write) of the full Python state, that is, all the inputs for the function
-    are available "for free".
+    The downside is that this is slow, and you need to set up **mutable** shared memory (e.g. for
+    large results) in advance. The upside is that each of these processes starts with a shared
+    memory copy(-on-write) of the full Python state, that is, all the inputs for the function are
+    available "for free".
 
     .. todo::
 
