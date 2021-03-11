@@ -26,7 +26,8 @@ def group_obs_data(
     name: Optional[str] = None,
 ) -> Optional[AnnData]:
     '''
-    Compute new data which has the sum ``of`` some data of the observations (cells) for each group.
+    Compute new data which has the ``what`` (default: {what}) sum of the observations (cells) for
+    each group.
 
     For example, having computed a metacell index for each cell, compute the per-metacell data
     for further analysis.
@@ -38,7 +39,9 @@ def group_obs_data(
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     **Returns**
 
@@ -48,7 +51,7 @@ def group_obs_data(
 
     The new data will contain only:
 
-    * An ``X`` member holding the summed-per-group ``of`` data. This will also be the focus.
+    * An ``X`` member holding the summed-per-group data.
 
     * A new ``grouped`` per-observation data which counts, for each group, the number
       of grouped observations summed into it.

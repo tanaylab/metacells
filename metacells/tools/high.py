@@ -29,7 +29,7 @@ def find_high_total_genes(
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Find genes which have high total number of UMIs.
+    Find genes which have high total number of ``what`` (default: {what}) data.
 
     This should typically only be applied to downsampled data to ensure that variance in sampling
     depth does not affect the result.
@@ -40,7 +40,9 @@ def find_high_total_genes(
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     **Returns**
 
@@ -58,9 +60,7 @@ def find_high_total_genes(
 
     2. Select the genes whose fraction is at least ``min_gene_total``.
     '''
-    data = ut.get_vo_proper(adata, what, layout='column_major')
-    total_of_genes = ut.sum_per(data, per='column')
-
+    total_of_genes = ut.get_v_numpy(adata, what, sum=True)
     genes_mask = total_of_genes >= min_gene_total
 
     if inplace:
@@ -82,7 +82,7 @@ def find_high_fraction_genes(
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Find genes which have high fraction of the total ``of`` some data of the cells.
+    Find genes which have high fraction of the total ``what`` (default: {what}) data of the cells.
 
     Genes with too-low expression are typically excluded from computations. In particular,
     genes may have all-zero expression, in which case including them just slows the
@@ -90,7 +90,9 @@ def find_high_fraction_genes(
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     **Returns**
 
@@ -133,7 +135,7 @@ def find_high_normalized_variance_genes(
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Find genes which have high normalized variance of ``what`` data (by default, the ``X``).
+    Find genes which have high normalized variance of ``what`` (default: {what}) data.
 
     The normalized variance measures the variance / mean of each gene. See
     :py:func:`metacells.utilities.computation.normalized_variance_per` for details.
@@ -143,7 +145,9 @@ def find_high_normalized_variance_genes(
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     **Returns**
 
@@ -190,7 +194,7 @@ def find_high_relative_variance_genes(
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Find genes which have high relative variance of ``what`` data (by default, the ``X``).
+    Find genes which have high relative variance of ``what`` (default: {what}) data.
 
     The relative variance measures the variance / mean of each gene relative to the other genes with
     a similar level of expression. See
@@ -203,7 +207,9 @@ def find_high_relative_variance_genes(
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     **Returns**
 

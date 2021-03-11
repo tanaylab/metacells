@@ -43,7 +43,7 @@ def set_max_parallel_piles(max_parallel_piles: int) -> None:
     positive maximal number of processors to use in parallel for computing piles.
 
     It may be useful to restrict the number of parallel piles to restrict the total amount of memory
-    used by the application, to keep it under the physical RAM available.
+    used by the application, to keep it within the physical RAM available.
     '''
     global MAX_PARALLEL_PILES
     MAX_PARALLEL_PILES = max_parallel_piles
@@ -478,7 +478,8 @@ def divide_and_conquer_pipeline(
     random_seed: int = pr.random_seed,
 ) -> None:
     '''
-    Complete pipeline using divide-and-conquer to compute the metacells for the whole data.
+    Complete pipeline using divide-and-conquer to compute the metacells for the ``what`` (default:
+    {what}) data.
 
     .. note::
 
@@ -486,15 +487,15 @@ def divide_and_conquer_pipeline(
         using the direct metacell computation (but will still by default first look for rare gene
         modules). If the data is "large" (up to O(10,000,000)), this will be much faster and will
         require much less memory than using the direct approach. The current implementation is not
-        optimized for "huge" data (O(1,000,000,000)) - it will work, and keep will use a limited
-        amount of memory, but a faster implementation would distribute the computation across
-        multiple servers.
+        optimized for "huge" data (O(1,000,000,000)) - that is, it will work, and keep will use a
+        limited amount of memory, but a faster implementation would distribute the computation
+        across multiple servers.
 
     **Input**
 
-    The presumably "clean" annotated ``adata``.
-
-    All the computations will use the ``of`` data (by default, the focus).
+    The presumably "clean" annotated ``adata``, where the observations are cells and the variables
+    are genes, where ``what`` is a per-variable-per-observation matrix or the name of a
+    per-variable-per-observation annotation containing such a matrix.
 
     **Returns**
 
@@ -815,7 +816,7 @@ def compute_divide_and_conquer_metacells(
     random_seed: int = pr.random_seed,
 ) -> None:
     '''
-    Compute metacells using the divide-and-conquer method.
+    Compute metacells for ``what`` (default: {what}) data using the divide-and-conquer method.
 
     This divides large data to smaller "piles" and directly computes metacells for each, then
     generates new piles of "similar" metacells and directly computes the final metacells from each
@@ -832,9 +833,9 @@ def compute_divide_and_conquer_metacells(
 
     **Input**
 
-    The presumably "clean" annotated ``adata``.
-
-    All the computations will use the ``of`` data (by default, the focus).
+    The presumably "clean" annotated ``adata``, where the observations are cells and the variables
+    are genes, where ``what`` is a per-variable-per-observation matrix or the name of a
+    per-variable-per-observation annotation containing such a matrix.
 
     **Returns**
 

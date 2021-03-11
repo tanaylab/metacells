@@ -25,17 +25,18 @@ def collect_metacells(
     top_level: bool = True,
 ) -> AnnData:
     '''
-    Collect computed metacells data.
+    Collect computed metacells ``what`` (default: {what}) data.
 
     **Input**
 
     Annotated (presumably "clean") ``adata``, where the observations are cells and the variables are
-    genes, and the "clean" ``cdata`` we have computed metacells for.
+    genes, and where ``what`` is a per-variable-per-observation matrix or the name of a
+    per-variable-per-observation annotation containing such a matrix.
 
     **Returns**
 
-    Annotated metacell data containing for each observation the sum ``of`` the data (by default,
-    the focus) of the cells for each metacell, which contains the following annotations:
+    Annotated metacell data containing for each observation the sum of the data (by of the cells for
+    each metacell, which contains the following annotations:
 
     Variable (Gene) Annotations
         ``excluded_gene``
@@ -62,6 +63,10 @@ def collect_metacells(
     Observations (Cell) Annotations
         ``grouped``
             The number of ("clean") cells grouped into each metacell.
+
+        ``pile``
+            The index of the pile used to compute the metacell each cell was assigned to to. This is
+            ``-1`` for non-"clean" cells.
 
         ``candidate``
             The index of the candidate metacell each cell was assigned to to. This is ``-1`` for

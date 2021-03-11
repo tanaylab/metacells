@@ -48,7 +48,7 @@ def find_rare_gene_modules(
     inplace: bool = True,
 ) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame, ut.NumpyVector]]:
     '''
-    Detect rare genes modules based ``of`` some data (by default, the focus).
+    Detect rare genes modules based on ``what`` (default: {what}) data.
 
     Rare gene modules include genes which are weakly and rarely expressed, yet are highly correlated
     with each other, allowing for robust detection. Global analysis algorithms (such as metacells)
@@ -60,7 +60,9 @@ def find_rare_gene_modules(
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     **Returns**
 

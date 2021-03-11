@@ -56,7 +56,7 @@ def compute_direct_metacells(
     random_seed: int = pr.random_seed,
 ) -> None:
     '''
-    Directly compute metacells.
+    Directly compute metacells using ``what`` (default: {what}) data.
 
     This directly computes the metacells on the whole data. Like any method that directly looks at
     the whole data at once, the amount of CPU and memory needed becomes unreasonable when the data
@@ -67,8 +67,8 @@ def compute_direct_metacells(
         The current implementation is naive in that it computes the full dense N^2 correlation
         matrix, and only then extracts the sparse graph out of it. We actually need two copies where
         each requires 4 bytes per entry, so for O(100,000) cells, we have storage of
-        O(100,000,000,000). In addition, the implementation is (mostly) serial for both the
-        correlation and graph clustering phases.
+        O(100,000,000,000). In addition, the implementation is serial for the graph clustering
+        phases.
 
         It is possible to mitigate this by fusing the correlations phase and the graph generation
         phase, parallelizing the result, and also (somehow) parallelizing the graph clustering
@@ -86,9 +86,9 @@ def compute_direct_metacells(
 
     **Input**
 
-    The presumably "clean" annotated ``adata``.
-
-    All the computations will use the ``of`` data (by default, the focus).
+    The presumably "clean" annotated ``adata``, where the observations are cells and the variables
+    are genes, where ``what`` is a per-variable-per-observation matrix or the name of a
+    per-variable-per-observation annotation containing such a matrix.
 
     **Returns**
 

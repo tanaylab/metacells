@@ -34,7 +34,7 @@ def extract_feature_data(
     top_level: bool = True,
 ) -> Optional[AnnData]:
     '''
-    Extract a "feature" subset of the ``adata`` to compute metacells for.
+    Extract a "feature" subset of ``what`` (default: {what} data, to compute metacells by.
 
     When computing metacells (or clustering cells in general), it makes sense to use a subset of the
     genes for computing cell-cell similarity, for both technical (e.g., too low an expression level)
@@ -45,15 +45,13 @@ def extract_feature_data(
     **Input**
 
     A presumably "clean" Annotated ``adata``, where the observations are cells and the variables are
-    genes.
-
-    All the computations will use the ``of`` data (by default, the focus).
+    genes, where ``what`` is a per-variable-per-observation matrix or the name of a
+    per-variable-per-observation annotation containing such a matrix.
 
     **Returns**
 
-    Returns annotated sliced data containing the "feature" subset of the original data. The focus of
-    the data will be the (slice) ``of`` the (downsampled) input data. By default, the ``name`` of
-    this data is {name}. If no features were selected, return ``None``.
+    Returns annotated sliced data containing the "feature" subset of the original data. By default,
+    the ``name`` of this data is {name}. If no features were selected, return ``None``.
 
     Also sets the following annotations in the full ``adata``:
 

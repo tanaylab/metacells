@@ -30,12 +30,14 @@ def compute_distinct_folds(
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
-    Compute for each observation (cell) and each variable (gene) how much is the value
-    different from the overall population.
+    Compute for each observation (cell) and each variable (gene) how much is the ``what`` (default:
+    {what}) value different from the overall population.
 
     **Input**
 
-    Annotated ``adata``, where the observations are (mata)cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     **Returns**
 
@@ -104,8 +106,9 @@ def find_distinct_genes(
     inplace: bool = True,
 ) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame]]:
     '''
-    Find for each observation (cell) the genes in which it is most distinct from the general
-    population. This is typically applied to the metacells data rather than to the cells data.
+    Find for each observation (cell) the genes in which its ``what`` (default: {what}) value is most
+    distinct from the general population. This is typically applied to the metacells data rather
+    than to the cells data.
 
     **Input**
 
@@ -127,8 +130,7 @@ def find_distinct_genes(
 
     **Computation Parameters**
 
-    1. Fetch the previously computed per-observation-per-variable `what`` data
-       (default: {what}).
+    1. Fetch the previously computed per-observation-per-variable ``what`` data.
 
     2. Keep the ``distinct_genes_count`` (default: {distinct_genes_count}) top fold factors.
     '''
@@ -166,17 +168,18 @@ def compute_subset_distinct_genes(
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Given a subset of the observations (cells), compute for each gene how distinct it is
-    in the subset compared to the overall population.
+    Given a subset of the observations (cells), compute for each gene how distinct its ``what``
+    (default: {what}) value is in the subset compared to the overall population.
 
-    This is the area-under-curve of the receiver operating characteristic (AUROC) for the gene,
-    that is, the probability that a randomly selected observation (cell) in the subset will
-    have a higher value ``of`` some data than a randomly selected observation (cell) outside
-    the subset.
+    This is the area-under-curve of the receiver operating characteristic (AUROC) for the gene, that
+    is, the probability that a randomly selected observation (cell) in the subset will have a higher
+    value than a randomly selected observation (cell) outside the subset.
 
     **Input**
 
-    Annotated ``adata``, where the observations are (mata)cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     **Returns**
 

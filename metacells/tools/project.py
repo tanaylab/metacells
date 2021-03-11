@@ -33,10 +33,9 @@ def project_group_to_obs(
     '''
     Project the value of a property from per-group data to per-observation data.
 
-    The input annotated ``gdata`` is expected to contain a per-observation (group)
-    annotation named ``property_name``. The input annotated ``adata`` is expected
-    to contain a per-observation annotation named ``group`` which identifies the
-    group each observation (cell) belongs to.
+    The input annotated ``gdata`` is expected to contain a per-observation (group) annotation named
+    ``property_name``. The input annotated ``adata`` is expected to contain a per-observation
+    annotation named ``group`` which identifies the group each observation (cell) belongs to.
 
     This will generate a new per-observation (cell) annotation in ``adata``, named
     ``to_property_name`` (by default, the same as ``property_name``), containing the value of the
@@ -69,9 +68,9 @@ def project_obs_to_obs(
     '''
     Project the value of a property from one annotated data to another.
 
-    The observation names are expected to be compatible between ``adata`` and ``bdata``.
-    The annotated ``adata`` is expected to contain a per-observation (cell) annotation
-    named ``property_name``.
+    The observation names are expected to be compatible between ``adata`` and ``bdata``. The
+    annotated ``adata`` is expected to contain a per-observation (cell) annotation named
+    ``property_name``.
 
     This will generate a new per-observation (cell) annotation in ``bdata``, named
     ``to_property_name`` (by default, the same as ``property_name``), containing the value of the

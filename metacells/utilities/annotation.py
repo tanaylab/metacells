@@ -6,6 +6,17 @@ In general we are using ``AnnData`` to hold the data being analyzed. However, th
 of AnnData leaves some things out which are crucial for the proper working of our algorithm
 (and any other algorithm that works at a scale of millions of cells).
 
+X as an Annotation
+..................
+
+For a uniform interface, we pretend the ``X`` member is a per-variable-per-observation annotation
+with the special name ``__x__``. This allows us to have APIs that take an annotation name and just
+pass them (typically by default) the annotation "name" ``__x__`` to force the code to run on the
+``X`` data member.
+
+In general the APIs allow specifying either annotation names or alternatively an explicit matrix (or
+vector for per-observation or per-variable annotations), for maximal usage flexibility.
+
 Data Types
 ..........
 

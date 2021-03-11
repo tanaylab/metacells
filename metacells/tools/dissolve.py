@@ -34,11 +34,13 @@ def dissolve_metacells(
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
-    Dissolve too-small metacells based ``of`` some data (by default, the focus).
+    Dissolve too-small metacells based on ``what`` (default: {what}) data.
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     **Returns**
 
@@ -63,11 +65,9 @@ def dissolve_metacells(
     2. Any metacell which has less cells than the ``min_metacell_cells`` is dissolved.
 
     3. We are trying to create metacells of size ``target_metacell_size``. Compute the sizes of the
-       resulting metacells by summing the ``cell_sizes`` (default: {cell_sizes}) If the cell sizes
-       is a string that contains ``<of>``, it is expanded using the name of the ``of`` data. If it
-       is ``None``, each has a size of one.
-       These parameters are typically identical to these passed
-       to :py:func:`metacells.tools.candidates.compute_candidate_metacells`.
+       resulting metacells by summing the ``cell_sizes`` (default: {cell_sizes}). If it is ``None``,
+       each has a size of one. These parameters are typically identical to these passed to
+       :py:func:`metacells.tools.candidates.compute_candidate_metacells`.
 
     4. If ``min_robust_size_factor` (default: {min_robust_size_factor}) is specified, then any
        metacell whose total size is at least ``target_metacell_size * min_robust_size_factor`` is

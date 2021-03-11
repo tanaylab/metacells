@@ -25,9 +25,9 @@ def compute_candidate_metacells(
     adata: AnnData,
     what: Union[str, ut.Matrix] = 'obs_outgoing_weights',
     *,
-    partition_method: 'ut.PartitionMethod' = ut.leiden_bounded_surprise,
     target_metacell_size: int,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.candidates_cell_sizes,
+    partition_method: 'ut.PartitionMethod' = ut.leiden_bounded_surprise,
     min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
     min_metacell_cells: Optional[int] = pr.candidates_min_metacell_cells,
@@ -36,14 +36,18 @@ def compute_candidate_metacells(
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Assign observations (cells) to (raw, candidate) metacells based ``of`` a weighted directed graph.
+    Assign observations (cells) to (raw, candidate) metacells based on ``what`` data. (a weighted
+    directed graph).
 
     These candidate metacells typically go through additional vetting (e.g. deviant detection and
     dissolving too-small metacells) to obtain the final metacells.
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-observation-per-observation matrix where each row is the outgoing weights from
+    each observation to the rest, or just the name of a per-observation-per-observation annotation
+    containing such a matrix. Typically this matrix will be sparse for efficient processing.
 
     **Returns**
 
@@ -57,11 +61,9 @@ def compute_candidate_metacells(
 
     **Computation Parameters**
 
-    1. We are trying to build metacells of ``target_metacell_size``. Use the ``cell_sizes``
-       (default: {cell_sizes}) to assign a size for each node (cell). If the cell sizes is a string
-       that contains ``<of>``, it is expanded using the name of the ``of`` data. If it is ``None``,
-       each has a size of one. These parameters are typically identical to these passed to
-       :py:func:`metacells.tools.dissolve.dissolve_metacells`.
+    1. We are trying to build metacells of ``target_metacell_size``, using the ``cell_sizes``
+       (default: {cell_sizes}) to assign a size for each node (cell). This can be a string name of a
+       per-observation annotation or a vector of values.
 
        .. note::
 
@@ -69,20 +71,21 @@ def compute_candidate_metacells(
             make sure to scale them (and the target metacell size) so that the resulting integer
             values would make sense.
 
-    2. Use the ``partition_method`` to compute initial communities. Several such possible methods
-       are provided in this module, and you can also provide your own as long as it is compatible
-       with the :py:const:`metacells.utilities.partition.PartitionMethod` interface.
+    2. Use the ``partition_method`` (default: {partition_method.__qualname__}) to compute initial
+       communities. Several such possible methods are provided in
+       :py:mod:`metacells.utilities.partition`, and you can also provide your own as long as it is
+       compatible with the :py:const:`metacells.utilities.partition.PartitionMethod` interface.
 
     3. If ``min_split_size_factor`` (default: {min_split_size_factor}) is specified, re-run the
        partition method on each community whose size is at least ``target_metacell_size
        * min_split_size_factor``, to split it to into smaller communities.
 
     4. If ``max_merge_size_factor`` (default: {max_merge_size_factor}) or ``min_metacell_cells``
-       (default: {min_metacell_cells}) are specified, condense each community whose size is at most
-       ``target_metacell_size * max_merge_size_factor`` or contains less cells than
-       ``min_metacell_cells`` into a single node (using the mean of the edge weights), and re-run
-       the partition method on the resulting graph (of just these condensed nodes) to merge these
-       communities into large ones.
+       (default: {min_metacell_cells}) are specified, condense into a single node each community
+       whose size is at most ``target_metacell_size * max_merge_size_factor`` or contains less cells
+       than ``min_metacell_cells`` (using the mean of the edge weights), and re-run the partition
+       method on the resulting graph (of just these condensed nodes) to merge these communities into
+       large ones.
 
     5. Repeat the above steps until no further progress can be made.
 

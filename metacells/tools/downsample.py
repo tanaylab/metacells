@@ -28,7 +28,7 @@ def downsample_cells(
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
-    Downsample the values of ``what`` data.
+    Downsample the values of ``what`` (default: {what}) data.
 
     Downsampling is an effective way to get the same number of samples in multiple cells
     (that is, the same number of total UMIs in multiple cells), and serves as an alternative to
@@ -41,7 +41,9 @@ def downsample_cells(
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     **Returns**
 

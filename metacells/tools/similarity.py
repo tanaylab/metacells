@@ -29,8 +29,7 @@ def compute_obs_obs_similarity(
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
-    Compute a measure of the similarity between the observations (cells) ``of`` some data (by
-    default, the focus).
+    Compute a measure of the similarity between the observations (cells) of ``what`` (default: {what}).
 
     The ``method`` (default: {method}) can be one of:
     * ``pearson`` for computing Pearson correlation.
@@ -43,7 +42,9 @@ def compute_obs_obs_similarity(
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     **Returns**
 
@@ -86,12 +87,13 @@ def compute_var_var_similarity(
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
-    Compute a measure of the similarity between the variables (genes) ``of`` some data (by
-    default, the focus).
+    Compute a measure of the similarity between the variables (genes) of ``what`` (default: {what}).
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     The ``method`` (default: {method}) can be one of:
     * ``pearson`` for computing Pearson correlation.

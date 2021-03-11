@@ -34,11 +34,13 @@ def find_deviant_cells(
 ) -> Optional[Tuple[ut.PandasSeries, ut.PandasSeries]]:
     '''
     Find cells which are have significantly different gene expression from the metacells they are
-    belong to based ``of`` some data (by default, the focus).
+    belong to based on ``what`` (default: {what}) data.
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     **Returns**
 

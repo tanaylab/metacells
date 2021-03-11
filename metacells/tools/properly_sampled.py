@@ -31,7 +31,7 @@ def find_properly_sampled_cells(
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Detect cells with a "proper" amount of ``what`` data.
+    Detect cells with a "proper" amount of ``what`` (default: {what}) data.
 
     Due to both technical effects and natural variance between cells, the total number of UMIs
     varies from cell to cell. We often would like to work on cells that contain a sufficient number
@@ -40,7 +40,9 @@ def find_properly_sampled_cells(
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     **Returns**
 
@@ -106,7 +108,7 @@ def find_properly_sampled_genes(
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Detect genes with a "proper" amount of ``what`` data.
+    Detect genes with a "proper" amount of ``what`` (default: {what}) data.
 
     Due to both technical effects and natural variance between genes, the expression of genes varies
     greatly between cells. This is exactly the information we are trying to analyze. We often would
@@ -119,7 +121,9 @@ def find_properly_sampled_genes(
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     **Returns**
 

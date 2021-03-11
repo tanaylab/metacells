@@ -38,7 +38,7 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Detect "noisy lonely" genes.
+    Detect "noisy lonely" genes based on ``what`` (default: {what}) data.
 
     Return the indices of genes which are "noisy" (have high variance compared to their mean) and
     also "lonely" (have low correlation with all other genes). Such genes should be excluded since
@@ -57,7 +57,9 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     **Returns**
 

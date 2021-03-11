@@ -32,14 +32,14 @@ def compute_obs_obs_knn_graph(
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
-    Compute a directed  K-Nearest-Neighbors graph based on similarity data for each pair of
-    observations (cells).
-
-    If ``of`` is specified, this specific data is used. Otherwise, ``obs_similarity`` is used.
+    Compute a directed  K-Nearest-Neighbors graph based on ``what`` (default: what) similarity data
+    for each pair of observations (cells).
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-observation-per-observation matrix or the name of a
+    per-observation-per-observation annotation containing such a matrix.
 
     **Returns**
 
@@ -116,15 +116,14 @@ def compute_var_var_knn_graph(
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
-    Compute a directed  K-Nearest-Neighbors graph based on similarity data for each pair of
-    variables (genes).
-
-    If ``of`` is specified, this specific data is used. Otherwise,
-    ``var_similarity`` is used.
+    Compute a directed  K-Nearest-Neighbors graph based on ``what`` (default: what) similarity data
+    for each pair of variables (genes).
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-variable matrix or the name of a per-variable-per-variable
+    annotation containing such a matrix.
 
     **Returns**
 

@@ -30,17 +30,23 @@ def compute_type_compatible_sizes(
     kind: str = 'type',
 ) -> None:
     '''
-    Given multiple annotated data of groups, compute a "compatible" sizes for each one to
-    allow for consistent excess R^2 and inner normalized variance comparison.
+    Given multiple annotated data of groups, compute a "compatible" size for each one to allow for
+    consistent excess R^2 and inner normalized variance comparison.
 
     Since excess R^2 and inner normalized variance quality measures are sensitive to the group
-    (metacell) sizes, it is useful to artifically shrink the groups so the sizes will be similar
+    (metacell) sizes, it is useful to artificially shrink the groups so the sizes will be similar
     between the compared data sets. Assuming each group (metacell) has a type annotation, for each
     such type, we give each one a "compatible" size (less than or equal to its actual size) so that
     using this reduced size will give us comparable measures between all the data sets.
 
     The "compatible" sizes are chosen such that the density distributions of the sizes in all data
     sets would be as similar to each other as possible.
+
+    .. note::
+
+        This is only effective if the groups are "similar" in size. Using this to compare very coarse
+        grouping (few thousands of cells) with fine-grained ones (few dozens of cells) will still
+        result in very different results.
 
     **Input**
 
@@ -195,7 +201,7 @@ def compute_excess_r2(
 ) -> None:
     '''
     Compute the excess gene-gene coefficient of determination (R^2) for the metacells based of
-    ``what`` data.
+    ``what`` (default: {what}) data.
 
     In an ideal metacell, all cells have the same biological state, and the only variation is due to
     sampling noise. In such an ideal metacell, there would be zero R^2 between the expression of
@@ -216,7 +222,9 @@ def compute_excess_r2(
 
     **Input**
 
-    Annotated ``adata``, where the observations are cells and the variables are genes.
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     In addition, ``mdata`` is assumed to have one observation for each metacell, and use the same
     genes as ``adata``.

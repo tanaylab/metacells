@@ -1,9 +1,5 @@
 '''
 Process a ``timing.csv`` file.
-
-.. todo::
-
-    Proper script documentation.
 '''
 
 import csv
