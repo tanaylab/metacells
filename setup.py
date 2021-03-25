@@ -14,11 +14,12 @@ SETUP_REQUIRES = [
 # TODO: Repeated in setup.cfg
 
 INSTALL_REQUIRES = [
-    'anndata',
+    'scanpy',
     'importlib-metadata',
     'leidenalg',
     'numpy',
     'pandas',
+    'scipy',
     'python-igraph',
     'threadpoolctl',
 ]
@@ -26,7 +27,6 @@ INSTALL_REQUIRES = [
 TESTS_REQUIRE = [
     'pytest',
     'pyyaml',
-    'scanpy',
     'tox',
 ]
 

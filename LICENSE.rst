@@ -1,7 +1,7 @@
 License (MIT)
 =============
 
-Copyright © 2020 Weizmann Institute of Science
+Copyright © 2020, 2021 Weizmann Institute of Science
 
 Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
 associated documentation files (the "Software"), to deal in the Software without restriction,

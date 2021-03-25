@@ -10,8 +10,7 @@ metacells documentation
 
   install
   intro
-  advanced
-  reuse
+  vignette
   todo
   license
 

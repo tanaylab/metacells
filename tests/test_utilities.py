@@ -233,16 +233,18 @@ def test_freeze_sparse() -> None:
 
 
 def test_sliding_window_function() -> None:
-    array = np.arange(3)
+    array = np.arange(5)
     actual_result = \
         ut.sliding_window_function(array, function='mean', window_size=3)
-    expected_result = np.array([1/3, 1, 5/3])
+
+    expected_result = np.array([1, 1, 2, 3, 3])
     assert np.allclose(actual_result, expected_result)
 
-    order_by = np.array([0, 2, 1])
+    order_by = np.array([0, 2, 1, 3, 4])
     actual_result = ut.sliding_window_function(array, function='mean',
                                                window_size=3, order_by=order_by)
-    expected_result = np.array([2/3, 4/3, 1])
+
+    expected_result = np.array([1, 2, 1, 8/3, 8/3])
     assert np.allclose(actual_result, expected_result)
 
 

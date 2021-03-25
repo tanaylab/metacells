@@ -28,15 +28,17 @@ def compute_direct_metacells(
     what: Union[str, ut.Matrix] = '__x__',
     *,
     feature_downsample_cell_quantile: float = pr.feature_downsample_cell_quantile,
-    feature_min_gene_fraction: float = pr.feature_min_gene_fraction,
+    feature_min_gene_total: int = pr.feature_min_gene_total,
+    feature_min_gene_top3: int = pr.feature_min_gene_top3,
     feature_min_gene_relative_variance: float = pr.feature_min_gene_relative_variance,
     forbidden_gene_names: Optional[Collection[str]] = None,
     forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
-    cells_similarity_log_normalization: float = pr.cells_similarity_log_normalization,
     cells_similarity_method: str = pr.cells_similarity_method,
     target_metacell_size: int = pr.target_metacell_size,
     knn_k: Optional[int] = pr.knn_k,
+    knn_max_unbalanced_ranks: int = pr.knn_max_unbalanced_ranks,
     knn_balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     knn_incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     knn_outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
@@ -54,7 +56,7 @@ def compute_direct_metacells(
     dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     random_seed: int = pr.random_seed,
-) -> None:
+) -> AnnData:
     '''
     Directly compute metacells using ``what`` (default: {what}) data.
 
@@ -138,7 +140,8 @@ def compute_direct_metacells(
     1. Invoke :py:func:`metacells.pipeline.feature.extract_feature_data` to extract "feature" data
        from the clean data, using the
        ``feature_downsample_cell_quantile`` (default: {feature_downsample_cell_quantile}),
-       ``feature_min_gene_fraction`` (default: {feature_min_gene_fraction}),
+       ``feature_min_gene_total`` (default: {feature_min_gene_total}),
+       ``feature_min_gene_top3`` (default: {feature_min_gene_top3}),
        ``feature_min_gene_relative_variance (default: {feature_min_gene_relative_variance}),
        ``forbidden_gene_names`` (default: {forbidden_gene_names}),
        ``forbidden_gene_patterns`` (default: {forbidden_gene_patterns})
@@ -146,17 +149,20 @@ def compute_direct_metacells(
        ``random_seed`` (default: {random_seed})
        to make this replicable.
 
-    2. If ``cells_similarity_log_data`` (default: {cells_similarity_log_data}), invoke the
-       :py:func:`metacells.utilities.computation.log_data` function to compute the log (base 2) of
-       the data, using the ``cells_similarity_log_normalization`` (default:
-       {cells_similarity_log_normalization}).
+    2. Compute the fractions of each variable in each cell, using using the
+       ``cells_similarity_value_normalization`` (default: {cells_similarity_value_normalization}).
 
-    3. Invoke :py:func:`metacells.tools.similarity.compute_obs_obs_similarity` to compute the
+    3. If ``cells_similarity_log_data`` (default: {cells_similarity_log_data}), invoke the
+       :py:func:`metacells.utilities.computation.log_data` function to compute the log (base 2) of
+       the data.
+
+    4. Invoke :py:func:`metacells.tools.similarity.compute_obs_obs_similarity` to compute the
        similarity between each pair of cells, using the
        ``cells_similarity_method`` (default: {cells_similarity_method}).
 
-    4. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a
+    5. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a
        K-Nearest-Neighbors graph, using the
+       ``knn_max_unbalanced_ranks`` (default: {knn_max_unbalanced_ranks}),
        ``knn_balanced_ranks_factor`` (default: {knn_balanced_ranks_factor}),
        ``knn_incoming_degree_factor`` (default: {knn_incoming_degree_factor})
        and
@@ -164,7 +170,7 @@ def compute_direct_metacells(
        If ``knn_k`` (default: {knn_k}) is not specified, then it is
        chosen to be the mean number of cells required to reach the target metacell size.
 
-    5. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
+    6. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
        the candidate metacells, using the
        ``candidates_partition_method`` (default: {candidates_partition_method.__qualname__}),
        ``candidates_min_split_size_factor`` (default: {candidates_min_split_size_factor}),
@@ -177,7 +183,7 @@ def compute_direct_metacells(
        using the
        ``cell_sizes`` (default: {cell_sizes}).
 
-    6. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
+    7. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
        :py:func:`metacells.tools.deviants.find_deviant_cells` to remove deviants from the candidate
        metacells, using the
        ``deviants_min_gene_fold_factor`` (default: {deviants_min_gene_fold_factor}),
@@ -185,7 +191,7 @@ def compute_direct_metacells(
        and
        ``deviants_max_cell_fraction`` (default: {deviants_max_cell_fraction}).
 
-    7. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
+    8. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
        :py:func:`metacells.tools.dissolve.dissolve_metacells` to dissolve small unconvincing
        metacells, using the same
        ``target_metacell_size`` (default: {target_metacell_size}),
@@ -198,14 +204,12 @@ def compute_direct_metacells(
        and
        ``dissolve_min_metacell_cells`` (default: ``dissolve_min_metacell_cells``).
     '''
-    total_per_cell = \
-        ut.get_o_numpy(adata, what, sum=True)
-
     fdata = \
         extract_feature_data(adata, what, top_level=False,
                              downsample_cell_quantile=feature_downsample_cell_quantile,
                              min_gene_relative_variance=feature_min_gene_relative_variance,
-                             min_gene_fraction=feature_min_gene_fraction,
+                             min_gene_total=feature_min_gene_total,
+                             min_gene_top3=feature_min_gene_top3,
                              forbidden_gene_names=forbidden_gene_names,
                              forbidden_gene_patterns=forbidden_gene_patterns,
                              random_seed=random_seed)
@@ -216,11 +220,14 @@ def compute_direct_metacells(
     cell_sizes = \
         ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
 
-    data = ut.get_vo_proper(fdata, what, layout='row_major')
-    data = ut.fraction_by(data, sums=total_per_cell, by='row')
+    data = ut.get_vo_proper(fdata, 'downsampled', layout='row_major')
+    data = ut.to_numpy_matrix(data, copy=True)
+
+    if cells_similarity_value_normalization > 0:
+        data += cells_similarity_value_normalization
+
     if cells_similarity_log_data:
-        data = ut.log_data(data, base=2,
-                           normalization=cells_similarity_log_normalization)
+        data = ut.log_data(data, base=2)
 
     tl.compute_obs_obs_similarity(fdata, data, method=cells_similarity_method)
 
@@ -229,7 +236,7 @@ def compute_direct_metacells(
             total_cell_sizes: float = fdata.n_obs
         else:
             total_cell_sizes = float(np.sum(cell_sizes))
-        knn_k = round(total_cell_sizes / target_metacell_size)
+        knn_k = round(fdata.n_obs * target_metacell_size / total_cell_sizes)
 
     if knn_k == 0:
         ut.log_calc('knn_k: 0 (too small, try single metacell)')
@@ -240,6 +247,7 @@ def compute_direct_metacells(
         ut.log_calc('knn_k', knn_k)
         tl.compute_obs_obs_knn_graph(fdata,
                                      k=knn_k,
+                                     max_unbalanced_ranks=knn_max_unbalanced_ranks,
                                      balanced_ranks_factor=knn_balanced_ranks_factor,
                                      incoming_degree_factor=knn_incoming_degree_factor,
                                      outgoing_degree_factor=knn_outgoing_degree_factor)
@@ -253,6 +261,9 @@ def compute_direct_metacells(
                                        max_merge_size_factor=candidates_max_merge_size_factor,
                                        min_metacell_cells=candidates_min_metacell_cells,
                                        random_seed=random_seed)
+
+    ut.set_oo_data(adata, 'obs_outgoing_weights',
+                   ut.get_oo_proper(fdata, 'obs_outgoing_weights'))
 
     candidate_of_cells = \
         ut.get_o_numpy(fdata, 'candidate', formatter=ut.groups_description)
@@ -301,3 +312,5 @@ def compute_direct_metacells(
         outlier_of_cells = metacell_of_cells < 0
         ut.set_o_data(adata, 'outlier', outlier_of_cells,
                       formatter=ut.mask_description)
+
+    return fdata

@@ -3,10 +3,10 @@ Defaults
 --------
 '''
 
+from math import sqrt
 from typing import Optional, Union
 import metacells.utilities.typing as utt
 import metacells.utilities.partition as utp
-
 
 #: The generic random seed. The default of ``0`` makes for a different result each time the code
 #: is run. For replicable results, provide a non-zero value. Used by too many functions to list
@@ -14,8 +14,6 @@ import metacells.utilities.partition as utp
 random_seed: int = 0
 
 #: The generic minimal "significant" gene fraction. See
-#: :py:const:`feature_min_gene_fraction`
-#: and
 #: :py:func:`metacells.tools.high.find_high_fraction_genes`.
 significant_gene_fraction: float = 1e-5
 
@@ -44,7 +42,7 @@ significant_gene_fold_factor: float = 3.0
 #: py:const:`rare_min_gene_maximum`,
 #: py:const:`rare_min_cell_module_total`,
 #: and
-#: py:const:`cells_similarity_log_normalization`.
+#: py:const:`cells_similarity_value_normalization`.
 significant_value: int = 7
 
 #: The generic quantile of the cells total size to use for downsampling the cells for some
@@ -316,16 +314,6 @@ rare_min_cell_module_total: int = int((significant_value + 1) / 2)
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 feature_downsample_cell_quantile: float = downsample_cell_quantile
 
-#: The minimal mean fraction of a gene to be considered a "feature". See
-#: :py:const:`significant_gene_fraction`,
-#: :py:func:`metacells.tools.high.find_high_fraction_genes`,
-#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
-#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
-#: and
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-feature_min_gene_fraction: float = significant_gene_fraction
-
 #: The minimal relative variance of a gene to be considered a "feature". See
 #: :py:func:`metacells.tools.high.find_high_relative_variance_genes`,
 #: :py:func:`metacells.pipeline.feature.extract_feature_data`,
@@ -335,6 +323,24 @@ feature_min_gene_fraction: float = significant_gene_fraction
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 feature_min_gene_relative_variance: float = 0.1
 
+#: The minimal number of downsampled UMIs of a gene to be considered a "feature". See
+#: :py:func:`metacells.tools.high.find_high_total_genes`,
+#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+feature_min_gene_total: int = 50
+
+#: The minimal number of the top-3rd downsampled UMIs of a gene to be considered a "feature". See
+#: :py:func:`metacells.tools.high.find_high_topN_genes`,
+#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+feature_min_gene_top3: int = 3
+
 #: Whether to compute cell-cell similarity using the log (base 2) of the data. See
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
@@ -342,14 +348,14 @@ feature_min_gene_relative_variance: float = 0.1
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 cells_similarity_log_data: bool = True
 
-#: The normalization factor to use if/when computing the log (base 2) of the data for directly
+#: The normalization factor to use if/when computing the fractions of the data for directly
 #: computing the metacells. See
 #: :py:const:`significant_value`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-cells_similarity_log_normalization: float = 1/significant_value
+cells_similarity_value_normalization: float = 1/significant_value
 
 #: The method to use to compute cell-cell similarity. See
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
@@ -373,7 +379,7 @@ groups_similarity_method: str = similarity_method
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 knn_k: Optional[int] = None
 
-#: The factor of K of edges to keep when computing the balanced edge weights for the
+#: The maximal unbalanced ranks to consider when computing the balanced ranks for the
 #: K-Nearest-Neighbors graph. See
 #: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
 #: :py:func:`metacells.tools.knn_graph.compute_var_var_knn_graph`,
@@ -381,7 +387,17 @@ knn_k: Optional[int] = None
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-knn_balanced_ranks_factor: float = 4.0
+knn_max_unbalanced_ranks: int = 20000
+
+#: The factor of K edge ranks to keep when computing the balanced ranks for the
+#: K-Nearest-Neighbors graph. See
+#: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
+#: :py:func:`metacells.tools.knn_graph.compute_var_var_knn_graph`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+knn_balanced_ranks_factor: float = sqrt(10)
 
 #: The factor of K of edges to keep when pruning the incoming edges of the K-Nearest-Neighbors
 #: graph. See
@@ -391,7 +407,7 @@ knn_balanced_ranks_factor: float = 4.0
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-knn_incoming_degree_factor: float = 3.0
+knn_incoming_degree_factor: float = 4.0
 
 #: The factor of K of edges to keep when pruning the outgoing edges of the K-Nearest-Neighbors
 #: graph. See

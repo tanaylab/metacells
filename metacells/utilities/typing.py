@@ -121,6 +121,7 @@ __all__ = [
     'LAYOUT_OF_AXIS',
     'PER_OF_AXIS',
 
+    'matrix_dtype',
     'matrix_layout',
 
     'is_layout',
@@ -162,8 +163,6 @@ class ShapedProtocol(Protocol):
     '''
     ndim: int
     shape: Union[Tuple[int, int], Tuple[int]]
-
-    def dtype(self) -> np.dtype: ...
 
     def __getitem__(self, key: Any) -> Any: ...
 
@@ -798,6 +797,26 @@ def is_layout(matrix: Matrix, layout: Optional[str]) -> bool:
 
     dense = to_numpy_matrix(matrix, only_extract=True)
     return dense.flags[DENSE_FAST_FLAG[layout]]
+
+
+def matrix_dtype(proper: ProperMatrix) -> str:
+    '''
+    Return the data type of the element of a proper matrix.
+    '''
+    frame = maybe_pandas_frame(proper)
+    if frame is not None:
+        proper = frame.values
+        if isinstance(proper, pd.core.arrays.categorical.Categorical):
+            proper = np.array(proper)
+
+    dense = maybe_numpy_matrix(proper)
+    if dense is not None:
+        return str(dense.dtype)
+
+    compressed = maybe_compressed_matrix(proper)
+    assert compressed is not None
+
+    return str(compressed.data.dtype)
 
 
 def matrix_layout(matrix: Matrix) -> Optional[str]:

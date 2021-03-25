@@ -174,7 +174,7 @@ def compute_candidate_metacells(
         community_of_cells = ut.compress_indices(improver.membership)
 
     if ut.logging_calc():
-        ut.log_calc('surprise',
+        ut.log_calc('score',
                     ut.leiden_surprise_quality(edge_weights=edge_weights,
                                                partition_of_nodes=community_of_cells))
 

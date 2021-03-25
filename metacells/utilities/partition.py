@@ -149,7 +149,7 @@ def leiden_surprise_quality(
     Return the quality score for a partition of nodes using the the ``SurpriseVertexPartition`` goal
     function.
     '''
-    mask = partition_of_nodes[partition_of_nodes >= 0]
+    mask = partition_of_nodes >= 0
     partition_of_nodes = partition_of_nodes[mask]
     edge_weights = edge_weights[mask, :][:, mask]
 

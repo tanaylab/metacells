@@ -438,7 +438,7 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
 
     if hasattr(value, 'ndim'):
         if value.ndim == 2:
-            text = f'{value.shape[0]} X {value.shape[1]} {value.dtype}s'
+            text = f'{value.shape[0]} X {value.shape[1]} {utt.matrix_dtype(value)}s'
             sparse = utt.maybe_sparse_matrix(value)
             if sparse is not None:
                 text += ' ' + ratio_description(value.shape[0] * value.shape[1], 'element',

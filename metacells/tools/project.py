@@ -165,7 +165,7 @@ def project_obs_obs_to_group_group(
     assert gdata.n_obs == (np.max(group_of_obs) + 1)
     property_of_group_group = \
         np.empty((gdata.n_obs, gdata.n_obs),
-                 dtype=str(property_of_obs_obs.dtype))
+                 dtype=ut.matrix_dtype(property_of_obs_obs))
 
     # TODO: This is a slow implementation.
     for row_group in range(gdata.n_obs):

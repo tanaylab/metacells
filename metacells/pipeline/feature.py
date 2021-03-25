@@ -26,8 +26,9 @@ def extract_feature_data(
     *,
     name: Optional[str] = '.feature',
     downsample_cell_quantile: float = pr.feature_downsample_cell_quantile,
-    min_gene_fraction: float = pr.feature_min_gene_fraction,
     min_gene_relative_variance: float = pr.feature_min_gene_relative_variance,
+    min_gene_total: int = pr.feature_min_gene_total,
+    min_gene_top3: int = pr.feature_min_gene_top3,
     forbidden_gene_names: Optional[Collection[str]] = None,
     forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     random_seed: int = 0,
@@ -56,7 +57,7 @@ def extract_feature_data(
     Also sets the following annotations in the full ``adata``:
 
     Variable (Gene) Annotations
-        ``high_fraction_gene``
+        ``high_total_gene``
             A boolean mask of genes with "high" expression level.
 
         ``high_relative_variance_gene``
@@ -76,8 +77,8 @@ def extract_feature_data(
        same total number of UMIs, using the ``downsample_cell_quantile`` (default:
        {downsample_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
 
-    2. Invoke :py:func:`metacells.tools.high.find_high_fraction_genes` to select high-expression
-       feature genes (based on the downsampled data), using ``min_gene_fraction``.
+    2. Invoke :py:func:`metacells.tools.high.find_high_total_genes` to select high-expression
+       feature genes (based on the downsampled data), using ``min_gene_total``.
 
     3. Invoke :py:func:`metacells.tools.high.find_high_relative_variance_genes` to select
        high-variance feature genes (based on the downsampled data), using
@@ -95,8 +96,11 @@ def extract_feature_data(
                         downsample_cell_quantile=downsample_cell_quantile,
                         random_seed=random_seed)
 
-    tl.find_high_fraction_genes(adata, 'downsampled',
-                                min_gene_fraction=min_gene_fraction)
+    tl.find_high_topN_genes(adata, 'downsampled', topN=3,
+                            min_gene_topN=min_gene_top3)
+
+    tl.find_high_total_genes(adata, 'downsampled',
+                             min_gene_total=min_gene_total)
 
     tl.find_high_relative_variance_genes(adata, 'downsampled',
                                          min_gene_relative_variance=min_gene_relative_variance)
@@ -110,7 +114,8 @@ def extract_feature_data(
 
     results = tl.filter_data(adata, name=name, top_level=top_level,
                              mask_var='feature_gene',
-                             var_masks=['high_fraction_gene',
+                             var_masks=['high_total_gene',
+                                        'high_top3_gene',
                                         'high_relative_variance_gene',
                                         '~forbidden_gene'])
 

@@ -896,35 +896,35 @@ collect_top(const size_t degree,
 static void
 prune_band(const size_t band_index,
            const size_t pruned_degree,
-           ConstCompressedMatrix<float32_t, int32_t, int32_t>& input_pruned_ranks,
-           ArraySlice<float32_t> output_pruned_ranks,
+           ConstCompressedMatrix<float32_t, int32_t, int32_t>& input_pruned_values,
+           ArraySlice<float32_t> output_pruned_values,
            ArraySlice<int32_t> output_pruned_indices,
            ConstArraySlice<int32_t> output_pruned_indptr) {
     const auto start_position = output_pruned_indptr[band_index];
     const auto stop_position = output_pruned_indptr[band_index + 1];
 
     auto output_indices = output_pruned_indices.slice(start_position, stop_position);
-    auto output_ranks = output_pruned_ranks.slice(start_position, stop_position);
+    auto output_values = output_pruned_values.slice(start_position, stop_position);
 
-    const auto input_indices = input_pruned_ranks.get_band_indices(band_index);
-    const auto input_ranks = input_pruned_ranks.get_band_data(band_index);
-    FastAssertCompare(input_indices.size(), ==, input_ranks.size());
-    FastAssertCompare(input_ranks.size(), ==, input_ranks.size());
+    const auto input_indices = input_pruned_values.get_band_indices(band_index);
+    const auto input_values = input_pruned_values.get_band_data(band_index);
+    FastAssertCompare(input_indices.size(), ==, input_values.size());
+    FastAssertCompare(input_values.size(), ==, input_values.size());
 
-    if (input_ranks.size() <= pruned_degree) {
+    if (input_values.size() <= pruned_degree) {
         std::copy(input_indices.begin(), input_indices.end(), output_indices.begin());
-        std::copy(input_ranks.begin(), input_ranks.end(), output_ranks.begin());
+        std::copy(input_values.begin(), input_values.end(), output_values.begin());
         return;
     }
 
-    tmp_indices.resize(input_ranks.size());
+    tmp_indices.resize(input_values.size());
     std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
     std::nth_element(tmp_indices.begin(),
                      tmp_indices.begin() + pruned_degree,
                      tmp_indices.end(),
                      [&](const size_t left_column_index, const size_t right_column_index) {
-                         const auto left_similarity = input_ranks[left_column_index];
-                         const auto right_similarity = input_ranks[right_column_index];
+                         const auto left_similarity = input_values[left_column_index];
+                         const auto right_similarity = input_values[right_column_index];
                          return left_similarity > right_similarity;
                      });
 
@@ -937,43 +937,43 @@ prune_band(const size_t band_index,
     for (size_t location = 0; location < pruned_degree; ++location) {
         size_t position = tmp_indices[location];
         output_indices[location] = input_indices[position];
-        output_ranks[location] = input_ranks[position];
+        output_values[location] = input_values[position];
     }
 }
 
-/// See the Python `metacell.tools.knn_graph._prune_ranks` function.
+/// See the Python `metacell.utilities.computation.prune_per` function.
 static void
 collect_pruned(const size_t pruned_degree,
-               const pybind11::array_t<float32_t>& input_pruned_ranks_data,
-               const pybind11::array_t<int32_t>& input_pruned_ranks_indices,
-               const pybind11::array_t<int32_t>& input_pruned_ranks_indptr,
-               pybind11::array_t<float32_t>& output_pruned_ranks_array,
+               const pybind11::array_t<float32_t>& input_pruned_values_data,
+               const pybind11::array_t<int32_t>& input_pruned_values_indices,
+               const pybind11::array_t<int32_t>& input_pruned_values_indptr,
+               pybind11::array_t<float32_t>& output_pruned_values_array,
                pybind11::array_t<int32_t>& output_pruned_indices_array,
                pybind11::array_t<int32_t>& output_pruned_indptr_array) {
     WithoutGil without_gil{};
 
-    size_t size = input_pruned_ranks_indptr.size() - 1;
-    ConstCompressedMatrix<float32_t, int32_t, int32_t> input_pruned_ranks(
-        ConstArraySlice<float32_t>(input_pruned_ranks_data, "input_pruned_ranks_data"),
-        ConstArraySlice<int32_t>(input_pruned_ranks_indices, "input_pruned_ranks_indices"),
-        ConstArraySlice<int32_t>(input_pruned_ranks_indptr, "pruned_ranks_indptr"),
+    size_t size = input_pruned_values_indptr.size() - 1;
+    ConstCompressedMatrix<float32_t, int32_t, int32_t> input_pruned_values(
+        ConstArraySlice<float32_t>(input_pruned_values_data, "input_pruned_values_data"),
+        ConstArraySlice<int32_t>(input_pruned_values_indices, "input_pruned_values_indices"),
+        ConstArraySlice<int32_t>(input_pruned_values_indptr, "pruned_values_indptr"),
         size,
-        "pruned_ranks");
+        "pruned_values");
 
-    ArraySlice<float32_t> output_pruned_ranks(output_pruned_ranks_array, "output_pruned_ranks");
+    ArraySlice<float32_t> output_pruned_values(output_pruned_values_array, "output_pruned_values");
     ArraySlice<int32_t> output_pruned_indices(output_pruned_indices_array, "output_pruned_indices");
     ArraySlice<int32_t> output_pruned_indptr(output_pruned_indptr_array, "output_pruned_indptr");
 
-    FastAssertCompare(output_pruned_ranks.size(), >=, size * pruned_degree);
+    FastAssertCompare(output_pruned_values.size(), >=, size * pruned_degree);
     FastAssertCompare(output_pruned_indices.size(), >=, size * pruned_degree);
     FastAssertCompare(output_pruned_indptr.size(), ==, size + 1);
 
     size_t start_position = output_pruned_indptr[0] = 0;
     for (size_t band_index = 0; band_index < size; ++band_index) {
         FastAssertCompare(start_position, ==, output_pruned_indptr[band_index]);
-        auto input_ranks = input_pruned_ranks.get_band_data(band_index);
-        if (input_ranks.size() <= pruned_degree) {
-            start_position += input_ranks.size();
+        auto input_values = input_pruned_values.get_band_data(band_index);
+        if (input_values.size() <= pruned_degree) {
+            start_position += input_values.size();
         } else {
             start_position += pruned_degree;
         }
@@ -983,8 +983,8 @@ collect_pruned(const size_t pruned_degree,
     parallel_loop(size, [&](size_t band_index) {
         prune_band(band_index,
                    pruned_degree,
-                   input_pruned_ranks,
-                   output_pruned_ranks,
+                   input_pruned_values,
+                   output_pruned_values,
                    output_pruned_indices,
                    output_pruned_indptr);
     });

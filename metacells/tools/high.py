@@ -12,6 +12,7 @@ import metacells.utilities as ut
 
 __all__ = [
     'find_high_total_genes',
+    'find_high_topN_genes',
     'find_high_fraction_genes',
     'find_high_normalized_variance_genes',
     'find_high_relative_variance_genes',
@@ -68,6 +69,62 @@ def find_high_total_genes(
         return None
 
     ut.log_return('high_total_genes', genes_mask)
+    return ut.to_pandas_series(genes_mask, index=adata.var_names)
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def find_high_topN_genes(  # pylint: disable=invalid-name
+    adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
+    *,
+    topN: int,  # pylint: disable=invalid-name
+    min_gene_topN: int,  # pylint: disable=invalid-name
+    inplace: bool = True,
+) -> Optional[ut.PandasSeries]:
+    '''
+    Find genes which have high total top-Nth value of ``what`` (default: {what}) data.
+
+    This should typically only be applied to downsampled data to ensure that variance in sampling
+    depth does not affect the result.
+
+    Genes with too-low expression are typically excluded from computations. In particular,
+    genes may have all-zero expression, in which case including them just slows the
+    computations (and triggers numeric edge cases).
+
+    **Input**
+
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
+
+    **Returns**
+
+    Variable (Gene) Annotations
+        ``high_top<topN>_genes``
+            A boolean mask indicating whether each gene was found to have a high top-Nth value.
+
+    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
+    ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
+
+    **Computation Parameters**
+
+    1. Use :py:func:`metacells.utilities.computation.top_per` to get the top-Nth UMIs of each gene.
+
+    2. Select the genes whose fraction is at least ``min_gene_topN``.
+    '''
+    data_of_genes = ut.get_vo_proper(adata, what, layout='column_major')
+    rank = max(adata.n_obs - topN - 1, 1)
+    topN_of_genes = ut.rank_per(data_of_genes,  # pylint: disable=invalid-name
+                                per='column', rank=rank)
+    genes_mask = topN_of_genes >= min_gene_topN
+
+    if inplace:
+        ut.set_v_data(adata, f'high_top{topN}_gene', genes_mask)
+        return None
+
+    ut.log_return(f'high_top{topN}_genes', genes_mask)
     return ut.to_pandas_series(genes_mask, index=adata.var_names)
 
 

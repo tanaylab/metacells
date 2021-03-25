@@ -427,6 +427,7 @@ def corrcoef(
         result /= stddev[:, None]
         result /= stddev[None, :]
         np.clip(result, -1, 1, out=result)
+
     return result
 
 
@@ -791,7 +792,7 @@ def matrix_rows_auroc(
         columns_subset = mask
 
     if dense is not None:
-        extension_name = 'auroc_dense_matrix_%s_t' % matrix.dtype
+        extension_name = 'auroc_dense_matrix_%s_t' % dense.dtype
         extension = getattr(xt, extension_name)
         extension(dense, columns_subset, columns_scale, rows_auroc)
     else:
@@ -1101,10 +1102,10 @@ def prune_per(compressed: utt.CompressedMatrix, top: int) -> utt.CompressedMatri
         assert layout == 'column_major'
         size = compressed.shape[1]
 
-    assert size * top < 2 ** 31
     indptr_array = np.empty(1 + size, dtype='int32')
     indices_array = np.empty(size * top, dtype='int32')
     data_array = np.empty(size * top, dtype='float32')
+    assert utt.matrix_dtype(compressed) == 'float32'
 
     with utm.timed_step('extensions.collect_pruned'):
         utm.timed_parameters(size=size, nnz=compressed.nnz, keep=top)
@@ -1207,7 +1208,8 @@ def scale_by(matrix: utt.Matrix, scale: utt.Vector, *, by: str) -> utt.ProperMat
 
 @utm.timed_call()
 def fraction_by(matrix: utt.Matrix, *,
-                sums: Optional[utt.Vector] = None, by: str) -> utt.ProperMatrix:
+                sums: Optional[utt.Vector] = None,
+                by: str) -> utt.ProperMatrix:
     '''
     Return a matrix containing, in each entry, the fraction of the original data out of the
     total ``by`` (``row`` or ``column``).
@@ -1224,6 +1226,7 @@ def fraction_by(matrix: utt.Matrix, *,
         sums = sum_per(proper, per=by)
     else:
         sums = utt.to_numpy_vector(sums)
+
     zeros_mask = sums == 0
     scale = np.reciprocal(sums, where=~zeros_mask)
     scale[zeros_mask] = 0
@@ -1502,6 +1505,13 @@ ROLLING_FUNCTIONS = {
     'var': pd.core.window.Rolling.var,
 }
 
+FULL_FUNCTIONS = {
+    'mean': np.mean,
+    'median': np.median,
+    'std': np.std,
+    'var': np.var,
+}
+
 
 @utd.expand_doc(functions=', '.join(['``%s``' % function for function in ROLLING_FUNCTIONS]))
 @utm.timed_call()
@@ -1531,12 +1541,15 @@ def sliding_window_function(
 
     if window_size % 2 == 0:
         window_size += 1
+    half_window_size = (window_size - 1) // 2
 
     utm.timed_parameters(function=function,
                          size=dense.size,
                          window=window_size)
 
-    half_window_size = (window_size - 1) // 2
+    if window_size >= len(vector):
+        value = FULL_FUNCTIONS[function](vector)
+        return np.full(len(vector), value)
 
     if order_by is not None:
         assert dense.size == order_by.size
@@ -1545,13 +1558,11 @@ def sliding_window_function(
     else:
         reverse_order_indices = order_indices = np.arange(dense.size)
 
-    min_index = order_indices[0]
-    max_index = order_indices[-1]
-
     extended_order_indices = np.concatenate([  #
-        np.repeat(min_index, half_window_size),
+        order_indices[np.arange(window_size - half_window_size, window_size)],
         order_indices,
-        np.repeat(max_index, half_window_size),
+        order_indices[np.arange(len(vector) - window_size,
+                                len(vector) - window_size + half_window_size)],
     ])
 
     extended_series = utt.to_pandas_series(dense[extended_order_indices])
@@ -1770,7 +1781,7 @@ def bin_fill(  # pylint: disable=too-many-statements,too-many-branches
 
 @utm.timed_call()
 def sum_groups(
-    matrix: utt.Matrix,
+    matrix: utt.ProperMatrix,
     groups: utt.Vector,
     *,
     per: Optional[str]
@@ -1819,8 +1830,8 @@ def sum_groups(
     with utm.timed_step(timed_step):
         utm.timed_parameters(groups=groups_count, entities=matrix.shape[0],
                              elements=matrix.shape[1])
-        results = \
-            np.empty((groups_count, matrix.shape[1]), dtype=str(matrix.dtype))
+        results = np.empty((groups_count, matrix.shape[1]),
+                           dtype=utt.matrix_dtype(matrix))
 
         for group_index in range(groups_count):
             group_mask = groups == group_index

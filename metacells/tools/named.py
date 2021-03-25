@@ -21,9 +21,9 @@ __all__ = [
 @ut.expand_doc()
 def find_named_genes(
     adata: AnnData,
+    *,
     names: Optional[Collection[str]] = None,
     patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    *,
     to: Optional[str] = None,
     invert: bool = False,
 ) -> Optional[ut.PandasSeries]:
