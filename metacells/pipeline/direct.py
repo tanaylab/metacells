@@ -97,7 +97,7 @@ def compute_direct_metacells(
     Sets the following annotations in ``adata``:
 
     Variable (Gene) Annotations
-        ``high_fraction_gene``
+        ``high_total_gene``
             A boolean mask of genes with "high" expression level.
 
         ``high_relative_variance_gene``

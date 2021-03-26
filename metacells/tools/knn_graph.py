@@ -289,7 +289,7 @@ def _rank_outgoing(
         ut.timed_parameters(results=size, elements=size)
         max_index_of_each = similarity.argmax(axis=1)
 
-    preserved_ranks = np.full(2 * size, 1, dtype='float32')
+    preserved_ranks = np.full(2 * size, size - 1, dtype='float32')
     preserved_row_indices = np.concatenate([all_indices, max_index_of_each])
     preserved_column_indices = np.concatenate([max_index_of_each, all_indices])
     preserved_matrix = sp.coo_matrix((preserved_ranks,
@@ -303,11 +303,12 @@ def _rank_outgoing(
     outgoing_ranks = \
         ut.top_per(similarity, top_unbalanced_ranks, per=None, ranks=True)
 
-    with ut.timed_step('.preserve'):
+    with ut.timed_step('sparse.maximum'):
         ut.timed_parameters(collected=outgoing_ranks.nnz,
                             preserved=preserved_matrix.nnz)
         outgoing_ranks = outgoing_ranks.maximum(preserved_matrix)
-        ut.sort_compressed_indices(outgoing_ranks)
+
+    ut.sort_compressed_indices(outgoing_ranks)
 
     outgoing_ranks.data *= -1
     outgoing_ranks.data += size
@@ -334,17 +335,38 @@ def _balance_ranks(
         balanced_ranks = ut.mustbe_compressed_matrix(  #
             outgoing_ranks.multiply(transposed_ranks))
 
+    np.sqrt(balanced_ranks.data, out=balanced_ranks.data)
+    balanced_ranks.data *= -1
+    balanced_ranks.data += 2**21
+
+    all_indices = np.arange(size)
+    with ut.timed_step('numpy.argmax'):
+        ut.timed_parameters(results=size, elements=balanced_ranks.nnz / size)
+        max_index_of_each = ut.to_numpy_vector(balanced_ranks.argmax(axis=1))
+
     max_rank = k * k * balanced_ranks_factor * balanced_ranks_factor
     ut.log_calc('max_rank', sqrt(max_rank))
+    balanced_ranks.data += max_rank + 1 - 2**21
 
-    balanced_ranks.data[balanced_ranks.data > max_rank] = 0
+    preserved_row_indices = all_indices
+    preserved_column_indices = max_index_of_each
+    preserved_balanced_ranks = \
+        ut.to_numpy_vector(balanced_ranks[preserved_row_indices,
+                                          preserved_column_indices])
+    preserved_balanced_ranks[preserved_balanced_ranks < 1] = 1
+    preserved_matrix = \
+        sp.coo_matrix((preserved_balanced_ranks,
+                       (preserved_row_indices, preserved_column_indices)),
+                      shape=balanced_ranks.shape)
+    preserved_matrix.has_canonical_format = True
 
+    balanced_ranks.data[balanced_ranks.data <= 0] = 0
     ut.eliminate_zeros(balanced_ranks)
 
-    np.sqrt(balanced_ranks.data, out=balanced_ranks.data)
-
-    balanced_ranks.data *= -1
-    balanced_ranks.data += max_rank + 1
+    with ut.timed_step('sparse.maximum'):
+        ut.timed_parameters(collected=balanced_ranks.nnz,
+                            preserved=preserved_matrix.nnz)
+        balanced_ranks = balanced_ranks.maximum(preserved_matrix)
 
     ut.sort_compressed_indices(balanced_ranks)
 
@@ -372,10 +394,10 @@ def _prune_ranks(
     all_indices = np.arange(size)
     with ut.timed_step('numpy.argmax'):
         ut.timed_parameters(results=size, elements=balanced_ranks.nnz / size)
-        min_index_of_each = ut.to_numpy_vector(balanced_ranks.argmax(axis=1))
+        max_index_of_each = ut.to_numpy_vector(balanced_ranks.argmax(axis=1))
 
     preserved_row_indices = all_indices
-    preserved_column_indices = min_index_of_each
+    preserved_column_indices = max_index_of_each
     preserved_balanced_ranks = \
         ut.to_numpy_vector(balanced_ranks[preserved_row_indices,
                                           preserved_column_indices])
@@ -405,7 +427,8 @@ def _prune_ranks(
         ut.timed_parameters(collected=pruned_ranks.nnz,
                             preserved=preserved_matrix.nnz)
         pruned_ranks = pruned_ranks.maximum(preserved_matrix)
-        ut.sort_compressed_indices(pruned_ranks)
+
+    ut.sort_compressed_indices(pruned_ranks)
 
     pruned_ranks = ut.mustbe_compressed_matrix(pruned_ranks)
     _assert_proper_compressed(pruned_ranks, 'csr')

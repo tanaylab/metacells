@@ -81,9 +81,9 @@ class ResultAnnotation(NamedTuple):
 
 
 GENE_ANNOTATIONS = [
-    ResultAnnotation(name='pre_high_fraction_gene',
+    ResultAnnotation(name='pre_high_total_gene',
                      default=0, dtype='int32', formatter=ut.mask_description),
-    ResultAnnotation(name='high_fraction_gene',
+    ResultAnnotation(name='high_total_gene',
                      default=0, dtype='int32', formatter=ut.mask_description),
     ResultAnnotation(name='pre_high_relative_variance_gene',
                      default=0, dtype='int32', formatter=ut.mask_description),
@@ -187,7 +187,7 @@ class SubsetResults:
         #: The per-gene data.
         #:
         #: This must cover all the genes of the "complete" (clean) data. It must contain a
-        #: ``feature_gene`` column, and optionally the ``high_fraction_gene``,
+        #: ``feature_gene`` column, and optionally the ``high_total_gene``,
         #: ``high_relative_variance_gene``, ``forbidden_gene`` and ``gene_deviant_votes`` columns.
         self.genes_frame = ut.to_pandas_frame(index=range(adata.n_vars))
 
@@ -524,7 +524,7 @@ def divide_and_conquer_pipeline(
         ``rare_genes``
             A boolean mask for the genes in any of the rare gene modules.
 
-        ``pre_high_fraction_gene``, ``high_fraction_gene``
+        ``pre_high_total_gene``, ``high_total_gene``
             The number of times the gene was marked as having a high expression level when computing
             the preliminary and final metacells. This is zero for non-"clean" genes.
 
@@ -859,7 +859,7 @@ def compute_divide_and_conquer_metacells(
             (probabilities).
 
     Variable (Gene) Annotations
-        ``pre_high_fraction_gene``, ``high_fraction_gene``
+        ``pre_high_total_gene``, ``high_total_gene``
             The number of times the gene was marked as having a high expression level when computing
             the preliminary and final metacells. This is zero for non-"clean" genes.
 

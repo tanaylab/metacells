@@ -896,10 +896,10 @@ collect_top(const size_t degree,
 static void
 prune_band(const size_t band_index,
            const size_t pruned_degree,
-           ConstCompressedMatrix<float32_t, int32_t, int32_t>& input_pruned_values,
+           ConstCompressedMatrix<float32_t, int32_t, int64_t>& input_pruned_values,
            ArraySlice<float32_t> output_pruned_values,
            ArraySlice<int32_t> output_pruned_indices,
-           ConstArraySlice<int32_t> output_pruned_indptr) {
+           ConstArraySlice<int64_t> output_pruned_indptr) {
     const auto start_position = output_pruned_indptr[band_index];
     const auto stop_position = output_pruned_indptr[band_index + 1];
 
@@ -946,23 +946,23 @@ static void
 collect_pruned(const size_t pruned_degree,
                const pybind11::array_t<float32_t>& input_pruned_values_data,
                const pybind11::array_t<int32_t>& input_pruned_values_indices,
-               const pybind11::array_t<int32_t>& input_pruned_values_indptr,
+               const pybind11::array_t<int64_t>& input_pruned_values_indptr,
                pybind11::array_t<float32_t>& output_pruned_values_array,
                pybind11::array_t<int32_t>& output_pruned_indices_array,
-               pybind11::array_t<int32_t>& output_pruned_indptr_array) {
+               pybind11::array_t<int64_t>& output_pruned_indptr_array) {
     WithoutGil without_gil{};
 
     size_t size = input_pruned_values_indptr.size() - 1;
-    ConstCompressedMatrix<float32_t, int32_t, int32_t> input_pruned_values(
+    ConstCompressedMatrix<float32_t, int32_t, int64_t> input_pruned_values(
         ConstArraySlice<float32_t>(input_pruned_values_data, "input_pruned_values_data"),
         ConstArraySlice<int32_t>(input_pruned_values_indices, "input_pruned_values_indices"),
-        ConstArraySlice<int32_t>(input_pruned_values_indptr, "pruned_values_indptr"),
+        ConstArraySlice<int64_t>(input_pruned_values_indptr, "pruned_values_indptr"),
         size,
         "pruned_values");
 
     ArraySlice<float32_t> output_pruned_values(output_pruned_values_array, "output_pruned_values");
     ArraySlice<int32_t> output_pruned_indices(output_pruned_indices_array, "output_pruned_indices");
-    ArraySlice<int32_t> output_pruned_indptr(output_pruned_indptr_array, "output_pruned_indptr");
+    ArraySlice<int64_t> output_pruned_indptr(output_pruned_indptr_array, "output_pruned_indptr");
 
     FastAssertCompare(output_pruned_values.size(), >=, size * pruned_degree);
     FastAssertCompare(output_pruned_indices.size(), >=, size * pruned_degree);

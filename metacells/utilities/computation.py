@@ -1059,7 +1059,7 @@ def top_per(matrix: utt.Matrix, top: int, *, per: Optional[str], ranks: bool = F
     size = dense.shape[0]
     assert top < dense.shape[1]
 
-    indptr = np.arange(size + 1, dtype='int32')
+    indptr = np.arange(size + 1, dtype='int64')
     indptr *= top
 
     if size == 1:
@@ -1102,7 +1102,7 @@ def prune_per(compressed: utt.CompressedMatrix, top: int) -> utt.CompressedMatri
         assert layout == 'column_major'
         size = compressed.shape[1]
 
-    indptr_array = np.empty(1 + size, dtype='int32')
+    indptr_array = np.empty(1 + size, dtype='int64')
     indices_array = np.empty(size * top, dtype='int32')
     data_array = np.empty(size * top, dtype='float32')
     assert utt.matrix_dtype(compressed) == 'float32'
