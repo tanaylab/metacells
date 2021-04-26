@@ -1,6 +1,10 @@
 Metacell Analysis
 =================
 
+**DANGER WILL ROBINSON:** This is a pre-alpha version under active development, so please do not use
+this (yet). We are working on a 1st release, hopefully in the next few weeks, in combination with
+submitting a paper.
+
 Naively, scRNA_seq data is a set of cell profiles, where for each one, for each gene, we get a count
 of the mRNA molecules that existed in the cell for that gene. This serves as an indicator of how
 "expressed" or "active" the gene is.
