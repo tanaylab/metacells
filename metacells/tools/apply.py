@@ -202,7 +202,7 @@ def _apply_annotations(  # pylint: disable=too-many-branches
                                % (full_name, name))
 
             if default_values.full is None:
-                full_value = np.full(full_size, None, dtype='float')
+                full_value = np.full(full_size, None, dtype='float32')
             else:
                 full_value = np.full(full_size, default_values.full)
 

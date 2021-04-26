@@ -27,7 +27,9 @@ def compute_direct_metacells(
     adata: AnnData,
     what: Union[str, ut.Matrix] = '__x__',
     *,
-    feature_downsample_cell_quantile: float = pr.feature_downsample_cell_quantile,
+    feature_downsample_min_samples: int = pr.feature_downsample_min_samples,
+    feature_downsample_min_cell_quantile: float = pr.feature_downsample_min_cell_quantile,
+    feature_downsample_max_cell_quantile: float = pr.feature_downsample_max_cell_quantile,
     feature_min_gene_total: int = pr.feature_min_gene_total,
     feature_min_gene_top3: int = pr.feature_min_gene_top3,
     feature_min_gene_relative_variance: float = pr.feature_min_gene_relative_variance,
@@ -38,14 +40,17 @@ def compute_direct_metacells(
     cells_similarity_method: str = pr.cells_similarity_method,
     target_metacell_size: int = pr.target_metacell_size,
     knn_k: Optional[int] = pr.knn_k,
-    knn_max_unbalanced_ranks: int = pr.knn_max_unbalanced_ranks,
     knn_balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     knn_incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     knn_outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
-    candidates_partition_method: 'ut.PartitionMethod' = pr.candidates_partition_method,
+    candidates_cell_seeds: Optional[Union[str, ut.Vector]] = None,
+    min_seed_size_quantile: float = pr.min_seed_size_quantile,
+    max_seed_size_quantile: float = pr.max_seed_size_quantile,
+    candidates_cooldown_step: float = pr.cooldown_step,
+    candidates_cooldown_rate: float = pr.cooldown_rate,
     candidates_min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
-    candidates_min_metacell_cells: int = pr.min_metacell_cells,
+    candidates_min_metacell_cells: Optional[int] = pr.min_metacell_cells,
     must_complete_cover: bool = False,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
@@ -116,6 +121,10 @@ def compute_direct_metacells(
             as deviant). This will be zero for non-"feature" genes.
 
     Observation (Cell) Annotations
+        ``seed``
+            The index of the seed metacell each cell was assigned to to. This is ``-1`` for
+            non-"clean" cells.
+
         ``candidate``
             The index of the candidate metacell each cell was assigned to to. This is ``-1`` for
             non-"clean" cells.
@@ -139,12 +148,13 @@ def compute_direct_metacells(
 
     1. Invoke :py:func:`metacells.pipeline.feature.extract_feature_data` to extract "feature" data
        from the clean data, using the
-       ``feature_downsample_cell_quantile`` (default: {feature_downsample_cell_quantile}),
-       ``feature_min_gene_total`` (default: {feature_min_gene_total}),
-       ``feature_min_gene_top3`` (default: {feature_min_gene_top3}),
-       ``feature_min_gene_relative_variance (default: {feature_min_gene_relative_variance}),
-       ``forbidden_gene_names`` (default: {forbidden_gene_names}),
-       ``forbidden_gene_patterns`` (default: {forbidden_gene_patterns})
+       ``feature_downsample_min_samples`` (default: {feature_downsample_min_samples}),
+       ``feature_downsample_min_cell_quantile`` (default: {feature_downsample_min_cell_quantile}),
+       ``feature_downsample_max_cell_quantile`` (default: {feature_downsample_max_cell_quantile}),
+       ``feature_min_gene_total`` (default: {feature_min_gene_total}), ``feature_min_gene_top3``
+       (default: {feature_min_gene_top3}), ``feature_min_gene_relative_variance (default:
+       {feature_min_gene_relative_variance}), ``forbidden_gene_names`` (default:
+       {forbidden_gene_names}), ``forbidden_gene_patterns`` (default: {forbidden_gene_patterns})
        and
        ``random_seed`` (default: {random_seed})
        to make this replicable.
@@ -162,7 +172,6 @@ def compute_direct_metacells(
 
     5. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a
        K-Nearest-Neighbors graph, using the
-       ``knn_max_unbalanced_ranks`` (default: {knn_max_unbalanced_ranks}),
        ``knn_balanced_ranks_factor`` (default: {knn_balanced_ranks_factor}),
        ``knn_incoming_degree_factor`` (default: {knn_incoming_degree_factor})
        and
@@ -172,7 +181,11 @@ def compute_direct_metacells(
 
     6. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
        the candidate metacells, using the
-       ``candidates_partition_method`` (default: {candidates_partition_method.__qualname__}),
+       ``candidates_cell_seeds`` (default: {candidates_cell_seeds}),
+       ``min_seed_size_quantile`` (default: {min_seed_size_quantile}),
+       ``max_seed_size_quantile`` (default: {max_seed_size_quantile}),
+       ``candidates_cooldown_step`` (default: {candidates_cooldown_step}),
+       ``candidates_cooldown_rate`` (default: {candidates_cooldown_rate}),
        ``candidates_min_split_size_factor`` (default: {candidates_min_split_size_factor}),
        ``candidates_max_merge_size_factor`` (default: {candidates_max_merge_size_factor}),
        ``candidates_min_metacell_cells`` (default: {candidates_min_metacell_cells}),
@@ -206,7 +219,9 @@ def compute_direct_metacells(
     '''
     fdata = \
         extract_feature_data(adata, what, top_level=False,
-                             downsample_cell_quantile=feature_downsample_cell_quantile,
+                             downsample_min_samples=feature_downsample_min_samples,
+                             downsample_min_cell_quantile=feature_downsample_min_cell_quantile,
+                             downsample_max_cell_quantile=feature_downsample_max_cell_quantile,
                              min_gene_relative_variance=feature_min_gene_relative_variance,
                              min_gene_total=feature_min_gene_total,
                              min_gene_top3=feature_min_gene_top3,
@@ -219,6 +234,7 @@ def compute_direct_metacells(
 
     cell_sizes = \
         ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
+    ut.log_calc('cell_sizes', cell_sizes, formatter=ut.sizes_description)
 
     data = ut.get_vo_proper(fdata, 'downsampled', layout='row_major')
     data = ut.to_numpy_matrix(data, copy=True)
@@ -247,23 +263,34 @@ def compute_direct_metacells(
         ut.log_calc('knn_k', knn_k)
         tl.compute_obs_obs_knn_graph(fdata,
                                      k=knn_k,
-                                     max_unbalanced_ranks=knn_max_unbalanced_ranks,
                                      balanced_ranks_factor=knn_balanced_ranks_factor,
                                      incoming_degree_factor=knn_incoming_degree_factor,
                                      outgoing_degree_factor=knn_outgoing_degree_factor)
 
         tl.compute_candidate_metacells(fdata,
                                        target_metacell_size=target_metacell_size,
-                                       must_complete_cover=must_complete_cover,
                                        cell_sizes=cell_sizes,
-                                       partition_method=candidates_partition_method,
+                                       cell_seeds=candidates_cell_seeds,
+                                       min_seed_size_quantile=min_seed_size_quantile,
+                                       max_seed_size_quantile=max_seed_size_quantile,
+                                       cooldown_step=candidates_cooldown_step,
+                                       cooldown_rate=candidates_cooldown_rate,
                                        min_split_size_factor=candidates_min_split_size_factor,
                                        max_merge_size_factor=candidates_max_merge_size_factor,
                                        min_metacell_cells=candidates_min_metacell_cells,
                                        random_seed=random_seed)
 
+    ut.set_oo_data(adata, 'obs_similarity',
+                   ut.get_oo_proper(fdata, 'obs_similarity'))
+
     ut.set_oo_data(adata, 'obs_outgoing_weights',
                    ut.get_oo_proper(fdata, 'obs_outgoing_weights'))
+
+    seed_of_cells = \
+        ut.get_o_numpy(fdata, 'seed', formatter=ut.groups_description)
+
+    ut.set_o_data(adata, 'seed', seed_of_cells,
+                  formatter=ut.groups_description)
 
     candidate_of_cells = \
         ut.get_o_numpy(fdata, 'candidate', formatter=ut.groups_description)

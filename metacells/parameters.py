@@ -6,7 +6,6 @@ Defaults
 from math import sqrt
 from typing import Optional, Union
 import metacells.utilities.typing as utt
-import metacells.utilities.partition as utp
 
 #: The generic random seed. The default of ``0`` makes for a different result each time the code
 #: is run. For replicable results, provide a non-zero value. Used by too many functions to list
@@ -45,14 +44,32 @@ significant_gene_fold_factor: float = 3.0
 #: py:const:`cells_similarity_value_normalization`.
 significant_value: int = 7
 
-#: The generic quantile of the cells total size to use for downsampling the cells for some
+#: The generic minimal samples to use for downsampling the cells for some
 #: purpose. See
 #: :py:const:`noisy_lonely_downsample_cell_quantile`,
 #: :py:const:`feature_downsample_cell_quantile`,
 #: :py:const:`excess_downsample_cell_quantile`
 #: and
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
-downsample_cell_quantile: float = 0.05
+downsample_min_samples: int = 750
+
+#: The generic minimal quantile of the cells total size to use for downsampling the cells for some
+#: purpose. See
+#: :py:const:`noisy_lonely_downsample_cell_quantile`,
+#: :py:const:`feature_downsample_cell_quantile`,
+#: :py:const:`excess_downsample_cell_quantile`
+#: and
+#: :py:func:`metacells.tools.downsample.downsample_cells`.
+downsample_min_cell_quantile: float = 0.05
+
+#: The generic maximal quantile of the cells total size to use for downsampling the cells for some
+#: purpose. See
+#: :py:const:`noisy_lonely_downsample_cell_quantile`,
+#: :py:const:`feature_downsample_cell_quantile`,
+#: :py:const:`excess_downsample_cell_quantile`
+#: and
+#: :py:func:`metacells.tools.downsample.downsample_cells`.
+downsample_max_cell_quantile: float = 0.5
 
 #: The window size to use to compute relative variance. See
 #: :py:func:`metacells.utilities.computation.relative_variance_per`
@@ -199,13 +216,28 @@ properly_sampled_max_excluded_genes_fraction: Optional[float] = None
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
 noisy_lonely_max_sampled_cells: int = 10000
 
-#: The quantile of the cells total size to use for downsampling the cells for computing "noisy
-#: lonely" genes. See
-#: :py:const:`downsample_cell_quantile`,
+#: The minimal samples to use for downsampling the cells for computing "noisy lonely" genes. See
+#: :py:const:`downsample_min_cell_quantile`,
 #: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes`,
 #: and
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
-noisy_lonely_downsample_cell_quantile: float = downsample_cell_quantile
+noisy_lonely_downsample_min_samples: int = downsample_min_samples
+
+#: The minimal quantile of the cells total size to use for downsampling the cells for computing
+#: "noisy lonely" genes. See
+#: :py:const:`downsample_min_cell_quantile`,
+#: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes`,
+#: and
+#: :py:func:`metacells.pipeline.clean.extract_clean_data`.
+noisy_lonely_downsample_min_cell_quantile: float = downsample_min_cell_quantile
+
+#: The maximal quantile of the cells total size to use for downsampling the cells for computing
+#: "noisy lonely" genes. See
+#: :py:const:`downsample_min_cell_quantile`,
+#: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes`,
+#: and
+#: :py:func:`metacells.pipeline.clean.extract_clean_data`.
+noisy_lonely_downsample_max_cell_quantile: float = downsample_max_cell_quantile
 
 #: The minimal total UMIs in the downsamples selected cells of a gene to be considered when
 #: computing "lonely" genes. See
@@ -303,7 +335,28 @@ rare_min_related_gene_fold_factor: float = 7
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 rare_min_cell_module_total: int = int((significant_value + 1) / 2)
 
-#: The quantile of the cells total size to use for downsampling the cells for computing
+#: The minimal samples to use for downsampling the cells for computing "feature" genes. See
+#: :py:const:`downsample_min_samples`,
+#: :py:func:`metacells.tools.downsample.downsample_cells`,
+#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+feature_downsample_min_samples: int = downsample_min_samples
+
+#: The minimal quantile of the cells total size to use for downsampling the cells for computing
+#: "feature" genes. See
+#: :py:const:`downsample_min_cell_quantile`,
+#: :py:func:`metacells.tools.downsample.downsample_cells`,
+#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+feature_downsample_min_cell_quantile: float = downsample_min_cell_quantile
+
+#: The maximal quantile of the cells total size to use for downsampling the cells for computing
 #: "feature" genes. See
 #: :py:const:`downsample_cell_quantile`,
 #: :py:func:`metacells.tools.downsample.downsample_cells`,
@@ -312,7 +365,7 @@ rare_min_cell_module_total: int = int((significant_value + 1) / 2)
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-feature_downsample_cell_quantile: float = downsample_cell_quantile
+feature_downsample_max_cell_quantile: float = downsample_max_cell_quantile
 
 #: The minimal relative variance of a gene to be considered a "feature". See
 #: :py:func:`metacells.tools.high.find_high_relative_variance_genes`,
@@ -339,7 +392,7 @@ feature_min_gene_total: int = 50
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-feature_min_gene_top3: int = 3
+feature_min_gene_top3: int = 4
 
 #: Whether to compute cell-cell similarity using the log (base 2) of the data. See
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
@@ -379,16 +432,6 @@ groups_similarity_method: str = similarity_method
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 knn_k: Optional[int] = None
 
-#: The maximal unbalanced ranks to consider when computing the balanced ranks for the
-#: K-Nearest-Neighbors graph. See
-#: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
-#: :py:func:`metacells.tools.knn_graph.compute_var_var_knn_graph`,
-#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
-#: and
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-knn_max_unbalanced_ranks: int = 20000
-
 #: The factor of K edge ranks to keep when computing the balanced ranks for the
 #: K-Nearest-Neighbors graph. See
 #: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
@@ -407,7 +450,7 @@ knn_balanced_ranks_factor: float = sqrt(10)
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-knn_incoming_degree_factor: float = 4.0
+knn_incoming_degree_factor: float = 3.0
 
 #: The factor of K of edges to keep when pruning the outgoing edges of the K-Nearest-Neighbors
 #: graph. See
@@ -419,13 +462,37 @@ knn_incoming_degree_factor: float = 4.0
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 knn_outgoing_degree_factor: float = 1.0
 
-#: The partition method to use for clustering the nodes of the K-Nearest-Neighbors graph. See
+#: The minimal quantile of a seed to be selected. See
+#: :py:func:`metacells.tools.candidates.choose_seeds`,
 #: :py:func:`metacells.tools.candidates.compute_candidate_metacells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-candidates_partition_method: 'utp.PartitionMethod' = utp.leiden_bounded_surprise
+min_seed_size_quantile: float = 0.85
+
+#: The maximal quantile of a seed to be selected. See
+#: :py:func:`metacells.tools.candidates.choose_seeds`,
+#: :py:func:`metacells.tools.candidates.compute_candidate_metacells`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+max_seed_size_quantile: float = 0.95
+
+#: How much to cooldown the temperature after doing a minimal (single node) improvement step. See
+#: :py:func:`metacells.tools.candidates.compute_candidate_metacells`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells` and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+cooldown_step: float = 0.1
+
+#: How much to reduce the cooldown each time we re-optimize a slightly modified partition. See
+#: :py:func:`metacells.tools.candidates.compute_candidate_metacells`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells` and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+cooldown_rate: float = 0.5
 
 #: The target total cluster size for clustering the nodes of the K-Nearest-Neighbors graph. See
 #: :py:const:`target_metacell_size`,
@@ -567,12 +634,26 @@ rare_dissolve_min_convincing_size_factor: Optional[float] = None
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 dissolve_min_convincing_gene_fold_factor: float = significant_gene_fold_factor
 
-#: The quantile of the cells total size to use for downsampling the cells for computing "excess"
+#: The minimal samples to use for downsampling the cells for computing "excess"
 #: R^2 for the genes. See
-#: :py:const:`downsample_cell_quantile`
+#: :py:const:`downsample_min_samples`
 #: and
 #: :py:func:`metacells.tools.excess.compute_excess_r2`.
-excess_downsample_cell_quantile: float = downsample_cell_quantile
+excess_downsample_min_samples: int = downsample_min_samples
+
+#: The minimal quantile of the cells total size to use for downsampling the cells for computing
+#: "excess" R^2 for the genes. See
+#: :py:const:`downsample_min_cell_quantile`
+#: and
+#: :py:func:`metacells.tools.excess.compute_excess_r2`.
+excess_downsample_min_cell_quantile: float = downsample_min_cell_quantile
+
+#: The maximal quantile of the cells total size to use for downsampling the cells for computing
+#: "excess" R^2 for the genes. See
+#: :py:const:`downsample_max_cell_quantile`
+#: and
+#: :py:func:`metacells.tools.excess.compute_excess_r2`.
+excess_downsample_max_cell_quantile: float = downsample_max_cell_quantile
 
 #: The minimal total value of a gene in a metacell to allow computing "excess" R^2 for it. See
 #: :py:func:`metacells.tools.excess.compute_excess_r2`.

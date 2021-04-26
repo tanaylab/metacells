@@ -4,24 +4,66 @@
 #    undef NDEBUG
 #    include <iostream>
 #    include <mutex>
+#    include <sstream>
+#    include <thread>
+#    include <unistd.h>
+
+static std::mutex writer_mutex;
+
+class AtomicWriter {
+    std::ostringstream m_st;
+    std::ostream& m_stream;
+
+public:
+    AtomicWriter(std::ostream& s = std::cerr) : m_stream(s) {
+        m_st << std::this_thread::get_id() << ' ';
+    }
+
+    template<typename T>
+    AtomicWriter& operator<<(T const& t) {
+        m_st << t;
+        return *this;
+    }
+
+    AtomicWriter& operator<<(std::ostream& (*f)(std::ostream&)) {
+        m_st << f;
+        {
+            std::lock_guard<std::mutex> lock(writer_mutex);
+            m_stream << m_st.str() << std::flush;
+        }
+        m_st.str("");
+        m_st << std::this_thread::get_id() << ' ';
+        return *this;
+    }
+};
+
+static thread_local AtomicWriter writer;
+
 #elif ASSERT_LEVEL < 0 || ASSERT_LEVEL > 2
 #    error Invalid ASSERT_LEVEL
 #endif
 
+#define LOCATED_LOG(COND) \
+    if (!(COND))          \
+        ;                 \
+    else                  \
+        writer << __FILE__ << ':' << __LINE__ << ':' << __FUNCTION__ << ":"
+
 #if ASSERT_LEVEL >= 1
-#    define FastAssertCompare(X, OP, Y)                                                          \
-        if (!(double(X) OP double(Y))) {                                                         \
-            std::lock_guard<std::mutex> io_lock(io_mutex);                                       \
-            std::cerr << __FILE__ << ":" << __LINE__ << ": failed assert: " << #X << " -> " << X \
-                      << " " << #OP << " " << Y << " <- " << #Y << "" << std::endl;              \
-            assert(false);                                                                       \
-        } else
-#    define FastAssertCompareWhat(X, OP, Y, WHAT)                                                  \
+#    define FastAssertCompare(X, OP, Y)                                                            \
         if (!(double(X) OP double(Y))) {                                                           \
             std::lock_guard<std::mutex> io_lock(io_mutex);                                         \
-            std::cerr << __FILE__ << ":" << __LINE__ << ": " << WHAT << ": failed assert: " << #X  \
-                      << " -> " << X << " " << #OP << " " << Y << " <- " << #Y << "" << std::endl; \
+            std::cerr << __FILE__ << ":" << __LINE__ << ": failed assert: " << #X << " -> " << (X) \
+                      << " " << #OP << " " << (Y) << " <- " << #Y << "" << std::endl;              \
             assert(false);                                                                         \
+        } else
+#    define FastAssertCompareWhat(X, OP, Y, WHAT)                                                 \
+        if (!(double(X) OP double(Y))) {                                                          \
+            std::lock_guard<std::mutex> io_lock(io_mutex);                                        \
+            std::cerr << __FILE__ << ":" << __LINE__ << ": " << WHAT << ": failed assert: " << #X \
+                      << " -> " << (X) << " " << #OP << " " << (Y) << " <- " << #Y << ""          \
+                      << std::endl;                                                               \
+            assert(false);                                                                        \
         } else
 #else
 #    define FastAssertCompare(...)
@@ -74,10 +116,12 @@ Py_END_ALLOW_THREADS;
 }
 ;
 
-static const double LOG2_SCALE = 1.0 / log(2.0);
+static const float64_t EPSILON = 1e-6;
+static const float64_t LOG2_SCALE = 1.0 / log(2.0);
+static const double NaN = std::numeric_limits<double>::quiet_NaN();
 
-static double
-log2(const double x) {
+static float64_t
+log2(const float64_t x) {
     FastAssertCompare(x, >, 0);
     return log(x) * LOG2_SCALE;
 }
@@ -91,6 +135,9 @@ private:
     const char* m_name;  ///< Name for error messages.
 
 public:
+    ConstArraySlice(const std::vector<T>& vector, const char* const name)
+      : m_data(&vector[0]), m_size(vector.size()), m_name(name) {}
+
     ConstArraySlice(const T* const data, const size_t size, const char* const name)
       : m_data(data), m_size(size), m_name(name) {}
 
@@ -126,6 +173,8 @@ public:
     const T* begin() const { return m_data; }
 
     const T* end() const { return m_data + m_size; }
+
+    bool sorted_contains(T item) const { return std::binary_search(begin(), end(), item); }
 };
 
 /// A mutable contiguous slice of an array of type ``T``.
@@ -137,6 +186,9 @@ private:
     const char* m_name;  ///< Name for error messages.
 
 public:
+    ArraySlice(std::vector<T>& vector, const char* const name)
+      : m_data(&vector[0]), m_size(vector.size()), m_name(name) {}
+
     ArraySlice(T* const data, const size_t size, const char* const name)
       : m_data(data), m_size(size), m_name(name) {}
 
@@ -440,6 +492,15 @@ parallel_loop(const size_t size, std::function<void(size_t)> parallel_body) {
     parallel_loop(size, parallel_body, parallel_body);
 }
 
+/*
+static void
+serial_loop(const size_t size, std::function<void(size_t)> serial_body) {
+    for (size_t index = 0; index < size; ++index) {
+        serial_body(index);
+    }
+}
+*/
+
 template<typename T>
 static T
 ceil_power_of_two(const T size) {
@@ -518,33 +579,96 @@ random_sample(ArraySlice<size_t> tree, ssize_t random) {
     }
 }
 
-static thread_local std::vector<size_t> tmp_positions;
-static thread_local std::vector<size_t> tmp_indices;
-static thread_local std::vector<float64_t> tmp_data_one;
-static thread_local std::vector<float64_t> tmp_data_two;
-static thread_local std::vector<size_t> tmp_tree;
+static const int size_t_count = 8;
+static thread_local bool g_size_t_used[size_t_count];
+static thread_local std::vector<size_t> g_size_t_vectors[size_t_count];
+
+class TmpVectorSizeT {
+private:
+    int m_index;
+
+public:
+    TmpVectorSizeT() : m_index(-1) {
+        for (int index = 0; index < size_t_count; ++index) {
+            if (!g_size_t_used[index]) {
+                g_size_t_used[index] = true;
+                m_index = index;
+                return;
+            }
+        }
+        assert(false);
+    }
+
+    ~TmpVectorSizeT() {
+        g_size_t_vectors[m_index].clear();
+        g_size_t_used[m_index] = false;
+    }
+
+    std::vector<size_t>& vector(size_t size = 0) {
+        g_size_t_vectors[m_index].resize(size);
+        return g_size_t_vectors[m_index];
+    }
+
+    ArraySlice<size_t> array_slice(const char* const name, size_t size = 0) {
+        return ArraySlice<size_t>(vector(size), name);
+    }
+};
+
+static const int float64_t_count = 8;
+static thread_local bool g_float64_t_used[float64_t_count];
+static thread_local std::vector<float64_t> g_float64_t_vectors[float64_t_count];
+
+class TmpVectorFloat64 {
+private:
+    int m_index;
+
+public:
+    TmpVectorFloat64() : m_index(-1) {
+        for (int index = 0; index < float64_t_count; ++index) {
+            if (!g_float64_t_used[index]) {
+                g_float64_t_used[index] = true;
+                m_index = index;
+                return;
+            }
+        }
+        assert(false);
+    }
+
+    ~TmpVectorFloat64() {
+        g_float64_t_vectors[m_index].clear();
+        g_float64_t_used[m_index] = false;
+    }
+
+    std::vector<float64_t>& vector(size_t size = 0) {
+        g_float64_t_vectors[m_index].resize(size);
+        return g_float64_t_vectors[m_index];
+    }
+
+    ArraySlice<float64_t> array_slice(const char* const name, size_t size = 0) {
+        return ArraySlice<float64_t>(vector(size), name);
+    }
+};
 
 template<typename D, typename O>
 static void
 downsample_slice(ConstArraySlice<D> input,
                  ArraySlice<O> output,
                  const size_t samples,
-                 const int random_seed) {
+                 const size_t random_seed) {
     FastAssertCompare(samples, >=, 0);
     FastAssertCompare(output.size(), ==, input.size());
-
-    tmp_tree.resize(downsample_tmp_size(input.size()));
-    ArraySlice<size_t> tree(&tmp_tree[0], tmp_tree.size(), "tree");
 
     if (input.size() == 0) {
         return;
     }
 
     if (input.size() == 1) {
-        output[0] = double(samples) < double(input[0]) ? samples : input[0];
+        output[0] = float64_t(samples) < float64_t(input[0]) ? samples : input[0];
         return;
     }
 
+    TmpVectorSizeT raii_tree;
+    auto tree = raii_tree.array_slice("tmp_tree", downsample_tmp_size(input.size()));
     initialize_tree(input, tree);
     size_t& total = tree[tree.size() - 1];
 
@@ -569,7 +693,7 @@ static void
 downsample_array(const pybind11::array_t<D>& input_array,
                  pybind11::array_t<O>& output_array,
                  const size_t samples,
-                 const int random_seed) {
+                 const size_t random_seed) {
     WithoutGil without_gil{};
 
     ConstArraySlice<D> input{ input_array, "input_array" };
@@ -584,14 +708,14 @@ static void
 downsample_matrix(const pybind11::array_t<D>& input_matrix,
                   pybind11::array_t<O>& output_array,
                   const size_t samples,
-                  const int random_seed) {
+                  const size_t random_seed) {
     WithoutGil without_gil{};
 
     ConstMatrixSlice<D> input{ input_matrix, "input_matrix" };
     MatrixSlice<O> output{ output_array, "output_array" };
 
-    parallel_loop(input.rows_count(), [&](size_t row_index) {
-        int slice_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
+    parallel_loop(input.rows_count(), [&](const size_t row_index) {
+        size_t slice_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
         downsample_slice(input.get_row(row_index), output.get_row(row_index), samples, slice_seed);
     });
 }
@@ -603,7 +727,7 @@ downsample_band(const size_t band_index,
                 ConstArraySlice<P> input_indptr,
                 ArraySlice<O> output,
                 const size_t samples,
-                const int random_seed) {
+                const size_t random_seed) {
     auto start_element_offset = input_indptr[band_index];
     auto stop_element_offset = input_indptr[band_index + 1];
 
@@ -620,7 +744,7 @@ downsample_compressed(const pybind11::array_t<D>& input_data_array,
                       const pybind11::array_t<P>& input_indptr_array,
                       pybind11::array_t<O>& output_array,
                       const size_t samples,
-                      const int random_seed) {
+                      const size_t random_seed) {
     WithoutGil without_gil{};
 
     ConstArraySlice<D> input_data{ input_data_array, "input_data_array" };
@@ -628,7 +752,7 @@ downsample_compressed(const pybind11::array_t<D>& input_data_array,
     ArraySlice<O> output{ output_array, "output_array" };
 
     parallel_loop(input_indptr.size() - 1, [&](size_t band_index) {
-        int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
+        size_t band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
         downsample_band(band_index, input_data, input_indptr, output, samples, band_seed);
     });
 }
@@ -761,7 +885,15 @@ sort_band(const size_t band_index, CompressedMatrix<D, I, P>& matrix) {
     auto band_indices = matrix.get_band_indices(band_index);
     auto band_data = matrix.get_band_data(band_index);
 
-    tmp_positions.resize(band_indices.size());
+    TmpVectorSizeT raii_positions;
+    auto tmp_positions = raii_positions.array_slice("tmp_positions", band_indices.size());
+
+    TmpVectorSizeT raii_indices;
+    auto tmp_indices = raii_indices.array_slice("tmp_indices", band_indices.size());
+
+    TmpVectorFloat64 raii_values;
+    auto tmp_values = raii_values.array_slice("tmp_values", band_indices.size());
+
     std::iota(tmp_positions.begin(), tmp_positions.end(), 0);
     std::sort(tmp_positions.begin(),
               tmp_positions.end(),
@@ -771,9 +903,6 @@ sort_band(const size_t band_index, CompressedMatrix<D, I, P>& matrix) {
                   return left_index < right_index;
               });
 
-    tmp_indices.resize(tmp_positions.size());
-    tmp_data_one.resize(tmp_positions.size());
-
 #ifdef __INTEL_COMPILER
 #    pragma simd
 #endif
@@ -781,11 +910,11 @@ sort_band(const size_t band_index, CompressedMatrix<D, I, P>& matrix) {
     for (size_t location = 0; location < tmp_size; ++location) {
         size_t position = tmp_positions[location];
         tmp_indices[location] = band_indices[position];
-        tmp_data_one[location] = band_data[position];
+        tmp_values[location] = band_data[position];
     }
 
     std::copy(tmp_indices.begin(), tmp_indices.end(), band_indices.begin());
-    std::copy(tmp_data_one.begin(), tmp_data_one.end(), band_data.begin());
+    std::copy(tmp_values.begin(), tmp_values.end(), band_data.begin());
 }
 
 /// See the Python `metacell.utilities.computation._relayout_compressed` function.
@@ -819,8 +948,9 @@ collect_top_row(const size_t row_index,
     const size_t start_position = row_index * degree;
     const size_t stop_position = start_position + degree;
 
-    tmp_positions.resize(columns_count);
-    std::iota(tmp_positions.begin(), tmp_positions.begin() + columns_count, 0);
+    TmpVectorSizeT raii_positions;
+    auto tmp_positions = raii_positions.array_slice("tmp_positions", columns_count);
+    std::iota(tmp_positions.begin(), tmp_positions.end(), 0);
 
     std::nth_element(tmp_positions.begin(),
                      tmp_positions.begin() + degree,
@@ -848,7 +978,7 @@ collect_top_row(const size_t row_index,
         return;
     }
 
-    tmp_positions.resize(degree);
+    tmp_positions = tmp_positions.slice(0, degree);
     std::iota(tmp_positions.begin(), tmp_positions.end(), 0);
     std::sort(tmp_positions.begin(),
               tmp_positions.end(),
@@ -857,6 +987,7 @@ collect_top_row(const size_t row_index,
                   float32_t right_similarity = row_similarities[row_indices[right_position]];
                   return left_similarity < right_similarity;
               });
+
 #ifdef __INTEL_COMPILER
 #    pragma simd
 #endif
@@ -917,7 +1048,8 @@ prune_band(const size_t band_index,
         return;
     }
 
-    tmp_indices.resize(input_values.size());
+    TmpVectorSizeT raii_indices;
+    auto tmp_indices = raii_indices.array_slice("tmp_indices", input_values.size());
     std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
     std::nth_element(tmp_indices.begin(),
                      tmp_indices.begin() + pruned_degree,
@@ -928,7 +1060,7 @@ prune_band(const size_t band_index,
                          return left_similarity > right_similarity;
                      });
 
-    tmp_indices.resize(pruned_degree);
+    tmp_indices = tmp_indices.slice(0, pruned_degree);
     std::sort(tmp_indices.begin(), tmp_indices.end());
 
 #ifdef __INTEL_COMPILER
@@ -992,15 +1124,18 @@ collect_pruned(const size_t pruned_degree,
 
 template<typename D, typename I, typename P>
 static void
-shuffle_band(const size_t band_index, CompressedMatrix<D, I, P>& matrix, const int random_seed) {
-    std::minstd_rand random(random_seed);
-    tmp_indices.resize(matrix.elements_count());
+shuffle_band(const size_t band_index, CompressedMatrix<D, I, P>& matrix, const size_t random_seed) {
+    TmpVectorSizeT raii_indices;
+    auto tmp_indices = raii_indices.array_slice("tmp_indices", matrix.elements_count());
     std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
+
+    std::minstd_rand random(random_seed);
     std::random_shuffle(tmp_indices.begin(), tmp_indices.end(), [&](size_t n) {
         return random() % n;
     });
+
     auto band_indices = matrix.get_band_indices(band_index);
-    tmp_indices.resize(band_indices.size());
+    tmp_indices = tmp_indices.slice(0, band_indices.size());
     std::copy(tmp_indices.begin(), tmp_indices.end(), band_indices.begin());
     sort_band(band_index, matrix);
 }
@@ -1012,7 +1147,7 @@ shuffle_compressed(pybind11::array_t<D>& data_array,
                    pybind11::array_t<I>& indices_array,
                    pybind11::array_t<P>& indptr_array,
                    const size_t elements_count,
-                   const int random_seed) {
+                   const size_t random_seed) {
     CompressedMatrix<D, I, P> matrix(ArraySlice<D>(data_array, "data"),
                                      ArraySlice<I>(indices_array, "indices"),
                                      ArraySlice<P>(indptr_array, "indptr"),
@@ -1020,14 +1155,14 @@ shuffle_compressed(pybind11::array_t<D>& data_array,
                                      "compressed");
 
     parallel_loop(matrix.bands_count(), [&](size_t band_index) {
-        int band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
+        size_t band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
         shuffle_band(band_index, matrix, band_seed);
     });
 }
 
 template<typename D>
 static void
-shuffle_row(const size_t row_index, MatrixSlice<D>& matrix, const int random_seed) {
+shuffle_row(const size_t row_index, MatrixSlice<D>& matrix, const size_t random_seed) {
     std::minstd_rand random(random_seed);
     auto row = matrix.get_row(row_index);
     std::random_shuffle(row.begin(), row.end(), [&](size_t n) { return random() % n; });
@@ -1036,20 +1171,21 @@ shuffle_row(const size_t row_index, MatrixSlice<D>& matrix, const int random_see
 /// See the Python `metacell.utilities.computation.shuffle_matrix` function.
 template<typename D>
 static void
-shuffle_matrix(pybind11::array_t<D>& matrix_array, const int random_seed) {
+shuffle_matrix(pybind11::array_t<D>& matrix_array, const size_t random_seed) {
     MatrixSlice<D> matrix(matrix_array, "matrix");
 
     parallel_loop(matrix.rows_count(), [&](size_t row_index) {
-        int row_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
+        size_t row_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
         shuffle_row(row_index, matrix, row_seed);
     });
 }
 
 template<typename D>
 static D
-rank_row(size_t row_index, ConstMatrixSlice<D>& input, size_t rank) {
+rank_row_element(const size_t row_index, ConstMatrixSlice<D>& input, const size_t rank) {
     const auto row_input = input.get_row(row_index);
-    tmp_indices.resize(input.columns_count());
+    TmpVectorSizeT raii_indices;
+    auto tmp_indices = raii_indices.array_slice("tmp_indices", input.columns_count());
     std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
     std::nth_element(tmp_indices.begin(),
                      tmp_indices.begin() + rank,
@@ -1065,9 +1201,9 @@ rank_row(size_t row_index, ConstMatrixSlice<D>& input, size_t rank) {
 /// See the Python `metacell.utilities.computation.rank_per` function.
 template<typename D>
 static void
-rank_matrix(const pybind11::array_t<D>& input_matrix,
-            pybind11::array_t<D>& output_array,
-            const size_t rank) {
+rank_rows(const pybind11::array_t<D>& input_matrix,
+          pybind11::array_t<D>& output_array,
+          const size_t rank) {
     ConstMatrixSlice<D> input(input_matrix, "input");
     ArraySlice<D> output(output_array, "array");
 
@@ -1075,15 +1211,68 @@ rank_matrix(const pybind11::array_t<D>& input_matrix,
     FastAssertCompare(rows_count, ==, output_array.size());
     FastAssertCompare(rank, <, input.columns_count());
 
+    parallel_loop(rows_count, [&](size_t row_index) {
+        output[row_index] = rank_row_element(row_index, input, rank);
+    });
+}
+
+template<typename D>
+static void
+rank_matrix_row(const size_t row_index, MatrixSlice<D>& matrix, bool ascending) {
+    auto row = matrix.get_row(row_index);
+    size_t columns_count = matrix.columns_count();
+
+    TmpVectorSizeT raii_positions;
+    auto tmp_positions = raii_positions.array_slice("tmp_positions", columns_count);
+
+    TmpVectorSizeT raii_indices;
+    auto tmp_indices = raii_indices.array_slice("tmp_indices", columns_count);
+
+    std::iota(tmp_positions.begin(), tmp_positions.end(), 0);
+    if (ascending) {
+        std::sort(tmp_positions.begin(),
+                  tmp_positions.end(),
+                  [&](const size_t left_column_index, const size_t right_column_index) {
+                      const auto left_value = row[left_column_index];
+                      const auto right_value = row[right_column_index];
+                      return left_value < right_value;
+                  });
+    } else {
+        std::sort(tmp_positions.begin(),
+                  tmp_positions.end(),
+                  [&](const size_t left_column_index, const size_t right_column_index) {
+                      const auto left_value = row[left_column_index];
+                      const auto right_value = row[right_column_index];
+                      return left_value > right_value;
+                  });
+    }
+
+    for (size_t column_index = 0; column_index < columns_count; ++column_index) {
+        tmp_indices[tmp_positions[column_index]] = column_index;
+    }
+
+    for (size_t column_index = 0; column_index < columns_count; ++column_index) {
+        row[column_index] = D(tmp_indices[column_index] + 1);
+    }
+}
+
+/// See the Python `metacell.utilities.computation.rank_matrix_by_layout` function.
+template<typename D>
+static void
+rank_matrix(pybind11::array_t<D>& array, const bool ascending) {
+    MatrixSlice<D> matrix(array, "matrix");
+
+    const size_t rows_count = matrix.rows_count();
+
     parallel_loop(rows_count,
-                  [&](size_t row_index) { output[row_index] = rank_row(row_index, input, rank); });
+                  [&](size_t row_index) { rank_matrix_row(row_index, matrix, ascending); });
 }
 
 /// See the Python `metacell.tools.outlier_cells._collect_fold_factors` function.
 template<typename D>
 static void
 fold_factor_dense(pybind11::array_t<D>& data_array,
-                  const double min_gene_fold_factor,
+                  const float64_t min_gene_fold_factor,
                   const pybind11::array_t<D>& total_of_rows_array,
                   const pybind11::array_t<D>& fraction_of_columns_array) {
     MatrixSlice<D> data(data_array, "data");
@@ -1116,7 +1305,7 @@ static void
 fold_factor_compressed(pybind11::array_t<D>& data_array,
                        pybind11::array_t<I>& indices_array,
                        pybind11::array_t<P>& indptr_array,
-                       const double min_gene_fold_factor,
+                       const float64_t min_gene_fold_factor,
                        const pybind11::array_t<D>& total_of_bands_array,
                        const pybind11::array_t<D>& fraction_of_elements_array) {
     ConstArraySlice<D> total_of_bands(total_of_bands_array, "total_of_bands");
@@ -1156,7 +1345,8 @@ static void
 collect_distinct_abs_folds(ArraySlice<int32_t> gene_indices,
                            ArraySlice<float32_t> gene_folds,
                            ConstArraySlice<float64_t> fold_in_cell) {
-    tmp_indices.resize(fold_in_cell.size());
+    TmpVectorSizeT raii_indices;
+    auto tmp_indices = raii_indices.array_slice("tmp_indices", fold_in_cell.size());
     std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
 
     std::nth_element(tmp_indices.begin(),
@@ -1187,7 +1377,8 @@ static void
 collect_distinct_high_folds(ArraySlice<int32_t> gene_indices,
                             ArraySlice<float32_t> gene_folds,
                             ConstArraySlice<float64_t> fold_in_cell) {
-    tmp_indices.resize(fold_in_cell.size());
+    TmpVectorSizeT raii_indices;
+    auto tmp_indices = raii_indices.array_slice("tmp_indices", fold_in_cell.size());
     std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
 
     std::nth_element(tmp_indices.begin(),
@@ -1248,28 +1439,25 @@ top_distinct(pybind11::array_t<int32_t>& gene_indices_array,
 }
 
 static float64_t
-auroc_data(std::vector<float64_t>& in_values,
-           std::vector<float64_t>& out_values,
-           const size_t zeros_count) {
+auroc_data(std::vector<float64_t>& in_values, std::vector<float64_t>& out_values) {
     std::sort(in_values.rbegin(), in_values.rend());
     std::sort(out_values.rbegin(), out_values.rend());
 
     const size_t in_size = in_values.size();
     const size_t out_size = out_values.size();
-    const size_t total_out_size = out_size + zeros_count;
 
     if (in_size == 0) {
-        FastAssertCompare(total_out_size, >, 0);
+        FastAssertCompare(out_size, >, 0);
         return 0.0;
     }
 
     if (out_size == 0) {
-        FastAssertCompare(total_out_size, >, 0);
+        FastAssertCompare(out_size, >, 0);
         return 1.0;
     }
 
     const float64_t in_scale = 1.0 / in_size;
-    const float64_t out_scale = 1.0 / total_out_size;
+    const float64_t out_scale = 1.0 / out_size;
 
     size_t in_count = 0;
     size_t out_count = 0;
@@ -1290,7 +1478,11 @@ auroc_data(std::vector<float64_t>& in_values,
         out_count = out_index;
     } while (in_count < in_size && out_count < out_size);
 
-    area += (total_out_size - out_count) * out_scale * (in_count + in_size) * in_scale / 2;
+    const bool is_all_in = in_count == in_size;
+    const bool is_all_out = out_count == out_size;
+    FastAssertCompare((is_all_in || is_all_out), ==, true);
+
+    area += (out_size - out_count) * out_scale * (in_count + in_size) * in_scale / 2;
 
     return area;
 }
@@ -1303,22 +1495,26 @@ auroc_dense_vector(const ConstArraySlice<D>& values,
     const size_t size = labels.size();
     FastAssertCompare(values.size(), ==, size);
 
-    tmp_data_one.reserve(size);
-    tmp_data_two.reserve(size);
+    TmpVectorFloat64 raii_in_values;
+    auto tmp_in_values = raii_in_values.vector();
 
-    tmp_data_one.resize(0);
-    tmp_data_two.resize(0);
+    TmpVectorFloat64 raii_out_values;
+    auto tmp_out_values = raii_out_values.vector();
+
+    tmp_in_values.reserve(size);
+    tmp_out_values.reserve(size);
 
     for (size_t index = 0; index < size; ++index) {
         const auto value = values[index] / scales[index];
         if (labels[index]) {
-            tmp_data_one.push_back(value);
+            tmp_in_values.push_back(value);
         } else {
-            tmp_data_two.push_back(value);
+            tmp_out_values.push_back(value);
         }
     }
 
-    return auroc_data(tmp_data_one, tmp_data_two, 0);
+    FastAssertCompare(tmp_in_values.size() + tmp_out_values.size(), ==, size);
+    return auroc_data(tmp_in_values, tmp_out_values);
 }
 
 template<typename D>
@@ -1354,45 +1550,52 @@ auroc_compressed_vector(const ConstArraySlice<D>& values,
     const size_t nnz_count = values.size();
     FastAssertCompare(nnz_count, <=, size);
 
-    tmp_data_one.reserve(size);
-    tmp_data_two.reserve(size);
+    TmpVectorFloat64 raii_in_values;
+    auto tmp_in_values = raii_in_values.vector();
 
-    tmp_data_one.resize(0);
-    tmp_data_two.resize(0);
+    TmpVectorFloat64 raii_out_values;
+    auto tmp_out_values = raii_out_values.vector();
+
+    tmp_in_values.reserve(size);
+    tmp_out_values.reserve(size);
 
     size_t prev_index = 0;
     for (size_t position = 0; position < nnz_count; ++position) {
         size_t index = size_t(indices[position]);
         auto value = values[position] / scales[index];
 
-        FastAssertCompare(prev_index, <=, index);
+        SlowAssertCompare(prev_index, <=, index);
         while (prev_index < index) {
             if (labels[prev_index]) {
-                tmp_data_one.push_back(0.0);
+                tmp_in_values.push_back(0.0);
+            } else {
+                tmp_out_values.push_back(0.0);
             }
             ++prev_index;
         }
 
+        SlowAssertCompare(prev_index, ==, index);
         if (labels[index]) {
-            tmp_data_one.push_back(value);
+            tmp_in_values.push_back(value);
         } else {
-            tmp_data_two.push_back(value);
+            tmp_out_values.push_back(value);
         }
-
-        FastAssertCompare(prev_index, ==, index);
         ++prev_index;
     }
 
     FastAssertCompare(prev_index, <=, size);
     while (prev_index < size) {
         if (labels[prev_index]) {
-            tmp_data_one.push_back(0.0);
+            tmp_in_values.push_back(0.0);
+        } else {
+            tmp_out_values.push_back(0.0);
         }
         ++prev_index;
     }
 
     FastAssertCompare(prev_index, ==, size);
-    return auroc_data(tmp_data_one, tmp_data_two, size - nnz_count);
+    FastAssertCompare(tmp_in_values.size() + tmp_out_values.size(), ==, size);
+    return auroc_data(tmp_in_values, tmp_out_values);
 }
 
 template<typename D, typename I, typename P>
@@ -1470,10 +1673,10 @@ logistics_dense_matrix(const pybind11::array_t<D>& values_array,
         } else {
             other_index = rows_count - 2 - other_index;
         }
-        float logistic = logistics_dense_vectors(values.get_row(some_index),
-                                                 values.get_row(other_index),
-                                                 location,
-                                                 scale);
+        float32_t logistic = logistics_dense_vectors(values.get_row(some_index),
+                                                     values.get_row(other_index),
+                                                     location,
+                                                     scale);
         logistics.get_row(some_index)[other_index] = logistic;
         logistics.get_row(other_index)[some_index] = logistic;
     });
@@ -1502,17 +1705,17 @@ logistics_dense_matrices(const pybind11::array_t<D>& rows_values_array,
         size_t row_index = iterations_count / columns_count;
         size_t column_index = iterations_count % columns_count;
 
-        float logistic = logistics_dense_vectors(rows_values.get_row(row_index),
-                                                 columns_values.get_row(column_index),
-                                                 location,
-                                                 scale);
+        float32_t logistic = logistics_dense_vectors(rows_values.get_row(row_index),
+                                                     columns_values.get_row(column_index),
+                                                     location,
+                                                     scale);
         logistics.get_row(row_index)[column_index] = logistic;
     });
 }
 
-static double
-cover_diameter(size_t points_count, double area, double cover_fraction) {
-    double point_area = area * cover_fraction / points_count;
+static float64_t
+cover_diameter(size_t points_count, float64_t area, float64_t cover_fraction) {
+    float64_t point_area = area * cover_fraction / points_count;
     return sqrt(point_area) * 4 / M_PI;
 }
 
@@ -1536,9 +1739,9 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
                   const pybind11::array_t<D>& raw_y_coordinates_array,
                   pybind11::array_t<D>& spaced_x_coordinates_array,
                   pybind11::array_t<D>& spaced_y_coordinates_array,
-                  const double cover_fraction,
-                  const double noise_fraction,
-                  const int random_seed) {
+                  const float64_t cover_fraction,
+                  const float64_t noise_fraction,
+                  const size_t random_seed) {
     FastAssertCompare(cover_fraction, >, 0);
     FastAssertCompare(cover_fraction, <, 1);
     FastAssertCompare(noise_fraction, >=, 0);
@@ -1555,7 +1758,7 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
     FastAssertCompare(spaced_y_coordinates.size(), ==, points_count);
 
     std::minstd_rand random(random_seed);
-    std::normal_distribution<double> noise(0.0, noise_fraction);
+    std::normal_distribution<float64_t> noise(0.0, noise_fraction);
 
     const auto x_min = *std::min_element(raw_x_coordinates.begin(), raw_x_coordinates.end());
     const auto y_min = *std::min_element(raw_y_coordinates.begin(), raw_y_coordinates.end());
@@ -1753,6 +1956,1149 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
     }
 }
 
+static std::vector<std::vector<int32_t>>
+collect_connected_nodes(ConstCompressedMatrix<float32_t, int32_t, int32_t>& outgoing_weights,
+                        ConstArraySlice<int32_t> seed_of_nodes) {
+    const size_t nodes_count = seed_of_nodes.size();
+    std::vector<std::vector<int32_t>> connected_nodes(nodes_count);
+
+    for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
+        auto node_outgoing = outgoing_weights.get_band_indices(node_index);
+        connected_nodes[node_index].resize(node_outgoing.size());
+        std::copy(node_outgoing.begin(), node_outgoing.end(), connected_nodes[node_index].begin());
+    }
+
+    return connected_nodes;
+}
+
+static size_t
+choose_seed(const std::vector<size_t>& tmp_candidates,
+            const std::vector<std::vector<int32_t>>& connected_nodes,
+            const float32_t min_seed_size_quantile,
+            const float32_t max_seed_size_quantile,
+            std::minstd_rand& random) {
+    size_t size = tmp_candidates.size();
+
+    TmpVectorSizeT raii_positions;
+    auto tmp_positions = raii_positions.array_slice("tmp_positions", size);
+    std::iota(tmp_positions.begin(), tmp_positions.end(), 0);
+
+    size_t min_seed_rank = size_t(floor((size - 1) * min_seed_size_quantile));
+    size_t max_seed_rank = size_t(ceil((size - 1) * max_seed_size_quantile));
+    FastAssertCompare(0, <=, min_seed_rank);
+    FastAssertCompare(min_seed_rank, <=, max_seed_rank);
+    FastAssertCompare(max_seed_rank, <=, size - 1);
+
+    std::nth_element(tmp_positions.begin(),
+                     tmp_positions.begin() + min_seed_rank,
+                     tmp_positions.end(),
+                     [&](const size_t left_position, const size_t right_position) {
+                         const auto left_node_index = tmp_candidates[left_position];
+                         const auto right_node_index = tmp_candidates[right_position];
+                         const auto left_size = connected_nodes[left_node_index].size();
+                         const auto right_size = connected_nodes[right_node_index].size();
+                         return left_size < right_size;
+                     });
+
+    std::nth_element(tmp_positions.begin() + min_seed_rank,
+                     tmp_positions.begin() + max_seed_rank,
+                     tmp_positions.end(),
+                     [&](const size_t left_position, const size_t right_position) {
+                         const auto left_node_index = tmp_candidates[left_position];
+                         const auto right_node_index = tmp_candidates[right_position];
+                         const auto left_size = connected_nodes[left_node_index].size();
+                         const auto right_size = connected_nodes[right_node_index].size();
+                         return left_size < right_size;
+                     });
+
+    const size_t selected = random() % (max_seed_rank + 1 - min_seed_rank);
+    const size_t position = tmp_positions[min_seed_rank + selected];
+    size_t seed_index = tmp_candidates[position];
+
+    LOCATED_LOG(false)                                      //
+        << " seed: " << seed_index                          //
+        << " size: " << connected_nodes[seed_index].size()  //
+        << std::endl;
+    return seed_index;
+}
+
+template<typename T>
+static void
+remove_sorted(std::vector<T>& vector, T value) {
+    auto position = std::lower_bound(vector.begin(), vector.end(), value);
+    if (position != vector.end() && *position == value) {
+        vector.erase(position);
+    }
+}
+
+static void
+store_seed(ConstCompressedMatrix<float32_t, int32_t, int32_t>& incoming_weights,
+           const size_t partition_index,
+           const size_t seed_index,
+           std::vector<size_t>& tmp_candidates,
+           std::vector<std::vector<int32_t>>& connected_nodes,
+           ArraySlice<int32_t> seed_of_nodes) {
+    seed_of_nodes[seed_index] = partition_index;
+
+    remove_sorted(tmp_candidates, seed_index);
+
+    for (int32_t node_index : connected_nodes[seed_index]) {
+        seed_of_nodes[node_index] = partition_index;
+        remove_sorted(tmp_candidates, size_t(node_index));
+
+        auto incoming_nodes = incoming_weights.get_band_indices(node_index);
+        for (size_t other_node_index : incoming_nodes) {
+            if (other_node_index != seed_index) {
+                remove_sorted(connected_nodes[other_node_index], node_index);
+            }
+        }
+    }
+}
+
+static bool
+keep_large_candidates(std::vector<size_t>& tmp_candidates,
+                      std::vector<std::vector<int32_t>>& connected_nodes) {
+    tmp_candidates.erase(std::remove_if(tmp_candidates.begin(),
+                                        tmp_candidates.end(),
+                                        [&](int candidate_node_index) {
+                                            return connected_nodes[candidate_node_index].size()
+                                                   == 0;
+                                        }),
+                         tmp_candidates.end());
+    return tmp_candidates.size() > 0;
+}
+
+static int32_t
+find_seed_index(size_t node_index,
+                ConstCompressedMatrix<float32_t, int32_t, int32_t>& outgoing_weights,
+                ConstCompressedMatrix<float32_t, int32_t, int32_t>& incoming_weights,
+                ConstArraySlice<int32_t> seed_of_nodes,
+                ArraySlice<float64_t> tmp_seeds_outgoing_weights,
+                ArraySlice<float64_t> tmp_seeds_incoming_weights) {
+    std::fill(tmp_seeds_outgoing_weights.begin(), tmp_seeds_outgoing_weights.end(), EPSILON);
+    std::fill(tmp_seeds_incoming_weights.begin(), tmp_seeds_incoming_weights.end(), EPSILON);
+
+    const auto& node_outgoing_indices = outgoing_weights.get_band_indices(node_index);
+    const auto& node_outgoing_weights = outgoing_weights.get_band_data(node_index);
+    for (size_t other_node_position = 0; other_node_position < node_outgoing_indices.size();
+         ++other_node_position) {
+        const int32_t other_node_index = node_outgoing_indices[other_node_position];
+        const int32_t other_seed_index = seed_of_nodes[other_node_index];
+        if (other_seed_index >= 0) {
+            const float32_t edge_weight = node_outgoing_weights[other_node_position];
+            tmp_seeds_incoming_weights[other_seed_index] += edge_weight;
+        }
+    }
+
+    const auto& node_incoming_indices = incoming_weights.get_band_indices(node_index);
+    const auto& node_incoming_weights = incoming_weights.get_band_data(node_index);
+    for (size_t other_node_position = 0; other_node_position < node_incoming_indices.size();
+         ++other_node_position) {
+        const int32_t other_node_index = node_incoming_indices[other_node_position];
+        const int32_t other_seed_index = seed_of_nodes[other_node_index];
+        if (other_seed_index >= 0) {
+            const float32_t edge_weight = node_incoming_weights[other_node_position];
+            tmp_seeds_incoming_weights[other_seed_index] += edge_weight;
+        }
+    }
+
+    int32_t best_seed_index = -1;
+    float64_t best_seed_weight = EPSILON * EPSILON;
+    size_t seeds_count = tmp_seeds_outgoing_weights.size();
+    for (size_t seed_index = 0; seed_index < seeds_count; ++seed_index) {
+        float64_t seed_weight =
+            tmp_seeds_outgoing_weights[seed_index] * tmp_seeds_incoming_weights[seed_index];
+        if (seed_weight > best_seed_weight) {
+            best_seed_index = seed_index;
+            best_seed_weight = seed_weight;
+        }
+    }
+
+    LOCATED_LOG(false) << " node_index: " << node_index              //
+                       << " best_seed_index: " << best_seed_index    //
+                       << " best_seed_weight: " << best_seed_weight  //
+                       << std::endl;
+    return best_seed_index;
+}
+
+/// See the Python `metacell.tools.candidates._choose_seeds` function.
+void
+choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
+             const pybind11::array_t<int32_t>& outgoing_weights_indices_array,
+             const pybind11::array_t<int32_t>& outgoing_weights_indptr_array,
+             const pybind11::array_t<float32_t>& incoming_weights_data_array,
+             const pybind11::array_t<int32_t>& incoming_weights_indices_array,
+             const pybind11::array_t<int32_t>& incoming_weights_indptr_array,
+             const size_t random_seed,
+             const size_t max_seeds_count,
+             const float32_t min_seed_size_quantile,
+             const float32_t max_seed_size_quantile,
+             pybind11::array_t<int32_t>& seed_of_nodes_array) {
+    ArraySlice<int32_t> seed_of_nodes = ArraySlice<int32_t>(seed_of_nodes_array, "seed_of_nodes");
+    size_t nodes_count = seed_of_nodes.size();
+
+    ConstCompressedMatrix<float32_t, int32_t, int32_t> outgoing_weights(
+        ConstArraySlice<float32_t>(outgoing_weights_data_array, "outgoing_weights_data"),
+        ConstArraySlice<int32_t>(outgoing_weights_indices_array, "outgoing_weights_indices"),
+        ConstArraySlice<int32_t>(outgoing_weights_indptr_array, "outgoing_weights_indptr"),
+        nodes_count,
+        "outgoing_weights");
+    FastAssertCompare(outgoing_weights.bands_count(), ==, nodes_count);
+
+    ConstCompressedMatrix<float32_t, int32_t, int32_t> incoming_weights(
+        ConstArraySlice<float32_t>(incoming_weights_data_array, "incoming_weights_data"),
+        ConstArraySlice<int32_t>(incoming_weights_indices_array, "incoming_weights_indices"),
+        ConstArraySlice<int32_t>(incoming_weights_indptr_array, "incoming_weights_indptr"),
+        nodes_count,
+        "incoming_weights");
+    FastAssertCompare(incoming_weights.bands_count(), ==, nodes_count);
+
+    FastAssertCompare(0, <=, min_seed_size_quantile);
+    FastAssertCompare(min_seed_size_quantile, <=, max_seed_size_quantile);
+    FastAssertCompare(max_seed_size_quantile, <=, 1.0);
+
+    std::vector<std::vector<int32_t>> connected_nodes =
+        collect_connected_nodes(incoming_weights, seed_of_nodes);
+
+    TmpVectorSizeT candidates_raii;
+    auto tmp_candidates = candidates_raii.vector(nodes_count);
+    std::iota(tmp_candidates.begin(), tmp_candidates.end(), 0);
+
+    std::minstd_rand random(random_seed);
+
+    size_t partition_index = 0;
+    while (partition_index < max_seeds_count
+           && keep_large_candidates(tmp_candidates, connected_nodes)) {
+        LOCATED_LOG(false) << " partition_index: " << partition_index << std::endl;
+        size_t seed_index = choose_seed(tmp_candidates,
+                                        connected_nodes,
+                                        min_seed_size_quantile,
+                                        max_seed_size_quantile,
+                                        random);
+        store_seed(incoming_weights,
+                   partition_index,
+                   seed_index,
+                   tmp_candidates,
+                   connected_nodes,
+                   seed_of_nodes);
+        ++partition_index;
+    }
+
+    size_t seeds_count = partition_index;
+    LOCATED_LOG(false) << " seeds_count: " << seeds_count << std::endl;
+
+    TmpVectorFloat64 tmp_seeds_outgoing_weights_raii;
+    TmpVectorFloat64 tmp_seeds_incoming_weights_raii;
+    auto tmp_seeds_outgoing_weights =
+        tmp_seeds_outgoing_weights_raii.array_slice("seeds_outgoing_weights", seeds_count);
+    auto tmp_seeds_incoming_weights =
+        tmp_seeds_incoming_weights_raii.array_slice("seeds_incoming_weights", seeds_count);
+
+    while (tmp_candidates.size() > 0) {
+        std::random_shuffle(tmp_candidates.begin(), tmp_candidates.end(), [&](size_t n) {
+            return random() % n;
+        });
+        tmp_candidates.erase(std::remove_if(tmp_candidates.begin(),
+                                            tmp_candidates.end(),
+                                            [&](int node_index) {
+                                                int32_t seed_index =
+                                                    find_seed_index(node_index,
+                                                                    outgoing_weights,
+                                                                    incoming_weights,
+                                                                    seed_of_nodes,
+                                                                    tmp_seeds_outgoing_weights,
+                                                                    tmp_seeds_incoming_weights);
+                                                if (seed_index < 0) {
+                                                    return false;
+                                                } else {
+                                                    seed_of_nodes[node_index] = seed_index;
+                                                    return true;
+                                                }
+                                            }),
+                             tmp_candidates.end());
+    }
+}
+
+// Score information for one node for one partition.
+struct NodeScore {
+private:
+    float64_t m_total_outgoing_weights;
+    float64_t m_total_incoming_weights;
+    float64_t m_score;
+
+public:
+    NodeScore()
+      : m_total_outgoing_weights(0), m_total_incoming_weights(0), m_score(log2(EPSILON) / 2.0) {}
+
+    void update_outgoing(const int direction, const float64_t edge_weight) {
+        m_total_outgoing_weights += direction * edge_weight;
+        SlowAssertCompare(m_total_outgoing_weights, >=, -EPSILON);
+        m_total_outgoing_weights = std::max(m_total_outgoing_weights, 0.0);
+        m_score = NaN;
+    }
+
+    void update_incoming(const int direction, const float64_t edge_weight) {
+        m_total_incoming_weights += direction * edge_weight;
+        SlowAssertCompare(m_total_incoming_weights, >=, -EPSILON);
+        m_total_incoming_weights = std::max(m_total_incoming_weights, 0.0);
+        m_score = NaN;
+    }
+
+    float64_t total_outgoing_weights() const { return m_total_outgoing_weights; }
+
+    float64_t total_incoming_weights() const { return m_total_incoming_weights; }
+
+    float64_t score() const {
+        SlowAssertCompare(std::isnan(m_score), ==, false);
+        return m_score;
+    }
+
+    float64_t rescore() {
+        SlowAssertCompare(m_total_outgoing_weights, >=, 0);
+        SlowAssertCompare(m_total_outgoing_weights, <=, 1 + EPSILON);
+        SlowAssertCompare(m_total_incoming_weights, >=, 0);
+        m_score = log2(EPSILON + m_total_outgoing_weights * m_total_incoming_weights) / 2.0;
+        return m_score;
+    }
+};
+
+static std::ostream&
+operator<<(std::ostream& os, const NodeScore& node_score) {
+    return os << node_score.score()
+              << " total_outgoing_weights: " << node_score.total_outgoing_weights()
+              << " total_incoming_weights: " << node_score.total_incoming_weights();
+}
+
+static std::vector<size_t>
+initial_size_of_partitions(ConstArraySlice<int32_t> partitions_of_nodes) {
+    std::vector<size_t> size_of_partitions;
+
+    for (int32_t partition_index : partitions_of_nodes) {
+        if (partition_index < 0) {
+            continue;
+        }
+        if (size_t(partition_index) >= size_of_partitions.size()) {
+            size_of_partitions.resize(partition_index + 1);
+        }
+        size_of_partitions[partition_index] += 1;
+    }
+
+    for (size_t partition_index = 0; partition_index < size_of_partitions.size();
+         ++partition_index) {
+        FastAssertCompare(size_of_partitions[partition_index], >, 0);
+    }
+
+    return size_of_partitions;
+}
+
+static float64_t
+initial_incoming_scale(ConstCompressedMatrix<float32_t, int32_t, int32_t> incoming_weights) {
+    size_t nodes_count = incoming_weights.bands_count();
+    float64_t incoming_scale = 0;
+
+    LOCATED_LOG(false) << " initial_incoming_scale_of_nodes" << std::endl;
+    for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
+        float64_t total_incoming_weights = 0;
+        const auto& node_incoming_weights = incoming_weights.get_band_data(node_index);
+        for (const auto incoming_weight : node_incoming_weights) {
+            total_incoming_weights += incoming_weight;
+        }
+        LOCATED_LOG(false)                                            //
+            << " node_index: " << node_index                          //
+            << " total_incoming_weights: " << total_incoming_weights  //
+            << std::endl;
+        FastAssertCompare(total_incoming_weights, >, 0);
+        incoming_scale += log2(total_incoming_weights);
+    }
+
+    return incoming_scale;
+}
+
+static std::vector<std::vector<NodeScore>>
+initial_score_of_nodes_of_partitions(
+    ConstCompressedMatrix<float32_t, int32_t, int32_t> outgoing_weights,
+    ConstCompressedMatrix<float32_t, int32_t, int32_t> incoming_weights,
+    ConstArraySlice<int32_t> partition_of_nodes,
+    size_t partitions_count) {
+    LOCATED_LOG(false) << " initial_score_of_partitions" << std::endl;
+    size_t nodes_count = outgoing_weights.bands_count();
+
+    std::vector<std::vector<NodeScore>> score_of_nodes_of_partitions(partitions_count);
+    for (size_t partition_index = 0; partition_index < partitions_count; ++partition_index) {
+        score_of_nodes_of_partitions[partition_index].resize(nodes_count);
+    }
+
+    for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
+        const int partition_index = partition_of_nodes[node_index];
+#if ASSERT_LEVEL > 0
+        float64_t total_outgoing_weights = 0;
+#endif
+
+        const auto& node_outgoing_indices = outgoing_weights.get_band_indices(node_index);
+        const auto& node_outgoing_weights = outgoing_weights.get_band_data(node_index);
+        for (size_t other_node_position = 0; other_node_position < node_outgoing_indices.size();
+             ++other_node_position) {
+            const int32_t other_node_index = node_outgoing_indices[other_node_position];
+            const float32_t edge_weight = node_outgoing_weights[other_node_position];
+
+            SlowAssertCompare(other_node_index, !=, node_index);
+            SlowAssertCompare(edge_weight, >, 0);
+            SlowAssertCompare(edge_weight, <, 1 + EPSILON);
+
+#if ASSERT_LEVEL > 0
+            total_outgoing_weights += edge_weight;
+#endif
+
+            const int other_partition_index = partition_of_nodes[other_node_index];
+
+            LOCATED_LOG(false)                                       //
+                << " from node_index: " << node_index                //
+                << " from partition_index: " << partition_index      //
+                << " to_node_index: " << other_node_index            //
+                << " to_partition_index: " << other_partition_index  //
+                << " edge weight: " << edge_weight                   //
+                << std::endl;
+
+            if (other_partition_index >= 0) {
+                score_of_nodes_of_partitions[other_partition_index][node_index]
+                    .update_outgoing(+1, edge_weight);
+                score_of_nodes_of_partitions[other_partition_index][node_index].rescore();
+            }
+
+            if (partition_index >= 0) {
+                score_of_nodes_of_partitions[partition_index][other_node_index]
+                    .update_incoming(+1, edge_weight);
+                score_of_nodes_of_partitions[partition_index][other_node_index].rescore();
+            }
+        }
+
+#if ASSERT_LEVEL > 0
+        FastAssertCompare(total_outgoing_weights, >, 1 - EPSILON);
+        FastAssertCompare(total_outgoing_weights, <, 1 + EPSILON);
+#endif
+    }
+
+    for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
+        for (size_t partition_index = 0; partition_index < partitions_count; ++partition_index) {
+            if (int32_t(partition_index) == partition_of_nodes[node_index]) {
+                LOCATED_LOG(false)                                                              //
+                    << " node_index: " << node_index                                            //
+                    << " current partition_index: " << partition_index                          //
+                    << " score: " << score_of_nodes_of_partitions[partition_index][node_index]  //
+                    << std::endl;
+            } else {
+                LOCATED_LOG(false)                                                              //
+                    << " node_index: " << node_index                                            //
+                    << " other partition_index: " << partition_index                            //
+                    << " score: " << score_of_nodes_of_partitions[partition_index][node_index]  //
+                    << std::endl;
+            }
+        }
+    }
+
+    return score_of_nodes_of_partitions;
+}
+
+static std::vector<float64_t>
+initial_score_of_partitions(
+    size_t nodes_count,
+    ConstArraySlice<int32_t> partitions_of_nodes,
+    const size_t partitions_count,
+    const std::vector<std::vector<NodeScore>>& score_of_nodes_of_partitions) {
+    std::vector<float64_t> score_of_partitions(partitions_count, 0);
+
+    for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
+        const int partition_index = partitions_of_nodes[node_index];
+        if (partition_index >= 0) {
+            score_of_partitions[partition_index] +=
+                score_of_nodes_of_partitions[partition_index][node_index].score();
+        }
+    }
+
+    return score_of_partitions;
+}
+
+#if ASSERT_LEVEL > 0
+std::function<void()> g_verify;
+#endif
+
+// Optimize the partition of a graph.
+struct OptimizePartitions {
+    ConstCompressedMatrix<float32_t, int32_t, int32_t> outgoing_weights;
+    ConstCompressedMatrix<float32_t, int32_t, int32_t> incoming_weights;
+    const size_t nodes_count;
+    ArraySlice<int32_t> partition_of_nodes;
+    std::vector<size_t> size_of_partitions;
+    const size_t partitions_count;
+    float64_t incoming_scale;
+    std::vector<std::vector<NodeScore>> score_of_nodes_of_partitions;
+    std::vector<float64_t> score_of_partitions;
+
+    OptimizePartitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
+                       const pybind11::array_t<int32_t>& outgoing_indices_array,
+                       const pybind11::array_t<int32_t>& outgoing_indptr_array,
+                       const pybind11::array_t<float32_t>& incoming_weights_array,
+                       const pybind11::array_t<int32_t>& incoming_indices_array,
+                       const pybind11::array_t<int32_t>& incoming_indptr_array,
+                       pybind11::array_t<int32_t>& partition_of_nodes_array)
+      : outgoing_weights(ConstCompressedMatrix<float32_t, int32_t, int32_t>(
+            ConstArraySlice<float32_t>(outgoing_weights_array, "outgoing_weights_array"),
+            ConstArraySlice<int32_t>(outgoing_indices_array, "outgoing_indices_array"),
+            ConstArraySlice<int32_t>(outgoing_indptr_array, "outgoing_indptr_array"),
+            outgoing_indptr_array.size() - 1,
+            "outgoing_weights"))
+      , incoming_weights(ConstCompressedMatrix<float32_t, int32_t, int32_t>(
+            ConstArraySlice<float32_t>(incoming_weights_array, "incoming_weights_array"),
+            ConstArraySlice<int32_t>(incoming_indices_array, "incoming_indices_array"),
+            ConstArraySlice<int32_t>(incoming_indptr_array, "incoming_indptr_array"),
+            incoming_indptr_array.size() - 1,
+            "incoming_weights"))
+      , nodes_count(outgoing_weights.bands_count())
+      , partition_of_nodes(partition_of_nodes_array, "partition_of_nodes")
+      , size_of_partitions(initial_size_of_partitions(partition_of_nodes))
+      , partitions_count(size_of_partitions.size())
+      , incoming_scale(initial_incoming_scale(incoming_weights))
+      , score_of_nodes_of_partitions(initial_score_of_nodes_of_partitions(outgoing_weights,
+                                                                          incoming_weights,
+                                                                          partition_of_nodes,
+                                                                          partitions_count))
+      , score_of_partitions(initial_score_of_partitions(nodes_count,
+                                                        partition_of_nodes,
+                                                        partitions_count,
+                                                        score_of_nodes_of_partitions)) {}
+
+    float64_t score(bool with_orphans = true) const {
+        /*
+        if (!with_orphans) {
+            std::cerr << "node,partition,total_outgoing,total_incoming" << std::endl;
+            for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
+                for (size_t partition_index = 0; partition_index < partitions_count;
+                     ++partition_index) {
+                    std::cerr << node_index << ","       //
+                              << partition_index << ","  //
+                              << score_of_nodes_of_partitions[partition_index][node_index]
+                                     .total_outgoing_weights()
+                              << ","  //
+                              << score_of_nodes_of_partitions[partition_index][node_index]
+                                     .total_incoming_weights()  //
+                              << std::endl;
+                }
+            }
+        }
+        */
+
+        float64_t total_score = nodes_count * log2(nodes_count) - incoming_scale;
+        size_t orphans_count = nodes_count;
+        for (size_t partition_index = 0; partition_index < partitions_count; ++partition_index) {
+            const float64_t score_of_partition = score_of_partitions[partition_index];
+            const size_t size_of_partition = size_of_partitions[partition_index];
+            total_score += score_of_partition - size_of_partition * log2(size_of_partition);
+            orphans_count -= size_of_partition;
+        }
+        if (with_orphans) {
+            total_score += orphans_count * NodeScore().score();
+            return pow(2, total_score / nodes_count);
+        } else {
+            return pow(2, total_score / (nodes_count - orphans_count));
+        }
+    }
+
+#if ASSERT_LEVEL > 0
+    void verify(const OptimizePartitions& other) {
+#    define ASSERT_SAME(CONTEXT, FIELD, EPSILON)                                                 \
+        if (fabs(double(this_##FIELD) - double(other_##FIELD)) > EPSILON) {                      \
+            std::cerr << "OOPS! " << #CONTEXT << ": " << CONTEXT << " actual " << #FIELD << ": " \
+                      << this_##FIELD << ": "                                                    \
+                      << " computed " << #FIELD << ": " << other_##FIELD << ": " << std::endl;   \
+            assert(false);                                                                       \
+        } else
+
+        ConstArraySlice<int32_t> other_partition_of_nodes = other.partition_of_nodes;
+        for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
+            auto this_partition_index = partition_of_nodes[node_index];
+            auto other_partition_index = other_partition_of_nodes[node_index];
+            ASSERT_SAME(node_index, partition_index, 0);
+        }
+
+        for (size_t partition_index = 0; partition_index < partitions_count; ++partition_index) {
+            for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
+                const auto& this_score_of_node =
+                    score_of_nodes_of_partitions[partition_index][node_index];
+                const auto& other_score_of_node =
+                    other.score_of_nodes_of_partitions[partition_index][node_index];
+
+#    define ASSERT_SCORE_FIELD(FIELD)                                                    \
+        if (fabs(this_score_of_node.FIELD() - other_score_of_node.FIELD()) >= EPSILON) { \
+            std::cerr << "OOPS! partition_index: " << partition_index                    \
+                      << " node_index: " << node_index << " actual " << #FIELD << ": "   \
+                      << this_score_of_node.FIELD() << " computed " << #FIELD << " : "   \
+                      << other_score_of_node.FIELD() << std::endl;                       \
+            assert(false);                                                               \
+        } else
+
+                ASSERT_SCORE_FIELD(total_outgoing_weights);
+                ASSERT_SCORE_FIELD(total_incoming_weights);
+                ASSERT_SCORE_FIELD(score);
+            }
+
+            auto this_partition_score = score_of_partitions[partition_index];
+            auto other_partition_score = other.score_of_partitions[partition_index];
+            ASSERT_SAME(partition_index, partition_score, 1e-3);
+        }
+
+        auto this_score = score();
+        auto other_score = other.score();
+        LOCATED_LOG(true) << " score: " << this_score << " ~ " << other_score << std::endl;
+        assert(fabs(this_score - other_score) < 1e-3);
+    }
+#endif
+
+    void optimize(const size_t random_seed, float64_t cooldown) {
+        if (partitions_count < 2) {
+            return;
+        }
+
+        std::minstd_rand random(random_seed);
+
+        TmpVectorSizeT indices_raii;
+        auto tmp_indices = indices_raii.vector(nodes_count);
+        std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
+
+        TmpVectorSizeT partitions_raii;
+        auto tmp_partitions = partitions_raii.vector(partitions_count);
+
+        TmpVectorFloat64 partition_cold_diffs_raii;
+        auto tmp_partition_cold_diffs = partition_cold_diffs_raii.vector(partitions_count);
+
+        TmpVectorFloat64 partition_hot_diffs_raii;
+        auto tmp_partition_hot_diffs = partition_hot_diffs_raii.vector(partitions_count);
+
+        if (cooldown != 0.0) {
+            FastAssertCompare(cooldown, >, 0.0);
+            FastAssertCompare(cooldown, <, 1.0);
+        }
+        float64_t temperature = cooldown;
+
+        bool did_improve = true;
+        while (temperature > 0 || did_improve) {
+            LOCATED_LOG(true)                       //
+                << " temperature: " << temperature  //
+                << " cooldown: " << cooldown        //
+                << " score: " << score()            //
+                << " did_improve: " << did_improve  //
+                << std::endl;
+            if (did_improve) {
+                did_improve = false;
+            } else {
+                temperature = 0;
+            }
+
+            std::random_shuffle(tmp_indices.begin(), tmp_indices.end(), [&](size_t n) {
+                return random() % n;
+            });
+            for (size_t node_index : tmp_indices) {
+                if (improve_node(node_index,
+                                 tmp_partitions,
+                                 tmp_partition_cold_diffs,
+                                 tmp_partition_hot_diffs,
+                                 random,
+                                 temperature)) {
+                    did_improve = true;
+                }
+                temperature *= cooldown;
+                LOCATED_LOG(false)                      //
+                    << " temperature: " << temperature  //
+                    << " cooldown: " << cooldown        //
+                    << " score: " << score()            //
+                    << " did_improve: " << did_improve  //
+                    << std::endl;
+            }
+        }
+
+        LOCATED_LOG(true)                       //
+            << " temperature: " << temperature  //
+            << " cooldown: " << cooldown        //
+            << " score: " << score()            //
+            << std::endl;
+    }
+
+    bool improve_node(size_t node_index,
+                      std::vector<size_t>& tmp_partitions,
+                      std::vector<float64_t>& tmp_partition_cold_diffs,
+                      std::vector<float64_t>& tmp_partition_hot_diffs,
+                      std::minstd_rand& random,
+                      const float64_t temperature) {
+        const auto current_partition_index = partition_of_nodes[node_index];
+        LOCATED_LOG(false)                                              //
+            << " node: " << node_index                                  //
+            << " current_partition_index: " << current_partition_index  //
+            << " size: "
+            << (current_partition_index < 0 ? 0 : size_of_partitions[current_partition_index])  //
+            << std::endl;
+
+        if (current_partition_index >= 0 && size_of_partitions[current_partition_index] < 2) {
+            return false;
+        }
+
+        collect_initial_partition_diffs(node_index,
+                                        current_partition_index,
+                                        tmp_partition_cold_diffs,
+                                        tmp_partition_hot_diffs);
+
+        collect_cold_partition_diffs(node_index, current_partition_index, tmp_partition_cold_diffs);
+
+        const float64_t current_cold_diff = collect_candidate_partitions(current_partition_index,
+                                                                         tmp_partition_cold_diffs,
+                                                                         tmp_partition_hot_diffs,
+                                                                         temperature,
+                                                                         tmp_partitions);
+
+        const int32_t chosen_partition_index =
+            choose_target_partition(current_partition_index, random, tmp_partitions);
+        if (chosen_partition_index < 0) {
+            return false;
+        }
+
+        const float64_t chosen_cold_diff = tmp_partition_cold_diffs[chosen_partition_index];
+        LOCATED_LOG(false)                                //
+            << " chosen_cold_diff: " << chosen_cold_diff  //
+            << std::endl;
+
+        update_scores_of_nodes(node_index, current_partition_index, chosen_partition_index);
+
+        update_partitions_of_nodes(node_index, current_partition_index, chosen_partition_index);
+
+        update_sizes_of_partitions(current_partition_index, chosen_partition_index);
+
+        update_scores_of_partition(current_partition_index,
+                                   current_cold_diff,
+                                   chosen_partition_index,
+                                   chosen_cold_diff);
+
+#if ASSERT_LEVEL > 0
+        if (g_verify) {
+            g_verify();
+        }
+#endif
+
+        return true;
+    }
+
+    void collect_initial_partition_diffs(const size_t node_index,
+                                         const int32_t current_partition_index,
+                                         std::vector<float64_t>& tmp_partition_cold_diffs,
+                                         std::vector<float64_t>& tmp_partition_hot_diffs) {
+        for (size_t partition_index = 0; partition_index < partitions_count; ++partition_index) {
+            const int direction = 1 - 2 * (int32_t(partition_index) == current_partition_index);
+            const auto score =
+                direction * score_of_nodes_of_partitions[partition_index][node_index].score();
+            tmp_partition_cold_diffs[partition_index] = score;
+            tmp_partition_hot_diffs[partition_index] = score;
+            LOCATED_LOG(false)                                                  //
+                << " node_index: " << node_index                                //
+                << " partition_index: " << partition_index                      //
+                << " cold_diff: " << tmp_partition_cold_diffs[partition_index]  //
+                << " hot_diff: " << tmp_partition_hot_diffs[partition_index]    //
+                << std::endl;
+        }
+    }
+
+    void collect_cold_partition_diffs(const size_t node_index,
+                                      const int32_t current_partition_index,
+                                      std::vector<float64_t>& tmp_partition_cold_diffs) {
+        const auto& node_outgoing_indices = outgoing_weights.get_band_indices(node_index);
+        const auto& node_incoming_indices = incoming_weights.get_band_indices(node_index);
+
+        const auto& node_outgoing_weights = outgoing_weights.get_band_data(node_index);
+        const auto& node_incoming_weights = incoming_weights.get_band_data(node_index);
+
+        size_t outgoing_count = node_outgoing_indices.size();
+        size_t incoming_count = node_incoming_indices.size();
+
+        FastAssertCompare(outgoing_count, >, 0);
+        FastAssertCompare(incoming_count, >, 0);
+
+        size_t outgoing_position = 0;
+        size_t incoming_position = 0;
+
+        auto outgoing_node_index = node_outgoing_indices[outgoing_position];
+        auto incoming_node_index = node_incoming_indices[incoming_position];
+
+        auto outgoing_edge_weight = node_outgoing_weights[outgoing_position];
+        auto incoming_edge_weight = node_incoming_weights[incoming_position];
+
+        while (outgoing_position < outgoing_count || incoming_position < incoming_count) {
+            const auto other_node_index = std::min(outgoing_node_index, incoming_node_index);
+            const auto other_partition_index = partition_of_nodes[other_node_index];
+
+            const int is_outgoing = int(outgoing_node_index == other_node_index);
+            const int is_incoming = int(incoming_node_index == other_node_index);
+
+            LOCATED_LOG(false) << " consider other_node " << other_node_index          //
+                               << " other_partition_index: " << other_partition_index  //
+                               << std::endl;
+
+            if (other_partition_index >= 0) {
+                NodeScore other_score =
+                    score_of_nodes_of_partitions[other_partition_index][other_node_index];
+                const float64_t old_score = other_score.score();
+
+                LOCATED_LOG(false)                                          //
+                    << " other_node_index: " << other_node_index            //
+                    << " other_partition_index: " << other_partition_index  //
+                    << " old score: " << other_score                        //
+                    << std::endl;
+
+                const int direction = 1 - 2 * (other_partition_index == current_partition_index);
+
+                other_score.update_incoming(direction * is_outgoing, outgoing_edge_weight);
+                LOCATED_LOG(false && is_outgoing)                         //
+                    << " other_node_index: " << other_node_index          //
+                    << " direction: " << direction                        //
+                    << " outgoing_edge_weight: " << outgoing_edge_weight  //
+                    << std::endl;
+
+                other_score.update_outgoing(direction * is_incoming, incoming_edge_weight);
+                LOCATED_LOG(false && is_incoming)                         //
+                    << " other_node_index: " << other_node_index          //
+                    << " direction: " << direction                        //
+                    << " incoming_edge_weight: " << incoming_edge_weight  //
+                    << std::endl;
+
+                const float64_t new_score = other_score.rescore();
+                LOCATED_LOG(false)                                          //
+                    << " other_node_index: " << other_node_index            //
+                    << " other_partition_index: " << other_partition_index  //
+                    << " new score: " << other_score                        //
+                    << std::endl;
+
+                tmp_partition_cold_diffs[other_partition_index] += new_score - old_score;
+            }
+
+            outgoing_position += is_outgoing;
+            incoming_position += is_incoming;
+
+            if (outgoing_position < outgoing_count) {
+                outgoing_node_index = node_outgoing_indices[outgoing_position];
+                outgoing_edge_weight = node_outgoing_weights[outgoing_position];
+            } else {
+                outgoing_node_index = nodes_count;
+                outgoing_edge_weight = 0;
+            }
+
+            if (incoming_position < incoming_count) {
+                incoming_node_index = node_incoming_indices[incoming_position];
+                incoming_edge_weight = node_incoming_weights[incoming_position];
+            } else {
+                incoming_node_index = nodes_count;
+                incoming_edge_weight = 0;
+            }
+        }
+    }
+
+    float64_t collect_candidate_partitions(const int32_t current_partition_index,
+                                           const std::vector<float64_t>& tmp_partition_cold_diffs,
+                                           const std::vector<float64_t>& tmp_partition_hot_diffs,
+                                           const float64_t temperature,
+                                           std::vector<size_t>& tmp_partitions) {
+        float64_t current_hot_diff = 0;
+        float64_t current_cold_diff = 0;
+        float64_t current_adjusted_cold_diff = 0;
+
+        if (current_partition_index >= 0) {
+            const float64_t hot_diff = tmp_partition_hot_diffs[current_partition_index];
+            const size_t old_size = size_of_partitions[current_partition_index];
+            const size_t new_size = old_size - 1;
+            const float64_t old_score = score_of_partitions[current_partition_index];
+            const float64_t old_adjusted_score = old_score - old_size * log2(old_size);
+            const float64_t cold_diff = tmp_partition_cold_diffs[current_partition_index];
+            const float64_t new_score = old_score + cold_diff;
+            const float64_t new_adjusted_score = new_score - new_size * log2(new_size);
+            const float64_t adjusted_cold_diff = new_adjusted_score - old_adjusted_score;
+            LOCATED_LOG(false)                                              //
+                << " current_partition_index: " << current_partition_index  //
+                << " hot_diff: " << hot_diff                                //
+                << " old_score: " << old_score                              //
+                << " new_score: " << new_score                              //
+                << " cold_diff: " << cold_diff                              //
+                << " old_size: " << old_size                                //
+                << " new_size: " << new_size                                //
+                << " old_adjusted_score: " << old_adjusted_score            //
+                << " new_adjusted_score: " << new_adjusted_score            //
+                << " adjusted_cold_diff: " << adjusted_cold_diff            //
+                << std::endl;
+            current_cold_diff = cold_diff;
+            current_hot_diff = hot_diff;
+            current_adjusted_cold_diff = adjusted_cold_diff;
+        }
+
+        tmp_partitions.clear();
+        for (size_t partition_index = 0; partition_index < partitions_count; ++partition_index) {
+            if (int32_t(partition_index) == current_partition_index) {
+                continue;
+            }
+            const float64_t hot_diff = tmp_partition_hot_diffs[partition_index];
+            const size_t old_size = size_of_partitions[partition_index];
+            const size_t new_size = old_size + 1;
+            const float64_t old_score = score_of_partitions[partition_index];
+            const float64_t cold_diff = tmp_partition_cold_diffs[partition_index];
+            const float64_t new_score = old_score + cold_diff;
+            const float64_t old_adjusted_score = old_score - old_size * log2(old_size);
+            const float64_t new_adjusted_score = new_score - new_size * log2(new_size);
+            const float64_t adjusted_cold_diff = new_adjusted_score - old_adjusted_score;
+            const float64_t total_diff =
+                (current_hot_diff + hot_diff) * temperature
+                + (current_adjusted_cold_diff + adjusted_cold_diff) * (1.0 - temperature);
+            LOCATED_LOG(false)                                    //
+                << " partition_index: " << partition_index        //
+                << " old_score: " << old_score                    //
+                << " new_score: " << new_score                    //
+                << " hot_diff: " << hot_diff                      //
+                << " cold_diff: " << cold_diff                    //
+                << " old_size: " << old_size                      //
+                << " new_size: " << new_size                      //
+                << " old_adjusted_score: " << old_adjusted_score  //
+                << " new_adjusted_score: " << new_adjusted_score  //
+                << " adjusted_cold_diff: " << adjusted_cold_diff  //
+                << " total_diff: " << total_diff                  //
+                << std::endl;
+            if (total_diff > 0) {
+                tmp_partitions.push_back(partition_index);
+            }
+        }
+
+        return current_cold_diff;
+    }
+
+    int32_t choose_target_partition(const int32_t current_partition_index,
+                                    std::minstd_rand& random,
+                                    const std::vector<size_t>& tmp_partitions) {
+        int32_t chosen_partition_index = -1;
+        if (tmp_partitions.size() == 0) {
+            if (current_partition_index >= 0) {
+                return -1;
+            }
+            chosen_partition_index = random() % partitions_count;
+        } else {
+            chosen_partition_index = tmp_partitions[random() % tmp_partitions.size()];
+        }
+
+        LOCATED_LOG(false)                                            //
+            << " chosen_partition_index: " << chosen_partition_index  //
+            << std::endl;
+
+        return chosen_partition_index;
+    }
+
+    void update_scores_of_nodes(const size_t node_index,
+                                const int32_t from_partition_index,
+                                const int32_t to_partition_index) {
+        auto score_of_nodes_of_from_partition =
+            from_partition_index < 0 ? nullptr
+                                     : &score_of_nodes_of_partitions[from_partition_index];
+        auto& score_of_nodes_of_to_partition = score_of_nodes_of_partitions[to_partition_index];
+
+        const auto& node_outgoing_indices = outgoing_weights.get_band_indices(node_index);
+        const auto& node_incoming_indices = incoming_weights.get_band_indices(node_index);
+
+        const auto& node_outgoing_weights = outgoing_weights.get_band_data(node_index);
+        const auto& node_incoming_weights = incoming_weights.get_band_data(node_index);
+
+        size_t outgoing_count = node_outgoing_indices.size();
+        size_t incoming_count = node_incoming_indices.size();
+
+        FastAssertCompare(outgoing_count, >, 0);
+        FastAssertCompare(incoming_count, >, 0);
+
+        size_t outgoing_position = 0;
+        size_t incoming_position = 0;
+
+        auto outgoing_node_index = node_outgoing_indices[outgoing_position];
+        auto incoming_node_index = node_incoming_indices[incoming_position];
+
+        auto outgoing_edge_weight = node_outgoing_weights[outgoing_position];
+        auto incoming_edge_weight = node_incoming_weights[incoming_position];
+
+        while (outgoing_position < outgoing_count || incoming_position < incoming_count) {
+            const auto other_node_index = std::min(outgoing_node_index, incoming_node_index);
+
+            const int is_outgoing = int(outgoing_node_index == other_node_index);
+            const int is_incoming = int(incoming_node_index == other_node_index);
+
+            if (score_of_nodes_of_from_partition) {
+                auto& other_node_from_score = (*score_of_nodes_of_from_partition)[other_node_index];
+                LOCATED_LOG(false)                                        //
+                    << " other_node_index: " << other_node_index          //
+                    << " from_partition_index: " << from_partition_index  //
+                    << " old score: " << other_node_from_score            //
+                    << std::endl;
+
+                other_node_from_score.update_incoming(-is_outgoing, outgoing_edge_weight);
+                other_node_from_score.update_outgoing(-is_incoming, incoming_edge_weight);
+                other_node_from_score.rescore();
+
+                LOCATED_LOG(false)                                        //
+                    << " other_node_index: " << other_node_index          //
+                    << " from_partition_index: " << from_partition_index  //
+                    << " new score: " << other_node_from_score            //
+                    << std::endl;
+            }
+
+            auto& other_node_to_score = score_of_nodes_of_to_partition[other_node_index];
+            LOCATED_LOG(false)                                    //
+                << " other_node_index: " << other_node_index      //
+                << " to_partition_index: " << to_partition_index  //
+                << " old score: " << other_node_to_score          //
+                << std::endl;
+
+            other_node_to_score.update_incoming(+is_outgoing, outgoing_edge_weight);
+            other_node_to_score.update_outgoing(+is_incoming, incoming_edge_weight);
+            other_node_to_score.rescore();
+
+            LOCATED_LOG(false)                                    //
+                << " other_node_index: " << other_node_index      //
+                << " to_partition_index: " << to_partition_index  //
+                << " new score: " << other_node_to_score          //
+                << std::endl;
+
+            outgoing_position += is_outgoing;
+            incoming_position += is_incoming;
+
+            if (outgoing_position < outgoing_count) {
+                outgoing_node_index = node_outgoing_indices[outgoing_position];
+                outgoing_edge_weight = node_outgoing_weights[outgoing_position];
+            } else {
+                outgoing_node_index = nodes_count;
+                outgoing_edge_weight = 0;
+            }
+
+            if (incoming_position < incoming_count) {
+                incoming_node_index = node_incoming_indices[incoming_position];
+                incoming_edge_weight = node_incoming_weights[incoming_position];
+            } else {
+                incoming_node_index = nodes_count;
+                incoming_edge_weight = 0;
+            }
+        }
+    }
+
+    void update_partitions_of_nodes(const size_t node_index,
+                                    const int32_t from_partition_index,
+                                    const int32_t to_partition_index) {
+        SlowAssertCompare(partition_of_nodes[node_index], ==, from_partition_index);
+        partition_of_nodes[node_index] = to_partition_index;
+        LOCATED_LOG(false)                                        //
+            << " set node_index: " << node_index                  //
+            << " from_partition_index: " << from_partition_index  //
+            << " to_partition_index: " << to_partition_index      //
+            << std::endl;
+    }
+
+    void update_sizes_of_partitions(const int32_t from_partition_index,
+                                    const int32_t to_partition_index) {
+        if (from_partition_index >= 0) {
+            SlowAssertCompare(size_of_partitions[from_partition_index], >, 1);
+            size_of_partitions[from_partition_index] -= 1;
+        }
+
+        size_of_partitions[to_partition_index] += 1;
+    }
+
+    void update_scores_of_partition(size_t current_partition_index,
+                                    float64_t current_cold_diff,
+                                    size_t chosen_partition_index,
+                                    float64_t chosen_cold_diff) {
+        if (current_partition_index >= 0) {
+            LOCATED_LOG(false) << " from_partition_index: " << current_partition_index            //
+                               << " old score: " << score_of_partitions[current_partition_index]  //
+                               << " from_cold_diff: " << current_cold_diff                        //
+                               << std::endl;
+            score_of_partitions[current_partition_index] += current_cold_diff;
+            LOCATED_LOG(false) << " from_partition_index: " << current_partition_index            //
+                               << " new score: " << score_of_partitions[current_partition_index]  //
+                               << std::endl;
+        }
+
+        LOCATED_LOG(false) << " to_partition_index: " << chosen_partition_index              //
+                           << " old score: " << score_of_partitions[chosen_partition_index]  //
+                           << " to_cold_diff: " << chosen_cold_diff                          //
+                           << std::endl;
+        score_of_partitions[chosen_partition_index] += chosen_cold_diff;
+        LOCATED_LOG(false) << " to_partition_index: " << chosen_partition_index              //
+                           << " new score: " << score_of_partitions[chosen_partition_index]  //
+                           << std::endl;
+    }
+};
+
+static float64_t
+optimize_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
+                    const pybind11::array_t<int32_t>& outgoing_indices_array,
+                    const pybind11::array_t<int32_t>& outgoing_indptr_array,
+                    const pybind11::array_t<float32_t>& incoming_weights_array,
+                    const pybind11::array_t<int32_t>& incoming_indices_array,
+                    const pybind11::array_t<int32_t>& incoming_indptr_array,
+                    const unsigned int random_seed,
+                    float64_t cooldown,
+                    pybind11::array_t<int32_t>& partition_of_nodes_array) {
+    OptimizePartitions optimizer(outgoing_weights_array,
+                                 outgoing_indices_array,
+                                 outgoing_indptr_array,
+                                 incoming_weights_array,
+                                 incoming_indices_array,
+                                 incoming_indptr_array,
+                                 partition_of_nodes_array);
+
+#if ASSERT_LEVEL > 0
+    auto verify = [&]() {
+        LOCATED_LOG(false) << " VERIFY" << std::endl;
+        OptimizePartitions verifier(outgoing_weights_array,
+                                    outgoing_indices_array,
+                                    outgoing_indptr_array,
+                                    incoming_weights_array,
+                                    incoming_indices_array,
+                                    incoming_indptr_array,
+                                    partition_of_nodes_array);
+        LOCATED_LOG(false) << " COMPARE" << std::endl;
+        verifier.verify(optimizer);
+        LOCATED_LOG(false) << " VERIFIED" << std::endl;
+    };
+#endif
+
+#if ASSERT_LEVEL > 1
+    g_verify = verify;
+#else
+    g_verify = nullptr;
+#endif
+
+    optimizer.optimize(random_seed, cooldown);
+
+#if ASSERT_LEVEL == 1
+    verify();
+#endif
+
+    float64_t score = optimizer.score();
+    return score;
+}
+
+static float64_t
+score_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
+                 const pybind11::array_t<int32_t>& outgoing_indices_array,
+                 const pybind11::array_t<int32_t>& outgoing_indptr_array,
+                 const pybind11::array_t<float32_t>& incoming_weights_array,
+                 const pybind11::array_t<int32_t>& incoming_indices_array,
+                 const pybind11::array_t<int32_t>& incoming_indptr_array,
+                 pybind11::array_t<int32_t>& partition_of_nodes_array,
+                 bool with_orphans) {
+    OptimizePartitions optimizer(outgoing_weights_array,
+                                 outgoing_indices_array,
+                                 outgoing_indptr_array,
+                                 incoming_weights_array,
+                                 incoming_indices_array,
+                                 incoming_indptr_array,
+                                 partition_of_nodes_array);
+    return optimizer.score(with_orphans);
+}
+
 }  // namespace metacells
 
 PYBIND11_MODULE(extensions, module) {
@@ -1764,24 +3110,36 @@ PYBIND11_MODULE(extensions, module) {
     module.def("cover_diameter",
                &metacells::cover_diameter,
                "The diameter for points to achieve plot area coverage.");
+    module.def("choose_seeds",
+               &metacells::choose_seeds,
+               "Choose seed partitions for computing metacells.");
+    module.def("optimize_partitions",
+               &metacells::optimize_partitions,
+               "Optimize the partition for computing metacells.");
+    module.def("score_partitions",
+               &metacells::score_partitions,
+               "Compute the quality score for metacells.");
 
-#define REGISTER_D(D)                                                                        \
-    module.def("shuffle_matrix_" #D, &metacells::shuffle_matrix<D>, "Shuffle matrix data."); \
-    module.def("rank_matrix_" #D, &metacells::rank_matrix<D>, "Rank of matrix data.");       \
-    module.def("fold_factor_dense_" #D,                                                      \
-               &metacells::fold_factor_dense<D>,                                             \
-               "Fold factors of dense data.");                                               \
-    module.def("auroc_dense_matrix_" #D,                                                     \
-               &metacells::auroc_dense_matrix<D>,                                            \
-               "AUROC for dense matrix.");                                                   \
-    module.def("logistics_dense_matrix_" #D,                                                 \
-               &metacells::logistics_dense_matrix<D>,                                        \
-               "Logistics distances for dense matrix.");                                     \
-    module.def("logistics_dense_matrices_" #D,                                               \
-               &metacells::logistics_dense_matrices<D>,                                      \
-               "Logistics distances for dense matrices.");                                   \
-    module.def("cover_coordinates_" #D,                                                      \
-               &metacells::cover_coordinates<D>,                                             \
+#define REGISTER_D(D)                                                                             \
+    module.def("shuffle_matrix_" #D, &metacells::shuffle_matrix<D>, "Shuffle matrix data.");      \
+    module.def("rank_rows_" #D,                                                                   \
+               &metacells::rank_rows<D>,                                                          \
+               "Collect the rank element in each row.");                                          \
+    module.def("rank_matrix_" #D, &metacells::rank_matrix<D>, "Replace matrix data with ranks."); \
+    module.def("fold_factor_dense_" #D,                                                           \
+               &metacells::fold_factor_dense<D>,                                                  \
+               "Fold factors of dense data.");                                                    \
+    module.def("auroc_dense_matrix_" #D,                                                          \
+               &metacells::auroc_dense_matrix<D>,                                                 \
+               "AUROC for dense matrix.");                                                        \
+    module.def("logistics_dense_matrix_" #D,                                                      \
+               &metacells::logistics_dense_matrix<D>,                                             \
+               "Logistics distances for dense matrix.");                                          \
+    module.def("logistics_dense_matrices_" #D,                                                    \
+               &metacells::logistics_dense_matrices<D>,                                           \
+               "Logistics distances for dense matrices.");                                        \
+    module.def("cover_coordinates_" #D,                                                           \
+               &metacells::cover_coordinates<D>,                                                  \
                "Move points to achieve plot area coverage.");
 
 #define REGISTER_D_O(D, O)                          \

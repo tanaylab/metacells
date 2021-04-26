@@ -72,6 +72,7 @@ __all__ = [
     'nanmean_matrix',
     'nanmax_matrix',
     'nanmin_matrix',
+    'rank_matrix_by_layout',
 
     'bincount_vector',
     'most_frequent',
@@ -1026,7 +1027,7 @@ def rank_per(matrix: utt.Matrix, rank: int, *, per: Optional[str]) -> utt.NumpyV
         dense = dense.transpose()
 
     output = np.empty(dense.shape[0], dtype=dense.dtype)
-    extension_name = 'rank_matrix_%s_t' % dense.dtype
+    extension_name = 'rank_rows_%s_t' % dense.dtype
     extension = getattr(xt, extension_name)
     extension(dense, output, rank)
     return output
@@ -1193,11 +1194,12 @@ def scale_by(matrix: utt.Matrix, scale: utt.Vector, *, by: str) -> utt.ProperMat
     if compressed is not None:
         scale_matrix = sp.spdiags(scale, 0, len(scale), len(scale))
         if by == 'row':
-            result = scale_matrix * matrix
+            result = utt.mustbe_compressed_matrix(scale_matrix * matrix)
         else:
-            result = matrix * scale_matrix
+            result = utt.mustbe_compressed_matrix(matrix * scale_matrix)
         utt.sum_duplicates(result)
         utt.eliminate_zeros(result)
+        assert utt.matrix_layout(result) == utt.matrix_layout(compressed)
         return result
 
     assert dense is not None
@@ -1409,6 +1411,22 @@ def nanmin_matrix(matrix: utt.Matrix) -> Any:
             return np.nanmin(dense)
         assert dense is not None
         return np.nanmin(dense)
+
+
+@utm.timed_call()
+def rank_matrix_by_layout(matrix: utt.NumpyMatrix, ascending: bool) -> Any:
+    '''
+    Replace each element of the matrix with its rank (in row for ``row_major``,
+    in column for ``column_major``).
+
+    If ``ascending`` then rank 1 is the minimal element. Otherwise, rank 1 is the maximal element.
+    '''
+    layout = utt.matrix_layout(matrix)
+    assert layout is not None
+    extension_name = 'rank_matrix_%s_t' % matrix.dtype
+    extension = getattr(xt, extension_name)
+    extension(matrix, ascending)
+    return matrix
 
 
 M = TypeVar('M', bound=utt.Matrix)

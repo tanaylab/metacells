@@ -30,7 +30,9 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
     *,
     excluded_genes_mask: Optional[str] = None,
     max_sampled_cells: int = pr.noisy_lonely_max_sampled_cells,
-    downsample_cell_quantile: float = pr.noisy_lonely_downsample_cell_quantile,
+    downsample_min_samples: int = pr.noisy_lonely_downsample_min_samples,
+    downsample_min_cell_quantile: float = pr.noisy_lonely_downsample_max_cell_quantile,
+    downsample_max_cell_quantile: float = pr.noisy_lonely_downsample_min_cell_quantile,
     min_gene_total: int = pr.noisy_lonely_min_gene_total,
     min_gene_normalized_variance: float = pr.noisy_lonely_min_gene_normalized_variance,
     max_gene_similarity: float = pr.noisy_lonely_max_gene_similarity,
@@ -78,9 +80,11 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
     2. If we were specified an ``excluded_genes_mask``, this is the name of a per-variable (gene)
        annotation containing a mask of excluded genes. Get rid of all these excluded genes.
 
-    3. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the surviving
-       cells to the same total number of UMIs, using the ``downsample_cell_quantile`` (default:
-       {downsample_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
+    3. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the cells to the
+       same total number of UMIs, using the ``downsample_min_samples`` (default:
+       {downsample_min_samples}), ``downsample_min_cell_quantile`` (default:
+       {downsample_min_cell_quantile}), ``downsample_max_cell_quantile`` (default:
+       {downsample_max_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
 
     4. Find "noisy" genes which have a total number of UMIs of at least ``min_gene_total`` (default:
        {min_gene_total}) and a normalized variance of at least ``min_gene_normalized_variance``
@@ -115,7 +119,9 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
         i_data = s_data
 
     downsample_cells(i_data, what,
-                     downsample_cell_quantile=downsample_cell_quantile,
+                     downsample_min_samples=downsample_min_samples,
+                     downsample_min_cell_quantile=downsample_min_cell_quantile,
+                     downsample_max_cell_quantile=downsample_max_cell_quantile,
                      random_seed=random_seed)
 
     find_high_total_genes(i_data, 'downsampled', min_gene_total=min_gene_total)

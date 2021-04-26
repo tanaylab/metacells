@@ -396,6 +396,10 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
     if isinstance(value, Parameter.empty.__class__):
         return None
 
+    checksum = ''
+#   if utt.is_1d(value) and 'U' not in str(value.dtype) and 'o' not in str(value.dtype):
+#       checksum = f' checksum: {utt.shaped_checksum(value)}'
+
     if formatter is not None:
         value = formatter(value)
         if value is None:
@@ -409,10 +413,10 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
         else:
             dtype = 'unknown'
 
-        return f'{name} annotated data with {value.shape[0]} X {value.shape[1]} {dtype}s'
+        return f'{name} annotated data with {value.shape[0]} X {value.shape[1]} {dtype}s' + checksum
 
     if isinstance(value, (np.bool_, bool, str, None.__class__)):
-        return str(value)
+        return str(value) + checksum
 
     if isinstance(value, (int, float, np.float32, np.float64, np.int32, np.int64)):
         value = float(value)
@@ -428,37 +432,33 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
             return fraction_description(value)
         if 'factor' in name:
             return f'X {value:.4g}'
-        return f'{value:g}'
+        return f'{value:g}' + checksum
 
     if hasattr(value, '__qualname__'):
-        return getattr(value, '__qualname__')
+        return getattr(value, '__qualname__') + checksum
 
     if isinstance(value, (pd.Series, np.ndarray)) and value.ndim == 1 and value.dtype == 'bool':
-        return mask_description(value)
+        return mask_description(value) + checksum
 
     if hasattr(value, 'ndim'):
         if value.ndim == 2:
             text = f'{value.shape[0]} X {value.shape[1]} {utt.matrix_dtype(value)}s'
-            sparse = utt.maybe_sparse_matrix(value)
-            if sparse is not None:
-                text += ' ' + ratio_description(value.shape[0] * value.shape[1], 'element',
-                                                sparse.nnz, 'non-zero')
-            return text  # + f' checksum: {utt.shaped_checksum(value)}'
+            return text + checksum
 
         if value.ndim == 1:
             value = utt.to_numpy_vector(value)
-            if len(value) > 100 or 'U' not in str(value.dtype):
-                # + f' checksum: {utt.shaped_checksum(value)}'
-                return f'{len(value)} {value.dtype}s'
+            if len(value) > 100:
+                text = f'{len(value)} {value.dtype}s'
+                return text + checksum
             value = list(value)
 
     if isinstance(value, list):
         if len(value) > 100:
-            return f'{len(value)} {value[0].__class__.__name__}s'
+            return f'{len(value)} {value[0].__class__.__name__}s' + checksum
         texts = [element.uns.get('__name__', 'unnamed')
                  if isinstance(element, AnnData) else str(element)
                  for element in value]
-        return f'[ {", ".join(texts)} ]'
+        return f'[ {", ".join(texts)} ]' + checksum
 
     raise RuntimeError(  #
         f'unknown parameter type: {value.__class__} value: {value}')

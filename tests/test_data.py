@@ -16,7 +16,7 @@ import metacells as mc
 # pylint: disable=missing-function-docstring
 
 np.seterr(all='raise')
-mc.ut.setup_logger(level=logging.WARN)
+mc.ut.setup_logger(level=logging.DEBUG)
 mc.ut.allow_inefficient_layout(False)
 mc.ut.set_processors_count(4)
 
@@ -57,6 +57,7 @@ def test_direct_pipeline() -> None:
     for path in glob('../metacells-test-data/*.h5ad'):
         adata, expected = _load(path)
 
+        mc.ut.log_calc('path', path)
         pdata = adata[range(6000), :].copy()
 
         mc.pl.analyze_clean_genes(pdata, random_seed=123456,

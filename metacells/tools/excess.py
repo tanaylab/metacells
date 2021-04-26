@@ -192,7 +192,9 @@ def compute_excess_r2(
     *,
     metacells: Union[str, ut.Vector] = 'metacell',
     compatible_size: Optional[str] = 'compatible_size',
-    downsample_cell_quantile: float = pr.excess_downsample_cell_quantile,
+    downsample_min_samples: int = pr.excess_downsample_min_samples,
+    downsample_min_cell_quantile: float = pr.excess_downsample_min_cell_quantile,
+    downsample_max_cell_quantile: float = pr.excess_downsample_max_cell_quantile,
     min_gene_total: int = pr.excess_min_gene_total,
     top_gene_rank: int = pr.excess_top_gene_rank,
     shuffles_count: int = pr.excess_shuffles_count,
@@ -268,11 +270,11 @@ def compute_excess_r2(
        number of grouped cells in the metacell. Pick a random subset of the cells of
        this size. If ``compatible_size`` is ``None``, use all the cells of the metacell.
 
-    2. Downsample the cells so their total number of UMIs would be the
-       ``downsample_cell_quantile`` (default: {downsample_cell_quantile}). That is, if
-       ``downsample_cell_quantile`` is 0.1, then 90% of the cells would have more UMIs than
-       the target number of samples and will be downsampled; 10% of the cells would have too
-       few UMIs and will be left unchanged.
+    3. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the surviving
+       cells to the same total number of UMIs, using the ``downsample_min_samples`` (default:
+       {downsample_min_samples}), ``downsample_min_cell_quantile`` (default:
+       {downsample_min_cell_quantile}), ``downsample_max_cell_quantile`` (default:
+       {downsample_max_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
 
     3 Ignore all genes whose total data in the metacell (in the downsampled data) is below the
       ``min_gene_total`` (default: {min_gene_total}). This ensures we only correlate genes
@@ -311,15 +313,15 @@ def compute_excess_r2(
 
     assert mdata.n_obs == metacells_count
     top_r2_per_gene_per_metacell = \
-        np.full(mdata.shape, None, dtype='float')
+        np.full(mdata.shape, None, dtype='float32')
     top_shuffled_r2_per_gene_per_metacell = \
-        np.full(mdata.shape, None, dtype='float')
+        np.full(mdata.shape, None, dtype='float32')
     excess_r2_per_gene_per_metacell = \
-        np.full(mdata.shape, None, dtype='float')
+        np.full(mdata.shape, None, dtype='float32')
     variance_per_gene_per_metacell = \
-        np.full(mdata.shape, None, dtype='float')
+        np.full(mdata.shape, None, dtype='float32')
     normalized_variance_per_gene_per_metacell = \
-        np.full(mdata.shape, None, dtype='float')
+        np.full(mdata.shape, None, dtype='float32')
 
     for metacell_index in range(metacells_count):
         with ut.log_step('- metacell', metacell_index,
@@ -336,7 +338,9 @@ def compute_excess_r2(
                                      compatible_size=compatible_size_of_metacell,
                                      metacell_of_cells=metacell_of_cells,
                                      data=data,
-                                     downsample_cell_quantile=downsample_cell_quantile,
+                                     downsample_min_samples=downsample_min_samples,
+                                     downsample_min_cell_quantile=downsample_min_cell_quantile,
+                                     downsample_max_cell_quantile=downsample_max_cell_quantile,
                                      random_seed=random_seed,
                                      shuffles_count=shuffles_count,
                                      top_gene_rank=top_gene_rank,
@@ -370,7 +374,9 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
     compatible_size: Optional[int],
     metacell_of_cells: ut.NumpyVector,
     data: ut.ProperMatrix,
-    downsample_cell_quantile: float,
+    downsample_min_samples: int,
+    downsample_min_cell_quantile: float,
+    downsample_max_cell_quantile: float,
     random_seed: int,
     shuffles_count: int,
     min_gene_total: float,
@@ -408,7 +414,9 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
     metacell_data = data[metacell_indices, :]
 
     total_per_cell = ut.sum_per(metacell_data, per='row')
-    samples = round(np.quantile(total_per_cell, downsample_cell_quantile))
+    samples = min(max(downsample_min_samples,
+                      np.quantile(total_per_cell, downsample_min_cell_quantile)),
+                  np.quantile(total_per_cell, downsample_max_cell_quantile))
     if ut.logging_calc():
         ut.log_calc(f'samples: {samples}')
     downsampled_data_rows = \

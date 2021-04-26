@@ -324,7 +324,7 @@ def is_1d(shaped: Shaped) -> bool:
     '''
     Test whether the ``shaped`` is 1-dimensional.
     '''
-    return not hasattr(shaped, 'ndim') or getattr(shaped, 'ndim') == 1
+    return hasattr(shaped, 'ndim') and getattr(shaped, 'ndim') == 1
 
 
 def is_2d(shaped: Shaped) -> bool:

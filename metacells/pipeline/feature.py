@@ -25,7 +25,9 @@ def extract_feature_data(
     what: Union[str, ut.Matrix] = '__x__',
     *,
     name: Optional[str] = '.feature',
-    downsample_cell_quantile: float = pr.feature_downsample_cell_quantile,
+    downsample_min_samples: float = pr.feature_downsample_min_samples,
+    downsample_min_cell_quantile: float = pr.feature_downsample_min_cell_quantile,
+    downsample_max_cell_quantile: float = pr.feature_downsample_max_cell_quantile,
     min_gene_relative_variance: float = pr.feature_min_gene_relative_variance,
     min_gene_total: int = pr.feature_min_gene_total,
     min_gene_top3: int = pr.feature_min_gene_top3,
@@ -73,9 +75,12 @@ def extract_feature_data(
 
     **Computation Parameters**
 
+
     1. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the cells to the
-       same total number of UMIs, using the ``downsample_cell_quantile`` (default:
-       {downsample_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
+       same total number of UMIs, using the ``downsample_min_samples`` (default:
+       {downsample_min_samples}), ``downsample_min_cell_quantile`` (default:
+       {downsample_min_cell_quantile}), ``downsample_max_cell_quantile`` (default:
+       {downsample_max_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
 
     2. Invoke :py:func:`metacells.tools.high.find_high_total_genes` to select high-expression
        feature genes (based on the downsampled data), using ``min_gene_total``.
@@ -93,7 +98,9 @@ def extract_feature_data(
        "feature" genes using the ``name`` (default: {name}).
     '''
     tl.downsample_cells(adata, what,
-                        downsample_cell_quantile=downsample_cell_quantile,
+                        downsample_min_samples=downsample_min_samples,
+                        downsample_min_cell_quantile=downsample_min_cell_quantile,
+                        downsample_max_cell_quantile=downsample_max_cell_quantile,
                         random_seed=random_seed)
 
     tl.find_high_topN_genes(adata, 'downsampled', topN=3,

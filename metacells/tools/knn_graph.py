@@ -3,7 +3,6 @@ K-Nearest-Neighbors Graph
 -------------------------
 '''
 
-from math import sqrt
 from typing import Optional, Union
 
 import numpy as np
@@ -27,7 +26,6 @@ def compute_obs_obs_knn_graph(
     what: Union[str, ut.Matrix] = 'obs_similarity',
     *,
     k: int,
-    max_unbalanced_ranks: int = pr.knn_max_unbalanced_ranks,
     balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
@@ -56,23 +54,19 @@ def compute_obs_obs_knn_graph(
 
     **Computation Parameters**
 
-    1. Use the ``obs_similarity`` to rank the edges, and keep the highest-ranked ``max_unbalanced_ranks``
-       (default: {max_unbalanced_ranks}) outgoing edges for each node.
-       while ensuring the highest-ranked outgoing edge of each node is also used by the other node
-       it is connected to. This gives us an asymmetric sparse ``<elements>_outgoing_ranks`` matrix.
+    1. Use the ``obs_similarity`` and convert it to ranks (in descending order).
+       This gives us a dense asymmetric ``<elements>_outgoing_ranks`` matrix.
 
     2. Convert the asymmetric outgoing ranks matrix into a symmetric ``obs_balanced_ranks`` matrix
-       by element-wise multiplying it with its transpose and taking the square root - that
-       . That is, for each edge to be
-       high-balanced-rank, it has to be high-outgoing-rank for both the nodes it connects.
+       by element-wise multiplying it with its transpose and taking the square root. That is, for
+       each edge to be high-balanced-rank, the geomean of its outgoing rank has to be high in both
+       nodes it connects.
 
        .. note::
 
             This can drastically reduce the degree of the nodes, since to survive an edge needs to
             have been in the top ranks for both its nodes (as multiplying with zero drops the edge).
-            This is why the ``max_unbalanced_ranks`` needs to be large-ish. For divide-and-conquer
-            piles, we basically keep everything. For large (direct) graphs, we have to limit this to
-            control memory and CPU usage.
+            This is why the ``balanced_ranks_factor`` needs to be large-ish.
 
     3. Keeping only balanced ranks of geomean of up to ``k * balanced_ranks_factor`` (default:
        {balanced_ranks_factor}). This does a preliminary pruning of low-quality edges.
@@ -102,7 +96,6 @@ def compute_obs_obs_knn_graph(
             rejected by its group as deviant.
     '''
     return _compute_elements_knn_graph(adata, 'obs', what, k=k,
-                                       max_unbalanced_ranks=max_unbalanced_ranks,
                                        balanced_ranks_factor=balanced_ranks_factor,
                                        incoming_degree_factor=incoming_degree_factor,
                                        outgoing_degree_factor=outgoing_degree_factor,
@@ -117,7 +110,6 @@ def compute_var_var_knn_graph(
     what: Union[str, ut.Matrix] = 'var_similarity',
     *,
     k: int,
-    max_unbalanced_ranks: int = pr.knn_max_unbalanced_ranks,
     balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
@@ -146,22 +138,19 @@ def compute_var_var_knn_graph(
 
     **Computation Parameters**
 
-    1. Use the ``obs_similarity`` to rank the edges, and keep the highest-ranked ``max_unbalanced_ranks``
-       (default: {max_unbalanced_ranks}) outgoing edges for each node.
-       while ensuring the highest-ranked outgoing edge of each node is also used by the other node
-       it is connected to. This gives us an asymmetric sparse ``<elements>_outgoing_ranks`` matrix.
+    1. Use the ``var_similarity`` and convert it to ranks (in descending order).
+       This gives us a dense asymmetric ``<elements>_outgoing_ranks`` matrix.
 
-    2. Convert the asymmetric outgoing ranks matrix into a symmetric ``obs_balanced_ranks`` matrix
-       by element-wise multiplying it with its transpose. That is, for each edge to be
-       high-balanced-rank, it has to be high-outgoing-rank for both the nodes it connects.
+    2. Convert the asymmetric outgoing ranks matrix into a symmetric ``var_balanced_ranks`` matrix
+       by element-wise multiplying it with its transpose and taking the square root. That is, for
+       each edge to be high-balanced-rank, the geomean of its outgoing rank has to be high in both
+       nodes it connects.
 
        .. note::
 
             This can drastically reduce the degree of the nodes, since to survive an edge needs to
             have been in the top ranks for both its nodes (as multiplying with zero drops the edge).
-            This is why the ``max_unbalanced_ranks`` needs to be large-ish. For divide-and-conquer
-            piles, we basically keep everything. For large (direct) graphs, we have to limit this to
-            control memory and CPU usage.
+            This is why the ``balanced_ranks_factor`` needs to be large-ish.
 
     3. Keeping only balanced ranks of up to ``k * k * balanced_ranks_factor`` (default:
        {balanced_ranks_factor}). This does a preliminary pruning of low-quality edges.
@@ -170,7 +159,7 @@ def compute_var_var_knn_graph(
        {incoming_degree_factor}) highest-ranked incoming edges for each node, and then only the ``k
        * outgoing_degree_factor`` (default: {outgoing_degree_factor}) highest-ranked outgoing edges
        for each node, while ensuring that the highest-balanced-ranked outgoing edge of each node is
-       preserved. This gives us an asymmetric ``obs_pruned_ranks`` matrix, which has the structure
+       preserved. This gives us an asymmetric ``var_pruned_ranks`` matrix, which has the structure
        we want, but not the correct edge weights yet.
 
        .. note::
@@ -181,7 +170,7 @@ def compute_var_var_knn_graph(
 
     5. Normalize the outgoing edge weights by dividing them with the sum of their balanced ranks,
        such that the sum of the outgoing edge weights for each node is 1. Note that there is always
-       at least one outgoing edge for each node. This gives us the ``obs_outgoing_weights`` for our
+       at least one outgoing edge for each node. This gives us the ``var_outgoing_weights`` for our
        directed K-Nearest-Neighbors graph.
 
        .. note::
@@ -191,7 +180,6 @@ def compute_var_var_knn_graph(
             rejected by its group as deviant.
     '''
     return _compute_elements_knn_graph(adata, 'var', what, k=k,
-                                       max_unbalanced_ranks=max_unbalanced_ranks,
                                        balanced_ranks_factor=balanced_ranks_factor,
                                        incoming_degree_factor=incoming_degree_factor,
                                        outgoing_degree_factor=outgoing_degree_factor,
@@ -204,7 +192,6 @@ def _compute_elements_knn_graph(
     what: Union[str, ut.Matrix] = '__x__',
     *,
     k: int,
-    max_unbalanced_ranks: int,
     balanced_ranks_factor: float,
     incoming_degree_factor: float,
     outgoing_degree_factor: float,
@@ -244,8 +231,7 @@ def _compute_elements_knn_graph(
 
     ut.log_calc('similarity', similarity)
 
-    outgoing_ranks = _rank_outgoing(similarity, max_unbalanced_ranks)
-    store_matrix(outgoing_ranks, 'outgoing_ranks', True)
+    outgoing_ranks = _rank_outgoing(similarity)
 
     balanced_ranks = _balance_ranks(outgoing_ranks, k, balanced_ranks_factor)
     store_matrix(balanced_ranks, 'balanced_ranks', True)
@@ -270,108 +256,71 @@ def _compute_elements_knn_graph(
 
 
 @ ut.timed_call()
-def _rank_outgoing(
-    similarity: ut.NumpyMatrix,
-    max_unbalanced_ranks: int,
-) -> ut.CompressedMatrix:
+def _rank_outgoing(similarity: ut.NumpyMatrix) -> ut.NumpyMatrix:
     size = similarity.shape[0]
     assert similarity.shape == (size, size)
     similarity = np.copy(similarity)
 
-    with ut.timed_step('numpy.amin'):
-        ut.timed_parameters(size=size * size)
-        min_similarity = np.amin(similarity)
+    min_similarity = ut.min_matrix(similarity)
 
     np.fill_diagonal(similarity, min_similarity - 1)
 
-    all_indices = np.arange(size)
-    with ut.timed_step('numpy.argmax'):
-        ut.timed_parameters(results=size, elements=size)
-        max_index_of_each = similarity.argmax(axis=1)
-
-    preserved_ranks = np.full(2 * size, size - 1, dtype='float32')
-    preserved_row_indices = np.concatenate([all_indices, max_index_of_each])
-    preserved_column_indices = np.concatenate([max_index_of_each, all_indices])
-    preserved_matrix = sp.coo_matrix((preserved_ranks,
-                                      (preserved_row_indices, preserved_column_indices)),
-                                     shape=similarity.shape)
-    preserved_matrix.has_canonical_format = True
-
-    top_unbalanced_ranks = min(max_unbalanced_ranks, size - 1)
-    ut.log_calc('top_unbalanced_ranks', top_unbalanced_ranks)
-
-    outgoing_ranks = \
-        ut.top_per(similarity, top_unbalanced_ranks, per=None, ranks=True)
-
-    with ut.timed_step('sparse.maximum'):
-        ut.timed_parameters(collected=outgoing_ranks.nnz,
-                            preserved=preserved_matrix.nnz)
-        outgoing_ranks = outgoing_ranks.maximum(preserved_matrix)
-
-    ut.sort_compressed_indices(outgoing_ranks)
-
-    outgoing_ranks.data *= -1
-    outgoing_ranks.data += size
-
-    _assert_proper_compressed(outgoing_ranks, 'csr')
+    assert ut.matrix_layout(similarity) == 'row_major'
+    outgoing_ranks = ut.rank_matrix_by_layout(similarity, ascending=False)
+    assert np.sum(np.diagonal(outgoing_ranks) == size) == size
     return outgoing_ranks
 
 
 @ ut.timed_call()
 def _balance_ranks(
-    outgoing_ranks: ut.CompressedMatrix,
+    outgoing_ranks: ut.NumpyMatrix,
     k: int,
     balanced_ranks_factor: float
 ) -> ut.CompressedMatrix:
     size = outgoing_ranks.shape[0]
 
-    transposed_ranks = \
-        ut.mustbe_compressed_matrix(ut.to_layout(outgoing_ranks.transpose(),
-                                                 'row_major'))
-    _assert_proper_compressed(transposed_ranks, 'csr')
-
     with ut.timed_step('.multiply'):
-        ut.timed_parameters(size=size, nnz=outgoing_ranks.nnz)
-        balanced_ranks = ut.mustbe_compressed_matrix(  #
-            outgoing_ranks.multiply(transposed_ranks))
+        ut.timed_parameters(size=size)
+        dense_balanced_ranks = outgoing_ranks
+        assert np.sum(np.diagonal(dense_balanced_ranks) == size) == size
+        dense_balanced_ranks *= outgoing_ranks.transpose()
 
-    np.sqrt(balanced_ranks.data, out=balanced_ranks.data)
-    balanced_ranks.data *= -1
-    balanced_ranks.data += 2**21
+    with ut.timed_step('.sqrt'):
+        np.sqrt(dense_balanced_ranks, out=dense_balanced_ranks)
 
-    all_indices = np.arange(size)
+    max_rank = k * balanced_ranks_factor
+    ut.log_calc('max_rank', max_rank)
+
+    dense_balanced_ranks *= -1
+    dense_balanced_ranks += 2**21
+
     with ut.timed_step('numpy.argmax'):
-        ut.timed_parameters(results=size, elements=balanced_ranks.nnz / size)
-        max_index_of_each = ut.to_numpy_vector(balanced_ranks.argmax(axis=1))
+        ut.timed_parameters(size=size)
+        max_index_of_each = \
+            ut.to_numpy_vector(  #
+                dense_balanced_ranks.argmax(axis=1))  # type: ignore
 
-    max_rank = k * k * balanced_ranks_factor * balanced_ranks_factor
-    ut.log_calc('max_rank', sqrt(max_rank))
-    balanced_ranks.data += max_rank + 1 - 2**21
+    dense_balanced_ranks += max_rank + 1 - 2**21
 
-    preserved_row_indices = all_indices
+    preserved_row_indices = np.arange(size)
     preserved_column_indices = max_index_of_each
     preserved_balanced_ranks = \
-        ut.to_numpy_vector(balanced_ranks[preserved_row_indices,
-                                          preserved_column_indices])
-    preserved_balanced_ranks[preserved_balanced_ranks < 1] = 1
-    preserved_matrix = \
-        sp.coo_matrix((preserved_balanced_ranks,
-                       (preserved_row_indices, preserved_column_indices)),
-                      shape=balanced_ranks.shape)
-    preserved_matrix.has_canonical_format = True
+        ut.to_numpy_vector(dense_balanced_ranks[preserved_row_indices,
+                                                preserved_column_indices])
 
-    balanced_ranks.data[balanced_ranks.data <= 0] = 0
-    ut.eliminate_zeros(balanced_ranks)
+    preserved_balanced_ranks[preserved_balanced_ranks < 0] = 1
 
-    with ut.timed_step('sparse.maximum'):
-        ut.timed_parameters(collected=balanced_ranks.nnz,
-                            preserved=preserved_matrix.nnz)
-        balanced_ranks = balanced_ranks.maximum(preserved_matrix)
+    dense_balanced_ranks[dense_balanced_ranks < 0] = 0
+    np.fill_diagonal(dense_balanced_ranks, 0)
 
-    ut.sort_compressed_indices(balanced_ranks)
+    dense_balanced_ranks[preserved_row_indices, preserved_column_indices] = \
+        preserved_balanced_ranks
 
-    _assert_proper_compressed(balanced_ranks, 'csr')
-    return balanced_ranks
+    assert np.sum(np.diagonal(dense_balanced_ranks) == 0) == size
+    sparse_balanced_ranks = sp.csr_matrix(dense_balanced_ranks)
+
+    _assert_proper_compressed(sparse_balanced_ranks, 'csr')
+    return sparse_balanced_ranks
 
 
 @ ut.timed_call()
@@ -401,6 +350,7 @@ def _prune_ranks(
     preserved_balanced_ranks = \
         ut.to_numpy_vector(balanced_ranks[preserved_row_indices,
                                           preserved_column_indices])
+    assert np.min(preserved_balanced_ranks) > 0
     preserved_matrix = \
         sp.coo_matrix((preserved_balanced_ranks,
                        (preserved_row_indices, preserved_column_indices)),

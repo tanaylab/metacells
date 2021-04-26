@@ -3,35 +3,41 @@ Candidates
 ----------
 '''
 
-from dataclasses import dataclass
 from math import ceil, floor
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 import numpy as np
 from anndata import AnnData
 
+import metacells.extensions as xt  # type: ignore
 import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
     'compute_candidate_metacells',
+    'choose_seeds',
+    'optimize_partitions',
+    'score_partitions',
 ]
 
 
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def compute_candidate_metacells(
+def compute_candidate_metacells(  # pylint: disable=too-many-statements
     adata: AnnData,
     what: Union[str, ut.Matrix] = 'obs_outgoing_weights',
     *,
     target_metacell_size: int,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.candidates_cell_sizes,
-    partition_method: 'ut.PartitionMethod' = ut.leiden_bounded_surprise,
+    cell_seeds: Optional[Union[str, ut.Vector]] = None,
+    min_seed_size_quantile: float = pr.min_seed_size_quantile,
+    max_seed_size_quantile: float = pr.max_seed_size_quantile,
+    cooldown_step: float = pr.cooldown_step,
+    cooldown_rate: float = pr.cooldown_rate,
     min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
     min_metacell_cells: Optional[int] = pr.candidates_min_metacell_cells,
-    must_complete_cover: bool = False,
     random_seed: int = 0,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -71,53 +77,60 @@ def compute_candidate_metacells(
             make sure to scale them (and the target metacell size) so that the resulting integer
             values would make sense.
 
-    2. Use the ``partition_method`` (default: {partition_method.__qualname__}) to compute initial
-       communities. Several such possible methods are provided in
-       :py:mod:`metacells.utilities.partition`, and you can also provide your own as long as it is
-       compatible with the :py:const:`metacells.utilities.partition.PartitionMethod` interface.
+    2. We start with some an assignment of cells to ``cell_seeds`` (default: {cell_seeds}). If no
+       seeds are provided, we use :py:func:`choose_seeds` using ``min_seed_size_quantile`` (default:
+       {min_seed_size_quantile}) and ``max_seed_size_quantile`` (default: {max_seed_size_quantile})
+       to compute them, picking a number of seeds such that the average metacell size would match
+       the target.
 
-    3. If ``min_split_size_factor`` (default: {min_split_size_factor}) is specified, re-run the
-       partition method on each community whose size is at least ``target_metacell_size
-       * min_split_size_factor``, to split it to into smaller communities.
+    3. We optimize the seeds using :py:func:`optimize_partitions` to obtain initial communities by
+       maximizing the "stability" of the solution (probability of starting at a random node and
+       moving either forward or backward in the graph and staying within the same metacell, divided
+       by the probability of staying in the metacell if the edges connected random nodes). We use a
+       ``cooldown`` parameter of ``1 - cooldown_step / nodes_count``.
 
-    4. If ``max_merge_size_factor`` (default: {max_merge_size_factor}) or ``min_metacell_cells``
-       (default: {min_metacell_cells}) are specified, condense into a single node each community
-       whose size is at most ``target_metacell_size * max_merge_size_factor`` or contains less cells
-       than ``min_metacell_cells`` (using the mean of the edge weights), and re-run the partition
-       method on the resulting graph (of just these condensed nodes) to merge these communities into
-       large ones.
+    4. If ``min_split_size_factor`` (default: {min_split_size_factor}) is specified, randomly split
+       to two each community whose size is partition method on each community whose size is at least
+       ``target_metacell_size * min_split_size_factor`` and re-optimize the solution (resulting in
+       one additional metacell). Every time we re-optimize, we multiply the ``cooldown`` by the
+       ``cooldown_rate`` (default: {cooldown_rate}).
 
-    5. Repeat the above steps until no further progress can be made.
+    5. If ``max_merge_size_factor`` (default: {max_merge_size_factor}) or ``min_metacell_cells``
+       (default: {min_metacell_cells}) are specified, make outliers of cells of a community whose
+       size is at most ``target_metacell_size * max_merge_size_factor`` or contains less cells and
+       re-optimize, which will assign these cells to other metacells (resulting on one less
+       metacell). We again apply the ``cooldown_rate`` every time we re-optimize.
 
-    6. If the ``max_merge_size_factor`` or the ``min_metacell_cells`` were specified, arbitrarily
-       combine the remaining communities whose size is at most the ``target_metacell_size
-       * max_merge_size_factor`` or contain less than ``min_metacell_cells`` cells into a single
-       community using :py:func:`metacells.utilities.computation.bin_pack` and
-       :py:func:`metacells.utilities.computation.bin_fill`. This is done more aggressively if
-       ``must_complete_cover``.
-
-    .. note::
-
-        This doesn't guarantee that all communities would be in the size range we want, but comes as
-        close as possible to it given the choice of partition method. Also, since we force merging
-        of communities beyond what the partition method would have done on its own, not all the
-        communities would have the same quality. Any too-low-quality groupings are expected to be
-        corrected by removing deviants and/or by dissolving too-small communities.
-
-    .. note::
-
-        The partition method is given the ``random_seed`` to allow making it reproducible, and all
-        the necessary size hints so it can, if possible, generate better-sized communities to reduce
-        or eliminate the need for the split and merge steps. However, most partition algorithms do
-        not naturally allow for this level of control over the resulting communities.
+    6. Repeat the above steps until all metacells candidates are in the acceptable size range.
     '''
     edge_weights = ut.get_oo_proper(adata, what, layout='row_major')
     assert edge_weights.shape[0] == edge_weights.shape[1]
+    assert 0.0 <= cooldown_rate <= 1.0
+
+    size = edge_weights.shape[0]
+
+    outgoing_edge_weights = ut.mustbe_compressed_matrix(edge_weights)
+
+    assert ut.matrix_layout(outgoing_edge_weights) == 'row_major'
+    incoming_edge_weights = \
+        ut.mustbe_compressed_matrix(ut.to_layout(outgoing_edge_weights,
+                                                 layout='column_major'))
+    assert ut.matrix_layout(incoming_edge_weights) == 'column_major'
+
+    assert outgoing_edge_weights.data.dtype == 'float32'
+    assert outgoing_edge_weights.indices.dtype == 'int32'
+    assert outgoing_edge_weights.indptr.dtype == 'int32'
+    assert incoming_edge_weights.data.dtype == 'float32'
+    assert incoming_edge_weights.indices.dtype == 'int32'
+    assert incoming_edge_weights.indptr.dtype == 'int32'
 
     node_sizes = \
         ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
-    if node_sizes is not None:
+    if node_sizes is None:
+        node_sizes = np.full(size, 1, dtype='int32')
+    else:
         node_sizes = node_sizes.astype('int32')
+    ut.log_calc('node_sizes', node_sizes, formatter=ut.sizes_description)
 
     assert target_metacell_size > 0
     max_metacell_size = None
@@ -135,452 +148,325 @@ def compute_candidate_metacells(
             floor(target_metacell_size * max_merge_size_factor) + 1
     ut.log_calc('min_metacell_size', min_metacell_size)
 
+    target_metacell_cells = max(1.0 if min_metacell_cells is None else float(min_metacell_cells),
+                                float(target_metacell_size / np.mean(node_sizes)))
+    ut.log_calc('target_metacell_cells', target_metacell_cells)
+
     if min_split_size_factor is not None and max_merge_size_factor is not None:
         assert max_merge_size_factor < min_split_size_factor
         assert min_metacell_size is not None
         assert max_metacell_size is not None
         assert min_metacell_size <= max_metacell_size
 
-    community_of_cells = partition_method(edge_weights=edge_weights,
-                                          node_sizes=node_sizes,
-                                          target_comm_size=target_metacell_size,
-                                          max_comm_size=max_metacell_size,
-                                          min_comm_size=min_metacell_size,
-                                          min_comm_nodes=min_metacell_cells,
-                                          random_seed=random_seed)
-    ut.log_calc('communities', community_of_cells,
+    community_of_nodes = \
+        ut.maybe_o_numpy(adata, cell_seeds, formatter=ut.groups_description)
+
+    if community_of_nodes is None:
+        target_seeds_count = ceil(size / target_metacell_cells)
+        ut.log_calc('target_seeds_count', target_seeds_count)
+
+        community_of_nodes = _choose_seeds(outgoing_edge_weights=outgoing_edge_weights,
+                                           incoming_edge_weights=incoming_edge_weights,
+                                           max_seeds_count=target_seeds_count,
+                                           min_seed_size_quantile=min_seed_size_quantile,
+                                           max_seed_size_quantile=max_seed_size_quantile,
+                                           random_seed=random_seed)
+
+    ut.set_o_data(adata, 'seed', community_of_nodes,
+                  formatter=ut.groups_description)
+    community_of_nodes = community_of_nodes.copy()
+
+    np.random.seed(random_seed)
+    cooldown = 1 - (cooldown_step / size)
+
+    while True:
+        _optimize_partitions(outgoing_edge_weights=outgoing_edge_weights,
+                             incoming_edge_weights=incoming_edge_weights,
+                             community_of_nodes=community_of_nodes,
+                             random_seed=random_seed,
+                             cooldown=cooldown)
+
+        if not _patch_communities(community_of_nodes=community_of_nodes,
+                                  node_sizes=node_sizes,
+                                  min_metacell_size=min_metacell_size,
+                                  min_metacell_cells=min_metacell_cells,
+                                  max_metacell_size=max_metacell_size):
+            break
+
+        cooldown *= cooldown_rate
+
+    ut.log_calc('communities', community_of_nodes,
                 formatter=ut.groups_description)
 
-    if max_metacell_size is not None or min_metacell_size is not None:
-        improver = Improver(community_of_cells,
-                            partition_method=partition_method,
-                            edge_weights=edge_weights,
-                            node_sizes=node_sizes,
-                            must_complete_cover=must_complete_cover,
-                            target_comm_size=target_metacell_size,
-                            max_comm_size=max_metacell_size,
-                            min_comm_size=min_metacell_size,
-                            min_comm_nodes=min_metacell_cells,
-                            random_seed=random_seed)
-
-        improver._improve()  # pylint: disable=protected-access
-
-        if min_metacell_size is not None:
-            improver._pack()  # pylint: disable=protected-access
-
-        if min_metacell_cells is not None:
-            improver._fill()  # pylint: disable=protected-access
-
-        community_of_cells = ut.compress_indices(improver.membership)
-
-    if ut.logging_calc():
-        ut.log_calc('score',
-                    ut.leiden_surprise_quality(edge_weights=edge_weights,
-                                               partition_of_nodes=community_of_cells))
-
     if inplace:
-        ut.set_o_data(adata, 'candidate', community_of_cells,
+        ut.set_o_data(adata, 'candidate', community_of_nodes,
                       formatter=ut.groups_description)
         return None
 
-    ut.log_return('candidate', community_of_cells,
+    ut.log_return('candidate', community_of_nodes,
                   formatter=ut.groups_description)
-    return ut.to_pandas_series(community_of_cells, index=adata.obs_names)
+    return ut.to_pandas_series(community_of_nodes, index=adata.obs_names)
 
 
-@dataclass  # pylint: disable=too-many-instance-attributes
-class Community:
+@ut.logged()
+@ut.timed_call()
+def choose_seeds(
+    *,
+    edge_weights: ut.CompressedMatrix,
+    max_seeds_count: int,
+    min_seed_size_quantile: float,
+    max_seed_size_quantile: float,
+    random_seed: int,
+) -> ut.NumpyVector:
     '''
-    Metadata about a community.
+    Choose initial assignment of cells to seeds based on the ``edge_weights``.
+
+    Returns a vector assigning each node (cell) to a seed (initial community).
+
+    **Computation Parameters**
+
+    1. We compute for each candidate node the number of nodes it is connected to (by an outgoing
+       edge).
+
+    2. We pick as a seed a random node whose number of connected nodes ("seed size") quantile is at
+       least ``min_seed_size_quantile`` and at most ``max_seed_size_quantile``. This ensures we pick
+       seeds that aren't too small or too large to get a good coverage of the population with a low
+       number of seeds.
+
+    3. We assign each of the connected nodes to their seed, and discount them from the number of
+       connected nodes of the remaining unassigned nodes.
+
+    4. We repeat this until we reach the target number of seeds.
     '''
+    outgoing_edge_weights = ut.mustbe_compressed_matrix(edge_weights)
+    assert ut.matrix_layout(outgoing_edge_weights) == 'row_major'
 
-    #: The index identifying the community.
-    index: int
+    incoming_edge_weights = \
+        ut.mustbe_compressed_matrix(ut.to_layout(outgoing_edge_weights,
+                                                 layout='column_major'))
+    assert ut.matrix_layout(incoming_edge_weights) == 'column_major'
 
-    #: The number of nodes in the community.
-    nodes: int
-
-    #: The total size of the community (sum of the node sizes).
-    size: int
-
-    #: A boolean mask of all the nodes that belong to the community.
-    mask: ut.NumpyVector
-
-    #: By how much (if at all) does the community have fewer nodes than the minimum allowed.
-    too_few: int
-
-    #: By how much (if at all) is the community smaller than the minimum allowed.
-    too_small: int
-
-    #: By how much (if at all) is the community larger than the maximum allowed.
-    too_large: int
-
-    #: Whether this community can't be split.
-    monolithic: bool
+    return _choose_seeds(outgoing_edge_weights=outgoing_edge_weights,
+                         incoming_edge_weights=incoming_edge_weights,
+                         max_seeds_count=max_seeds_count,
+                         min_seed_size_quantile=min_seed_size_quantile,
+                         max_seed_size_quantile=max_seed_size_quantile,
+                         random_seed=random_seed)
 
 
-class Improver:  # pylint: disable=too-many-instance-attributes
+@ut.timed_call()
+def _choose_seeds(
+    *,
+    outgoing_edge_weights: ut.CompressedMatrix,
+    incoming_edge_weights: ut.CompressedMatrix,
+    max_seeds_count: int,
+    min_seed_size_quantile: float,
+    max_seed_size_quantile: float,
+    random_seed: int,
+) -> ut.NumpyVector:
+    size = incoming_edge_weights.shape[0]
+    seed_of_cells = np.full(size, -1, dtype='int32')
+
+    xt.choose_seeds(outgoing_edge_weights.data,
+                    outgoing_edge_weights.indices,
+                    outgoing_edge_weights.indptr,
+                    incoming_edge_weights.data,
+                    incoming_edge_weights.indices,
+                    incoming_edge_weights.indptr,
+                    random_seed,
+                    max_seeds_count,
+                    min_seed_size_quantile,
+                    max_seed_size_quantile,
+                    seed_of_cells)
+
+    ut.log_calc('seeds', seed_of_cells, formatter=ut.groups_description)
+    return seed_of_cells
+
+
+@ut.logged()
+@ut.timed_call()
+def optimize_partitions(
+    *,
+    edge_weights: ut.CompressedMatrix,
+    community_of_nodes: ut.NumpyVector,
+    cooldown: float,
+    random_seed: int,
+) -> None:
     '''
-    Improve the communities.
+    Optimize partition to candidate metacells (communities) using the ``edge_weights``.
+
+    This modifies the ``community_of_nodes`` in-place.
+
+    The goal is to minimize the "stability" goal function which is defined to be the ratio between
+    (1) the probability that, selecting a random node and either a random outgoing edge or a random
+    incoming edge (biased by their weights), that the node connected to by that edge is in the same
+    community (metacell) and (2) the probability that a random edge would lead to this same
+    community (the fraction of its number of nodes out of the total).
+
+    To maximize this, we repeatedly pass on a randomized permutation of the nodes, and for each
+    node, move it to a random "better" community. When deciding if a community is better, we
+    consider both (1) just the "local" product of the sum of the weights of incoming and outgoing edges
+    between the node and the current and candidate communities and (2) the effect on the "global" goal
+    function (considering the impact on this product for all other nodes connected to the current
+    node).
+
+    We define a notion of ``temperature`` (initially, the ``cooldown``) and we give a weight of
+    ``temperature`` to the local score and (1 - ``temperature``) to the global score. When we move
+    to the next node, we multiply the ``temperature`` by the ``cooldown``.
+
+    This simulated-annealing-like behavior helps the algorithm to escape local maximums, although of
+    course no claim is made of achieving the global maximum of the goal function.
     '''
-
-    def __init__(  #
-        self,
-        membership: ut.NumpyVector,
-        *,
-        partition_method: 'ut.PartitionMethod',
-        edge_weights: ut.ProperMatrix,
-        node_sizes: Optional[ut.NumpyVector],
-        target_comm_size: int,
-        must_complete_cover: bool,
-        min_comm_size: Optional[int],
-        max_comm_size: Optional[int],
-        min_comm_nodes: Optional[int],
-        random_seed: int,
-    ) -> None:
-        #: The vector assigning a partition index to each node.
-        self.membership = membership
-
-        #: The partition method to use.
-        self.partition_method = partition_method
-
-        #: The random seed to use for reproducibility.
-        self.random_seed = random_seed
-
-        #: The edge weights we are using to compute partitions.
-        self.edge_weights = edge_weights
-
-        #: The size of each node (if not all-1).
-        self.node_sizes = node_sizes
-
-        #: Try to obtain communities of this size.
-        self.target_comm_size = target_comm_size
-
-        #: Split communities larger than this.
-        self.max_comm_size = max_comm_size
-
-        #: Merge communities smaller than this.
-        self.min_comm_size = min_comm_size
-
-        #: Merge communities with less nodes than this.
-        self.min_comm_nodes = min_comm_nodes
-
-        #: The list of communities.
-        self.communities: List[Community] = []
-
-        #: The sum of the too-few penalties across all communities.
-        self.too_few = 0
-
-        #: The sum of the too-small penalties across all communities.
-        self.too_small = 0
-
-        #: The sum of the too-large penalties across all communities.
-        self.too_large = 0
-
-        #: The next unused community index.
-        self.next_community_index = 0
-
-        #: Whether the metacell computation is required to cover all cells.
-        self.must_complete_cover = must_complete_cover
-
-        self.add()
-
-    def add(  #
-        self,
-        count: Optional[int] = None
-    ) -> None:
-        '''
-        Add new communities to the list by using the membership vector.
-        '''
-        if count is None:
-            assert self.next_community_index == 0
-            count = np.max(self.membership) + 1
-        else:
-            assert self.next_community_index > 0
-
-        for _ in range(count):
-            community_index = self.next_community_index
-            self.next_community_index += 1
-
-            mask = self.membership == community_index
-
-            total_nodes = np.sum(mask)
-
-            if self.min_comm_nodes is not None and total_nodes < self.min_comm_nodes:
-                few = self.min_comm_nodes - total_nodes
-                self.too_few += few
-            else:
-                few = 0
-
-            if self.node_sizes is None:
-                total_size = np.sum(mask)
-            else:
-                total_size = np.sum(self.node_sizes[mask])
-
-            if self.min_comm_size is not None and total_size < self.min_comm_size:
-                small = self.min_comm_size - total_size
-                self.too_small += small
-            else:
-                small = 0
-
-            if self.max_comm_size is not None and total_size > self.max_comm_size:
-                large = total_size - self.max_comm_size
-                self.too_large += large
-            else:
-                large = 0
-
-            self.communities.append(Community(index=community_index,
-                                              nodes=total_nodes, size=total_size,
-                                              mask=mask, too_few=few,
-                                              too_small=small, too_large=large,
-                                              monolithic=False))
-
-    def _remove(self, position: int) -> None:
-        community = self.communities[position]
-        self.communities[position:position+1] = []
-        self.too_few -= community.too_few
-        self.too_small -= community.too_small
-        self.too_large -= community.too_large
-        assert self.too_few >= 0
-        assert self.too_small >= 0
-        assert self.too_large >= 0
-
-    @ut.timed_call()
-    def _improve(self) -> None:
-        if self.min_comm_size is not None:
-            while self.too_few > 0 or self.too_small > 0:
-                if not self._merge_few_or_small():
-                    break
-
-        penalty = (self.too_few, self.too_small + self.too_large + 1)
-        while (self.too_few, self.too_small + self.too_large) < penalty:
-            penalty = (self.too_few, self.too_small + self.too_large)
-
-            if self.max_comm_size is not None:
-                did_split = False
-                while self.too_large > 0:
-                    if not self._split_large():
-                        break
-                    did_split = True
-
-                if did_split and self.min_comm_size is not None:
-                    while self.too_few > 0 or self.too_small > 0:
-                        if not self._merge_few_or_small():
-                            break
-
-    @ut.timed_call()
-    def _merge_few_or_small(self) -> bool:
-        nodes_count = self.edge_weights.shape[0]
-        merged_nodes_mask = np.zeros(nodes_count, dtype='bool')
-        location_of_nodes = np.full(nodes_count, -1)
-        merged_communities: List[Community] = []
-        position_of_merged_communities: List[int] = []
-        size_of_merged_communities: List[int] = []
-
-        for position, community in enumerate(self.communities):
-            if community.too_few == 0 and community.too_small == 0:
-                continue
-            merged_nodes_mask |= community.mask
-            location_of_nodes[community.mask] = len(merged_communities)
-            merged_communities.append(community)
-            position_of_merged_communities.append(position)
-            size_of_merged_communities.append(community.size)
-
-        if len(merged_communities) < 2:
-            return False
-
-        edge_weights_of_merged_nodes = self.edge_weights[merged_nodes_mask, :]
-        edge_weights_of_merged_nodes = \
-            ut.to_layout(edge_weights_of_merged_nodes, 'column_major')
-        edge_weights_of_merged_nodes = \
-            edge_weights_of_merged_nodes[:, merged_nodes_mask]
-        edge_weights_of_merged_nodes = \
-            ut.to_numpy_matrix(edge_weights_of_merged_nodes)
-        merge_frame = ut.to_pandas_frame(edge_weights_of_merged_nodes)
-        location_of_merged_nodes = location_of_nodes[merged_nodes_mask]
-        merge_frame = \
-            merge_frame.groupby(location_of_merged_nodes,  # type: ignore
-                                axis=0).mean()
-        merge_frame = \
-            merge_frame.groupby(location_of_merged_nodes,  # type: ignore
-                                axis=1).mean()
-        merged_communities_edge_weights = ut.to_proper_matrix(merge_frame)
-        np.fill_diagonal(merged_communities_edge_weights, 0)
-
-        merged_communities_node_sizes = \
-            np.array(size_of_merged_communities)
-
-        merged_communities_membership = \
-            self.partition_method(edge_weights=merged_communities_edge_weights,
-                                  node_sizes=merged_communities_node_sizes,
-                                  target_comm_size=self.target_comm_size,
-                                  max_comm_size=self.max_comm_size,
-                                  min_comm_size=self.min_comm_size,
-                                  random_seed=self.random_seed)
-
-        for merged_community, merged_index \
-                in zip(merged_communities, merged_communities_membership):
-            self.membership[merged_community.mask] = \
-                merged_index + self.next_community_index
-
-        before_too_few = self.too_few
-        before_too_small = self.too_small
-        for position in reversed(position_of_merged_communities):
-            self._remove(position)
-
-        merged_communities_count = \
-            np.max(merged_communities_membership) + 1
-        self.add(merged_communities_count)
-
-        did_improve = \
-            (self.too_few, self.too_small) < (before_too_few, before_too_small)
-        if did_improve:
-            ut.log_calc(f'merged {len(merged_communities)} too-small communities '
-                        f'into {merged_communities_count} larger communities')
-        else:
-            ut.log_calc(  #
-                f'could not merge {len(merged_communities)} too-small communities')
-
-        return did_improve
-
-    @ut.timed_call()
-    def _split_large(self) -> bool:
-        did_split = False
-
-        position = 0
-        while position < len(self.communities):
-            split_community = self.communities[position]
-            if split_community.too_large == 0 or split_community.monolithic:
-                position += 1
-                continue
-
-            split_edge_weights = self.edge_weights[split_community.mask, :]
-            split_edge_weights = \
-                ut.to_layout(split_edge_weights, 'column_major')
-            split_edge_weights = split_edge_weights[:,
-                                                    split_community.mask]
-            split_node_sizes = None if self.node_sizes is None \
-                else self.node_sizes[split_community.mask]
-            split_nodes_membership = \
-                self.partition_method(edge_weights=split_edge_weights,
-                                      node_sizes=split_node_sizes,
-                                      target_comm_size=self.target_comm_size,
-                                      max_comm_size=self.max_comm_size,
-                                      min_comm_size=self.min_comm_size,
-                                      random_seed=self.random_seed)
-
-            split_communities_count = np.max(split_nodes_membership) + 1
-            if split_communities_count == 1:
-                ut.log_calc('could not split too-large community')
-
-                split_community.monolithic = True
-                position += 1
-                continue
-
-            ut.log_calc(f'split too-large community '
-                        f'into {split_communities_count} smaller communities')
-
-            did_split = True
-
-            self._remove(position)
-
-            split_nodes_membership += self.next_community_index
-            self.membership[split_community.mask] = split_nodes_membership
-            self.add(split_communities_count)
-
-        return did_split
-
-    @ut.timed_call()
-    def _pack(self) -> None:
-        list_of_small_community_sizes: List[int] = []
-        list_of_small_community_indices: List[int] = []
-
-        position = 0
-        while position < len(self.communities):
-            community = self.communities[position]
-            if community.too_small == 0 and community.too_few == 0:
-                position += 1
-                continue
-            list_of_small_community_sizes.append(community.size)
-            list_of_small_community_indices.append(community.index)
-            self._remove(position)
-
-        if len(list_of_small_community_indices) == 0:
-            return
-
-        small_community_sizes = np.array(list_of_small_community_sizes)
-        small_community_bins = \
-            ut.bin_pack(small_community_sizes, self.target_comm_size)
-
-        bins_count = np.max(small_community_bins) + 1
-
-        for small_community_index, community_bin \
-                in zip(list_of_small_community_indices, small_community_bins):
-            merged_community_index = self.next_community_index + community_bin
-            self.membership[self.membership == small_community_index] = \
-                merged_community_index
-
-        ut.log_calc(f'packed {len(list_of_small_community_indices)} too-small communities '
-                    f'into {bins_count} larger communities')
-
-        self.add(bins_count)
-
-    @ut.timed_call()
-    def _fill(self) -> None:
-        assert self.min_comm_nodes is not None
-
-        list_of_few_community_nodes: List[int] = []
-        list_of_few_community_indices: List[int] = []
-
-        position = 0
-        total_nodes = 0
-        while position < len(self.communities):
-            community = self.communities[position]
-            if community.too_few == 0:
-                position += 1
-                continue
-            total_nodes += community.nodes
-            list_of_few_community_nodes.append(community.nodes)
-            list_of_few_community_indices.append(community.index)
-            self._remove(position)
-
-        if len(list_of_few_community_indices) == 0:
-            return
-
-        if self.must_complete_cover and total_nodes < self.min_comm_nodes:
-            candidates = \
-                sorted([(community.nodes, community.size,
-                         community_position, community.index)
-                        for (community_position, community)
-                        in enumerate(self.communities)
-                        if not community.too_few
-                        ])
-
-            positions: List[int] = []
-            for community_nodes, _, community_position, community_index in candidates:
-                positions.append(community_position)
-                total_nodes += community_nodes
-                list_of_few_community_nodes.append(community_nodes)
-                list_of_few_community_indices.append(community_index)
-                if total_nodes >= self.min_comm_nodes:
-                    break
-
-            for position in reversed(sorted(positions)):
-                self._remove(position)
-
-        few_community_nodes = np.array(list_of_few_community_nodes)
-        few_community_bins = \
-            ut.bin_fill(few_community_nodes, self.min_comm_nodes)
-
-        bins_count = np.max(few_community_bins) + 1
-
-        for few_community_index, community_bin \
-                in zip(list_of_few_community_indices, few_community_bins):
-            merged_community_index = self.next_community_index + community_bin
-            self.membership[self.membership == few_community_index] = \
-                merged_community_index
-
-        ut.log_calc(f'filled {len(list_of_few_community_indices)} too-few communities '
-                    f'into {bins_count} larger communities')
-
-        self.add(bins_count)
+    outgoing_edge_weights = ut.mustbe_compressed_matrix(edge_weights)
+    assert ut.matrix_layout(outgoing_edge_weights) == 'row_major'
+
+    incoming_edge_weights = \
+        ut.mustbe_compressed_matrix(ut.to_layout(outgoing_edge_weights,
+                                                 layout='column_major'))
+    assert ut.matrix_layout(incoming_edge_weights) == 'column_major'
+    _optimize_partitions(outgoing_edge_weights=outgoing_edge_weights,
+                         incoming_edge_weights=incoming_edge_weights,
+                         random_seed=random_seed,
+                         cooldown=cooldown,
+                         community_of_nodes=community_of_nodes)
+
+
+@ut.timed_call()
+def _optimize_partitions(
+    *,
+    outgoing_edge_weights: ut.CompressedMatrix,
+    incoming_edge_weights: ut.CompressedMatrix,
+    community_of_nodes: ut.NumpyVector,
+    cooldown: float,
+    random_seed: int,
+) -> None:
+    assert str(community_of_nodes.dtype) == 'int32'
+    score = xt.optimize_partitions(outgoing_edge_weights.data,
+                                   outgoing_edge_weights.indices,
+                                   outgoing_edge_weights.indptr,
+                                   incoming_edge_weights.data,
+                                   incoming_edge_weights.indices,
+                                   incoming_edge_weights.indptr,
+                                   random_seed,
+                                   cooldown,
+                                   community_of_nodes)
+    ut.log_calc('score', score)
+
+
+@ut.logged()
+@ut.timed_call()
+def score_partitions(
+    *,
+    edge_weights: ut.CompressedMatrix,
+    partition_of_nodes: ut.NumpyVector,
+    with_orphans: bool = True,
+) -> None:
+    '''
+    Compute the "stability" the "stability" goal function which is defined to be the ratio between
+    (1) the probability that, selecting a random node and either a random outgoing edge or a random
+    incoming edge (biased by their weights), that the node connected to by that edge is in the same
+    community (metacell) and (2) the probability that a random edge would lead to this same
+    community (the fraction of its number of nodes out of the total).
+
+    If ``with_orphans`` is True (the default), outlier nodes are included in the computation. In
+    general we add 1e-6 to the product of the incoming and outgoing weights so we can safely log it
+    for efficient computation; thus orphans are given a very small (non-zero) weight so the overall
+    score is not zeroed even when including them.
+    '''
+    assert str(partition_of_nodes.dtype) == 'int32'
+    outgoing_edge_weights = ut.mustbe_compressed_matrix(edge_weights)
+    assert ut.matrix_layout(outgoing_edge_weights) == 'row_major'
+
+    incoming_edge_weights = \
+        ut.mustbe_compressed_matrix(ut.to_layout(outgoing_edge_weights,
+                                                 layout='column_major'))
+    assert ut.matrix_layout(incoming_edge_weights) == 'column_major'
+
+    with ut.unfrozen(partition_of_nodes):
+        with ut.timed_step('.score'):
+            score = xt.score_partitions(outgoing_edge_weights.data,
+                                        outgoing_edge_weights.indices,
+                                        outgoing_edge_weights.indptr,
+                                        incoming_edge_weights.data,
+                                        incoming_edge_weights.indices,
+                                        incoming_edge_weights.indptr,
+                                        partition_of_nodes,
+                                        with_orphans)
+
+    ut.log_calc('score', score)
+    return score
+
+
+def _patch_communities(
+    *,
+    community_of_nodes: ut.NumpyVector,
+    node_sizes: ut.NumpyVector,
+    min_metacell_size: Optional[float],
+    min_metacell_cells: Optional[int],
+    max_metacell_size: Optional[float]
+) -> bool:
+    if min_metacell_size is None \
+            and min_metacell_cells is None \
+            and max_metacell_size is None:
+        return False
+
+    communities_count = np.max(community_of_nodes) + 1
+    assert communities_count > 0
+
+    too_large_community_index: Optional[int] = None
+    too_large_community_size = -1
+    too_small_community_index: Optional[int] = None
+    too_small_community_nodes_count = len(node_sizes) + 1
+
+    for community_index in range(communities_count):
+        community_mask = community_of_nodes == community_index
+        community_nodes_count = np.sum(community_mask)
+
+        if min_metacell_cells is not None and community_nodes_count < min_metacell_cells:
+            ut.logger().debug('community: %s nodes: %s is too few',
+                              community_index, community_nodes_count)
+            if community_nodes_count < too_small_community_nodes_count:
+                too_small_community_index = community_index
+                too_small_community_nodes_count = community_nodes_count
+
+        if min_metacell_size is None and max_metacell_size is None:
+            continue
+
+        community_size = np.sum(node_sizes[community_mask])
+
+        if min_metacell_size is not None and community_size < min_metacell_size:
+            ut.logger().debug('community: %s nodes: %s size: %s is too small',
+                              community_index, community_nodes_count, community_size)
+            if community_nodes_count < too_small_community_nodes_count:
+                too_small_community_index = community_index
+                too_small_community_nodes_count = community_nodes_count
+
+        if max_metacell_size is not None and community_size > max_metacell_size:
+            ut.logger().debug('community: %s nodes: %s size: %s is too large',
+                              community_index, community_nodes_count, community_size)
+            if community_size > too_large_community_size:
+                too_large_community_index = community_index
+                too_large_community_size = community_size
+
+    if too_large_community_index is not None:
+        community_node_indices = \
+            np.where(community_of_nodes == too_large_community_index)[0]
+        ut.log_calc('split too-large community', too_large_community_index)
+        community_nodes_count = len(community_node_indices)
+        split_node_indices = \
+            np.random.permutation(community_node_indices)[:community_nodes_count
+                                                          // 2]
+        community_of_nodes[split_node_indices] = communities_count
+        return True
+
+    if too_small_community_index is not None:
+        ut.log_calc('merge too-small community', too_small_community_index)
+        community_of_nodes[community_of_nodes ==
+                           too_small_community_index] = -1
+        max_community_index = communities_count - 1
+        if too_small_community_index != max_community_index:
+            community_of_nodes[community_of_nodes ==
+                               max_community_index] = too_small_community_index
+        return True
+
+    return False

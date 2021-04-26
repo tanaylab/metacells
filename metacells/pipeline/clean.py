@@ -34,7 +34,9 @@ def analyze_clean_genes(
     *,
     properly_sampled_min_gene_total: int = pr.properly_sampled_min_gene_total,
     noisy_lonely_max_sampled_cells: int = pr.noisy_lonely_max_sampled_cells,
-    noisy_lonely_downsample_cell_quantile: float = pr.noisy_lonely_downsample_cell_quantile,
+    noisy_lonely_downsample_min_samples: int = pr.noisy_lonely_downsample_min_samples,
+    noisy_lonely_downsample_min_cell_quantile: float = pr.noisy_lonely_downsample_min_cell_quantile,
+    noisy_lonely_downsample_max_cell_quantile: float = pr.noisy_lonely_downsample_max_cell_quantile,
     noisy_lonely_min_gene_total: int = pr.noisy_lonely_min_gene_total,
     noisy_lonely_min_gene_normalized_variance: float = pr.noisy_lonely_min_gene_normalized_variance,
     noisy_lonely_max_gene_similarity: float = pr.noisy_lonely_max_gene_similarity,
@@ -70,11 +72,13 @@ def analyze_clean_genes(
 
     2. Invoke :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes` using
        ``noisy_lonely_max_sampled_cells`` (default: {noisy_lonely_max_sampled_cells}),
-       ``noisy_lonely_downsample_cell_quantile`` (default: {noisy_lonely_downsample_cell_quantile}),
-       ``noisy_lonely_min_gene_total`` (default: {noisy_lonely_min_gene_total}),
-       ``noisy_lonely_min_gene_normalized_variance`` (default:
-       {noisy_lonely_min_gene_normalized_variance}), and ``noisy_lonely_max_gene_similarity``
-       (default: {noisy_lonely_max_gene_similarity}).
+       ``noisy_lonely_downsample_min_samples`` (default: {noisy_lonely_downsample_min_samples}),
+       ``noisy_lonely_downsample_min_cell_quantile`` (default:
+       {noisy_lonely_downsample_min_cell_quantile}), ``noisy_lonely_downsample_max_cell_quantile``
+       (default: {noisy_lonely_downsample_max_cell_quantile}), ``noisy_lonely_min_gene_total``
+       (default: {noisy_lonely_min_gene_total}), ``noisy_lonely_min_gene_normalized_variance``
+       (default: {noisy_lonely_min_gene_normalized_variance}), and
+       ``noisy_lonely_max_gene_similarity`` (default: {noisy_lonely_max_gene_similarity}).
 
     3. Invoke :py:func:`metacells.tools.named.find_named_genes` to exclude genes based on their
        name, using the ``excluded_gene_names`` (default: {excluded_gene_names}) and
@@ -97,7 +101,9 @@ def analyze_clean_genes(
     tl.find_noisy_lonely_genes(adata,
                                excluded_genes_mask=excluded_genes_mask,
                                max_sampled_cells=noisy_lonely_max_sampled_cells,
-                               downsample_cell_quantile=noisy_lonely_downsample_cell_quantile,
+                               downsample_min_samples=noisy_lonely_downsample_min_samples,
+                               downsample_min_cell_quantile=noisy_lonely_downsample_min_cell_quantile,
+                               downsample_max_cell_quantile=noisy_lonely_downsample_max_cell_quantile,
                                min_gene_total=noisy_lonely_min_gene_total,
                                min_gene_normalized_variance=noisy_lonely_min_gene_normalized_variance,
                                max_gene_similarity=noisy_lonely_max_gene_similarity,
