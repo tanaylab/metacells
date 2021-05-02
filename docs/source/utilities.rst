@@ -9,9 +9,6 @@ Utilities
 .. automodule:: metacells.utilities.computation
     :members:
 
-.. automodule:: metacells.utilities.partition
-    :members:
-
 .. automodule:: metacells.utilities.typing
     :members:
 

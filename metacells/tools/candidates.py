@@ -4,7 +4,7 @@ Candidates
 '''
 
 from math import ceil, floor
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 from anndata import AnnData
@@ -161,16 +161,20 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
     community_of_nodes = \
         ut.maybe_o_numpy(adata, cell_seeds, formatter=ut.groups_description)
 
-    if community_of_nodes is None:
+    if community_of_nodes is not None:
+        assert community_of_nodes.dtype == 'int32'
+    else:
         target_seeds_count = ceil(size / target_metacell_cells)
         ut.log_calc('target_seeds_count', target_seeds_count)
 
-        community_of_nodes = _choose_seeds(outgoing_edge_weights=outgoing_edge_weights,
-                                           incoming_edge_weights=incoming_edge_weights,
-                                           max_seeds_count=target_seeds_count,
-                                           min_seed_size_quantile=min_seed_size_quantile,
-                                           max_seed_size_quantile=max_seed_size_quantile,
-                                           random_seed=random_seed)
+        community_of_nodes = np.full(size, -1, dtype='int32')
+        _choose_seeds(outgoing_edge_weights=outgoing_edge_weights,
+                      incoming_edge_weights=incoming_edge_weights,
+                      seed_of_cells=community_of_nodes,
+                      max_seeds_count=target_seeds_count,
+                      min_seed_size_quantile=min_seed_size_quantile,
+                      max_seed_size_quantile=max_seed_size_quantile,
+                      random_seed=random_seed)
 
     ut.set_o_data(adata, 'seed', community_of_nodes,
                   formatter=ut.groups_description)
@@ -179,24 +183,53 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
     np.random.seed(random_seed)
     cooldown = 1 - (cooldown_step / size)
 
+    phase = 'splitting'
+    optimized_communities = [community_of_nodes.copy()]
+    optimized_scores = [0.0]
     while True:
-        _optimize_partitions(outgoing_edge_weights=outgoing_edge_weights,
-                             incoming_edge_weights=incoming_edge_weights,
-                             community_of_nodes=community_of_nodes,
-                             random_seed=random_seed,
-                             cooldown=cooldown)
+        ut.logger().debug('phase: %s', phase)
+        score = \
+            _optimize_partitions(outgoing_edge_weights=outgoing_edge_weights,
+                                 incoming_edge_weights=incoming_edge_weights,
+                                 community_of_nodes=community_of_nodes,
+                                 random_seed=random_seed,
+                                 cooldown=cooldown)
+        optimized_communities.append(community_of_nodes.copy())
+        optimized_scores.append(score)
+        ut.log_calc('communities', community_of_nodes,
+                    formatter=ut.groups_description)
 
-        if not _patch_communities(community_of_nodes=community_of_nodes,
-                                  node_sizes=node_sizes,
-                                  min_metacell_size=min_metacell_size,
-                                  min_metacell_cells=min_metacell_cells,
-                                  max_metacell_size=max_metacell_size):
+        phase, kept_communities, new_communities = \
+            _patch_communities(community_of_nodes=community_of_nodes,
+                               phase=phase,
+                               node_sizes=node_sizes,
+                               target_metacell_size=target_metacell_size,
+                               min_metacell_size=min_metacell_size,
+                               min_metacell_cells=min_metacell_cells,
+                               max_metacell_size=max_metacell_size)
+
+        if phase in ('done', 'revert'):
+            ut.logger().debug('phase: %s', phase)
+            if phase == 'revert':
+                assert len(optimized_communities) > 2
+                community_of_nodes = optimized_communities[-2]
+                score = optimized_scores[-2]
+                ut.log_calc('score', score)
             break
+        assert phase in ('splitting', 'merging')
 
         cooldown *= cooldown_rate
 
-    ut.log_calc('communities', community_of_nodes,
-                formatter=ut.groups_description)
+        if new_communities > 0:
+            target_seeds_count = kept_communities + new_communities
+            ut.log_calc('target_seeds_count', target_seeds_count)
+            _choose_seeds(outgoing_edge_weights=outgoing_edge_weights,
+                          incoming_edge_weights=incoming_edge_weights,
+                          seed_of_cells=community_of_nodes,
+                          max_seeds_count=target_seeds_count,
+                          min_seed_size_quantile=min_seed_size_quantile,
+                          max_seed_size_quantile=max_seed_size_quantile,
+                          random_seed=random_seed)
 
     if inplace:
         ut.set_o_data(adata, 'candidate', community_of_nodes,
@@ -213,6 +246,7 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
 def choose_seeds(
     *,
     edge_weights: ut.CompressedMatrix,
+    seed_of_cells: Optional[ut.NumpyVector] = None,
     max_seeds_count: int,
     min_seed_size_quantile: float,
     max_seed_size_quantile: float,
@@ -222,6 +256,14 @@ def choose_seeds(
     Choose initial assignment of cells to seeds based on the ``edge_weights``.
 
     Returns a vector assigning each node (cell) to a seed (initial community).
+
+    If ``seed_of_cells`` is specified, it is expected to contain a vector of partial seeds. Only
+    cells which have a negative seed will be assigned a new seed. New seeds will be created so that
+    the total number of seeds will not exceed ``max_seeds_count``. The ``seed_of_cells`` will be
+    modified in-place and returned.
+
+    Otherwise, a new vector is created, initialized with ``-1`` (that is, no seed) for all nodes,
+    filled as above, and returned.
 
     **Computation Parameters**
 
@@ -238,6 +280,8 @@ def choose_seeds(
 
     4. We repeat this until we reach the target number of seeds.
     '''
+    size = edge_weights.shape[0]
+
     outgoing_edge_weights = ut.mustbe_compressed_matrix(edge_weights)
     assert ut.matrix_layout(outgoing_edge_weights) == 'row_major'
 
@@ -246,8 +290,18 @@ def choose_seeds(
                                                  layout='column_major'))
     assert ut.matrix_layout(incoming_edge_weights) == 'column_major'
 
+    if seed_of_cells is None:
+        seed_of_cells = np.full(size, -1, dtype='int32')
+    else:
+        assert seed_of_cells.dtype == 'int32'
+
+    assert outgoing_edge_weights.shape \
+        == incoming_edge_weights.shape \
+        == (len(seed_of_cells), len(seed_of_cells))
+
     return _choose_seeds(outgoing_edge_weights=outgoing_edge_weights,
                          incoming_edge_weights=incoming_edge_weights,
+                         seed_of_cells=seed_of_cells,
                          max_seeds_count=max_seeds_count,
                          min_seed_size_quantile=min_seed_size_quantile,
                          max_seed_size_quantile=max_seed_size_quantile,
@@ -259,14 +313,12 @@ def _choose_seeds(
     *,
     outgoing_edge_weights: ut.CompressedMatrix,
     incoming_edge_weights: ut.CompressedMatrix,
+    seed_of_cells: ut.NumpyVector,
     max_seeds_count: int,
     min_seed_size_quantile: float,
     max_seed_size_quantile: float,
     random_seed: int,
 ) -> ut.NumpyVector:
-    size = incoming_edge_weights.shape[0]
-    seed_of_cells = np.full(size, -1, dtype='int32')
-
     xt.choose_seeds(outgoing_edge_weights.data,
                     outgoing_edge_weights.indices,
                     outgoing_edge_weights.indptr,
@@ -291,9 +343,11 @@ def optimize_partitions(
     community_of_nodes: ut.NumpyVector,
     cooldown: float,
     random_seed: int,
-) -> None:
+) -> float:
     '''
     Optimize partition to candidate metacells (communities) using the ``edge_weights``.
+
+    Returns the score of the optimized partition.
 
     This modifies the ``community_of_nodes`` in-place.
 
@@ -324,11 +378,11 @@ def optimize_partitions(
         ut.mustbe_compressed_matrix(ut.to_layout(outgoing_edge_weights,
                                                  layout='column_major'))
     assert ut.matrix_layout(incoming_edge_weights) == 'column_major'
-    _optimize_partitions(outgoing_edge_weights=outgoing_edge_weights,
-                         incoming_edge_weights=incoming_edge_weights,
-                         random_seed=random_seed,
-                         cooldown=cooldown,
-                         community_of_nodes=community_of_nodes)
+    return _optimize_partitions(outgoing_edge_weights=outgoing_edge_weights,
+                                incoming_edge_weights=incoming_edge_weights,
+                                random_seed=random_seed,
+                                cooldown=cooldown,
+                                community_of_nodes=community_of_nodes)
 
 
 @ut.timed_call()
@@ -339,8 +393,8 @@ def _optimize_partitions(
     community_of_nodes: ut.NumpyVector,
     cooldown: float,
     random_seed: int,
-) -> None:
-    assert str(community_of_nodes.dtype) == 'int32'
+) -> float:
+    assert community_of_nodes.dtype == 'int32'
     score = xt.optimize_partitions(outgoing_edge_weights.data,
                                    outgoing_edge_weights.indices,
                                    outgoing_edge_weights.indptr,
@@ -351,6 +405,7 @@ def _optimize_partitions(
                                    cooldown,
                                    community_of_nodes)
     ut.log_calc('score', score)
+    return score
 
 
 @ut.logged()
@@ -397,76 +452,90 @@ def score_partitions(
     return score
 
 
-def _patch_communities(
+def _patch_communities(  # pylint: disable=too-many-branches
     *,
     community_of_nodes: ut.NumpyVector,
+    phase: str,
     node_sizes: ut.NumpyVector,
+    target_metacell_size: int,
     min_metacell_size: Optional[float],
     min_metacell_cells: Optional[int],
     max_metacell_size: Optional[float]
-) -> bool:
-    if min_metacell_size is None \
-            and min_metacell_cells is None \
-            and max_metacell_size is None:
-        return False
+) -> Tuple[str, int, int]:
+    assert phase in ('splitting', 'merging')
 
     communities_count = np.max(community_of_nodes) + 1
     assert communities_count > 0
 
-    too_large_community_index: Optional[int] = None
-    too_large_community_size = -1
-    too_small_community_index: Optional[int] = None
-    too_small_community_nodes_count = len(node_sizes) + 1
+    cancelled_total_size = 0
+    cancelled_total_nodes = 0
+
+    if min_metacell_size is None \
+            and min_metacell_cells is None \
+            and max_metacell_size is None:
+        ut.logger().debug('all communities are valid')
+        return ('done', -1, -1)
+
+    cancelled_communities = []
 
     for community_index in range(communities_count):
         community_mask = community_of_nodes == community_index
         community_nodes_count = np.sum(community_mask)
-
-        if min_metacell_cells is not None and community_nodes_count < min_metacell_cells:
-            ut.logger().debug('community: %s nodes: %s is too few',
-                              community_index, community_nodes_count)
-            if community_nodes_count < too_small_community_nodes_count:
-                too_small_community_index = community_index
-                too_small_community_nodes_count = community_nodes_count
-
-        if min_metacell_size is None and max_metacell_size is None:
-            continue
-
         community_size = np.sum(node_sizes[community_mask])
-
-        if min_metacell_size is not None and community_size < min_metacell_size:
-            ut.logger().debug('community: %s nodes: %s size: %s is too small',
-                              community_index, community_nodes_count, community_size)
-            if community_nodes_count < too_small_community_nodes_count:
-                too_small_community_index = community_index
-                too_small_community_nodes_count = community_nodes_count
 
         if max_metacell_size is not None and community_size > max_metacell_size:
             ut.logger().debug('community: %s nodes: %s size: %s is too large',
                               community_index, community_nodes_count, community_size)
-            if community_size > too_large_community_size:
-                too_large_community_index = community_index
-                too_large_community_size = community_size
+            cancelled_total_size += community_size
+            cancelled_total_nodes += community_nodes_count
+            cancelled_communities.append(community_index)
 
-    if too_large_community_index is not None:
-        community_node_indices = \
-            np.where(community_of_nodes == too_large_community_index)[0]
-        ut.log_calc('split too-large community', too_large_community_index)
-        community_nodes_count = len(community_node_indices)
-        split_node_indices = \
-            np.random.permutation(community_node_indices)[:community_nodes_count
-                                                          // 2]
-        community_of_nodes[split_node_indices] = communities_count
-        return True
+    if len(cancelled_communities) > 0:
+        if phase == 'merging':
+            return ('revert', -1, -1)
+        new_count = ceil(cancelled_total_size / target_metacell_size)
 
-    if too_small_community_index is not None:
-        ut.log_calc('merge too-small community', too_small_community_index)
-        community_of_nodes[community_of_nodes ==
-                           too_small_community_index] = -1
-        max_community_index = communities_count - 1
-        if too_small_community_index != max_community_index:
+    else:
+        if phase == 'splitting':
+            phase = 'merging'
+
+        for community_index in range(communities_count):
+            community_mask = community_of_nodes == community_index
+            community_nodes_count = np.sum(community_mask)
+            community_size = np.sum(node_sizes[community_mask])
+
+            if min_metacell_cells is not None and community_nodes_count < min_metacell_cells:
+                ut.logger().debug('community: %s nodes: %s is too few',
+                                  community_index, community_nodes_count)
+            elif min_metacell_size is not None and community_size < min_metacell_size:
+                ut.logger().debug('community: %s nodes: %s size: %s is too small',
+                                  community_index, community_nodes_count, community_size)
+            else:
+                continue
+
+            cancelled_total_size += community_size
+            cancelled_total_nodes += community_nodes_count
+            cancelled_communities.append(community_index)
+
+        if len(cancelled_communities) == 0:
+            ut.logger().debug('all communities are valid')
+            return ('done', -1, -1)
+
+        new_count = len(cancelled_communities) - 1
+
+    ut.logger().debug('total cancelled communities: %s', len(cancelled_communities))
+    ut.logger().debug('seeds covering cancelled: %s', new_count)
+    assert new_count >= 0
+
+    next_community_index = 0
+    for community_index in range(communities_count):
+        if community_index in cancelled_communities:
+            community_of_nodes[community_of_nodes == community_index] = -1
+            continue
+
+        if next_community_index < community_index:
             community_of_nodes[community_of_nodes ==
-                               max_community_index] = too_small_community_index
-        return True
+                               community_index] = next_community_index
+        next_community_index += 1
 
-    return False
+    return (phase, next_community_index, new_count)

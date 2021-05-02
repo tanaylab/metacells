@@ -414,9 +414,9 @@ def _collect_metacell_excess(  # pylint: disable=too-many-statements,too-many-br
     metacell_data = data[metacell_indices, :]
 
     total_per_cell = ut.sum_per(metacell_data, per='row')
-    samples = min(max(downsample_min_samples,
-                      np.quantile(total_per_cell, downsample_min_cell_quantile)),
-                  np.quantile(total_per_cell, downsample_max_cell_quantile))
+    samples = round(min(max(downsample_min_samples,
+                            np.quantile(total_per_cell, downsample_min_cell_quantile)),
+                        np.quantile(total_per_cell, downsample_max_cell_quantile)))
     if ut.logging_calc():
         ut.log_calc(f'samples: {samples}')
     downsampled_data_rows = \

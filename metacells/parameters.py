@@ -46,27 +46,27 @@ significant_value: int = 7
 
 #: The generic minimal samples to use for downsampling the cells for some
 #: purpose. See
-#: :py:const:`noisy_lonely_downsample_cell_quantile`,
-#: :py:const:`feature_downsample_cell_quantile`,
-#: :py:const:`excess_downsample_cell_quantile`
+#: :py:const:`noisy_lonely_downsample_min_samples`,
+#: :py:const:`feature_downsample_min_samples`,
+#: :py:const:`excess_downsample_min_samples`
 #: and
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
 downsample_min_samples: int = 750
 
 #: The generic minimal quantile of the cells total size to use for downsampling the cells for some
 #: purpose. See
-#: :py:const:`noisy_lonely_downsample_cell_quantile`,
-#: :py:const:`feature_downsample_cell_quantile`,
-#: :py:const:`excess_downsample_cell_quantile`
+#: :py:const:`noisy_lonely_downsample_min_cell_quantile`,
+#: :py:const:`feature_downsample_min_cell_quantile`,
+#: :py:const:`excess_downsample_min_cell_quantile`
 #: and
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
 downsample_min_cell_quantile: float = 0.05
 
 #: The generic maximal quantile of the cells total size to use for downsampling the cells for some
 #: purpose. See
-#: :py:const:`noisy_lonely_downsample_cell_quantile`,
-#: :py:const:`feature_downsample_cell_quantile`,
-#: :py:const:`excess_downsample_cell_quantile`
+#: :py:const:`noisy_lonely_downsample_max_cell_quantile`,
+#: :py:const:`feature_downsample_max_cell_quantile`,
+#: :py:const:`excess_downsample_max_cell_quantile`
 #: and
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
 downsample_max_cell_quantile: float = 0.5
@@ -358,7 +358,7 @@ feature_downsample_min_cell_quantile: float = downsample_min_cell_quantile
 
 #: The maximal quantile of the cells total size to use for downsampling the cells for computing
 #: "feature" genes. See
-#: :py:const:`downsample_cell_quantile`,
+#: :py:const:`downsample_max_cell_quantile`,
 #: :py:func:`metacells.tools.downsample.downsample_cells`,
 #: :py:func:`metacells.pipeline.feature.extract_feature_data`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,

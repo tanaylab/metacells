@@ -316,7 +316,8 @@ class SubsetResults:
                                      target_name, cell_indices,
                                      lambda old_cells_value:
                                      old_cells_value + new_value,
-                                     formatter=gene_annotation.formatter)
+                                     formatter=cell_annotation.formatter)
+
                 continue
                 # pylint: enable=cell-var-from-loop
 
@@ -337,7 +338,7 @@ class SubsetResults:
             _modify_value_subset(adata, ut.get_o_numpy, ut.set_o_data,
                                  target_name, cell_indices,
                                  lambda _: new_cells_value,
-                                 formatter=gene_annotation.formatter)
+                                 formatter=cell_annotation.formatter)
 
             # pylint: enable=cell-var-from-loop
 
@@ -718,16 +719,16 @@ def divide_and_conquer_pipeline(
                                          formatter=lambda rare_index:
                                          ut.progress_description(len(subset_results),
                                                                  rare_index, 'module')):
-                            mask = rare_results.cells_frame['metacell'] >= 0
-                            ut.log_calc('rare_grouped_cells', mask)
-                            if not np.any(mask):
+                            rare_cells_mask = rare_results.cells_frame['metacell'] >= 0
+                            ut.log_calc('rare_grouped_cells', rare_cells_mask)
+                            if not np.any(rare_cells_mask):
                                 continue
 
                             if not did_apply_subset:
                                 did_apply_subset = True
                                 _initialize_results(adata)
 
-                            cell_indices = rare_results.cells_frame.index.values[mask]
+                            cell_indices = rare_results.cells_frame.index.values[rare_cells_mask]
                             normal_cells_mask[cell_indices] = False
 
                             rare_results.collect(adata, counts, rare=True)
@@ -739,54 +740,56 @@ def divide_and_conquer_pipeline(
         else:
             cdata = adata
 
-        compute_divide_and_conquer_metacells(cdata, what,
-                                             feature_downsample_min_samples=feature_downsample_min_samples,
-                                             feature_downsample_min_cell_quantile=feature_downsample_min_cell_quantile,
-                                             feature_downsample_max_cell_quantile=feature_downsample_max_cell_quantile,
-                                             feature_min_gene_relative_variance=feature_min_gene_relative_variance,
-                                             feature_min_gene_total=feature_min_gene_total,
-                                             feature_min_gene_top3=feature_min_gene_top3,
-                                             forbidden_gene_names=forbidden_gene_names,
-                                             forbidden_gene_patterns=forbidden_gene_patterns,
-                                             cells_similarity_value_normalization=cells_similarity_value_normalization,
-                                             cells_similarity_log_data=cells_similarity_log_data,
-                                             cells_similarity_method=cells_similarity_method,
-                                             groups_similarity_method=groups_similarity_method,
-                                             target_pile_size=target_pile_size,
-                                             pile_min_split_size_factor=pile_min_split_size_factor,
-                                             pile_min_robust_size_factor=pile_min_robust_size_factor,
-                                             pile_max_merge_size_factor=pile_max_merge_size_factor,
-                                             target_metacell_size=target_metacell_size,
-                                             knn_k=knn_k,
-                                             knn_balanced_ranks_factor=knn_balanced_ranks_factor,
-                                             knn_incoming_degree_factor=knn_incoming_degree_factor,
-                                             knn_outgoing_degree_factor=knn_outgoing_degree_factor,
-                                             min_seed_size_quantile=min_seed_size_quantile,
-                                             max_seed_size_quantile=max_seed_size_quantile,
-                                             candidates_cooldown_step=candidates_cooldown_step,
-                                             candidates_cooldown_rate=candidates_cooldown_rate,
-                                             candidates_min_split_size_factor=candidates_min_split_size_factor,
-                                             candidates_max_merge_size_factor=candidates_max_merge_size_factor,
-                                             candidates_min_metacell_cells=candidates_min_metacell_cells,
-                                             must_complete_cover=must_complete_cover,
-                                             final_max_outliers_levels=final_max_outliers_levels,
-                                             deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
-                                             deviants_max_gene_fraction=deviants_max_gene_fraction,
-                                             deviants_max_cell_fraction=deviants_max_cell_fraction,
-                                             dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
-                                             dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
-                                             dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
-                                             dissolve_min_metacell_cells=dissolve_min_metacell_cells,
-                                             cell_sizes=cell_sizes,
-                                             random_seed=random_seed)
+        is_divide_and_conquer = \
+            compute_divide_and_conquer_metacells(cdata, what,
+                                                 feature_downsample_min_samples=feature_downsample_min_samples,
+                                                 feature_downsample_min_cell_quantile=feature_downsample_min_cell_quantile,
+                                                 feature_downsample_max_cell_quantile=feature_downsample_max_cell_quantile,
+                                                 feature_min_gene_relative_variance=feature_min_gene_relative_variance,
+                                                 feature_min_gene_total=feature_min_gene_total,
+                                                 feature_min_gene_top3=feature_min_gene_top3,
+                                                 forbidden_gene_names=forbidden_gene_names,
+                                                 forbidden_gene_patterns=forbidden_gene_patterns,
+                                                 cells_similarity_value_normalization=cells_similarity_value_normalization,
+                                                 cells_similarity_log_data=cells_similarity_log_data,
+                                                 cells_similarity_method=cells_similarity_method,
+                                                 groups_similarity_method=groups_similarity_method,
+                                                 target_pile_size=target_pile_size,
+                                                 pile_min_split_size_factor=pile_min_split_size_factor,
+                                                 pile_min_robust_size_factor=pile_min_robust_size_factor,
+                                                 pile_max_merge_size_factor=pile_max_merge_size_factor,
+                                                 target_metacell_size=target_metacell_size,
+                                                 knn_k=knn_k,
+                                                 knn_balanced_ranks_factor=knn_balanced_ranks_factor,
+                                                 knn_incoming_degree_factor=knn_incoming_degree_factor,
+                                                 knn_outgoing_degree_factor=knn_outgoing_degree_factor,
+                                                 min_seed_size_quantile=min_seed_size_quantile,
+                                                 max_seed_size_quantile=max_seed_size_quantile,
+                                                 candidates_cooldown_step=candidates_cooldown_step,
+                                                 candidates_cooldown_rate=candidates_cooldown_rate,
+                                                 candidates_min_split_size_factor=candidates_min_split_size_factor,
+                                                 candidates_max_merge_size_factor=candidates_max_merge_size_factor,
+                                                 candidates_min_metacell_cells=candidates_min_metacell_cells,
+                                                 must_complete_cover=must_complete_cover,
+                                                 final_max_outliers_levels=final_max_outliers_levels,
+                                                 deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
+                                                 deviants_max_gene_fraction=deviants_max_gene_fraction,
+                                                 deviants_max_cell_fraction=deviants_max_cell_fraction,
+                                                 dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
+                                                 dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
+                                                 dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                                                 dissolve_min_metacell_cells=dissolve_min_metacell_cells,
+                                                 cell_sizes=cell_sizes,
+                                                 random_seed=random_seed)
 
         if did_apply_subset:
             with ut.log_step('collect common cells results:'):
                 common_results = SubsetResults(cdata,
-                                               is_direct=False,
+                                               is_direct=not is_divide_and_conquer,
                                                pre_target='preliminary',
                                                final_target='final')
                 common_results.collect(adata, counts)
+
         if did_apply_subset:
             ut.done_incrementals(adata)
     finally:
@@ -838,7 +841,7 @@ def compute_divide_and_conquer_metacells(
     dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     random_seed: int = pr.random_seed,
-) -> None:
+) -> bool:
     '''
     Compute metacells for ``what`` (default: {what}) data using the divide-and-conquer method.
 
@@ -862,6 +865,8 @@ def compute_divide_and_conquer_metacells(
     per-variable-per-observation annotation containing such a matrix.
 
     **Returns**
+
+    ``True`` if actually used divide-and-conquer, ``False`` if used the direct algorithm.
 
     Sets the following annotations in ``adata``:
 
@@ -1009,8 +1014,10 @@ def compute_divide_and_conquer_metacells(
                                      dissolve_min_metacell_cells=dissolve_min_metacell_cells,
                                      cell_sizes=cell_sizes,
                                      random_seed=random_seed)
+
             _patch_direct_results(adata)
-        return
+
+        return False
 
     _initialize_results(adata)
     try:
@@ -1091,8 +1098,8 @@ def compute_divide_and_conquer_metacells(
                                                  candidates_cooldown_step=candidates_cooldown_step,
                                                  candidates_cooldown_rate=candidates_cooldown_rate,
                                                  candidates_min_split_size_factor=pile_min_split_size_factor,
-                                                 candidates_max_merge_size_factor=pile_max_merge_size_factor,
-                                                 candidates_min_metacell_cells=candidates_min_metacell_cells,
+                                                 candidates_max_merge_size_factor=None,
+                                                 candidates_min_metacell_cells=None,
                                                  must_complete_cover=True,
                                                  final_max_outliers_levels=None,
                                                  deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
@@ -1160,6 +1167,8 @@ def compute_divide_and_conquer_metacells(
                                     cell_sizes=cell_sizes,
                                     random_seed=random_seed)
         ut.done_incrementals(adata)
+
+        return True
     finally:
         ut.cancel_incrementals(adata)
 
@@ -1297,50 +1306,51 @@ def compute_piled_metacells(
                          obs=outlier_of_cells,
                          track_obs='complete_cell_index')
 
-        compute_divide_and_conquer_metacells(odata, what,
-                                             feature_downsample_min_samples=feature_downsample_min_samples,
-                                             feature_downsample_min_cell_quantile=feature_downsample_min_cell_quantile,
-                                             feature_downsample_max_cell_quantile=feature_downsample_max_cell_quantile,
-                                             feature_min_gene_total=feature_min_gene_total,
-                                             feature_min_gene_top3=feature_min_gene_top3,
-                                             feature_min_gene_relative_variance=feature_min_gene_relative_variance,
-                                             forbidden_gene_names=forbidden_gene_names,
-                                             forbidden_gene_patterns=forbidden_gene_patterns,
-                                             cells_similarity_value_normalization=cells_similarity_value_normalization,
-                                             cells_similarity_log_data=cells_similarity_log_data,
-                                             cells_similarity_method=cells_similarity_method,
-                                             groups_similarity_method=groups_similarity_method,
-                                             target_pile_size=target_pile_size,
-                                             pile_min_split_size_factor=pile_min_split_size_factor,
-                                             pile_min_robust_size_factor=pile_min_robust_size_factor,
-                                             pile_max_merge_size_factor=pile_max_merge_size_factor,
-                                             target_metacell_size=target_metacell_size,
-                                             knn_k=knn_k,
-                                             knn_balanced_ranks_factor=knn_balanced_ranks_factor,
-                                             knn_incoming_degree_factor=knn_incoming_degree_factor,
-                                             knn_outgoing_degree_factor=knn_outgoing_degree_factor,
-                                             min_seed_size_quantile=min_seed_size_quantile,
-                                             max_seed_size_quantile=max_seed_size_quantile,
-                                             candidates_cooldown_step=candidates_cooldown_step,
-                                             candidates_cooldown_rate=candidates_cooldown_rate,
-                                             candidates_min_split_size_factor=candidates_min_split_size_factor,
-                                             candidates_max_merge_size_factor=candidates_max_merge_size_factor,
-                                             candidates_min_metacell_cells=candidates_min_metacell_cells,
-                                             must_complete_cover=must_complete_cover,
-                                             final_max_outliers_levels=final_max_outliers_levels,
-                                             deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
-                                             deviants_max_gene_fraction=deviants_max_gene_fraction,
-                                             deviants_max_cell_fraction=deviants_max_cell_fraction,
-                                             dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
-                                             dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
-                                             dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
-                                             dissolve_min_metacell_cells=dissolve_min_metacell_cells,
-                                             cell_sizes=cell_sizes,
-                                             random_seed=random_seed)
+        is_divide_and_conquer = \
+            compute_divide_and_conquer_metacells(odata, what,
+                                                 feature_downsample_min_samples=feature_downsample_min_samples,
+                                                 feature_downsample_min_cell_quantile=feature_downsample_min_cell_quantile,
+                                                 feature_downsample_max_cell_quantile=feature_downsample_max_cell_quantile,
+                                                 feature_min_gene_total=feature_min_gene_total,
+                                                 feature_min_gene_top3=feature_min_gene_top3,
+                                                 feature_min_gene_relative_variance=feature_min_gene_relative_variance,
+                                                 forbidden_gene_names=forbidden_gene_names,
+                                                 forbidden_gene_patterns=forbidden_gene_patterns,
+                                                 cells_similarity_value_normalization=cells_similarity_value_normalization,
+                                                 cells_similarity_log_data=cells_similarity_log_data,
+                                                 cells_similarity_method=cells_similarity_method,
+                                                 groups_similarity_method=groups_similarity_method,
+                                                 target_pile_size=target_pile_size,
+                                                 pile_min_split_size_factor=pile_min_split_size_factor,
+                                                 pile_min_robust_size_factor=pile_min_robust_size_factor,
+                                                 pile_max_merge_size_factor=pile_max_merge_size_factor,
+                                                 target_metacell_size=target_metacell_size,
+                                                 knn_k=knn_k,
+                                                 knn_balanced_ranks_factor=knn_balanced_ranks_factor,
+                                                 knn_incoming_degree_factor=knn_incoming_degree_factor,
+                                                 knn_outgoing_degree_factor=knn_outgoing_degree_factor,
+                                                 min_seed_size_quantile=min_seed_size_quantile,
+                                                 max_seed_size_quantile=max_seed_size_quantile,
+                                                 candidates_cooldown_step=candidates_cooldown_step,
+                                                 candidates_cooldown_rate=candidates_cooldown_rate,
+                                                 candidates_min_split_size_factor=candidates_min_split_size_factor,
+                                                 candidates_max_merge_size_factor=candidates_max_merge_size_factor,
+                                                 candidates_min_metacell_cells=candidates_min_metacell_cells,
+                                                 must_complete_cover=must_complete_cover,
+                                                 final_max_outliers_levels=final_max_outliers_levels,
+                                                 deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
+                                                 deviants_max_gene_fraction=deviants_max_gene_fraction,
+                                                 deviants_max_cell_fraction=deviants_max_cell_fraction,
+                                                 dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
+                                                 dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
+                                                 dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+                                                 dissolve_min_metacell_cells=dissolve_min_metacell_cells,
+                                                 cell_sizes=cell_sizes,
+                                                 random_seed=random_seed)
 
         with ut.log_step('collect outliers results:'):
             outliers_results = SubsetResults(odata,
-                                             is_direct=False,
+                                             is_direct=not is_divide_and_conquer,
                                              pre_target=None,
                                              final_target=phase)
             outliers_results.collect(adata, counts)
@@ -1478,8 +1488,8 @@ def _modify_value_subset(
     modifier: Callable[[ut.NumpyVector], ut.NumpyVector],
     formatter: LogValue = None,
 ) -> None:
-    old_value = getter(adata, name)
-    ut.unfreeze(old_value)
-    old_value[indices] = modifier(old_value[indices])
-    ut.freeze(old_value)
-    setter(adata, name, old_value, formatter=formatter)
+    old_values = getter(adata, name)
+    ut.unfreeze(old_values)
+    old_values[indices] = modifier(old_values[indices])
+    ut.freeze(old_values)
+    setter(adata, name, old_values, formatter=formatter)

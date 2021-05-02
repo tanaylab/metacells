@@ -1957,26 +1957,36 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
 }
 
 static std::vector<std::vector<int32_t>>
-collect_connected_nodes(ConstCompressedMatrix<float32_t, int32_t, int32_t>& outgoing_weights,
+collect_connected_nodes(ConstCompressedMatrix<float32_t, int32_t, int32_t>& incoming_weights,
                         ConstArraySlice<int32_t> seed_of_nodes) {
     const size_t nodes_count = seed_of_nodes.size();
     std::vector<std::vector<int32_t>> connected_nodes(nodes_count);
 
     for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
-        auto node_outgoing = outgoing_weights.get_band_indices(node_index);
-        connected_nodes[node_index].resize(node_outgoing.size());
-        std::copy(node_outgoing.begin(), node_outgoing.end(), connected_nodes[node_index].begin());
+        if (seed_of_nodes[node_index] >= 0) {
+            continue;
+        }
+        auto node_outgoing = incoming_weights.get_band_indices(node_index);
+        auto& node_connected = connected_nodes[node_index];
+        node_connected.resize(node_outgoing.size());
+        auto copied = std::copy_if(node_outgoing.begin(),
+                                   node_outgoing.end(),
+                                   node_connected.begin(),
+                                   [&](int32_t other_node_index) {
+                                       return seed_of_nodes[other_node_index] < 0;
+                                   });
+        node_connected.resize(copied - node_connected.begin());
     }
 
     return connected_nodes;
 }
 
 static size_t
-choose_seed(const std::vector<size_t>& tmp_candidates,
-            const std::vector<std::vector<int32_t>>& connected_nodes,
-            const float32_t min_seed_size_quantile,
-            const float32_t max_seed_size_quantile,
-            std::minstd_rand& random) {
+choose_seed_node(const std::vector<size_t>& tmp_candidates,
+                 const std::vector<std::vector<int32_t>>& connected_nodes,
+                 const float32_t min_seed_size_quantile,
+                 const float32_t max_seed_size_quantile,
+                 std::minstd_rand& random) {
     size_t size = tmp_candidates.size();
 
     TmpVectorSizeT raii_positions;
@@ -2013,51 +2023,67 @@ choose_seed(const std::vector<size_t>& tmp_candidates,
 
     const size_t selected = random() % (max_seed_rank + 1 - min_seed_rank);
     const size_t position = tmp_positions[min_seed_rank + selected];
-    size_t seed_index = tmp_candidates[position];
+    size_t seed_node_index = tmp_candidates[position];
 
-    LOCATED_LOG(false)                                      //
-        << " seed: " << seed_index                          //
-        << " size: " << connected_nodes[seed_index].size()  //
+    LOCATED_LOG(false)                                           //
+        << " node: " << seed_node_index                          //
+        << " size: " << connected_nodes[seed_node_index].size()  //
         << std::endl;
-    return seed_index;
+    return seed_node_index;
 }
 
 template<typename T>
 static void
-remove_sorted(std::vector<T>& vector, T value) {
+remove_sorted(std::vector<T>& vector, T value, bool must_exist) {
     auto position = std::lower_bound(vector.begin(), vector.end(), value);
     if (position != vector.end() && *position == value) {
         vector.erase(position);
+    } else if (must_exist) {
+        LOCATED_LOG(true) << " OOPS! removing nonexistent value" << std::endl;
+        assert(false);
     }
 }
 
 static void
-store_seed(ConstCompressedMatrix<float32_t, int32_t, int32_t>& incoming_weights,
-           const size_t partition_index,
-           const size_t seed_index,
-           std::vector<size_t>& tmp_candidates,
-           std::vector<std::vector<int32_t>>& connected_nodes,
-           ArraySlice<int32_t> seed_of_nodes) {
-    seed_of_nodes[seed_index] = partition_index;
+store_seed_node(ConstCompressedMatrix<float32_t, int32_t, int32_t>& outgoing_weights,
+                const size_t seed_index,
+                const size_t seed_node_index,
+                std::vector<size_t>& tmp_candidates,
+                std::vector<std::vector<int32_t>>& connected_nodes,
+                ArraySlice<int32_t> seed_of_nodes) {
+    remove_sorted(tmp_candidates, seed_node_index, true);
 
-    remove_sorted(tmp_candidates, seed_index);
+    auto seed_outgoing_nodes = outgoing_weights.get_band_indices(seed_node_index);
+    for (int32_t node_index : seed_outgoing_nodes) {
+        if (seed_of_nodes[node_index] < 0) {
+            remove_sorted(connected_nodes[node_index], int32_t(seed_node_index), true);
+        }
+    }
 
-    for (int32_t node_index : connected_nodes[seed_index]) {
-        seed_of_nodes[node_index] = partition_index;
-        remove_sorted(tmp_candidates, size_t(node_index));
+    FastAssertCompare(seed_of_nodes[seed_node_index], <, 0);
+    seed_of_nodes[seed_node_index] = seed_index;
 
-        auto incoming_nodes = incoming_weights.get_band_indices(node_index);
-        for (size_t other_node_index : incoming_nodes) {
-            if (other_node_index != seed_index) {
-                remove_sorted(connected_nodes[other_node_index], node_index);
+    for (int32_t node_index : connected_nodes[seed_node_index]) {
+        auto outgoing_nodes = outgoing_weights.get_band_indices(node_index);
+        for (size_t other_node_index : outgoing_nodes) {
+            if (seed_of_nodes[other_node_index] < 0) {
+                remove_sorted(connected_nodes[other_node_index], node_index, true);
             }
         }
     }
+
+    for (int32_t node_index : connected_nodes[seed_node_index]) {
+        SlowAssertCompare(seed_of_nodes[node_index], <, 0);
+        seed_of_nodes[node_index] = seed_index;
+        remove_sorted(tmp_candidates, size_t(node_index), false);
+    }
+
+    connected_nodes[seed_node_index].clear();
 }
 
 static bool
 keep_large_candidates(std::vector<size_t>& tmp_candidates,
-                      std::vector<std::vector<int32_t>>& connected_nodes) {
+                      const std::vector<std::vector<int32_t>>& connected_nodes) {
     tmp_candidates.erase(std::remove_if(tmp_candidates.begin(),
                                         tmp_candidates.end(),
                                         [&](int candidate_node_index) {
@@ -2066,59 +2092,6 @@ keep_large_candidates(std::vector<size_t>& tmp_candidates,
                                         }),
                          tmp_candidates.end());
     return tmp_candidates.size() > 0;
-}
-
-static int32_t
-find_seed_index(size_t node_index,
-                ConstCompressedMatrix<float32_t, int32_t, int32_t>& outgoing_weights,
-                ConstCompressedMatrix<float32_t, int32_t, int32_t>& incoming_weights,
-                ConstArraySlice<int32_t> seed_of_nodes,
-                ArraySlice<float64_t> tmp_seeds_outgoing_weights,
-                ArraySlice<float64_t> tmp_seeds_incoming_weights) {
-    std::fill(tmp_seeds_outgoing_weights.begin(), tmp_seeds_outgoing_weights.end(), EPSILON);
-    std::fill(tmp_seeds_incoming_weights.begin(), tmp_seeds_incoming_weights.end(), EPSILON);
-
-    const auto& node_outgoing_indices = outgoing_weights.get_band_indices(node_index);
-    const auto& node_outgoing_weights = outgoing_weights.get_band_data(node_index);
-    for (size_t other_node_position = 0; other_node_position < node_outgoing_indices.size();
-         ++other_node_position) {
-        const int32_t other_node_index = node_outgoing_indices[other_node_position];
-        const int32_t other_seed_index = seed_of_nodes[other_node_index];
-        if (other_seed_index >= 0) {
-            const float32_t edge_weight = node_outgoing_weights[other_node_position];
-            tmp_seeds_incoming_weights[other_seed_index] += edge_weight;
-        }
-    }
-
-    const auto& node_incoming_indices = incoming_weights.get_band_indices(node_index);
-    const auto& node_incoming_weights = incoming_weights.get_band_data(node_index);
-    for (size_t other_node_position = 0; other_node_position < node_incoming_indices.size();
-         ++other_node_position) {
-        const int32_t other_node_index = node_incoming_indices[other_node_position];
-        const int32_t other_seed_index = seed_of_nodes[other_node_index];
-        if (other_seed_index >= 0) {
-            const float32_t edge_weight = node_incoming_weights[other_node_position];
-            tmp_seeds_incoming_weights[other_seed_index] += edge_weight;
-        }
-    }
-
-    int32_t best_seed_index = -1;
-    float64_t best_seed_weight = EPSILON * EPSILON;
-    size_t seeds_count = tmp_seeds_outgoing_weights.size();
-    for (size_t seed_index = 0; seed_index < seeds_count; ++seed_index) {
-        float64_t seed_weight =
-            tmp_seeds_outgoing_weights[seed_index] * tmp_seeds_incoming_weights[seed_index];
-        if (seed_weight > best_seed_weight) {
-            best_seed_index = seed_index;
-            best_seed_weight = seed_weight;
-        }
-    }
-
-    LOCATED_LOG(false) << " node_index: " << node_index              //
-                       << " best_seed_index: " << best_seed_index    //
-                       << " best_seed_weight: " << best_seed_weight  //
-                       << std::endl;
-    return best_seed_index;
 }
 
 /// See the Python `metacell.tools.candidates._choose_seeds` function.
@@ -2136,6 +2109,7 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
              pybind11::array_t<int32_t>& seed_of_nodes_array) {
     ArraySlice<int32_t> seed_of_nodes = ArraySlice<int32_t>(seed_of_nodes_array, "seed_of_nodes");
     size_t nodes_count = seed_of_nodes.size();
+    FastAssertCompare(nodes_count, >, 0);
 
     ConstCompressedMatrix<float32_t, int32_t, int32_t> outgoing_weights(
         ConstArraySlice<float32_t>(outgoing_weights_data_array, "outgoing_weights_data"),
@@ -2163,60 +2137,113 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
     TmpVectorSizeT candidates_raii;
     auto tmp_candidates = candidates_raii.vector(nodes_count);
     std::iota(tmp_candidates.begin(), tmp_candidates.end(), 0);
+    tmp_candidates.erase(std::remove_if(tmp_candidates.begin(),
+                                        tmp_candidates.end(),
+                                        [&](int candidate_node_index) {
+                                            return seed_of_nodes[candidate_node_index] >= 0;
+                                        }),
+                         tmp_candidates.end());
 
     std::minstd_rand random(random_seed);
+    size_t given_seeds_count =
+        size_t(*std::max_element(seed_of_nodes.begin(), seed_of_nodes.end()) + 1);
+    size_t seeds_count = given_seeds_count;
 
-    size_t partition_index = 0;
-    while (partition_index < max_seeds_count
+    while (seeds_count < max_seeds_count
            && keep_large_candidates(tmp_candidates, connected_nodes)) {
-        LOCATED_LOG(false) << " partition_index: " << partition_index << std::endl;
-        size_t seed_index = choose_seed(tmp_candidates,
-                                        connected_nodes,
-                                        min_seed_size_quantile,
-                                        max_seed_size_quantile,
-                                        random);
-        store_seed(incoming_weights,
-                   partition_index,
-                   seed_index,
-                   tmp_candidates,
-                   connected_nodes,
-                   seed_of_nodes);
-        ++partition_index;
+        size_t seed_node_index = choose_seed_node(tmp_candidates,
+                                                  connected_nodes,
+                                                  min_seed_size_quantile,
+                                                  max_seed_size_quantile,
+                                                  random);
+
+        store_seed_node(outgoing_weights,
+                        seeds_count,
+                        seed_node_index,
+                        tmp_candidates,
+                        connected_nodes,
+                        seed_of_nodes);
+        ++seeds_count;
     }
 
-    size_t seeds_count = partition_index;
-    LOCATED_LOG(false) << " seeds_count: " << seeds_count << std::endl;
+    FastAssertCompare(seeds_count, >, given_seeds_count);
+    size_t strong_seeds_count = seeds_count;
 
-    TmpVectorFloat64 tmp_seeds_outgoing_weights_raii;
-    TmpVectorFloat64 tmp_seeds_incoming_weights_raii;
-    auto tmp_seeds_outgoing_weights =
-        tmp_seeds_outgoing_weights_raii.array_slice("seeds_outgoing_weights", seeds_count);
-    auto tmp_seeds_incoming_weights =
-        tmp_seeds_incoming_weights_raii.array_slice("seeds_incoming_weights", seeds_count);
-
-    while (tmp_candidates.size() > 0) {
+    if (seeds_count < max_seeds_count) {
         std::random_shuffle(tmp_candidates.begin(), tmp_candidates.end(), [&](size_t n) {
             return random() % n;
         });
-        tmp_candidates.erase(std::remove_if(tmp_candidates.begin(),
-                                            tmp_candidates.end(),
-                                            [&](int node_index) {
-                                                int32_t seed_index =
-                                                    find_seed_index(node_index,
-                                                                    outgoing_weights,
-                                                                    incoming_weights,
-                                                                    seed_of_nodes,
-                                                                    tmp_seeds_outgoing_weights,
-                                                                    tmp_seeds_incoming_weights);
-                                                if (seed_index < 0) {
-                                                    return false;
-                                                } else {
-                                                    seed_of_nodes[node_index] = seed_index;
-                                                    return true;
-                                                }
-                                            }),
-                             tmp_candidates.end());
+
+        while (tmp_candidates.size() > 0 && seeds_count < max_seeds_count) {
+            auto node_index = tmp_candidates.back();
+            tmp_candidates.pop_back();
+            seed_of_nodes[node_index] = seeds_count;
+            seeds_count += 1;
+        }
     }
+
+    TmpVectorSizeT seed_nodes_raii;
+    auto tmp_seed_nodes = candidates_raii.vector(nodes_count);
+    if (seeds_count < max_seeds_count) {
+        std::iota(tmp_seed_nodes.begin(), tmp_seed_nodes.end(), 0);
+        std::random_shuffle(tmp_seed_nodes.begin(), tmp_seed_nodes.end(), [&](size_t n) {
+            return random() % n;
+        });
+    }
+
+    if (seeds_count < max_seeds_count) {
+        FastAssertCompare(tmp_candidates.size(), ==, 0);
+        tmp_candidates.resize(strong_seeds_count - given_seeds_count);
+        std::iota(tmp_candidates.begin(), tmp_candidates.end(), given_seeds_count);
+        std::random_shuffle(tmp_candidates.begin(), tmp_candidates.end(), [&](size_t n) {
+            return random() % n;
+        });
+
+        while (tmp_candidates.size() > 0 && seeds_count < max_seeds_count) {
+            auto seed_index = tmp_candidates.back();
+            tmp_candidates.pop_back();
+            bool did_find = false;
+            for (auto node_index : tmp_seed_nodes) {
+                if (size_t(seed_of_nodes[node_index]) == seed_index) {
+                    seed_of_nodes[node_index] = seeds_count;
+                    seeds_count += 1;
+                    did_find = true;
+                    break;
+                }
+            }
+            FastAssertCompare(did_find, ==, true);
+        }
+
+        tmp_candidates.clear();
+    }
+
+    if (seeds_count < max_seeds_count) {
+        FastAssertCompare(tmp_candidates.size(), ==, 0);
+        tmp_candidates.resize(given_seeds_count);
+        std::iota(tmp_candidates.begin(), tmp_candidates.end(), 0);
+        std::random_shuffle(tmp_candidates.begin(), tmp_candidates.end(), [&](size_t n) {
+            return random() % n;
+        });
+
+        while (tmp_candidates.size() > 0 && seeds_count < max_seeds_count) {
+            auto seed_index = tmp_candidates.back();
+            tmp_candidates.pop_back();
+            bool did_find = false;
+            for (auto node_index : tmp_seed_nodes) {
+                if (size_t(seed_of_nodes[node_index]) == seed_index) {
+                    seed_of_nodes[node_index] = seeds_count;
+                    seeds_count += 1;
+                    did_find = true;
+                    break;
+                }
+            }
+            FastAssertCompare(did_find, ==, true);
+        }
+
+        tmp_candidates.clear();
+    }
+
+    FastAssertCompare(seeds_count, ==, max_seeds_count);
 }
 
 // Score information for one node for one partition.
@@ -2548,7 +2575,7 @@ struct OptimizePartitions {
 
         auto this_score = score();
         auto other_score = other.score();
-        LOCATED_LOG(true) << " score: " << this_score << " ~ " << other_score << std::endl;
+        LOCATED_LOG(false) << " score: " << this_score << " ~ " << other_score << std::endl;
         assert(fabs(this_score - other_score) < 1e-3);
     }
 #endif
@@ -2581,7 +2608,7 @@ struct OptimizePartitions {
 
         bool did_improve = true;
         while (temperature > 0 || did_improve) {
-            LOCATED_LOG(true)                       //
+            LOCATED_LOG(false)                      //
                 << " temperature: " << temperature  //
                 << " cooldown: " << cooldown        //
                 << " score: " << score()            //
@@ -2615,7 +2642,7 @@ struct OptimizePartitions {
             }
         }
 
-        LOCATED_LOG(true)                       //
+        LOCATED_LOG(false)                      //
             << " temperature: " << temperature  //
             << " cooldown: " << cooldown        //
             << " score: " << score()            //
@@ -3048,9 +3075,9 @@ optimize_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                                  incoming_indptr_array,
                                  partition_of_nodes_array);
 
-#if ASSERT_LEVEL > 0
-    auto verify = [&]() {
-        LOCATED_LOG(false) << " VERIFY" << std::endl;
+#if ASSERT_LEVEL > 1
+    g_verify = = [&]() {
+        LOCATED_LOG(true) << " VERIFY" << std::endl;
         OptimizePartitions verifier(outgoing_weights_array,
                                     outgoing_indices_array,
                                     outgoing_indptr_array,
@@ -3058,23 +3085,15 @@ optimize_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                                     incoming_indices_array,
                                     incoming_indptr_array,
                                     partition_of_nodes_array);
-        LOCATED_LOG(false) << " COMPARE" << std::endl;
+        LOCATED_LOG(true) << " COMPARE" << std::endl;
         verifier.verify(optimizer);
-        LOCATED_LOG(false) << " VERIFIED" << std::endl;
+        LOCATED_LOG(true) << " VERIFIED" << std::endl;
     };
-#endif
-
-#if ASSERT_LEVEL > 1
-    g_verify = verify;
 #else
     g_verify = nullptr;
 #endif
 
     optimizer.optimize(random_seed, cooldown);
-
-#if ASSERT_LEVEL == 1
-    verify();
-#endif
 
     float64_t score = optimizer.score();
     return score;

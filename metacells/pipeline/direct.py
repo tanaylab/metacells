@@ -23,7 +23,7 @@ __all__ = [
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def compute_direct_metacells(
+def compute_direct_metacells(  # pylint: disable=too-many-statements
     adata: AnnData,
     what: Union[str, ut.Matrix] = '__x__',
     *,
@@ -238,6 +238,13 @@ def compute_direct_metacells(
 
     data = ut.get_vo_proper(fdata, 'downsampled', layout='row_major')
     data = ut.to_numpy_matrix(data, copy=True)
+
+    max_of_rows = ut.max_per(data, per='row')
+    zero_cell_indices = np.where(max_of_rows == 0)[0]
+    if len(zero_cell_indices) > 0:
+        full_data = ut.get_vo_proper(fdata, '__x__', layout='row_major')
+        for zero_cell in zero_cell_indices:
+            data[zero_cell, :] = full_data[zero_cell, :]
 
     if cells_similarity_value_normalization > 0:
         data += cells_similarity_value_normalization

@@ -77,13 +77,14 @@ def downsample_cells(
     '''
     total_per_cell = ut.get_o_numpy(adata, what, sum=True)
 
-    samples = min(max(downsample_min_samples,
-                      np.quantile(total_per_cell, downsample_min_cell_quantile)),
-                  np.quantile(total_per_cell, downsample_max_cell_quantile))
+    samples = round(min(max(downsample_min_samples,
+                            np.quantile(total_per_cell, downsample_min_cell_quantile)),
+                        np.quantile(total_per_cell, downsample_max_cell_quantile)))
 
     ut.log_calc('samples', samples)
 
     data = ut.get_vo_proper(adata, what, layout='row_major')
+    assert ut.matrix_dtype(data) == 'float32'
     downsampled = ut.downsample_matrix(data, per='row', samples=samples,
                                        random_seed=random_seed)
     if inplace:

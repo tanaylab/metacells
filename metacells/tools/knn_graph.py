@@ -377,6 +377,7 @@ def _prune_ranks(
         ut.timed_parameters(collected=pruned_ranks.nnz,
                             preserved=preserved_matrix.nnz)
         pruned_ranks = pruned_ranks.maximum(preserved_matrix)
+        pruned_ranks = pruned_ranks.maximum(preserved_matrix.transpose())
 
     ut.sort_compressed_indices(pruned_ranks)
 
