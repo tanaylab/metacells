@@ -4,6 +4,7 @@ python:
 - '3.7'
 
 install:
+- apt-get install g++-7
 - pip install -e .[test]
 
 script:
