@@ -19,32 +19,44 @@ Preparation
 Data Set
 --------
 
-* Download the `PBMC 163K
-  <http://www.wisdom.weizmann.ac.il/~atanay/metac_data/pbmc163k.h5ad.gz>`_ data file to the work
-  directory (use ``wget``, ``curl``, your browser's download function, whatever).
+The metacells package is built around the `scanpy https://pypi.org/project/scanpy/`_ framework. In
+particular it uses `anndata https://pypi.org/project/anndata/`_ to hold the analyzed data, and uses
+`.h5ad` files to persist this data on disk. You can access also these files directly from R using
+several packages, most notably `anndata https://cran.r-project.org/web/packages/anndata/index.html`.
 
-  This data is a unification of the following TenX sample data sets:
+You can convert data from various "standard" scRNA data formats into a `.h5ad` file using any of the
+functions available in the scanpy and/or anndata packages. Note that converting textual data to this
+format takes a "non-trivial" amount of time for large data sets. Mercifully, this is a one-time
+operation. Less excusable is the fact that none of the above packages memory-map the `.h5ad` files
+so reading large files will still take a noticeable amount of time for no good reason.
 
-  * `Fresh 68k PBMCs (Donor A) <https://support.10xgenomics.com/single-cell-gene-expression/datasets/1.1.0/fresh_68k_pbmc_donor_a>`_
+For the purposes of this vignette, we'll use a ~160K cells data set which is a unification of
+several batches of PBMC scRNA data from `TenX
+<https://support.10xgenomics.com/single-cell-gene-expression/datasets>`_, specifically from the
+"Single Cell 3' Paper: Zheng et al. 2017" datasets. Since 10x do not provide stable links to their
+data sets, and to avoid the long time it would take to convert their textual format files to `.h5ad`
+files, simply download the `PBMC 163K
+<http://www.wisdom.weizmann.ac.il/~atanay/metac_data/pbmc163k.h5ad.gz>`_ data file to your work
+directory (using ``wget``, ``curl``, your browser's download function, etc.).
 
-  * `CD19+ B Cells <https://support.10xgenomics.com/single-cell-gene-expression/datasets/1.1.0/b_cells>`_
+To save network bandwidth (download time), this file is compressed, so you will need to run ``gunzip
+pbmc163k.h5ad.gz`` to extract the ``pbmc163k.h5ad`` data to analyze.
 
-  * `CD14+ Monocytes <https://support.10xgenomics.com/single-cell-gene-expression/datasets/1.1.0/cd14_monocytes>`_
+Cleaning The Data
+-----------------
 
-  * `CD34+ Cells <https://support.10xgenomics.com/single-cell-gene-expression/datasets/1.1.0/cd34>`_
+The first step in processing the data is to extract a "clean" subset of it for further analysis. The
+exact details might vary depending on your specific data set's origins. Still, the metacells package
+supports a basic 2-phase procedure which should be useful in many cases.
 
-  * `CD4+ Helper T Cells <https://support.10xgenomics.com/single-cell-gene-expression/datasets/1.1.0/cd4_t_helper>`_
+Phase 1: Clean genes
+....................
 
-  * `CD56+ Natural Killer Cells <https://support.10xgenomics.com/single-cell-gene-expression/datasets/1.1.0/cd56_nk>`_
+There are several reasons to exclude genes from the "clean" data:
 
-  * `CD8+ Cytotoxic T cells <https://support.10xgenomics.com/single-cell-gene-expression/datasets/1.1.0/cytotoxic_t>`_
+- Genes whose inclusion in the data is detrimental to the analysis. The poster child for such genes
+  are mitochondrial genes, but other genes might interfere with the analysis to such a degree that
+  requires them to be completely excluded from the data.
 
-  * `CD4+/CD45RO+ Memory T Cells <https://support.10xgenomics.com/single-cell-gene-expression/datasets/1.1.0/memory_t>`_
-
-  * `CD8+/CD45RA+ Naive Cytotoxic T Cells <https://support.10xgenomics.com/single-cell-gene-expression/datasets/1.1.0/naive_cytotoxic>`_
-
-  * TODO: ``Naive T``
-
-  * TODO: ``Regular T``
-
-* ``gunzip pbmc163k.h5ad.gz`` to extract the ``pbmc163k.h5ad`` data to analyze.
+  Typically we create a file called `excluded_genes.txt` which contains one gene name per line,
+  and read it by wr

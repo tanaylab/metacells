@@ -254,7 +254,16 @@ def _collect_fold_factors(
 
         list_of_fold_factors.append(compressed)
 
-    assert remaining_cells_count == 0
+    if remaining_cells_count > 0:
+        assert remaining_cells_count == np.sum(candidate_of_cells < 0)
+        list_of_cell_index_of_rows.append(np.where(candidate_of_cells < 0)[0])
+        compressed = \
+            sparse.csr_matrix(([], [], [0] * (remaining_cells_count + 1)),
+                              shape=(remaining_cells_count, genes_count))
+        assert compressed.has_sorted_indices
+        assert compressed.has_canonical_format
+        list_of_fold_factors.append(compressed)
+
     return list_of_fold_factors, list_of_cell_index_of_rows
 
 
