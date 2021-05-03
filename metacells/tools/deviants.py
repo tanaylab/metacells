@@ -161,7 +161,7 @@ def find_deviant_cells(
 
 
 @ut.timed_call()
-def _collect_fold_factors(
+def _collect_fold_factors(  # pylint: disable=too-many-statements
     *,
     data: ut.ProperMatrix,
     candidate_of_cells: ut.NumpyVector,
