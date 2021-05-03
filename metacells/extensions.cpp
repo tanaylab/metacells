@@ -2581,10 +2581,6 @@ struct OptimizePartitions {
 #endif
 
     void optimize(const size_t random_seed, float64_t cooldown) {
-        if (partitions_count < 2) {
-            return;
-        }
-
         std::minstd_rand random(random_seed);
 
         TmpVectorSizeT indices_raii;
@@ -3077,7 +3073,7 @@ optimize_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
 
 #if ASSERT_LEVEL > 1
     g_verify = = [&]() {
-        LOCATED_LOG(true) << " VERIFY" << std::endl;
+        LOCATED_LOG(false) << " VERIFY" << std::endl;
         OptimizePartitions verifier(outgoing_weights_array,
                                     outgoing_indices_array,
                                     outgoing_indptr_array,
@@ -3085,9 +3081,9 @@ optimize_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                                     incoming_indices_array,
                                     incoming_indptr_array,
                                     partition_of_nodes_array);
-        LOCATED_LOG(true) << " COMPARE" << std::endl;
+        LOCATED_LOG(false) << " COMPARE" << std::endl;
         verifier.verify(optimizer);
-        LOCATED_LOG(true) << " VERIFIED" << std::endl;
+        LOCATED_LOG(false) << " VERIFIED" << std::endl;
     };
 #else
     g_verify = nullptr;
