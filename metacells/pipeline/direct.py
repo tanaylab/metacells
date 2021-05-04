@@ -244,7 +244,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements
     if len(zero_cell_indices) > 0:
         full_data = ut.get_vo_proper(fdata, '__x__', layout='row_major')
         for zero_cell in zero_cell_indices:
-            data[zero_cell, :] = full_data[zero_cell, :]
+            data[zero_cell, :] = ut.to_numpy_vector(full_data[zero_cell, :])
 
     if cells_similarity_value_normalization > 0:
         data += cells_similarity_value_normalization
