@@ -18,3 +18,6 @@ Pipeline
 .. automodule:: metacells.pipeline.collect
     :members:
 
+.. automodule:: metacells.pipeline.umap
+    :members:
+

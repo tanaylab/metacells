@@ -24,8 +24,8 @@ def compute_obs_obs_similarity(
     what: Union[str, ut.Matrix] = '__x__',
     *,
     method: str = pr.similarity_method,
-    location: float = pr.logistics_location,
-    scale: float = pr.logistics_scale,
+    logistics_location: float = pr.logistics_location,
+    logistics_scale: float = pr.logistics_scale,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
@@ -37,8 +37,8 @@ def compute_obs_obs_similarity(
     * ``logistics`` for computing the logistics function.
     * ``logistics_pearson`` for computing correlations-of-logistics.
 
-    If using the logistics function, use the ``scale`` (default: {scale}) and ``location`` (default:
-    {location}).
+    If using the logistics function, use the ``logistics_scale`` (default: {logistics_scale}) and
+    ``logistics_location`` (default: {logistics_location}).
 
     **Input**
 
@@ -69,8 +69,8 @@ def compute_obs_obs_similarity(
     '''
     return _compute_elements_similarity(adata, 'obs', 'row', what,
                                         method=method,
-                                        location=location,
-                                        scale=scale,
+                                        logistics_location=logistics_location,
+                                        logistics_scale=logistics_scale,
                                         inplace=inplace)
 
 
@@ -82,8 +82,8 @@ def compute_var_var_similarity(
     what: Union[str, ut.Matrix] = '__x__',
     *,
     method: str = pr.similarity_method,
-    location: float = pr.logistics_location,
-    scale: float = pr.logistics_scale,
+    logistics_location: float = pr.logistics_location,
+    logistics_scale: float = pr.logistics_scale,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
@@ -101,8 +101,8 @@ def compute_var_var_similarity(
     * ``logistics`` for computing the logistics function.
     * ``logistics_pearson`` for computing correlations-of-logistics.
 
-    If using the logistics function, use the ``scale`` (default: {scale}) and ``location`` (default:
-    {location}).
+    If using the logistics function, use the ``logistics_scale`` (default: {logistics_scale}) and
+    ``logistics_location`` (default: {logistics_location}).
 
     **Returns**
 
@@ -127,8 +127,8 @@ def compute_var_var_similarity(
     '''
     return _compute_elements_similarity(adata, 'var', 'column', what,
                                         method=method,
-                                        location=location,
-                                        scale=scale,
+                                        logistics_location=logistics_location,
+                                        logistics_scale=logistics_scale,
                                         inplace=inplace)
 
 
@@ -139,8 +139,8 @@ def _compute_elements_similarity(
     what: Union[str, ut.Matrix],
     *,
     method: str,
-    location: float,
-    scale: float,
+    logistics_location: float,
+    logistics_scale: float,
     inplace: bool,
 ) -> Optional[ut.PandasFrame]:
     assert elements in ('obs', 'var')
@@ -152,7 +152,8 @@ def _compute_elements_similarity(
 
     if method.startswith('logistics'):
         similarity = \
-            ut.logistics(data, location=location, scale=scale, per=per)
+            ut.logistics(data, location=logistics_location,
+                         scale=logistics_scale, per=per)
     else:
         similarity = ut.corrcoef(data, per=per)
 

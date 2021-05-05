@@ -5,18 +5,81 @@ High
 
 from typing import Optional, Union
 
+import numpy as np
 from anndata import AnnData
 
 import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
+    'find_top_feature_genes',
     'find_high_total_genes',
     'find_high_topN_genes',
     'find_high_fraction_genes',
     'find_high_normalized_variance_genes',
     'find_high_relative_variance_genes',
 ]
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def find_top_feature_genes(
+    adata: AnnData,
+    *,
+    max_genes: int = pr.max_top_feature_genes,
+    inplace: bool = True,
+) -> Optional[ut.PandasSeries]:
+    '''
+    Find genes which have high ``feature_gene`` value.
+
+    This is applied after computing metacells to pick the "strongest" feature genes. If using the
+    direct algorithm (:py:func:`metacells.pipeline.direct.compute_direct_metacells`) then all
+    feature genes are equally "strong"; however, if using the divide-and-conquer algorithm
+    (:py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`,
+    :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`) then this
+    will pick the genes which were most commonly used as features across all the piles.
+
+    **Input**
+
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``feature_gene`` is a per-variable (gene) annotation counting how many times each gene was used
+    as a feature.
+
+    **Returns**
+
+    Variable (Gene) Annotations
+        ``top_feature_gene``
+            A boolean mask indicating whether each gene was found to be a top feature gene.
+
+    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
+    ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
+
+    **Computation Parameters**
+
+    1. Look for the lowest positive ``feature_gene`` threshold such that at most ``max_genes`` are
+       picked as top feature genes. Note we may still pick more than ``max_genes``, for example when
+       using the direct algorithm, we always return all feature genes as there's no way to
+       distinguish between them using the ``feature_gene`` data.
+    '''
+    feature_of_gene = \
+        ut.get_v_numpy(adata, 'feature_gene', formatter=ut.mask_description)
+    max_threshold = np.max(feature_of_gene)
+    assert max_threshold > 0
+    threshold = 0
+    selected_count = max_genes + 1
+    while selected_count > max_genes and threshold < max_threshold:
+        threshold = threshold + 1
+        genes_mask = feature_of_gene >= threshold
+        selected_count = np.sum(genes_mask)
+        ut.log_calc(f'threshold: {threshold} selected: {selected_count}')
+
+    if inplace:
+        ut.set_v_data(adata, 'top_feature_gene', genes_mask)
+        return None
+
+    ut.log_return('top_feature_gene', genes_mask)
+    return ut.to_pandas_series(genes_mask, index=adata.var_names)
 
 
 @ut.logged()

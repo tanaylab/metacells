@@ -159,8 +159,9 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements
        ``random_seed`` (default: {random_seed})
        to make this replicable.
 
-    2. Compute the fractions of each variable in each cell, using using the
-       ``cells_similarity_value_normalization`` (default: {cells_similarity_value_normalization}).
+    2. Compute the fractions of each variable in each cell, and add the
+       ``cells_similarity_value_normalization`` (default: {cells_similarity_value_normalization}) to
+       it.
 
     3. If ``cells_similarity_log_data`` (default: {cells_similarity_log_data}), invoke the
        :py:func:`metacells.utilities.computation.log_data` function to compute the log (base 2) of

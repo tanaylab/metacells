@@ -16,3 +16,4 @@ from .collect import *
 from .direct import *
 from .divide_and_conquer import *
 from .feature import *
+from .umap import *

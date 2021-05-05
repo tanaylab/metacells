@@ -84,6 +84,7 @@ relative_variance_window_size: int = 100
 similarity_method: str = 'pearson'
 
 #: The default location for the logistics function. See
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`,
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
 #: :py:func:`metacells.tools.similarity.compute_var_var_similarity`.
 #: and
@@ -91,6 +92,7 @@ similarity_method: str = 'pearson'
 logistics_location: float = 0.8
 
 #: The default scale for the logistics function. See
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`,
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
 #: :py:func:`metacells.tools.similarity.compute_var_var_similarity`.
 #: and
@@ -671,14 +673,44 @@ excess_shuffles_count: int = 10
 #: :py:func:`metacells.tools.distinct.find_distinct_genes`.
 distinct_genes_count: int = 20
 
-#: The minimal UMAP point distance. See also :py:const:`umap_spread`.
+#: The normalization factor to use if/when computing the fractions of the data for UMAP.
+#: See
+#: :py:const:`metacells.parameters.target_metacell_size`
+#: and
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+umap_similarity_value_normalization: float = 1/target_metacell_size
+
+#: Whether to compute metacell-metacell similarity using the log (base 2) of the data for UMAP. See
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+umap_similarity_log_data: bool = True
+
+#: The method to use to compute similarities for UMAP. See
+#: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
+#: and
+#: :py:func:`metacells.tools.similarity.compute_var_var_similarity`.
+umap_similarity_method: str = 'logistics_pearson'
+
+#: The minimal UMAP point distance. See :py:const:`umap_spread` and
+#: :py:func:`metacells.tools.layout.umap_by_distances`.
 umap_min_dist: float = 0.5
 
 #: The minimal UMAP spread. This is automatically raised if the :py:const:`umap_min_dist` is higher.
+#: See :py:func:`metacells.tools.layout.umap_by_distances`.
 umap_spread: float = 1.0
 
-#: The UMAP KNN graph degree. See :py:func:`metacells.tools.layout.umap_by_distances`.
+#: The UMAP KNN graph degree. See
+#: :py:func:`metacells.tools.layout.umap_by_distances`.
 umap_k: int = 15
+
+#: The maximal number of top feature genes to pick.
+#: See :py:func:`metacells.tools.high.find_top_feature_genes`
+#: and
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+max_top_feature_genes: int = 1000
+
+#: The value to add to gene fractions before applying the log function. See
+#: See :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+umap_fraction_normalization: float = 1e-5
 
 #: The fraction of the UMAP plot area to cover with points. See
 #: :py:func:`metacells.utilities.computation.cover_diameter`,

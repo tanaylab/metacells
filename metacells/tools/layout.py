@@ -3,6 +3,8 @@ Layout
 ------
 '''
 
+from typing import Optional, Union
+
 import numpy as np
 import scipy.sparse as sp  # type: ignore
 import umap  # type: ignore
@@ -22,12 +24,13 @@ __all__ = [
 @ut.expand_doc()
 def umap_by_distances(
     adata: AnnData,
-    distances: str = 'umap_distances',
+    distances: Union[str, ut.ProperMatrix] = 'umap_distances',
     *,
     prefix: str = 'umap',
     k: int = pr.umap_k,
     min_dist: float = pr.umap_min_dist,
     spread: float = pr.umap_spread,
+    random_seed: int = pr.random_seed,
 ) -> None:
     '''
     Compute layout for the observations using UMAP, based on a distances matrix.
@@ -51,22 +54,32 @@ def umap_by_distances(
 
     1. Invoke UMAP to compute the layout using ``min_dist`` (default: {min_dist}), ``spread``
        (default: {spread}) and ``k`` (default: {k}). If the spread is lower than the minimal
-       distance, it is raised.
+       distance, it is raised. If ``random_seed`` (default: {random_seed}) is not zero, then it is
+       passed to UMAP to force the computation to be reproducible. However, this means UMAP will use
+       a single-threaded implementation that will be slower.
     '''
-    distances_matrix = ut.get_oo_proper(adata, distances)
-    spread = max(min_dist, spread)
-
-    # UMAP implementation dies when given a dense matrix.
+    if isinstance(distances, str):
+        distances_matrix = ut.get_oo_proper(adata, distances)
+    else:
+        distances_matrix = distances
+    # UMAP dies when given a dense matrix.
     distances_csr = sp.csr_matrix(distances_matrix)
+
+    spread = max(min_dist, spread)  # UMAP insists.
 
     # UMAP implementation doesn't know to reduce K by itself.
     n_neighbors = min(k, adata.n_obs - 2)
+
+    random_state: Optional[int] = None
+    if random_seed != 0:
+        random_state = random_seed
 
     try:
         coordinates = umap.UMAP(metric='precomputed',
                                 n_neighbors=n_neighbors,
                                 spread=spread,
-                                min_dist=min_dist).fit_transform(distances_csr)
+                                min_dist=min_dist,
+                                random_state=random_state).fit_transform(distances_csr)
     except ValueError:
         # UMAP implementation doesn't know how to handle too few edges.
         # However, it considers structural zeros as real edges.
@@ -77,7 +90,8 @@ def umap_by_distances(
         coordinates = umap.UMAP(metric='precomputed',
                                 n_neighbors=n_neighbors,
                                 spread=spread,
-                                min_dist=min_dist).fit_transform(distances_csr)
+                                min_dist=min_dist,
+                                random_state=random_state).fit_transform(distances_csr)
 
     x_coordinates = ut.to_numpy_vector(coordinates[:, 0], copy=True)
     y_coordinates = ut.to_numpy_vector(coordinates[:, 1], copy=True)

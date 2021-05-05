@@ -31,6 +31,7 @@ __all__ = [
 @ut.expand_doc()
 def analyze_clean_genes(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
     properly_sampled_min_gene_total: int = pr.properly_sampled_min_gene_total,
     noisy_lonely_max_sampled_cells: int = pr.noisy_lonely_max_sampled_cells,
@@ -85,7 +86,7 @@ def analyze_clean_genes(
        ``excluded_gene_patterns`` (default: {excluded_gene_patterns}). This is stored in a
        per-variable (gene) ``excluded_genes`` boolean mask.
     '''
-    tl.find_properly_sampled_genes(adata,
+    tl.find_properly_sampled_genes(adata, what,
                                    min_gene_total=properly_sampled_min_gene_total)
 
     excluded_genes_mask: Optional[str]
@@ -98,7 +99,7 @@ def analyze_clean_genes(
     else:
         excluded_genes_mask = None
 
-    tl.find_noisy_lonely_genes(adata,
+    tl.find_noisy_lonely_genes(adata, what,
                                excluded_genes_mask=excluded_genes_mask,
                                max_sampled_cells=noisy_lonely_max_sampled_cells,
                                downsample_min_samples=noisy_lonely_downsample_min_samples,
@@ -149,6 +150,7 @@ def pick_clean_genes(  # pylint: disable=dangerous-default-value
 @ut.timed_call()
 def analyze_clean_cells(
     adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
     *,
     properly_sampled_min_cell_total: Optional[int],
     properly_sampled_max_cell_total: Optional[int],
@@ -197,7 +199,7 @@ def analyze_clean_cells(
     else:
         max_excluded_genes_fraction = properly_sampled_max_excluded_genes_fraction
 
-    tl.find_properly_sampled_cells(adata,
+    tl.find_properly_sampled_cells(adata, what,
                                    min_cell_total=properly_sampled_min_cell_total,
                                    max_cell_total=properly_sampled_max_cell_total,
                                    excluded_adata=excluded_adata,
