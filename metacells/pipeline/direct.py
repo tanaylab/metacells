@@ -275,6 +275,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements
                                      incoming_degree_factor=knn_incoming_degree_factor,
                                      outgoing_degree_factor=knn_outgoing_degree_factor)
 
+
         tl.compute_candidate_metacells(fdata,
                                        target_metacell_size=target_metacell_size,
                                        cell_sizes=cell_sizes,

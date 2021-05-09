@@ -248,8 +248,8 @@ def choose_seeds(
     edge_weights: ut.CompressedMatrix,
     seed_of_cells: Optional[ut.NumpyVector] = None,
     max_seeds_count: int,
-    min_seed_size_quantile: float,
-    max_seed_size_quantile: float,
+    min_seed_size_quantile: float = pr.min_seed_size_quantile,
+    max_seed_size_quantile: float = pr.max_seed_size_quantile,
     random_seed: int,
 ) -> ut.NumpyVector:
     '''
@@ -341,7 +341,7 @@ def optimize_partitions(
     *,
     edge_weights: ut.CompressedMatrix,
     community_of_nodes: ut.NumpyVector,
-    cooldown: float,
+    cooldown: float = 1.0 - pr.cooldown_step,
     random_seed: int,
 ) -> float:
     '''
