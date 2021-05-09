@@ -308,7 +308,7 @@ def _balance_ranks(
         ut.to_numpy_vector(dense_balanced_ranks[preserved_row_indices,
                                                 preserved_column_indices])
 
-    preserved_balanced_ranks[preserved_balanced_ranks < 0] = 1
+    preserved_balanced_ranks[preserved_balanced_ranks < 1] = 1
 
     dense_balanced_ranks[dense_balanced_ranks < 0] = 0
     np.fill_diagonal(dense_balanced_ranks, 0)

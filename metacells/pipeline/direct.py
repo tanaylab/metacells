@@ -247,6 +247,10 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements
         for zero_cell in zero_cell_indices:
             data[zero_cell, :] = ut.to_numpy_vector(full_data[zero_cell, :])
 
+    max_of_rows = ut.max_per(data, per='row')
+    zero_cell_indices = np.where(max_of_rows == 0)[0]
+    assert len(zero_cell_indices) == 0
+
     if cells_similarity_value_normalization > 0:
         data += cells_similarity_value_normalization
 
@@ -274,7 +278,6 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements
                                      balanced_ranks_factor=knn_balanced_ranks_factor,
                                      incoming_degree_factor=knn_incoming_degree_factor,
                                      outgoing_degree_factor=knn_outgoing_degree_factor)
-
 
         tl.compute_candidate_metacells(fdata,
                                        target_metacell_size=target_metacell_size,
