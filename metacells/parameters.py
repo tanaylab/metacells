@@ -434,6 +434,15 @@ groups_similarity_method: str = similarity_method
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 knn_k: Optional[int] = None
 
+#: The minimal target K for building the K-Nearest-Neighbors graph. See
+#: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
+#: :py:func:`metacells.tools.knn_graph.compute_var_var_knn_graph`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+min_knn_k: Optional[int] = 30
+
 #: The factor of K edge ranks to keep when computing the balanced ranks for the
 #: K-Nearest-Neighbors graph. See
 #: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,

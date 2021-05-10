@@ -1966,11 +1966,11 @@ collect_connected_nodes(ConstCompressedMatrix<float32_t, int32_t, int32_t>& inco
         if (seed_of_nodes[node_index] >= 0) {
             continue;
         }
-        auto node_outgoing = incoming_weights.get_band_indices(node_index);
+        auto node_incoming = incoming_weights.get_band_indices(node_index);
         auto& node_connected = connected_nodes[node_index];
-        node_connected.resize(node_outgoing.size());
-        auto copied = std::copy_if(node_outgoing.begin(),
-                                   node_outgoing.end(),
+        node_connected.resize(node_incoming.size());
+        auto copied = std::copy_if(node_incoming.begin(),
+                                   node_incoming.end(),
                                    node_connected.begin(),
                                    [&](int32_t other_node_index) {
                                        return seed_of_nodes[other_node_index] < 0;
@@ -2034,11 +2034,11 @@ choose_seed_node(const std::vector<size_t>& tmp_candidates,
 
 template<typename T>
 static void
-remove_sorted(std::vector<T>& vector, T value, bool must_exist) {
+remove_sorted(std::vector<T>& vector, T value) {
     auto position = std::lower_bound(vector.begin(), vector.end(), value);
     if (position != vector.end() && *position == value) {
         vector.erase(position);
-    } else if (must_exist) {
+    } else {
         LOCATED_LOG(true) << " OOPS! removing nonexistent value" << std::endl;
         assert(false);
     }
@@ -2046,39 +2046,65 @@ remove_sorted(std::vector<T>& vector, T value, bool must_exist) {
 
 static void
 store_seed_node(ConstCompressedMatrix<float32_t, int32_t, int32_t>& outgoing_weights,
+                ConstCompressedMatrix<float32_t, int32_t, int32_t>& incoming_weights,
                 const size_t seed_index,
                 const size_t seed_node_index,
                 std::vector<size_t>& tmp_candidates,
                 std::vector<std::vector<int32_t>>& connected_nodes,
-                ArraySlice<int32_t> seed_of_nodes) {
-    remove_sorted(tmp_candidates, seed_node_index, true);
+                ArraySlice<int32_t> seed_of_nodes,
+                const size_t seed_size) {
+    remove_sorted(tmp_candidates, seed_node_index);
 
-    auto seed_outgoing_nodes = outgoing_weights.get_band_indices(seed_node_index);
-    for (int32_t node_index : seed_outgoing_nodes) {
-        if (seed_of_nodes[node_index] < 0) {
-            remove_sorted(connected_nodes[node_index], int32_t(seed_node_index), true);
-        }
+    auto seed_incoming_nodes = incoming_weights.get_band_indices(seed_node_index);
+    auto seed_incoming_weights = incoming_weights.get_band_data(seed_node_index);
+
+    TmpVectorSizeT positions_raii;
+    auto tmp_positions = positions_raii.vector(seed_incoming_nodes.size());
+    std::iota(tmp_positions.begin(), tmp_positions.end(), 0);
+
+    tmp_positions.erase(std::remove_if(tmp_positions.begin(),
+                                       tmp_positions.end(),
+                                       [&](int position) {
+                                           return seed_of_nodes[seed_incoming_nodes[position]] >= 0;
+                                       }),
+                        tmp_positions.end());
+    if (seed_size < tmp_positions.size()) {
+        std::nth_element(tmp_positions.begin(),
+                         tmp_positions.begin() + seed_size,
+                         tmp_positions.end(),
+                         [&](const size_t left_position, const size_t right_position) {
+                             return seed_incoming_weights[left_position]
+                                    > seed_incoming_weights[right_position];
+                         });
+        tmp_positions.resize(seed_size);
     }
 
     FastAssertCompare(seed_of_nodes[seed_node_index], <, 0);
     seed_of_nodes[seed_node_index] = seed_index;
+    connected_nodes[seed_node_index].clear();
 
-    for (int32_t node_index : connected_nodes[seed_node_index]) {
-        auto outgoing_nodes = outgoing_weights.get_band_indices(node_index);
-        for (size_t other_node_index : outgoing_nodes) {
-            if (seed_of_nodes[other_node_index] < 0) {
-                remove_sorted(connected_nodes[other_node_index], node_index, true);
-            }
+    for (auto position : tmp_positions) {
+        auto node_index = seed_incoming_nodes[position];
+        connected_nodes[node_index].clear();
+        seed_of_nodes[node_index] = seed_index;
+    }
+
+    auto outgoing_nodes = outgoing_weights.get_band_indices(seed_node_index);
+    for (size_t node_index : outgoing_nodes) {
+        if (seed_of_nodes[node_index] < 0) {
+            remove_sorted(connected_nodes[node_index], int32_t(seed_node_index));
         }
     }
 
-    for (int32_t node_index : connected_nodes[seed_node_index]) {
-        SlowAssertCompare(seed_of_nodes[node_index], <, 0);
-        seed_of_nodes[node_index] = seed_index;
-        remove_sorted(tmp_candidates, size_t(node_index), false);
+    for (auto position : tmp_positions) {
+        auto node_index = seed_incoming_nodes[position];
+        auto outgoing_nodes = outgoing_weights.get_band_indices(node_index);
+        for (size_t other_node_index : outgoing_nodes) {
+            if (seed_of_nodes[other_node_index] < 0) {
+                remove_sorted(connected_nodes[other_node_index], node_index);
+            }
+        }
     }
-
-    connected_nodes[seed_node_index].clear();
 }
 
 static bool
@@ -2149,6 +2175,11 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
         size_t(*std::max_element(seed_of_nodes.begin(), seed_of_nodes.end()) + 1);
     size_t seeds_count = given_seeds_count;
 
+    FastAssertCompare(tmp_candidates.size(), >=, max_seeds_count - given_seeds_count);
+    size_t mean_seed_size =
+        size_t(ceil(tmp_candidates.size() / (max_seeds_count - given_seeds_count)));
+    FastAssertCompare(mean_seed_size, >=, 1);
+
     while (seeds_count < max_seeds_count
            && keep_large_candidates(tmp_candidates, connected_nodes)) {
         size_t seed_node_index = choose_seed_node(tmp_candidates,
@@ -2158,16 +2189,18 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
                                                   random);
 
         store_seed_node(outgoing_weights,
+                        incoming_weights,
                         seeds_count,
                         seed_node_index,
                         tmp_candidates,
                         connected_nodes,
-                        seed_of_nodes);
+                        seed_of_nodes,
+                        mean_seed_size);
         ++seeds_count;
     }
 
-    FastAssertCompare(seeds_count, >, given_seeds_count);
     size_t strong_seeds_count = seeds_count;
+    FastAssertCompare(strong_seeds_count, >, given_seeds_count);
 
     if (seeds_count < max_seeds_count) {
         std::random_shuffle(tmp_candidates.begin(), tmp_candidates.end(), [&](size_t n) {
@@ -2182,65 +2215,35 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
         }
     }
 
-    TmpVectorSizeT seed_nodes_raii;
-    auto tmp_seed_nodes = candidates_raii.vector(nodes_count);
     if (seeds_count < max_seeds_count) {
-        std::iota(tmp_seed_nodes.begin(), tmp_seed_nodes.end(), 0);
-        std::random_shuffle(tmp_seed_nodes.begin(), tmp_seed_nodes.end(), [&](size_t n) {
-            return random() % n;
-        });
-    }
-
-    if (seeds_count < max_seeds_count) {
-        FastAssertCompare(tmp_candidates.size(), ==, 0);
-        tmp_candidates.resize(strong_seeds_count - given_seeds_count);
-        std::iota(tmp_candidates.begin(), tmp_candidates.end(), given_seeds_count);
-        std::random_shuffle(tmp_candidates.begin(), tmp_candidates.end(), [&](size_t n) {
-            return random() % n;
-        });
-
-        while (tmp_candidates.size() > 0 && seeds_count < max_seeds_count) {
-            auto seed_index = tmp_candidates.back();
-            tmp_candidates.pop_back();
-            bool did_find = false;
-            for (auto node_index : tmp_seed_nodes) {
-                if (size_t(seed_of_nodes[node_index]) == seed_index) {
-                    seed_of_nodes[node_index] = seeds_count;
-                    seeds_count += 1;
-                    did_find = true;
-                    break;
-                }
-            }
-            FastAssertCompare(did_find, ==, true);
-        }
-
-        tmp_candidates.clear();
-    }
-
-    if (seeds_count < max_seeds_count) {
-        FastAssertCompare(tmp_candidates.size(), ==, 0);
-        tmp_candidates.resize(given_seeds_count);
+        tmp_candidates.resize(nodes_count);
         std::iota(tmp_candidates.begin(), tmp_candidates.end(), 0);
         std::random_shuffle(tmp_candidates.begin(), tmp_candidates.end(), [&](size_t n) {
             return random() % n;
         });
 
-        while (tmp_candidates.size() > 0 && seeds_count < max_seeds_count) {
-            auto seed_index = tmp_candidates.back();
-            tmp_candidates.pop_back();
-            bool did_find = false;
-            for (auto node_index : tmp_seed_nodes) {
+        size_t failed_attempts = 0;
+        while (seeds_count < max_seeds_count) {
+            auto seed_index =
+                random() % (strong_seeds_count - given_seeds_count) + given_seeds_count;
+            bool did_find_first_node = false;
+
+            failed_attempts += 1;
+            for (auto node_index : tmp_candidates) {
                 if (size_t(seed_of_nodes[node_index]) == seed_index) {
-                    seed_of_nodes[node_index] = seeds_count;
-                    seeds_count += 1;
-                    did_find = true;
-                    break;
+                    if (!did_find_first_node) {
+                        did_find_first_node = true;
+                    } else {
+                        seed_of_nodes[node_index] = seeds_count;
+                        seeds_count += 1;
+                        failed_attempts = 0;
+                        break;
+                    }
                 }
             }
-            FastAssertCompare(did_find, ==, true);
-        }
 
-        tmp_candidates.clear();
+            FastAssertCompare(failed_attempts, <, 10 * (strong_seeds_count - given_seeds_count));
+        }
     }
 
     FastAssertCompare(seeds_count, ==, max_seeds_count);

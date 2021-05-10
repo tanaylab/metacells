@@ -23,7 +23,7 @@ __all__ = [
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def compute_direct_metacells(  # pylint: disable=too-many-statements
+def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-branches
     adata: AnnData,
     what: Union[str, ut.Matrix] = '__x__',
     *,
@@ -40,6 +40,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements
     cells_similarity_method: str = pr.cells_similarity_method,
     target_metacell_size: int = pr.target_metacell_size,
     knn_k: Optional[int] = pr.knn_k,
+    min_knn_k: Optional[int] = pr.min_knn_k,
     knn_balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     knn_incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     knn_outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
@@ -178,7 +179,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements
        and
        ``knn_outgoing_degree_factor`` (default: {knn_outgoing_degree_factor}).
        If ``knn_k`` (default: {knn_k}) is not specified, then it is
-       chosen to be the mean number of cells required to reach the target metacell size.
+       chosen to be the median number of cells required to reach the target metacell size,
+       but at least ``min_knn_k`` (default: {min_knn_k}).
 
     6. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
        the candidate metacells, using the
@@ -261,16 +263,24 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements
 
     if knn_k is None:
         if cell_sizes is None:
-            total_cell_sizes: float = fdata.n_obs
+            median_cell_size = 1.0
         else:
-            total_cell_sizes = float(np.sum(cell_sizes))
-        knn_k = round(fdata.n_obs * target_metacell_size / total_cell_sizes)
+            median_cell_size = float(np.median(cell_sizes))
+        knn_k = round(target_metacell_size / median_cell_size)
+        if min_knn_k is not None:
+            knn_k = max(knn_k, min_knn_k)
 
     if knn_k == 0:
         ut.log_calc('knn_k: 0 (too small, try single metacell)')
         ut.set_o_data(fdata, 'candidate',
                       np.full(fdata.n_obs, 0, dtype='int32'),
                       formatter=lambda _: '* <- 0')
+    elif knn_k >= fdata.n_obs:
+        ut.log_calc(f'knn_k: {knn_k} (too large, try single metacell)')
+        ut.set_o_data(fdata, 'candidate',
+                      np.full(fdata.n_obs, 0, dtype='int32'),
+                      formatter=lambda _: '* <- 0')
+
     else:
         ut.log_calc('knn_k', knn_k)
         tl.compute_obs_obs_knn_graph(fdata,
