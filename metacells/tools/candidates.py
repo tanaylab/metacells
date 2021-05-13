@@ -28,13 +28,14 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
     adata: AnnData,
     what: Union[str, ut.Matrix] = 'obs_outgoing_weights',
     *,
-    target_metacell_size: int,
+    target_metacell_size: float,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.candidates_cell_sizes,
     cell_seeds: Optional[Union[str, ut.Vector]] = None,
     min_seed_size_quantile: float = pr.min_seed_size_quantile,
     max_seed_size_quantile: float = pr.max_seed_size_quantile,
-    cooldown_step: float = pr.cooldown_step,
-    cooldown_rate: float = pr.cooldown_rate,
+    cooldown_pass: float = pr.cooldown_pass,
+    cooldown_node: float = pr.cooldown_node,
+    cooldown_phase: float = pr.cooldown_phase,
     min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
     min_metacell_cells: Optional[int] = pr.candidates_min_metacell_cells,
@@ -71,12 +72,6 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
        (default: {cell_sizes}) to assign a size for each node (cell). This can be a string name of a
        per-observation annotation or a vector of values.
 
-       .. note::
-
-            The cell sizes are converted to integer values, so if you have floating point sizes,
-            make sure to scale them (and the target metacell size) so that the resulting integer
-            values would make sense.
-
     2. We start with some an assignment of cells to ``cell_seeds`` (default: {cell_seeds}). If no
        seeds are provided, we use :py:func:`choose_seeds` using ``min_seed_size_quantile`` (default:
        {min_seed_size_quantile}) and ``max_seed_size_quantile`` (default: {max_seed_size_quantile})
@@ -86,26 +81,28 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
     3. We optimize the seeds using :py:func:`optimize_partitions` to obtain initial communities by
        maximizing the "stability" of the solution (probability of starting at a random node and
        moving either forward or backward in the graph and staying within the same metacell, divided
-       by the probability of staying in the metacell if the edges connected random nodes). We use a
-       ``cooldown`` parameter of ``1 - cooldown_step / nodes_count``.
+       by the probability of staying in the metacell if the edges connected random nodes). We pass
+       it the ``cooldown_pass`` {cooldown_pass}) and ``cooldown_node`` (default: {cooldown_node}).
 
     4. If ``min_split_size_factor`` (default: {min_split_size_factor}) is specified, randomly split
        to two each community whose size is partition method on each community whose size is at least
        ``target_metacell_size * min_split_size_factor`` and re-optimize the solution (resulting in
-       one additional metacell). Every time we re-optimize, we multiply the ``cooldown`` by the
-       ``cooldown_rate`` (default: {cooldown_rate}).
+       one additional metacell). Every time we re-optimize, we multiply 1 - ``cooldown_pass`` by
+       1 - ``cooldown_phase`` (default: {cooldown_phase}).
 
     5. If ``max_merge_size_factor`` (default: {max_merge_size_factor}) or ``min_metacell_cells``
        (default: {min_metacell_cells}) are specified, make outliers of cells of a community whose
        size is at most ``target_metacell_size * max_merge_size_factor`` or contains less cells and
        re-optimize, which will assign these cells to other metacells (resulting on one less
-       metacell). We again apply the ``cooldown_rate`` every time we re-optimize.
+       metacell). We again apply the ``cooldown_phase`` every time we re-optimize.
 
     6. Repeat the above steps until all metacells candidates are in the acceptable size range.
     '''
     edge_weights = ut.get_oo_proper(adata, what, layout='row_major')
     assert edge_weights.shape[0] == edge_weights.shape[1]
-    assert 0.0 <= cooldown_rate <= 1.0
+    assert 0.0 < cooldown_pass < 1.0
+    assert 0.0 <= cooldown_node <= 1.0
+    assert 0.0 < cooldown_phase <= 1.0
 
     size = edge_weights.shape[0]
 
@@ -127,9 +124,9 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
     node_sizes = \
         ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
     if node_sizes is None:
-        node_sizes = np.full(size, 1, dtype='int32')
+        node_sizes = np.full(size, 1.0, dtype='float32')
     else:
-        node_sizes = node_sizes.astype('int32')
+        node_sizes = node_sizes.astype('float32')
     ut.log_calc('node_sizes', node_sizes, formatter=ut.sizes_description)
 
     assert target_metacell_size > 0
@@ -181,7 +178,6 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
     community_of_nodes = community_of_nodes.copy()
 
     np.random.seed(random_seed)
-    cooldown = 1 - (cooldown_step / size)
 
     phase = 'splitting'
     optimized_communities = [community_of_nodes.copy()]
@@ -193,7 +189,8 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
                                  incoming_edge_weights=incoming_edge_weights,
                                  community_of_nodes=community_of_nodes,
                                  random_seed=random_seed,
-                                 cooldown=cooldown)
+                                 cooldown_pass=cooldown_pass,
+                                 cooldown_node=cooldown_node)
         optimized_communities.append(community_of_nodes.copy())
         optimized_scores.append(score)
         ut.log_calc('communities', community_of_nodes,
@@ -218,7 +215,7 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
             break
         assert phase in ('splitting', 'merging')
 
-        cooldown *= cooldown_rate
+        cooldown_pass = 1 - (1 - cooldown_pass) * (1 - cooldown_phase)
 
         if new_communities > 0:
             target_seeds_count = kept_communities + new_communities
@@ -341,7 +338,8 @@ def optimize_partitions(
     *,
     edge_weights: ut.CompressedMatrix,
     community_of_nodes: ut.NumpyVector,
-    cooldown: float = 1.0 - pr.cooldown_step,
+    cooldown_pass: float = pr.cooldown_pass,
+    cooldown_node: float = pr.cooldown_node,
     random_seed: int,
 ) -> float:
     '''
@@ -364,9 +362,14 @@ def optimize_partitions(
     function (considering the impact on this product for all other nodes connected to the current
     node).
 
-    We define a notion of ``temperature`` (initially, the ``cooldown``) and we give a weight of
-    ``temperature`` to the local score and (1 - ``temperature``) to the global score. When we move
-    to the next node, we multiply the ``temperature`` by the ``cooldown``.
+    We define a notion of ``temperature`` (initially, 1 - ``cooldown_pass``, default:
+    {cooldown_pass}) and we give a weight of ``temperature`` to the local score and
+    (1 - ``temperature``) to the global score. When we move to the next node, we multiply the
+    temperature by 1 - ``cooldown_pass``. If we did not move the node, we multiply its temperature
+    by ``cooldown_node`` (default: {cooldown_node}). We skip looking at nodes which are colder from
+    the global temperature to accelerate the algorithm. If we don't move any node, we reduce the
+    global temperature below that of any cold node; if there are no such nodes, we reduce it to zero
+    to perform a final hill-climbing phase.
 
     This simulated-annealing-like behavior helps the algorithm to escape local maximums, although of
     course no claim is made of achieving the global maximum of the goal function.
@@ -381,7 +384,8 @@ def optimize_partitions(
     return _optimize_partitions(outgoing_edge_weights=outgoing_edge_weights,
                                 incoming_edge_weights=incoming_edge_weights,
                                 random_seed=random_seed,
-                                cooldown=cooldown,
+                                cooldown_pass=cooldown_pass,
+                                cooldown_node=cooldown_node,
                                 community_of_nodes=community_of_nodes)
 
 
@@ -391,7 +395,8 @@ def _optimize_partitions(
     outgoing_edge_weights: ut.CompressedMatrix,
     incoming_edge_weights: ut.CompressedMatrix,
     community_of_nodes: ut.NumpyVector,
-    cooldown: float,
+    cooldown_pass: float,
+    cooldown_node: float,
     random_seed: int,
 ) -> float:
     assert community_of_nodes.dtype == 'int32'
@@ -402,7 +407,8 @@ def _optimize_partitions(
                                    incoming_edge_weights.indices,
                                    incoming_edge_weights.indptr,
                                    random_seed,
-                                   cooldown,
+                                   cooldown_pass,
+                                   cooldown_node,
                                    community_of_nodes)
     ut.log_calc('score', score)
     return score
@@ -457,7 +463,7 @@ def _patch_communities(  # pylint: disable=too-many-branches
     community_of_nodes: ut.NumpyVector,
     phase: str,
     node_sizes: ut.NumpyVector,
-    target_metacell_size: int,
+    target_metacell_size: float,
     min_metacell_size: Optional[float],
     min_metacell_cells: Optional[int],
     max_metacell_size: Optional[float]
@@ -494,6 +500,7 @@ def _patch_communities(  # pylint: disable=too-many-branches
         if phase == 'merging':
             return ('revert', -1, -1)
         new_count = ceil(cancelled_total_size / target_metacell_size)
+        assert new_count > len(cancelled_communities)
 
     else:
         if phase == 'splitting':

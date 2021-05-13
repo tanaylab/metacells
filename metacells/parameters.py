@@ -112,7 +112,23 @@ target_pile_size: int = 10000
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-target_metacell_size: int = 160000
+target_metacell_size: float = 160000
+
+#: The maximal cell size (total UMIs) to use. See
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
+#: and
+#: py:func:`metacells.pipeline.collect.collect_metacells`.
+max_cell_size: Optional[float] = None
+
+#: The maximal cell size as a factor of the median cell size. See
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
+#: and
+#: py:func:`metacells.pipeline.collect.collect_metacells`.
+max_cell_size_factor: Optional[float] = 2.0
 
 #: The genetic size of each cell for computing each metacell's size. See
 #: :py:const:`candidates_cell_sizes`,
@@ -121,6 +137,7 @@ target_metacell_size: int = 160000
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
 #: and
+#: :py:func:`metacells.pipeline.collect.collect_metacells`.
 cell_sizes: Union[str, utt.Vector] = '__x__|sum'
 
 #: The generic maximal group size factor, above which we should split it. See
@@ -491,19 +508,27 @@ min_seed_size_quantile: float = 0.85
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 max_seed_size_quantile: float = 0.95
 
-#: How much to cooldown the temperature after doing a minimal (single node) improvement step. See
+#: By how much (as a fraction) to cooldown the temperature after doing a pass on all the nodes. See
 #: :py:func:`metacells.tools.candidates.compute_candidate_metacells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells` and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-cooldown_step: float = 0.1
+cooldown_pass: float = 0.01
 
-#: How much to reduce the cooldown each time we re-optimize a slightly modified partition. See
+#: By how much (as a fraction) to cooldown the node temperature after improving it. See
 #: :py:func:`metacells.tools.candidates.compute_candidate_metacells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells` and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-cooldown_rate: float = 0.5
+cooldown_node: float = 0.25
+
+#: By how much (as a fraction) to reduce the cooldown each time we re-optimize a slightly modified
+#: partition. See
+#: :py:func:`metacells.tools.candidates.compute_candidate_metacells`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells` and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+cooldown_phase: float = 0.01
 
 #: The target total cluster size for clustering the nodes of the K-Nearest-Neighbors graph. See
 #: :py:const:`target_metacell_size`,
@@ -512,7 +537,7 @@ cooldown_rate: float = 0.5
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-candidates_target_metacell_size: int = target_metacell_size
+candidates_target_metacell_size: float = target_metacell_size
 
 #: The size of each node for clustering the nodes of the K-Nearest-Neighbors graph. See
 #: :py:const:`cell_sizes`

@@ -13,6 +13,7 @@ import metacells.parameters as pr
 import metacells.tools as tl
 import metacells.utilities as ut
 
+from .collect import compute_effective_cell_sizes
 from .feature import extract_feature_data
 
 __all__ = [
@@ -38,7 +39,10 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_method: str = pr.cells_similarity_method,
-    target_metacell_size: int = pr.target_metacell_size,
+    target_metacell_size: float = pr.target_metacell_size,
+    max_cell_size: Optional[float] = pr.max_cell_size,
+    max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
+    cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     knn_k: Optional[int] = pr.knn_k,
     min_knn_k: Optional[int] = pr.min_knn_k,
     knn_balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
@@ -47,8 +51,9 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     candidates_cell_seeds: Optional[Union[str, ut.Vector]] = None,
     min_seed_size_quantile: float = pr.min_seed_size_quantile,
     max_seed_size_quantile: float = pr.max_seed_size_quantile,
-    candidates_cooldown_step: float = pr.cooldown_step,
-    candidates_cooldown_rate: float = pr.cooldown_rate,
+    candidates_cooldown_pass: float = pr.cooldown_pass,
+    candidates_cooldown_node: float = pr.cooldown_node,
+    candidates_cooldown_phase: float = pr.cooldown_phase,
     candidates_min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
     candidates_min_metacell_cells: Optional[int] = pr.min_metacell_cells,
@@ -60,7 +65,6 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
     dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
-    cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     random_seed: int = pr.random_seed,
 ) -> AnnData:
     '''
@@ -187,8 +191,9 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        ``candidates_cell_seeds`` (default: {candidates_cell_seeds}),
        ``min_seed_size_quantile`` (default: {min_seed_size_quantile}),
        ``max_seed_size_quantile`` (default: {max_seed_size_quantile}),
-       ``candidates_cooldown_step`` (default: {candidates_cooldown_step}),
-       ``candidates_cooldown_rate`` (default: {candidates_cooldown_rate}),
+       ``candidates_cooldown_pass`` (default: {candidates_cooldown_pass}),
+       ``candidates_cooldown_node`` (default: {candidates_cooldown_node}),
+       ``candidates_cooldown_phase`` (default: {candidates_cooldown_phase}),
        ``candidates_min_split_size_factor`` (default: {candidates_min_split_size_factor}),
        ``candidates_max_merge_size_factor`` (default: {candidates_max_merge_size_factor}),
        ``candidates_min_metacell_cells`` (default: {candidates_min_metacell_cells}),
@@ -235,9 +240,28 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     if fdata is None:
         raise ValueError('Empty feature data, giving up')
 
-    cell_sizes = \
-        ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
-    ut.log_calc('cell_sizes', cell_sizes, formatter=ut.sizes_description)
+    effective_cell_sizes, max_cell_size, _cell_scale_factors = \
+        compute_effective_cell_sizes(adata,
+                                     max_cell_size=max_cell_size,
+                                     max_cell_size_factor=max_cell_size_factor,
+                                     cell_sizes=cell_sizes)
+    ut.log_calc('effective_cell_sizes',
+                effective_cell_sizes, formatter=ut.sizes_description)
+
+    if max_cell_size is not None:
+        if candidates_min_metacell_cells is not None:
+            target_metacell_size = \
+                max(target_metacell_size,
+                    max_cell_size * candidates_min_metacell_cells)
+
+        if dissolve_min_metacell_cells is not None:
+            target_metacell_size = \
+                max(target_metacell_size,
+                    max_cell_size * dissolve_min_metacell_cells)
+
+        if candidates_min_metacell_cells is not None \
+                or dissolve_min_metacell_cells is not None:
+            ut.log_calc('target_metacell_size', target_metacell_size)
 
     data = ut.get_vo_proper(fdata, 'downsampled', layout='row_major')
     data = ut.to_numpy_matrix(data, copy=True)
@@ -259,13 +283,11 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     if cells_similarity_log_data:
         data = ut.log_data(data, base=2)
 
-    tl.compute_obs_obs_similarity(fdata, data, method=cells_similarity_method)
-
     if knn_k is None:
-        if cell_sizes is None:
+        if effective_cell_sizes is None:
             median_cell_size = 1.0
         else:
-            median_cell_size = float(np.median(cell_sizes))
+            median_cell_size = float(np.median(effective_cell_sizes))
         knn_k = round(target_metacell_size / median_cell_size)
         if min_knn_k is not None:
             knn_k = max(knn_k, min_knn_k)
@@ -283,6 +305,10 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
 
     else:
         ut.log_calc('knn_k', knn_k)
+
+        tl.compute_obs_obs_similarity(fdata, data,
+                                      method=cells_similarity_method)
+
         tl.compute_obs_obs_knn_graph(fdata,
                                      k=knn_k,
                                      balanced_ranks_factor=knn_balanced_ranks_factor,
@@ -291,28 +317,29 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
 
         tl.compute_candidate_metacells(fdata,
                                        target_metacell_size=target_metacell_size,
-                                       cell_sizes=cell_sizes,
+                                       cell_sizes=effective_cell_sizes,
                                        cell_seeds=candidates_cell_seeds,
                                        min_seed_size_quantile=min_seed_size_quantile,
                                        max_seed_size_quantile=max_seed_size_quantile,
-                                       cooldown_step=candidates_cooldown_step,
-                                       cooldown_rate=candidates_cooldown_rate,
+                                       cooldown_pass=candidates_cooldown_pass,
+                                       cooldown_node=candidates_cooldown_node,
+                                       cooldown_phase=candidates_cooldown_phase,
                                        min_split_size_factor=candidates_min_split_size_factor,
                                        max_merge_size_factor=candidates_max_merge_size_factor,
                                        min_metacell_cells=candidates_min_metacell_cells,
                                        random_seed=random_seed)
 
-    ut.set_oo_data(adata, 'obs_similarity',
-                   ut.get_oo_proper(fdata, 'obs_similarity'))
+        ut.set_oo_data(adata, 'obs_similarity',
+                       ut.get_oo_proper(fdata, 'obs_similarity'))
 
-    ut.set_oo_data(adata, 'obs_outgoing_weights',
-                   ut.get_oo_proper(fdata, 'obs_outgoing_weights'))
+        ut.set_oo_data(adata, 'obs_outgoing_weights',
+                       ut.get_oo_proper(fdata, 'obs_outgoing_weights'))
 
-    seed_of_cells = \
-        ut.get_o_numpy(fdata, 'seed', formatter=ut.groups_description)
+        seed_of_cells = \
+            ut.get_o_numpy(fdata, 'seed', formatter=ut.groups_description)
 
-    ut.set_o_data(adata, 'seed', seed_of_cells,
-                  formatter=ut.groups_description)
+        ut.set_o_data(adata, 'seed', seed_of_cells,
+                      formatter=ut.groups_description)
 
     candidate_of_cells = \
         ut.get_o_numpy(fdata, 'candidate', formatter=ut.groups_description)
@@ -349,7 +376,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
         tl.dissolve_metacells(adata,
                               candidates=candidate_of_cells,
                               target_metacell_size=target_metacell_size,
-                              cell_sizes=cell_sizes,
+                              cell_sizes=effective_cell_sizes,
                               min_robust_size_factor=dissolve_min_robust_size_factor,
                               min_convincing_size_factor=dissolve_min_convincing_size_factor,
                               min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,

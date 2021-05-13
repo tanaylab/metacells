@@ -25,7 +25,7 @@ def dissolve_metacells(
     *,
     candidates: Union[str, ut.Vector] = 'candidate',
     deviants: Optional[Union[str, ut.Vector]] = 'cell_deviant_votes',
-    target_metacell_size: int = pr.target_metacell_size,
+    target_metacell_size: float = pr.target_metacell_size,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.dissolve_cell_sizes,
     min_metacell_cells: int = pr.dissolve_min_metacell_cells,
     min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
