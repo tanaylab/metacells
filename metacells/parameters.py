@@ -513,7 +513,7 @@ max_seed_size_quantile: float = 0.95
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells` and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-cooldown_pass: float = 0.01
+cooldown_pass: float = 0.02
 
 #: By how much (as a fraction) to cooldown the node temperature after improving it. See
 #: :py:func:`metacells.tools.candidates.compute_candidate_metacells`,
@@ -528,7 +528,7 @@ cooldown_node: float = 0.25
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells` and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-cooldown_phase: float = 0.01
+cooldown_phase: float = 0.75
 
 #: The target total cluster size for clustering the nodes of the K-Nearest-Neighbors graph. See
 #: :py:const:`target_metacell_size`,

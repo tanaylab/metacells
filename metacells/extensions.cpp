@@ -2585,12 +2585,34 @@ struct OptimizePartitions {
     }
 #endif
 
-    void optimize(const size_t random_seed, float64_t cooldown_pass, float64_t cooldown_node) {
+    void optimize(const size_t random_seed,
+                  float64_t cooldown_pass,
+                  float64_t cooldown_node,
+                  int32_t cold_partitions,
+                  float64_t cold_temperature) {
         std::minstd_rand random(random_seed);
 
         TmpVectorSizeT indices_raii;
         auto tmp_indices = indices_raii.vector(nodes_count);
         std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
+
+        std::vector<u_char> frozen_nodes(nodes_count, u_char(1));
+        size_t frozen_count = 0;
+        for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
+            auto partition_index = partition_of_nodes[node_index];
+            if (0 <= partition_index && partition_index < int32_t(cold_partitions)) {
+                temperature_of_nodes[node_index] = cold_temperature;
+                frozen_nodes[node_index] = 1;
+                frozen_count += 1;
+            } else {
+                temperature_of_nodes[node_index] = 1.0;
+                frozen_nodes[node_index] = 0;
+            }
+            LOCATED_LOG(false)                                           //
+                << " node: " << node_index                               //
+                << " temperature: " << temperature_of_nodes[node_index]  //
+                << std::endl;
+        }
 
         TmpVectorSizeT partitions_raii;
         auto tmp_partitions = partitions_raii.vector(partitions_count);
@@ -2608,10 +2630,13 @@ struct OptimizePartitions {
             FastAssertCompare(cooldown_pass, <, 1.0);
         }
         float64_t cooldown_rate = 1.0 - cooldown_pass / nodes_count;
-        float64_t temperature = cooldown_rate;
+        float64_t temperature = 1.0;
 
         bool did_improve = true;
         bool did_skip = false;
+        size_t total_skipped = 0;
+        size_t total_improved = 0;
+        size_t total_unimproved = 0;
         while (temperature > 0 || did_improve) {
             LOCATED_LOG(false)                          //
                 << " temperature: " << temperature      //
@@ -2627,8 +2652,10 @@ struct OptimizePartitions {
                 if (did_skip) {
                     did_skip = false;
                     for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
-                        float64_t node_temperature = temperature_of_nodes[node_index];
-                        temperature = std::min(temperature, node_temperature);
+                        if (!frozen_nodes[node_index]) {
+                            float64_t node_temperature = temperature_of_nodes[node_index];
+                            temperature = std::min(temperature, node_temperature);
+                        }
                     }
                 } else {
                     temperature = 0;
@@ -2641,48 +2668,69 @@ struct OptimizePartitions {
             std::random_shuffle(tmp_indices.begin(), tmp_indices.end(), [&](size_t n) {
                 return random() % n;
             });
+            size_t skipped = 0;
+            size_t improved = 0;
+            size_t unimproved = 0;
             for (size_t node_index : tmp_indices) {
-                LOCATED_LOG(false)                                                //
-                    << " node: " << node_index                                    //
-                    << " node temperature: " << temperature_of_nodes[node_index]  //
-                    << " temperature: " << temperature                            //
+                temperature *= cooldown_rate;
+                LOCATED_LOG(false)                                           //
+                    << " cooldown_rate: " << cooldown_rate                   //
+                    << " temperature: " << temperature                       //
+                    << " node: " << node_index                               //
+                    << " temperature: " << temperature_of_nodes[node_index]  //
                     << std::endl;
                 if (temperature_of_nodes[node_index] < temperature) {
                     did_skip = true;
-                    LOCATED_LOG(false)                                           //
-                        << " node: " << node_index                               //
-                        << " temperature: " << temperature_of_nodes[node_index]  //
-                        << " < temperature: " << temperature                     //
+                    ++skipped;
+                    LOCATED_LOG(false)              //
+                        << " node: " << node_index  //
+                        << " skipped"               //
                         << std::endl;
-                    continue;
-                }
-                if (improve_node(node_index,
-                                 tmp_partitions,
-                                 tmp_partition_cold_diffs,
-                                 tmp_partition_hot_diffs,
-                                 random,
-                                 temperature)) {
+                } else if (improve_node(node_index,
+                                        tmp_partitions,
+                                        tmp_partition_cold_diffs,
+                                        tmp_partition_hot_diffs,
+                                        random,
+                                        temperature)) {
+                    frozen_count -= frozen_nodes[node_index];
+                    frozen_nodes[node_index] = u_char(0);
                     did_improve = true;
+                    ++improved;
+                    LOCATED_LOG(false)              //
+                        << " node: " << node_index  //
+                        << " improved"              //
+                        << std::endl;
                 } else {
+                    frozen_count -= frozen_nodes[node_index];
+                    frozen_nodes[node_index] = u_char(0);
                     temperature_of_nodes[node_index] = temperature * (1 - cooldown_node);
+                    ++unimproved;
                     LOCATED_LOG(false)                                           //
-                        << " temperature: " << temperature                       //
-                        << " cooldown_node: " << cooldown_node                   //
                         << " node: " << node_index                               //
+                        << " unimproved"                                         //
                         << " temperature: " << temperature_of_nodes[node_index]  //
                         << std::endl;
                 }
-                temperature *= cooldown_rate;
-                LOCATED_LOG(false)                          //
-                    << " temperature: " << temperature      //
-                    << " cooldown_rate: " << cooldown_rate  //
-                    << " score: " << score()                //
-                    << " did_improve: " << did_improve      //
-                    << " did_skip: " << did_skip            //
-                    << std::endl;
             }
+            LOCATED_LOG(false)                                      //
+                << " improved: " << improved                        //
+                << " unimproved: " << unimproved                    //
+                << " skipped: " << skipped                          //
+                << " total: " << (improved + unimproved + skipped)  //
+                << " frozen: " << frozen_count                      //
+                << std::endl;
+            total_improved += improved;
+            total_skipped += skipped;
+            total_unimproved += unimproved;
         }
 
+        LOCATED_LOG(false)                                                        //
+            << " improved: " << total_improved                                    //
+            << " unimproved: " << total_unimproved                                //
+            << " skipped: " << total_skipped                                      //
+            << " total: " << (total_improved + total_unimproved + total_skipped)  //
+            << " frozen: " << frozen_count                                        //
+            << std::endl;
         LOCATED_LOG(false)                          //
             << " temperature: " << temperature      //
             << " cooldown_rate: " << cooldown_rate  //
@@ -3113,7 +3161,9 @@ optimize_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                     const unsigned int random_seed,
                     float64_t cooldown_pass,
                     float64_t cooldown_node,
-                    pybind11::array_t<int32_t>& partition_of_nodes_array) {
+                    pybind11::array_t<int32_t>& partition_of_nodes_array,
+                    int32_t cold_partitions,
+                    float64_t cold_temperature) {
     OptimizePartitions optimizer(outgoing_weights_array,
                                  outgoing_indices_array,
                                  outgoing_indptr_array,
@@ -3140,7 +3190,11 @@ optimize_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
     g_verify = nullptr;
 #endif
 
-    optimizer.optimize(random_seed, cooldown_pass, cooldown_node);
+    optimizer.optimize(random_seed,
+                       cooldown_pass,
+                       cooldown_node,
+                       cold_partitions,
+                       cold_temperature);
 
     float64_t score = optimizer.score();
     return score;

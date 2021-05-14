@@ -179,18 +179,24 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
 
     np.random.seed(random_seed)
 
+    cold_temperature = 1 - cooldown_pass
+
     phase = 'splitting'
     optimized_communities = [community_of_nodes.copy()]
     optimized_scores = [0.0]
+    kept_communities = 0
     while True:
         ut.logger().debug('phase: %s', phase)
+        ut.log_calc('cold_temperature', cold_temperature)
         score = \
             _optimize_partitions(outgoing_edge_weights=outgoing_edge_weights,
                                  incoming_edge_weights=incoming_edge_weights,
                                  community_of_nodes=community_of_nodes,
                                  random_seed=random_seed,
                                  cooldown_pass=cooldown_pass,
-                                 cooldown_node=cooldown_node)
+                                 cooldown_node=cooldown_node,
+                                 cold_communities=kept_communities,
+                                 cold_temperature=cold_temperature)
         optimized_communities.append(community_of_nodes.copy())
         optimized_scores.append(score)
         ut.log_calc('communities', community_of_nodes,
@@ -215,10 +221,11 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
             break
         assert phase in ('splitting', 'merging')
 
-        cooldown_pass = 1 - (1 - cooldown_pass) * (1 - cooldown_phase)
+        cold_temperature = cold_temperature * (1 - cooldown_phase)
 
         if new_communities > 0:
             target_seeds_count = kept_communities + new_communities
+            ut.logger().debug('kept communities: %s', kept_communities)
             ut.log_calc('target_seeds_count', target_seeds_count)
             _choose_seeds(outgoing_edge_weights=outgoing_edge_weights,
                           incoming_edge_weights=incoming_edge_weights,
@@ -386,7 +393,9 @@ def optimize_partitions(
                                 random_seed=random_seed,
                                 cooldown_pass=cooldown_pass,
                                 cooldown_node=cooldown_node,
-                                community_of_nodes=community_of_nodes)
+                                community_of_nodes=community_of_nodes,
+                                cold_communities=0,
+                                cold_temperature=cooldown_pass)
 
 
 @ut.timed_call()
@@ -397,6 +406,8 @@ def _optimize_partitions(
     community_of_nodes: ut.NumpyVector,
     cooldown_pass: float,
     cooldown_node: float,
+    cold_communities: int,
+    cold_temperature: float,
     random_seed: int,
 ) -> float:
     assert community_of_nodes.dtype == 'int32'
@@ -409,7 +420,9 @@ def _optimize_partitions(
                                    random_seed,
                                    cooldown_pass,
                                    cooldown_node,
-                                   community_of_nodes)
+                                   community_of_nodes,
+                                   cold_communities,
+                                   cold_temperature)
     ut.log_calc('score', score)
     return score
 
@@ -500,7 +513,6 @@ def _patch_communities(  # pylint: disable=too-many-branches
         if phase == 'merging':
             return ('revert', -1, -1)
         new_count = ceil(cancelled_total_size / target_metacell_size)
-        assert new_count > len(cancelled_communities)
 
     else:
         if phase == 'splitting':
