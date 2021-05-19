@@ -465,9 +465,10 @@ min_knn_k: Optional[int] = 30
 #: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
 #: :py:func:`metacells.tools.knn_graph.compute_var_var_knn_graph`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
 #: and
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
 knn_balanced_ranks_factor: float = sqrt(10)
 
 #: The factor of K of edges to keep when pruning the incoming edges of the K-Nearest-Neighbors
@@ -475,9 +476,10 @@ knn_balanced_ranks_factor: float = sqrt(10)
 #: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
 #: :py:func:`metacells.tools.knn_graph.compute_var_var_knn_graph`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
 #: and
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
 knn_incoming_degree_factor: float = 3.0
 
 #: The factor of K of edges to keep when pruning the outgoing edges of the K-Nearest-Neighbors
@@ -485,9 +487,10 @@ knn_incoming_degree_factor: float = 3.0
 #: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
 #: :py:func:`metacells.tools.knn_graph.compute_var_var_knn_graph`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
 #: and
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
 knn_outgoing_degree_factor: float = 1.0
 
 #: The minimal quantile of a seed to be selected. See
@@ -720,21 +723,35 @@ umap_similarity_log_data: bool = True
 
 #: The method to use to compute similarities for UMAP. See
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
+#: :py:func:`metacells.tools.similarity.compute_var_var_similarity`,
 #: and
-#: :py:func:`metacells.tools.similarity.compute_var_var_similarity`.
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
 umap_similarity_method: str = 'logistics_pearson'
 
 #: The minimal UMAP point distance. See :py:const:`umap_spread` and
-#: :py:func:`metacells.tools.layout.umap_by_distances`.
+#: :py:func:`metacells.tools.layout.umap_by_distances`
+#: and
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
 umap_min_dist: float = 0.5
 
 #: The minimal UMAP spread. This is automatically raised if the :py:const:`umap_min_dist` is higher.
-#: See :py:func:`metacells.tools.layout.umap_by_distances`.
+#: See :py:func:`metacells.tools.layout.umap_by_distances`
+#: and
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
 umap_spread: float = 1.0
 
 #: The UMAP KNN graph degree. See
-#: :py:func:`metacells.tools.layout.umap_by_distances`.
+#: :py:func:`metacells.tools.layout.umap_by_distances`
+#: and
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
 umap_k: int = 15
+
+#: The UMAP KNN skeleton graph degree. See
+#: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
+#: :py:func:`metacells.tools.knn_graph.compute_var_var_knn_graph`,
+#: and
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+skeleton_k: int = 4
 
 #: The maximal number of top feature genes to pick.
 #: See :py:func:`metacells.tools.high.find_top_feature_genes`
