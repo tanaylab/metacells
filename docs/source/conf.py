@@ -38,6 +38,7 @@ nitpick_ignore = [
     ('py:class', 'ImproperMatrix'),
     ('py:class', 'IO'),
     ('py:class', 'Iterator[None]'),
+    ('py:class', 'leidenalg.VertexPartition.SurpriseVertexPartition'),
     ('py:class', 'logging.Logger'),
     ('py:class', 'numpy.ndarray'),
     ('py:class', 'Optional[Callable[[metacells.utilities.annotation.SlicingContext, str], None]]'),

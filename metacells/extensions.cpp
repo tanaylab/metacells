@@ -1488,10 +1488,13 @@ auroc_data(std::vector<float64_t>& in_values, std::vector<float64_t>& out_values
 }
 
 template<typename D>
-static float64_t
+static void
 auroc_dense_vector(const ConstArraySlice<D>& values,
                    const ConstArraySlice<bool>& labels,
-                   const ConstArraySlice<float32_t>& scales) {
+                   const ConstArraySlice<float32_t>& scales,
+                   const float64_t normalization,
+                   float64_t* fold,
+                   float64_t* auroc) {
     const size_t size = labels.size();
     FastAssertCompare(values.size(), ==, size);
 
@@ -1504,17 +1507,28 @@ auroc_dense_vector(const ConstArraySlice<D>& values,
     tmp_in_values.reserve(size);
     tmp_out_values.reserve(size);
 
+    float64_t sum_in = 0.0;
+    float64_t sum_out = 0.0;
+
     for (size_t index = 0; index < size; ++index) {
         const auto value = values[index] / scales[index];
         if (labels[index]) {
             tmp_in_values.push_back(value);
+            sum_in += value;
         } else {
             tmp_out_values.push_back(value);
+            sum_out += value;
         }
     }
 
     FastAssertCompare(tmp_in_values.size() + tmp_out_values.size(), ==, size);
-    return auroc_data(tmp_in_values, tmp_out_values);
+
+    size_t num_in = tmp_in_values.size();
+    size_t num_out = tmp_out_values.size();
+    num_in += !num_in;
+    num_out += !num_out;
+    *fold = (sum_in / num_in + normalization) / (sum_out / num_out + normalization);
+    *auroc = auroc_data(tmp_in_values, tmp_out_values);
 }
 
 template<typename D>
@@ -1522,11 +1536,15 @@ static void
 auroc_dense_matrix(const pybind11::array_t<D>& values_array,
                    const pybind11::array_t<bool>& column_labels_array,
                    const pybind11::array_t<float32_t>& column_scales_array,
+                   const float64_t normalization,
+                   pybind11::array_t<float64_t>& folds_array,
                    pybind11::array_t<float64_t>& aurocs_array) {
     ConstMatrixSlice<D> values(values_array, "values");
     ConstArraySlice<bool> column_labels(column_labels_array, "column_labels");
     ConstArraySlice<float32_t> column_scales(column_scales_array, "column_scales");
+    ArraySlice<float64_t> row_folds(folds_array, "row_folds");
     ArraySlice<float64_t> row_aurocs(aurocs_array, "row_aurocs");
+    FastAssertCompare(normalization, >, 0);
 
     const size_t columns_count = values.columns_count();
     const size_t rows_count = values.rows_count();
@@ -1535,17 +1553,24 @@ auroc_dense_matrix(const pybind11::array_t<D>& values_array,
     FastAssertCompare(row_aurocs.size(), ==, rows_count);
 
     parallel_loop(rows_count, [&](size_t row_index) {
-        row_aurocs[row_index] =
-            auroc_dense_vector(values.get_row(row_index), column_labels, column_scales);
+        auroc_dense_vector(values.get_row(row_index),
+                           column_labels,
+                           column_scales,
+                           normalization,
+                           &row_folds[row_index],
+                           &row_aurocs[row_index]);
     });
 }
 
 template<typename D, typename I>
-static float64_t
+static void
 auroc_compressed_vector(const ConstArraySlice<D>& values,
                         const ConstArraySlice<I>& indices,
                         const ConstArraySlice<bool>& labels,
-                        const ConstArraySlice<float32_t>& scales) {
+                        const ConstArraySlice<float32_t>& scales,
+                        const float64_t normalization,
+                        float64_t* fold,
+                        float64_t* auroc) {
     const size_t size = labels.size();
     const size_t nnz_count = values.size();
     FastAssertCompare(nnz_count, <=, size);
@@ -1558,6 +1583,9 @@ auroc_compressed_vector(const ConstArraySlice<D>& values,
 
     tmp_in_values.reserve(size);
     tmp_out_values.reserve(size);
+
+    float64_t sum_in = 0.0;
+    float64_t sum_out = 0.0;
 
     size_t prev_index = 0;
     for (size_t position = 0; position < nnz_count; ++position) {
@@ -1577,8 +1605,10 @@ auroc_compressed_vector(const ConstArraySlice<D>& values,
         SlowAssertCompare(prev_index, ==, index);
         if (labels[index]) {
             tmp_in_values.push_back(value);
+            sum_in += value;
         } else {
             tmp_out_values.push_back(value);
+            sum_out += value;
         }
         ++prev_index;
     }
@@ -1595,7 +1625,13 @@ auroc_compressed_vector(const ConstArraySlice<D>& values,
 
     FastAssertCompare(prev_index, ==, size);
     FastAssertCompare(tmp_in_values.size() + tmp_out_values.size(), ==, size);
-    return auroc_data(tmp_in_values, tmp_out_values);
+
+    size_t num_in = tmp_in_values.size();
+    size_t num_out = tmp_out_values.size();
+    num_in += !num_in;
+    num_out += !num_out;
+    *fold = (sum_in / num_in + normalization) / (sum_out / num_out + normalization);
+    *auroc = auroc_data(tmp_in_values, tmp_out_values);
 }
 
 template<typename D, typename I, typename P>
@@ -1606,6 +1642,8 @@ auroc_compressed_matrix(const pybind11::array_t<D>& values_data_array,
                         size_t elements_count,
                         const pybind11::array_t<bool>& element_labels_array,
                         const pybind11::array_t<float32_t>& element_scales_array,
+                        float64_t normalization,
+                        pybind11::array_t<float64_t>& band_folds_array,
                         pybind11::array_t<float64_t>& band_aurocs_array) {
     ConstCompressedMatrix<D, I, P> values(ConstArraySlice<D>(values_data_array, "values_data"),
                                           ConstArraySlice<I>(values_indices_array,
@@ -1615,13 +1653,17 @@ auroc_compressed_matrix(const pybind11::array_t<D>& values_data_array,
                                           "values");
     ConstArraySlice<bool> element_labels(element_labels_array, "element_labels");
     ConstArraySlice<float32_t> element_scales(element_scales_array, "element_scales");
+    ArraySlice<float64_t> band_folds(band_folds_array, "band_folds");
     ArraySlice<float64_t> band_aurocs(band_aurocs_array, "band_aurocs");
 
     parallel_loop(values.bands_count(), [&](size_t band_index) {
-        band_aurocs[band_index] = auroc_compressed_vector(values.get_band_data(band_index),
-                                                          values.get_band_indices(band_index),
-                                                          element_labels,
-                                                          element_scales);
+        auroc_compressed_vector(values.get_band_data(band_index),
+                                values.get_band_indices(band_index),
+                                element_labels,
+                                element_scales,
+                                normalization,
+                                &band_folds[band_index],
+                                &band_aurocs[band_index]);
     });
 }
 

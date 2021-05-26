@@ -6,6 +6,9 @@ Pipeline
 .. automodule:: metacells.pipeline.clean
     :members:
 
+.. automodule:: metacells.pipeline.related_genes
+    :members:
+
 .. automodule:: metacells.pipeline.feature
     :members:
 

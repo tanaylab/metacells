@@ -7,8 +7,10 @@ The steps provided here are expected to yield a reasonable such projection, thou
 might need to tweak the parameters or even the overall flow for specific data sets.
 '''
 
-from typing import Union
+from typing import Any, Tuple, Union
 
+import igraph as ig  # type: ignore
+import leidenalg as la  # type: ignore
 import numpy as np
 import scipy.sparse as sparse  # type: ignore
 from anndata import AnnData
@@ -18,8 +20,109 @@ import metacells.tools as tl
 import metacells.utilities as ut
 
 __all__ = [
+    'compute_knn_by_features',
     'compute_umap_by_features',
+    'compute_clusters_by_features',
 ]
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def compute_knn_by_features(
+    adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
+    *,
+    max_top_feature_genes: int = pr.max_top_feature_genes,
+    similarity_value_normalization: float = pr.umap_similarity_value_normalization,
+    similarity_log_data: bool = pr.umap_similarity_log_data,
+    similarity_method: str = pr.umap_similarity_method,
+    logistics_location: float = pr.logistics_location,
+    logistics_scale: float = pr.logistics_scale,
+    k: int,
+    balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
+    incoming_degree_factor: float = pr.knn_incoming_degree_factor,
+    outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
+) -> ut.PandasFrame:
+    '''
+    Compute KNN graph between metacells based on feature genes.
+
+    **Input**
+
+    Annotated ``adata`` where each observation is a metacells and the variables are genes,
+    are genes, where ``what`` is a per-variable-per-observation matrix or the name of a
+    per-variable-per-observation annotation containing such a matrix.
+
+    **Returns**
+
+    Sets the following in ``adata``:
+
+    Observations-Pair (Metacells) Annotations
+        ``obs_outgoing_weights``
+            A sparse square matrix where each non-zero entry is the weight of an edge between a pair
+            of cells or genes, where the sum of the weights of the outgoing edges for each element
+            is 1 (there is always at least one such edge).
+
+    Also return a pandas data frame of the similarities between the observations (metacells).
+
+    **Computation Parameters**
+
+    1. Invoke :py:func:`metacells.tools.high.find_top_feature_genes` using ``max_top_feature_genes``
+       (default: {max_top_feature_genes}) to pick the feature genes to use to compute similarities
+       between the metacells.
+
+    2. Compute the fractions of each gene in each cell, and add the
+       ``similarity_value_normalization`` (default: {similarity_value_normalization}) to
+       it.
+
+    3. If ``similarity_log_data`` (default: {similarity_log_data}), invoke the
+       :py:func:`metacells.utilities.computation.log_data` function to compute the log (base 2) of
+       the data.
+
+    4. Invoke :py:func:`metacells.tools.similarity.compute_obs_obs_similarity` using
+       ``similarity_method`` (default: {similarity_method}), ``logistics_location`` (default:
+       {logistics_location}) and ``logistics_scale`` (default: {logistics_scale}) and convert this
+       to distances.
+
+    5. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` using the distances,
+       ``k`` (no default!), ``balanced_ranks_factor`` (default: {balanced_ranks_factor}),
+       ``incoming_degree_factor`` (default: {incoming_degree_factor}), ``outgoing_degree_factor``
+       (default: {outgoing_degree_factor}) to compute a "skeleton" graph to overlay on top of the
+       UMAP graph.
+    '''
+    tl.find_top_feature_genes(adata, max_genes=max_top_feature_genes)
+
+    all_data = ut.get_vo_proper(adata, what, layout='row_major')
+    all_fractions = ut.fraction_by(all_data, by='row')
+
+    top_feature_genes_mask = ut.get_v_numpy(adata, 'top_feature_gene')
+
+    top_feature_genes_fractions = all_fractions[:, top_feature_genes_mask]
+    top_feature_genes_fractions = \
+        ut.to_layout(top_feature_genes_fractions, layout='row_major')
+
+    top_feature_genes_fractions += similarity_value_normalization
+
+    if similarity_log_data:
+        top_feature_genes_fractions = \
+            ut.log_data(top_feature_genes_fractions, base=2)
+
+    tdata = ut.slice(adata, vars=top_feature_genes_mask)
+    similarities = tl.compute_obs_obs_similarity(tdata,
+                                                 top_feature_genes_fractions,
+                                                 method=similarity_method,
+                                                 logistics_location=logistics_location,
+                                                 logistics_scale=logistics_scale,
+                                                 inplace=False)
+    assert similarities is not None
+
+    tl.compute_obs_obs_knn_graph(adata, similarities,
+                                 k=k,
+                                 balanced_ranks_factor=balanced_ranks_factor,
+                                 incoming_degree_factor=incoming_degree_factor,
+                                 outgoing_degree_factor=outgoing_degree_factor)
+
+    return similarities
 
 
 @ut.logged()
@@ -68,66 +171,33 @@ def compute_umap_by_features(
 
     **Computation Parameters**
 
-    1. Invoke :py:func:`metacells.tools.high.find_top_feature_genes` using ``max_top_feature_genes``
-       (default: {max_top_feature_genes}) to pick the feature genes to use to compute similarities
-       between the metacells.
+    1. Invoke :py:func:`metacells.pipeline.umap.compute_knn_by_features` using
+       ``max_top_feature_genes` (default: {max_top_feature_genes}),
+       ``similarity_value_normalization`` (default: {similarity_value_normalization}),
+       ``similarity_log_data`` (default: {similarity_log_data}), ``similarity_method`` (default:
+       {similarity_method}), ``logistics_location`` (default: {logistics_location}),
+       ``logistics_scale`` (default: {logistics_scale}), ``skeleton_k``` (default: {skeleton_k}),
+       ``balanced_ranks_factor`` (default: {balanced_ranks_factor}), ``incoming_degree_factor``
+       (default: {incoming_degree_factor}), ``outgoing_degree_factor`` (default:
+       {outgoing_degree_factor}) to compute a "skeleton" graph to overlay on top of the UMAP graph.
 
-    2. Compute the fractions of each gene in each cell, and add the
-       ``similarity_value_normalization`` (default: {similarity_value_normalization}) to
-       it.
-
-    3. If ``similarity_log_data`` (default: {similarity_log_data}), invoke the
-       :py:func:`metacells.utilities.computation.log_data` function to compute the log (base 2) of
-       the data.
-
-    4. Invoke :py:func:`metacells.tools.similarity.compute_obs_obs_similarity` using
-       ``similarity_method`` (default: {similarity_method}), ``logistics_location`` (default:
-       {logistics_location}) and ``logistics_scale`` (default: {logistics_scale}) and convert this
-       to distances.
-
-    5. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` using the distances,
-       ``skeleton_k`` (default: {skeleton_k}), ``balanced_ranks_factor`` (default:
-       {balanced_ranks_factor}), ``incoming_degree_factor`` (default: {incoming_degree_factor}),
-       ``outgoing_degree_factor`` (default: {outgoing_degree_factor}) to compute a "skeleton" graph
-       to overlay on top of the UMAP graph.
-
-    5. Invoke :py:func:`metacells.tools.layout.umap_by_distances` using the distances, ``umap_k``
+    2. Invoke :py:func:`metacells.tools.layout.umap_by_distances` using the distances, ``umap_k``
        (default: {umap_k}), ``min_dist`` (default: {min_dist}), ``spread`` (default: {spread}) and the
        ``random_seed`` (default: {random_seed}). Note that if the seed is not zero, the result will
        be reproducible, but the computation will use only a single thread which will take longer to
        complete.
     '''
-    tl.find_top_feature_genes(adata, max_genes=max_top_feature_genes)
-
-    all_data = ut.get_vo_proper(adata, what, layout='row_major')
-    all_fractions = ut.fraction_by(all_data, by='row')
-
-    top_feature_genes_mask = ut.get_v_numpy(adata, 'top_feature_gene')
-
-    top_feature_genes_fractions = all_fractions[:, top_feature_genes_mask]
-    top_feature_genes_fractions = \
-        ut.to_layout(top_feature_genes_fractions, layout='row_major')
-
-    top_feature_genes_fractions += similarity_value_normalization
-
-    if similarity_log_data:
-        top_feature_genes_fractions = \
-            ut.log_data(top_feature_genes_fractions, base=2)
-
-    tdata = ut.slice(adata, vars=top_feature_genes_mask)
-    similarities = tl.compute_obs_obs_similarity(tdata,
-                                                 top_feature_genes_fractions,
-                                                 method=similarity_method,
-                                                 logistics_location=logistics_location,
-                                                 logistics_scale=logistics_scale,
-                                                 inplace=False)
-    assert similarities is not None
-
-    tl.compute_obs_obs_knn_graph(adata, similarities,
-                                 k=skeleton_k,
-                                 balanced_ranks_factor=balanced_ranks_factor,
-                                 incoming_degree_factor=incoming_degree_factor,
-                                 outgoing_degree_factor=outgoing_degree_factor)
+    similarities = compute_knn_by_features(adata, what,
+                                           max_top_feature_genes=max_top_feature_genes,
+                                           similarity_value_normalization=similarity_value_normalization,
+                                           similarity_log_data=similarity_log_data,
+                                           similarity_method=similarity_method,
+                                           logistics_location=logistics_location,
+                                           logistics_scale=logistics_scale,
+                                           k=skeleton_k,
+                                           balanced_ranks_factor=balanced_ranks_factor,
+                                           incoming_degree_factor=incoming_degree_factor,
+                                           outgoing_degree_factor=outgoing_degree_factor)
 
     distances = ut.to_numpy_matrix(similarities)
     distances *= -1
@@ -137,3 +207,102 @@ def compute_umap_by_features(
 
     tl.umap_by_distances(adata, distances, k=umap_k, min_dist=min_dist,
                          spread=spread, random_seed=random_seed)
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def compute_clusters_by_features(
+    adata: AnnData,
+    what: Union[str, ut.Matrix] = '__x__',
+    *,
+    max_top_feature_genes: int = pr.max_top_feature_genes,
+    similarity_value_normalization: float = pr.umap_similarity_value_normalization,
+    similarity_log_data: bool = pr.umap_similarity_log_data,
+    similarity_method: str = pr.umap_similarity_method,
+    logistics_location: float = pr.logistics_location,
+    logistics_scale: float = pr.logistics_scale,
+    k: int,
+    balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
+    incoming_degree_factor: float = pr.knn_incoming_degree_factor,
+    outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
+    partition_method: Any = pr.partition_method,
+    random_seed: int = pr.random_seed,
+) -> None:
+    '''
+    Compute clusters of metacells using the feature genes.
+
+    This is provided as a convenience. It is not meant to endorse direct clustering as the "proper"
+    way to analyze scRNA data. Even such clustering is be used for a "proper" analysis, it would
+    only be a part of the complete analysis pipeline.
+
+    **Input**
+
+    Annotated ``adata`` where each observation is a metacells and the variables are genes,
+    are genes, where ``what`` is a per-variable-per-observation matrix or the name of a
+    per-variable-per-observation annotation containing such a matrix.
+
+    **Returns**
+
+    Sets the following in ``adata``:
+
+    Observations (Metacells) Annotations
+        ``cluster``
+            The index of the cluster each metacell belongs to.
+
+    **Computation Parameters**
+
+    1. Invoke :py:func:`metacells.pipeline.umap.compute_knn_by_features` using
+       ``max_top_feature_genes` (default: {max_top_feature_genes}),
+       ``similarity_value_normalization`` (default: {similarity_value_normalization}),
+       ``similarity_log_data`` (default: {similarity_log_data}), ``similarity_method`` (default:
+       {similarity_method}), ``logistics_location`` (default: {logistics_location}),
+       ``logistics_scale`` (default: {logistics_scale}), ``k``` (no default!),
+       ``balanced_ranks_factor`` (default: {balanced_ranks_factor}), ``incoming_degree_factor``
+       (default: {incoming_degree_factor}), ``outgoing_degree_factor`` (default:
+       {outgoing_degree_factor}) to compute a "skeleton" graph to overlay on top of the UMAP graph.
+
+    2. Invoke ``leidenalg`` to cluster the metacells using the KNN graph using the ``random_seed``
+       (default: {random_seed}) and the partition_method (default: {partition_method.__qualname__}).
+    '''
+    compute_knn_by_features(adata, what,
+                            max_top_feature_genes=max_top_feature_genes,
+                            similarity_value_normalization=similarity_value_normalization,
+                            similarity_log_data=similarity_log_data,
+                            similarity_method=similarity_method,
+                            logistics_location=logistics_location,
+                            logistics_scale=logistics_scale,
+                            k=k,
+                            balanced_ranks_factor=balanced_ranks_factor,
+                            incoming_degree_factor=incoming_degree_factor,
+                            outgoing_degree_factor=outgoing_degree_factor)
+
+    edge_weights = ut.get_oo_proper(adata, 'obs_outgoing_weights')
+    graph, weights_array = _build_igraph(edge_weights)
+
+    with ut.timed_step('.leidenalg'):
+        ut.timed_parameters(size=edge_weights.shape[0],
+                            edges=weights_array.size)
+        kwargs = dict(n_iterations=-1, weights=weights_array, seed=random_seed)
+
+        partition = la.find_partition(graph, partition_method, **kwargs)
+        clusters = ut.compress_indices(np.array(partition.membership))
+
+    ut.set_o_data(adata, 'cluster', clusters, formatter=ut.groups_description)
+
+
+def _build_igraph(edge_weights: ut.Matrix) -> Tuple[ig.Graph, ut.NumpyVector]:
+    edge_weights = ut.to_proper_matrix(edge_weights)
+    assert edge_weights.shape[0] == edge_weights.shape[1]
+    size = edge_weights.shape[0]
+
+    sources, targets = edge_weights.nonzero()
+    weights_array = \
+        ut.to_numpy_vector(edge_weights[sources, targets]).astype('float64')
+
+    graph = ig.Graph(directed=True)
+    graph.add_vertices(size)
+    graph.add_edges(list(zip(sources, targets)))
+    graph.es['weight'] = weights_array
+
+    return graph, weights_array

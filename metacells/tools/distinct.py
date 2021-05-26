@@ -162,11 +162,11 @@ def compute_subset_distinct_genes(
     adata: AnnData,
     what: Union[str, ut.Matrix] = '__x__',
     *,
-    to: Optional[str] = None,
-    normalize: Optional[Union[bool, str, ut.NumpyVector]],
+    prefix: Optional[str] = None,
+    scale: Optional[Union[bool, str, ut.NumpyVector]],
     subset: Union[str, ut.NumpyVector],
-    inplace: bool = True,
-) -> Optional[ut.PandasSeries]:
+    normalization: float,
+) -> Optional[Tuple[ut.PandasSeries, ut.PandasSeries]]:
     '''
     Given a subset of the observations (cells), compute for each gene how distinct its ``what``
     (default: {what}) value is in the subset compared to the overall population.
@@ -184,13 +184,15 @@ def compute_subset_distinct_genes(
     **Returns**
 
     Variable (Gene) Annotations
-        ``to``
+        ``<prefix>_fold``
+            Store the ratio of the expression of the gene in the subset as opposed to the rest of
+            the population.
+        ``<prefix>_auroc``
             Store the distinctiveness of the gene in the subset as opposed to the rest of the
             population.
 
-    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
-    ``None``. This requires ``to`` to be specified. Otherwise this is returned as a pandas series
-    (indexed by the gene names).
+    If ``prefix`` (default: {prefix}), is specified, this is written to the data. Otherwise this is
+    returned as two pandas series (indexed by the gene names).
 
     **Computation Parameters**
 
@@ -198,12 +200,13 @@ def compute_subset_distinct_genes(
        be a vector of integer observation names, or a boolean mask, or the string name of a
        per-observation annotation containing the boolean mask.
 
-    2. If ``normalize`` is ``False``, use the data as-is. If it is ``True``, divide the data by the
+    2. If ``scale`` is ``False``, use the data as-is. If it is ``True``, divide the data by the
        sum of each observation (cell). If it is a string, it should be the name of a per-observation
        annotation to use. Otherwise, it should be a vector of the scale factor for each observation
        (cell).
 
-    3. Compute the AUROC for each gene for the scaled data based on this mask.
+    3. Compute the fold ratios using the ``normalization`` (no default!) and the AUROC for each gene,
+       for the scaled data based on this mask.
     '''
     if isinstance(subset, str):
         subset = ut.get_o_numpy(adata, subset)
@@ -214,20 +217,25 @@ def compute_subset_distinct_genes(
         subset = mask
 
     scale_of_cells: Optional[ut.NumpyVector] = None
-    if not isinstance(normalize, bool):
+    if not isinstance(scale, bool):
         scale_of_cells = \
-            ut.maybe_o_numpy(adata, normalize, formatter=ut.sizes_description)
-    elif normalize:
+            ut.maybe_o_numpy(adata, scale, formatter=ut.sizes_description)
+    elif scale:
         scale_of_cells = ut.get_o_numpy(adata, what, sum=True)
     else:
         scale_of_cells = None
 
     matrix = ut.get_vo_proper(adata, what, layout='column_major').transpose()
-    distinct_of_genes = ut.matrix_rows_auroc(matrix, subset, scale_of_cells)
+    fold_of_genes, auroc_of_genes = \
+        ut.matrix_rows_folds_and_aurocs(matrix,
+                                        columns_subset=subset,
+                                        columns_scale=scale_of_cells,
+                                        normalization=normalization)
 
-    if inplace:
-        assert to is not None
-        ut.set_v_data(adata, to, distinct_of_genes)
+    if prefix is not None:
+        ut.set_v_data(adata, f'{prefix}_auroc', auroc_of_genes)
+        ut.set_v_data(adata, f'{prefix}_fold', fold_of_genes)
         return None
 
-    return ut.to_pandas_series(distinct_of_genes, index=adata.var_names)
+    return (ut.to_pandas_series(fold_of_genes, index=adata.var_names),
+            ut.to_pandas_series(auroc_of_genes, index=adata.var_names))

@@ -81,7 +81,7 @@ __all__ = [
     'downsample_matrix',
     'downsample_vector',
 
-    'matrix_rows_auroc',
+    'matrix_rows_folds_and_aurocs',
 
     'sliding_window_function',
     'patterns_matches',
@@ -760,16 +760,19 @@ def downsample_vector(
 
 
 @utm.timed_call()
-def matrix_rows_auroc(
+def matrix_rows_folds_and_aurocs(
     matrix: utt.Matrix,
+    *,
     columns_subset: utt.NumpyVector,
     columns_scale: Optional[utt.NumpyVector] = None,
-) -> utt.NumpyVector:
+    normalization: float,
+) -> Tuple[utt.NumpyVector, utt.NumpyVector]:
     '''
-    Given a matrix and a subset of the columns, return a vector containing for each row the area
-    under the receiver operating characteristic (AUROC) for the row, that is, the probability that a
-    random column in the subset would have a higher value in this row than a random column outside
-    the subset.
+    Given a matrix and a subset of the columns, return two vectors. The first contains, for each
+    row, the mean column value in the subset divided by the mean column value outside the subset.
+    The second contains for each row the area under the receiver operating characteristic (AUROC)
+    for the row, that is, the probability that a random column in the subset would have a higher
+    value in this row than a random column outside the subset.
 
     If ``columns_scale`` is specified, the data is divided by this scale before computing the AUROC.
     '''
@@ -782,6 +785,7 @@ def matrix_rows_auroc(
         columns_scale = columns_scale.astype('float32')
         assert columns_scale.size == columns_count
 
+    rows_folds = np.empty(rows_count, dtype='float64')
     rows_auroc = np.empty(rows_count, dtype='float64')
 
     columns_subset = utt.to_numpy_vector(columns_subset)
@@ -795,7 +799,8 @@ def matrix_rows_auroc(
     if dense is not None:
         extension_name = 'auroc_dense_matrix_%s_t' % dense.dtype
         extension = getattr(xt, extension_name)
-        extension(dense, columns_subset, columns_scale, rows_auroc)
+        extension(dense, columns_subset, columns_scale,
+                  normalization, rows_folds, rows_auroc)
     else:
         assert compressed is not None
         assert compressed.has_sorted_indices
@@ -806,9 +811,10 @@ def matrix_rows_auroc(
                compressed.indptr.dtype)
         extension = getattr(xt, extension_name)
         extension(compressed.data, compressed.indices, compressed.indptr,
-                  columns_count, columns_subset, columns_scale, rows_auroc)
+                  columns_count, columns_subset, columns_scale,
+                  normalization, rows_folds, rows_auroc)
 
-    return rows_auroc
+    return (rows_folds, rows_auroc)
 
 
 @utm.timed_call()

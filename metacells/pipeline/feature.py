@@ -75,7 +75,6 @@ def extract_feature_data(
 
     **Computation Parameters**
 
-
     1. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the cells to the
        same total number of UMIs, using the ``downsample_min_samples`` (default:
        {downsample_min_samples}), ``downsample_min_cell_quantile`` (default:
@@ -120,11 +119,12 @@ def extract_feature_data(
                             patterns=forbidden_gene_patterns)
 
     results = tl.filter_data(adata, name=name, top_level=top_level,
+                             track_var='full_gene_index',
                              mask_var='feature_gene',
                              var_masks=['high_total_gene',
                                         'high_top3_gene',
                                         'high_relative_variance_gene',
-                                        '~forbidden_gene'])
+                                        '~forbidden_gene?'])
 
     if results is None:
         raise ValueError('Empty feature data, giving up')

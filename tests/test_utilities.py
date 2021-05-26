@@ -138,7 +138,7 @@ def test_downsample_matrix() -> None:
     assert np.all(new_row_sums == min_sum)
 
 
-def test_matrix_rows_auroc() -> None:
+def test_matrix_rows_folds_and_aurocs() -> None:
     np.random.seed(123456)
 
     signal = np.random.rand(100)
@@ -152,16 +152,32 @@ def test_matrix_rows_auroc() -> None:
         dense[index, :] *= index / 10
         dense[index, :] += signal
 
-    builtin_rows_auroc = \
+    in_data = ut.to_layout(dense[:, one_mask], layout='row_major')
+    out_data = ut.to_layout(dense[:, ~one_mask], layout='row_major')
+    in_means = ut.mean_per(in_data, per='row')
+    out_means = ut.mean_per(out_data, per='row')
+
+    normalization = 1e-4
+    in_means += normalization
+    out_means += normalization
+    builtin_rows_folds = in_means / out_means
+
+    builtin_rows_aurocs = \
         np.array([roc_auc_score(one_mask, dense[index, :])
                   for index in range(20)])
 
-    dense_rows_auroc = ut.matrix_rows_auroc(dense, one_mask)
-    assert np.allclose(dense_rows_auroc, builtin_rows_auroc)
+    dense_rows_folds, dense_rows_aurocs = \
+        ut.matrix_rows_folds_and_aurocs(dense, columns_subset=one_mask,
+                                        normalization=normalization)
+    assert np.allclose(dense_rows_aurocs, builtin_rows_aurocs)
+    assert np.allclose(dense_rows_folds, builtin_rows_folds)
 
     compressed = sparse.csr_matrix(dense)
-    sparse_rows_auroc = ut.matrix_rows_auroc(compressed, one_mask)
-    assert np.allclose(sparse_rows_auroc, builtin_rows_auroc)
+    sparse_rows_folds, sparse_rows_aurocs = \
+        ut.matrix_rows_folds_and_aurocs(compressed, columns_subset=one_mask,
+                                        normalization=normalization)
+    assert np.allclose(sparse_rows_aurocs, builtin_rows_aurocs)
+    assert np.allclose(sparse_rows_folds, builtin_rows_folds)
 
 
 def test_bincount_vector() -> None:

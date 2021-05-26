@@ -31,7 +31,6 @@ def find_rare_gene_modules(
     *,
     max_gene_cell_fraction: float = pr.rare_max_gene_cell_fraction,
     min_gene_maximum: int = pr.rare_min_gene_maximum,
-    similarity_of: Optional[str] = None,
     genes_similarity_method: str = pr.rare_genes_similarity_method,
     genes_cluster_method: str = pr.rare_genes_cluster_method,
     forbidden_gene_names: Optional[Collection[str]] = None,
@@ -76,8 +75,8 @@ def find_rare_gene_modules(
 
     Variable (Gene) Annotations
         ``genes_rare_gene_modules``
-            The indices of the rare gene module(s) each gene belongs to, where every non-zero bit
-            indicates the gene participates in the matching rare gene module.
+            The index of the rare gene module each gene belongs to, or ``-1`` if the gene does not
+            belong to any rate genes module.
 
         ``rare_genes``
             A boolean mask for the genes in any of the rare gene modules.
@@ -99,9 +98,7 @@ def find_rare_gene_modules(
 
     2. Compute the similarity between the genes using
        :py:func:`metacells.tools.similarity.compute_var_var_similarity` using the
-       ``genes_similarity_method`` (default: {genes_similarity_method}). If ``similarity_of`` is
-       specified (default: {similarity_of}), use this data for computing the similarity in exactly
-       the way you prefer (e.g., to correlate the log values).
+       ``genes_similarity_method`` (default: {genes_similarity_method}).
 
     3. Create a hierarchical clustering of the candidate genes using the ``genes_cluster_method``
        (default: {genes_cluster_method}).
@@ -165,7 +162,7 @@ def find_rare_gene_modules(
 
     similarities_between_candidate_genes = \
         _genes_similarity(candidate_data=candidate_data,
-                          what=similarity_of or what,
+                          what=what,
                           method=genes_similarity_method)
 
     linkage = \
@@ -268,6 +265,7 @@ def _genes_similarity(
     return ut.to_numpy_matrix(similarity, only_extract=True)
 
 
+# TODO: Replicated in metacell.pipeline.related_genes
 @ut.timed_call()
 def _cluster_genes(
     similarities_between_candidate_genes: ut.NumpyMatrix,

@@ -4,8 +4,9 @@ Defaults
 '''
 
 from math import sqrt
-from typing import Optional, Union
+from typing import Any, Optional, Union
 import metacells.utilities.typing as utt
+import leidenalg as la  # type: ignore
 
 #: The generic random seed. The default of ``0`` makes for a different result each time the code
 #: is run. For replicable results, provide a non-zero value. Used by too many functions to list
@@ -228,6 +229,69 @@ properly_sampled_min_gene_total: int = 1
 #:
 #:    There's no "reasonable" default value here. This must be tailored to the data.
 properly_sampled_max_excluded_genes_fraction: Optional[float] = None
+
+#: The number of randomly selected cells to use for computing related genes. See
+#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
+related_max_sampled_cells: int = 10000
+
+#: How to compute gene-gene similarity for computing the related genes. See
+#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
+related_genes_similarity_method: str = 'repeated_pearson'
+
+#: The hierarchical clustering method to use for computing the related genes. See
+#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
+related_genes_cluster_method: str = 'ward'
+
+#: The minimal number of genes in a related gene module. See
+#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
+related_min_genes_of_modules: int = 16
+
+#: The minimal samples to use for downsampling the cells for computing related genes. See
+#: :py:const:`downsample_min_samples`,
+#: :py:func:`metacells.tools.downsample.downsample_cells`,
+#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: and
+#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
+related_downsample_min_samples: int = downsample_min_samples
+
+#: The minimal quantile of the cells total size to use for downsampling the cells for computing
+#: "feature" genes. See
+#: :py:const:`downsample_min_cell_quantile`,
+#: :py:func:`metacells.tools.downsample.downsample_cells`,
+#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: and
+#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
+related_downsample_min_cell_quantile: float = downsample_min_cell_quantile
+
+#: The maximal quantile of the cells total size to use for downsampling the cells for computing
+#: "feature" genes. See
+#: :py:const:`downsample_max_cell_quantile`,
+#: :py:func:`metacells.tools.downsample.downsample_cells`,
+#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: and
+#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
+related_downsample_max_cell_quantile: float = downsample_max_cell_quantile
+
+#: The minimal relative variance of a gene to be considered a "feature". See
+#: :py:func:`metacells.tools.high.find_high_relative_variance_genes`,
+#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: and
+#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
+related_min_gene_relative_variance: float = 0.1
+
+#: The minimal number of downsampled UMIs of a gene to be considered a "feature". See
+#: :py:func:`metacells.tools.high.find_high_total_genes`,
+#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: and
+#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
+related_min_gene_total: int = 50
+
+#: The minimal number of the top-3rd downsampled UMIs of a gene to be considered a "feature". See
+#: :py:func:`metacells.tools.high.find_high_topN_genes`,
+#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: and
+#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
+related_min_gene_top3: int = 1
 
 #: The number of randomly selected cells to use for computing "noisy lonely" genes. See
 #: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes`
@@ -775,3 +839,7 @@ cover_fraction: float = 1/3.0
 #: and
 #: :py:func:`metacells.tools.layout.umap_by_distances`,
 noise_fraction: float = 0.1
+
+#: The default partition method. See
+#: :py:func:`metacells.pipeline.compute_clusters_by_features`.
+partition_method: Any = la.SurpriseVertexPartition
