@@ -124,7 +124,7 @@ def extract_feature_data(
                              var_masks=['high_total_gene',
                                         'high_top3_gene',
                                         'high_relative_variance_gene',
-                                        '~forbidden_gene?'])
+                                        '~forbidden_gene'])
 
     if results is None:
         raise ValueError('Empty feature data, giving up')

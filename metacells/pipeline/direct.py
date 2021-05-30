@@ -266,16 +266,13 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     data = ut.get_vo_proper(fdata, 'downsampled', layout='row_major')
     data = ut.to_numpy_matrix(data, copy=True)
 
-    max_of_rows = ut.max_per(data, per='row')
-    zero_cell_indices = np.where(max_of_rows == 0)[0]
-    if len(zero_cell_indices) > 0:
-        full_data = ut.get_vo_proper(fdata, '__x__', layout='row_major')
-        for zero_cell in zero_cell_indices:
-            data[zero_cell, :] = ut.to_numpy_vector(full_data[zero_cell, :])
-
-    max_of_rows = ut.max_per(data, per='row')
-    zero_cell_indices = np.where(max_of_rows == 0)[0]
-    assert len(zero_cell_indices) == 0
+    max_of_cells = ut.max_per(data, per='row')
+    min_of_cells = ut.min_per(data, per='row')
+    uniform_cell_indices = np.where(min_of_cells == max_of_cells)[0]
+    np.random.seed(random_seed)
+    for uniform_cell_index in uniform_cell_indices:
+        data[uniform_cell_index, np.random.randint(fdata.n_vars)] = \
+            max_of_cells[uniform_cell_index] + 0.1
 
     if cells_similarity_value_normalization > 0:
         data += cells_similarity_value_normalization
