@@ -271,8 +271,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     uniform_cell_indices = np.where(min_of_cells == max_of_cells)[0]
     np.random.seed(random_seed)
     for uniform_cell_index in uniform_cell_indices:
-        data[uniform_cell_index, np.random.randint(fdata.n_vars)] = \
-            max_of_cells[uniform_cell_index] + 0.1
+        data[uniform_cell_index, :] = np.random.rand(fdata.n_vars)
 
     if cells_similarity_value_normalization > 0:
         data += cells_similarity_value_normalization
