@@ -16,7 +16,6 @@ SETUP_REQUIRES = [
 INSTALL_REQUIRES = [
     'scanpy',
     'importlib-metadata',
-    'leidenalg',
     'numpy',
     'pandas',
     'scipy',

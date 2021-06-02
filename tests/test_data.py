@@ -74,23 +74,14 @@ def test_direct_pipeline() -> None:
 
         mdata = mc.pl.collect_metacells(cdata)
 
-        mc.tl.compute_excess_r2(cdata, random_seed=123456,
-                                compatible_size=None, mdata=mdata)
+        mc.tl.compute_inner_normalized_variance(adata=cdata,
+                                                gdata=mdata,
+                                                random_seed=123456)
 
-        expected_results = [expected['gene_max_top_r2'],
-                            expected['gene_max_top_shuffled_r2'],
-                            expected['gene_max_excess_r2']]
+        expected_results = expected['inner_normalized_variance']
 
-        top_r2 = mc.ut.get_vo_proper(mdata, 'top_r2', layout='column_major')
-        top_shuffled_r2 = \
-            mc.ut.get_vo_proper(mdata, 'top_shuffled_r2',
-                                layout='column_major')
-        excess_r2 = \
-            mc.ut.get_vo_proper(mdata, 'excess_r2', layout='column_major')
-        actual_results = [
-            np.nanmean(mc.ut.nanmax_per(top_r2, per='column')),
-            np.nanmean(mc.ut.nanmax_per(top_shuffled_r2, per='column')),
-            np.nanmean(mc.ut.nanmax_per(excess_r2, per='column'))
-        ]
+        actual_results = \
+            np.nanmean(mc.ut.get_vo_proper(mdata, 'inner_normalized_variance',
+                                           layout='column_major'))
 
-        assert np.allclose(expected_results, actual_results)
+        assert np.allclose([expected_results], [actual_results])

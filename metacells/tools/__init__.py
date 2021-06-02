@@ -18,7 +18,6 @@ from .deviants import *
 from .dissolve import *
 from .distinct import *
 from .downsample import *
-from .excess import *
 from .filter import *
 from .group import *
 from .high import *
@@ -29,5 +28,6 @@ from .named import *
 from .noisy_lonely import *
 from .project import *
 from .properly_sampled import *
+from .quality import *
 from .rare import *
 from .similarity import *

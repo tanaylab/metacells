@@ -66,7 +66,7 @@ Evaluating the Metacells
 .. automodule:: metacells.tools.group
     :members:
 
-.. automodule:: metacells.tools.excess
+.. automodule:: metacells.tools.quality
     :members:
 
 .. automodule:: metacells.tools.distinct

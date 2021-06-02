@@ -49,7 +49,6 @@ significant_value: int = 7
 #: purpose. See
 #: :py:const:`noisy_lonely_downsample_min_samples`,
 #: :py:const:`feature_downsample_min_samples`,
-#: :py:const:`excess_downsample_min_samples`
 #: and
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
 downsample_min_samples: int = 750
@@ -58,7 +57,6 @@ downsample_min_samples: int = 750
 #: purpose. See
 #: :py:const:`noisy_lonely_downsample_min_cell_quantile`,
 #: :py:const:`feature_downsample_min_cell_quantile`,
-#: :py:const:`excess_downsample_min_cell_quantile`
 #: and
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
 downsample_min_cell_quantile: float = 0.05
@@ -67,7 +65,6 @@ downsample_min_cell_quantile: float = 0.05
 #: purpose. See
 #: :py:const:`noisy_lonely_downsample_max_cell_quantile`,
 #: :py:const:`feature_downsample_max_cell_quantile`,
-#: :py:const:`excess_downsample_max_cell_quantile`
 #: and
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
 downsample_max_cell_quantile: float = 0.5
@@ -333,7 +330,7 @@ noisy_lonely_min_gene_total: int = 100
 #: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes`
 #: and
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
-noisy_lonely_min_gene_normalized_variance: float = 1.0
+noisy_lonely_min_gene_normalized_variance: float = significant_gene_normalized_variance
 
 #: The maximal similarity between a gene and another gene to be considered "lonely". See
 #: :py:const:`significant_gene_similarity`,
@@ -736,39 +733,6 @@ rare_dissolve_min_convincing_size_factor: Optional[float] = None
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 dissolve_min_convincing_gene_fold_factor: float = significant_gene_fold_factor
-
-#: The minimal samples to use for downsampling the cells for computing "excess"
-#: R^2 for the genes. See
-#: :py:const:`downsample_min_samples`
-#: and
-#: :py:func:`metacells.tools.excess.compute_excess_r2`.
-excess_downsample_min_samples: int = downsample_min_samples
-
-#: The minimal quantile of the cells total size to use for downsampling the cells for computing
-#: "excess" R^2 for the genes. See
-#: :py:const:`downsample_min_cell_quantile`
-#: and
-#: :py:func:`metacells.tools.excess.compute_excess_r2`.
-excess_downsample_min_cell_quantile: float = downsample_min_cell_quantile
-
-#: The maximal quantile of the cells total size to use for downsampling the cells for computing
-#: "excess" R^2 for the genes. See
-#: :py:const:`downsample_max_cell_quantile`
-#: and
-#: :py:func:`metacells.tools.excess.compute_excess_r2`.
-excess_downsample_max_cell_quantile: float = downsample_max_cell_quantile
-
-#: The minimal total value of a gene in a metacell to allow computing "excess" R^2 for it. See
-#: :py:func:`metacells.tools.excess.compute_excess_r2`.
-excess_min_gene_total: int = 40
-
-#: The rank of the "top" gene-gene similarity to use for computing "excess" R^2 for each gene.
-#: See :py:func:`metacells.tools.excess.compute_excess_r2`.
-excess_top_gene_rank: int = 5
-
-#: The number of times to shuffle the genes for averaging the baseline technical R^2 for each
-#: gene. See :py:func:`metacells.tools.excess.compute_excess_r2`.
-excess_shuffles_count: int = 10
 
 #: The number of most-distinct genes to collect for each cell. See
 #: :py:func:`metacells.tools.distinct.find_distinct_genes`.
