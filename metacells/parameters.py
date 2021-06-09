@@ -392,7 +392,7 @@ rare_max_cells_of_random_pile: int = min_metacell_cells * 4
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-rare_min_modules_size_factor: float = max_merge_size_factor
+rare_min_modules_size_factor: float = 0
 
 #: The minimal average correlation between the genes in a rare gene module. See
 #: :py:func:`metacells.parameters.significant_gene_similarity`,
@@ -407,6 +407,13 @@ rare_min_module_correlation: float = significant_gene_similarity
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 rare_min_related_gene_fold_factor: float = 7
+
+#: The maximal ratio of total cells to include as a result of adding a related gene to a rare gene
+#: module. See
+#: :py:func:`metacells.tools.rare.find_rare_gene_modules`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+rare_max_related_gene_increase_factor: float = 4.0
 
 #: The minimal number of UMIs of a rare gene module in a cell to be considered as expressing the
 #: rare behavior. See

@@ -4,7 +4,7 @@ Rare
 '''
 
 from re import Pattern
-from typing import Collection, Dict, List, Optional, Tuple, Union
+from typing import Collection, List, Optional, Set, Tuple, Union
 
 import numpy as np
 import scipy.cluster.hierarchy as sch  # type: ignore
@@ -43,9 +43,10 @@ def find_rare_gene_modules(
     min_modules_size_factor: float = pr.rare_min_modules_size_factor,
     min_module_correlation: float = pr.rare_min_module_correlation,
     min_related_gene_fold_factor: float = pr.rare_min_related_gene_fold_factor,
+    max_related_gene_increase_factor: float = pr.rare_max_related_gene_increase_factor,
     min_cell_module_total: int = pr.rare_min_cell_module_total,
     inplace: bool = True,
-) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame, ut.NumpyVector]]:
+) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame]]:
     '''
     Detect rare genes modules based on ``what`` (default: {what}) data.
 
@@ -70,24 +71,18 @@ def find_rare_gene_modules(
             The index of the rare gene module each cell expresses the most, or ``-1`` in the common
             case it does not express any rare genes module.
 
-        ``rare_cells``
+        ``rare_cell``
             A boolean mask for the (few) cells that express a rare gene module.
 
     Variable (Gene) Annotations
-        ``genes_rare_gene_modules``
-            The index of the rare gene module each gene belongs to, or ``-1`` if the gene does not
-            belong to any rate genes module.
+        ``rare_gene_module_<N>``
+            A boolean mask for the genes in the gene module with index ``N``.
 
-        ``rare_genes``
+        ``rare_gene``
             A boolean mask for the genes in any of the rare gene modules.
 
-    Unstructured Annotations
-        ``rare_gene_modules``
-            An array of rare gene modules, where every entry is the array of the names of the genes
-            of the module.
-
     If ``inplace``, these are written to to the data, and the function returns ``None``. Otherwise
-    they are returned as tuple containing two data frames and an array.
+    they are returned as tuple containing two data frames.
 
     **Computation Parameters**
 
@@ -117,10 +112,12 @@ def find_rare_gene_modules(
     6. Add to the gene module all genes whose fraction in cells expressing any of the genes in the
        rare gene module is at least 2^``min_related_gene_fold_factor`` (default:
        {min_related_gene_fold_factor}) times their fraction in the rest of the population, as long
-       as their maximal value in one of the expressing cells is at least ``min_gene_maximum``, as
-       long as they do not match the ``forbidden_gene_names`` or the ``forbidden_gene_patterns``. If
-       a gene is above the threshold for multiple gene modules, associate it with the gene module
-       for which its fold factor is higher.
+       as their maximal value in one of the expressing cells is at least ``min_gene_maximum``,
+       as long as this doesn't add more than ``max_related_gene_increase_factor`` times the original
+       number of cells to the rare gene module, and as long as they do not match the
+       ``forbidden_gene_names`` or the ``forbidden_gene_patterns``. If a gene is above the threshold
+       for multiple gene modules, associate it with the gene module for which its fold factor is
+       higher.
 
     7. Associate cells with the rare gene module if they contain at least ``min_cell_module_total``
        (default: {min_cell_module_total}) UMIs of the expanded rare gene module. If a cell meets the
@@ -144,7 +141,7 @@ def find_rare_gene_modules(
     ut.log_calc('allowed_genes_mask', allowed_genes_mask)
 
     rare_module_of_cells = np.full(adata.n_obs, -1, dtype='int32')
-    list_of_names_of_genes_of_modules: List[ut.NumpyVector] = []
+    list_of_rare_gene_indices_of_modules: List[List[int]] = []
 
     candidates = \
         _pick_candidates(adata_of_all_genes_of_all_cells=adata,
@@ -156,7 +153,7 @@ def find_rare_gene_modules(
     if candidates is None:
         return _results(adata=adata,
                         rare_module_of_cells=rare_module_of_cells,
-                        list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules,
+                        list_of_rare_gene_indices_of_modules=list_of_rare_gene_indices_of_modules,
                         inplace=inplace)
     candidate_data, candidate_genes_indices = candidates
 
@@ -187,8 +184,10 @@ def find_rare_gene_modules(
                        min_genes_of_modules=min_genes_of_modules,
                        min_cells_of_modules=min_cells_of_modules,
                        max_cells_of_modules=max_cells_of_modules,
+                       min_cell_module_total=min_cell_module_total,
                        min_gene_maximum=min_gene_maximum,
-                       min_related_gene_fold_factor=min_related_gene_fold_factor)
+                       min_related_gene_fold_factor=min_related_gene_fold_factor,
+                       max_related_gene_increase_factor=max_related_gene_increase_factor)
 
     _identify_cells(adata_of_all_genes_of_all_cells=adata,
                     what=what,
@@ -198,19 +197,19 @@ def find_rare_gene_modules(
                     min_cell_module_total=min_cell_module_total,
                     rare_module_of_cells=rare_module_of_cells)
 
-    _compress_modules(adata_of_all_genes_of_all_cells=adata,
-                      what=what,
-                      min_cells_of_modules=min_cells_of_modules,
-                      max_cells_of_modules=max_cells_of_modules,
-                      target_metacell_size=target_metacell_size,
-                      min_modules_size_factor=min_modules_size_factor,
-                      related_gene_indices_of_modules=related_gene_indices_of_modules,
-                      rare_module_of_cells=rare_module_of_cells,
-                      list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules)
+    list_of_rare_gene_indices_of_modules = \
+        _compress_modules(adata_of_all_genes_of_all_cells=adata,
+                          what=what,
+                          min_cells_of_modules=min_cells_of_modules,
+                          max_cells_of_modules=max_cells_of_modules,
+                          target_metacell_size=target_metacell_size,
+                          min_modules_size_factor=min_modules_size_factor,
+                          related_gene_indices_of_modules=related_gene_indices_of_modules,
+                          rare_module_of_cells=rare_module_of_cells)
 
     return _results(adata=adata,
                     rare_module_of_cells=rare_module_of_cells,
-                    list_of_names_of_genes_of_modules=list_of_names_of_genes_of_modules,
+                    list_of_rare_gene_indices_of_modules=list_of_rare_gene_indices_of_modules,
                     inplace=inplace)
 
 
@@ -330,7 +329,7 @@ def _identify_genes(
 
 
 @ut.timed_call()
-def _related_genes(  # pylint: disable=too-many-branches,too-many-statements
+def _related_genes(  # pylint: disable=too-many-statements,too-many-branches
     *,
     adata_of_all_genes_of_all_cells: AnnData,
     what: Union[str, ut.Matrix] = '__x__',
@@ -340,15 +339,22 @@ def _related_genes(  # pylint: disable=too-many-branches,too-many-statements
     min_gene_maximum: int,
     min_cells_of_modules: int,
     max_cells_of_modules: int,
+    min_cell_module_total: int,
     min_related_gene_fold_factor: float,
+    max_related_gene_increase_factor: float,
 ) -> List[List[int]]:
     total_all_cells_umis_of_all_genes = \
         ut.get_v_numpy(adata_of_all_genes_of_all_cells, what, sum=True)
 
-    related_data_of_genes: Dict[int, Tuple[bool, float, float, int]] = {}
-
     ut.log_calc('genes for modules:')
     modules_count = 0
+    related_gene_indices_of_modules: List[List[int]] = []
+
+    rare_gene_indices_of_any: Set[int] = set()
+    for rare_gene_indices_of_module in rare_gene_indices_of_modules:
+        if len(rare_gene_indices_of_module) >= min_genes_of_modules:
+            rare_gene_indices_of_any.update(list(rare_gene_indices_of_module))
+
     for rare_gene_indices_of_module in rare_gene_indices_of_modules:
         if len(rare_gene_indices_of_module) < min_genes_of_modules:
             continue
@@ -362,7 +368,7 @@ def _related_genes(  # pylint: disable=too-many-branches,too-many-statements
 
             adata_of_module_genes_of_all_cells = \
                 ut.slice(adata_of_all_genes_of_all_cells,
-                         name=f'.module{module_index}.rare_genes',
+                         name=f'.module{module_index}.rare_gene',
                          vars=rare_gene_indices_of_module,
                          top_level=False)
 
@@ -392,7 +398,7 @@ def _related_genes(  # pylint: disable=too-many-branches,too-many-statements
 
             adata_of_all_genes_of_expressed_cells_of_module = \
                 ut.slice(adata_of_all_genes_of_all_cells,
-                         name=f'.module{module_index}.rare_cells',
+                         name=f'.module{module_index}.rare_cell',
                          obs=mask_of_expressed_cells,
                          top_level=False)
 
@@ -426,51 +432,62 @@ def _related_genes(  # pylint: disable=too-many-branches,too-many-statements
             related_gene_indices = np.where(mask_of_related_genes)[0]
             assert np.all(mask_of_related_genes[rare_gene_indices_of_module])
 
+            base_genes_of_all_cells_adata = \
+                ut.slice(adata_of_all_genes_of_all_cells,
+                         name=f'.module{module_index}.base',
+                         vars=rare_gene_indices_of_module)
+            total_base_genes_of_all_cells = \
+                ut.get_o_numpy(base_genes_of_all_cells_adata, what, sum=True)
+            mask_of_strong_base_cells = \
+                total_base_genes_of_all_cells >= min_cell_module_total
+            count_of_strong_base_cells = np.sum(mask_of_strong_base_cells)
+
             if ut.logging_calc():
                 ut.log_calc('candidate_gene_names',
                             sorted(adata_of_all_genes_of_all_cells.var_names[related_gene_indices]))
+                ut.log_calc('base_strong_genes', count_of_strong_base_cells)
 
+            related_gene_indices_of_module = list(rare_gene_indices_of_module)
             for gene_index in related_gene_indices:
-                current_gene_data = \
-                    related_data_of_genes.get(gene_index,
-                                              (False, 0.0, 0.0, module_index))
-
                 if gene_index in rare_gene_indices_of_module:
-                    gene_data = (True, 0.0, 0.0, module_index)
-                    assert not current_gene_data[0]
-                elif background_cells_fraction_of_all_genes[gene_index] == 0:
-                    gene_data = \
-                        (False,
-                         expressed_cells_fraction_of_all_genes[gene_index],
-                         0.0,
-                         module_index)
-                else:
-                    gene_data = \
-                        (False,
-                         0.0,
-                         expressed_cells_fraction_of_all_genes[gene_index]
-                         / background_cells_fraction_of_all_genes[gene_index],
-                         module_index)
+                    continue
 
-                if gene_data > current_gene_data:
-                    related_data_of_genes[gene_index] = gene_data
+                if gene_index in rare_gene_indices_of_any:
+                    ut.log_calc(f'- candidate gene {adata_of_all_genes_of_all_cells.var_names[gene_index]} '
+                                f'belongs to another module')
+                    continue
 
-    related_gene_indices_of_modules: List[List[int]] = [[]] * modules_count
+                if gene_index not in rare_gene_indices_of_module:
+                    related_gene_of_all_cells_adata = \
+                        ut.slice(adata_of_all_genes_of_all_cells,
+                                 name=f'.{adata_of_all_genes_of_all_cells.var_names[gene_index]}',
+                                 vars=np.array([gene_index]))
+                    assert related_gene_of_all_cells_adata.n_vars == 1
+                    total_related_genes_of_all_cells = \
+                        ut.get_o_numpy(related_gene_of_all_cells_adata,
+                                       what, sum=True)
+                    total_related_genes_of_all_cells += total_base_genes_of_all_cells
+                    mask_of_strong_related_cells = \
+                        total_related_genes_of_all_cells >= min_cell_module_total
+                    count_of_strong_related_cells = \
+                        np.sum(mask_of_strong_related_cells)
+                    ut.log_calc(f'- candidate gene {adata_of_all_genes_of_all_cells.var_names[gene_index]} '
+                                f'strong cells: {count_of_strong_related_cells} '
+                                f'factor: {count_of_strong_related_cells / count_of_strong_base_cells}')
+                    if count_of_strong_related_cells \
+                            > max_related_gene_increase_factor * count_of_strong_base_cells:
+                        continue
 
-    ut.log_calc('related genes for modules:')
-    for module_index in range(modules_count):
-        related_gene_indices_of_module = [gene_index
-                                          for gene_index, gene_data
-                                          in related_data_of_genes.items()
-                                          if gene_data[3] == module_index]
-        related_gene_indices_of_modules[module_index] = related_gene_indices_of_module
-        if ut.logging_calc():
-            with ut.log_step('- module', module_index,
-                             formatter=lambda module_index:
-                             ut.progress_description(modules_count,
-                                                     module_index, 'module')):
-                ut.log_calc('related_gene_names',
-                            sorted(adata_of_all_genes_of_all_cells.var_names[related_gene_indices_of_module]))
+                related_gene_indices_of_module.append(gene_index)
+
+            related_gene_indices_of_modules.append(  #
+                related_gene_indices_of_module)
+
+    if ut.logging_calc():
+        ut.log_calc('related genes for modules:')
+        for module_index, related_gene_indices_of_module in enumerate(related_gene_indices_of_modules):
+            ut.log_calc(f'- module {module_index} related_gene_names',
+                        sorted(adata_of_all_genes_of_all_cells.var_names[related_gene_indices_of_module]))
 
     return related_gene_indices_of_modules
 
@@ -511,6 +528,9 @@ def _identify_cells(
             mask_of_strong_cells_of_module = \
                 total_related_genes_of_all_cells >= min_cell_module_total
 
+            median_strength_of_module = \
+                np.median(  #
+                    total_related_genes_of_all_cells[mask_of_strong_cells_of_module])
             strong_cells_count = np.sum(mask_of_strong_cells_of_module)
 
             if strong_cells_count > max_cells_of_modules:
@@ -533,8 +553,11 @@ def _identify_cells(
 
             ut.log_calc('strong_cells', mask_of_strong_cells_of_module)
 
-            mask_of_strong_cells_of_module &= \
-                total_related_genes_of_all_cells >= max_strength_of_cells
+            strength_of_all_cells = total_related_genes_of_all_cells / median_strength_of_module
+            mask_of_strong_cells_of_module &= strength_of_all_cells >= max_strength_of_cells
+            max_strength_of_cells[mask_of_strong_cells_of_module] = \
+                strength_of_all_cells[mask_of_strong_cells_of_module]
+
             rare_module_of_cells[mask_of_strong_cells_of_module] = module_index
 
 
@@ -549,8 +572,10 @@ def _compress_modules(
     min_modules_size_factor: float,
     related_gene_indices_of_modules: List[List[int]],
     rare_module_of_cells: ut.NumpyVector,
-    list_of_names_of_genes_of_modules: List[ut.NumpyVector],
-) -> None:
+) -> List[List[int]]:
+    list_of_rare_gene_indices_of_modules: List[List[int]] = []
+    list_of_names_of_genes_of_modules: List[List[str]] = []
+
     min_umis_of_modules = target_metacell_size * min_modules_size_factor
     ut.log_calc('min_umis_of_modules', min_umis_of_modules)
 
@@ -560,7 +585,6 @@ def _compress_modules(
     cell_counts_of_modules: List[int] = []
 
     ut.log_calc('compress modules:')
-    next_module_index = 0
     modules_count = len(related_gene_indices_of_modules)
     for module_index, gene_indices_of_module in enumerate(related_gene_indices_of_modules):
         if len(gene_indices_of_module) == 0:
@@ -599,78 +623,71 @@ def _compress_modules(
 
             ut.log_calc('UMIs', module_umis_count)
 
+            next_module_index = len(list_of_rare_gene_indices_of_modules)
             if module_index != next_module_index:
                 ut.log_calc('is reindexed to', next_module_index)
                 rare_module_of_cells[module_cells_mask] = next_module_index
                 module_index = next_module_index
 
             next_module_index += 1
+            list_of_rare_gene_indices_of_modules.append(gene_indices_of_module)
 
             if ut.logging_calc():
                 cell_counts_of_modules.append(np.sum(module_cells_mask))
-            list_of_names_of_genes_of_modules.append(np.array(  #
-                sorted(adata_of_all_genes_of_all_cells.var_names[gene_indices_of_module])))
+            list_of_names_of_genes_of_modules.append(  #
+                sorted(adata_of_all_genes_of_all_cells.var_names[gene_indices_of_module]))
 
     if ut.logging_calc():
         ut.log_calc('final modules:')
-        modules_count = len(list_of_names_of_genes_of_modules)
         for module_index, (module_cells_count, module_gene_names) \
                 in enumerate(zip(cell_counts_of_modules, list_of_names_of_genes_of_modules)):
-            with ut.log_step('- module', module_index,
-                             formatter=lambda module_index:
-                             ut.progress_description(modules_count,
-                                                     module_index, 'module')):
-                ut.log_calc('cells', module_cells_count)
-                ut.log_calc('genes', module_gene_names)
+            ut.log_calc(  #
+                f'- module: {module_index} cells: {module_cells_count} genes: {module_gene_names}')
+
+    return list_of_rare_gene_indices_of_modules
 
 
 def _results(
     *,
     adata: AnnData,
     rare_module_of_cells: ut.NumpyVector,
-    list_of_names_of_genes_of_modules: List[ut.NumpyVector],
+    list_of_rare_gene_indices_of_modules: List[List[int]],
     inplace: bool
-) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame, ut.NumpyVector]]:
+) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame]]:
     assert np.max(rare_module_of_cells) \
-        == len(list_of_names_of_genes_of_modules) - 1
+        == len(list_of_rare_gene_indices_of_modules) - 1
 
-    array_of_names_of_genes_of_modules = \
-        np.array(list_of_names_of_genes_of_modules, dtype='object')
+    if not inplace:
+        var_metrics = ut.to_pandas_frame(index=adata.var_names)
 
-    rare_module_of_genes = np.full(adata.n_vars, -1, dtype='int32')
-    genes_series = \
-        ut.to_pandas_series(rare_module_of_genes, index=adata.var_names)
-    for module_index, list_of_names_of_genes_of_module in enumerate(list_of_names_of_genes_of_modules):
-        genes_series[list_of_names_of_genes_of_module] = module_index
+    rare_gene_mask = np.zeros(adata.n_vars, dtype='bool')
+    for module_index, rare_gene_indices_of_module \
+            in enumerate(list_of_rare_gene_indices_of_modules):
+        rare_module_gene_mask = np.zeros(adata.n_vars, dtype='bool')
+        rare_module_gene_mask[rare_gene_indices_of_module] = True
+        property_name = f'rare_gene_module_{module_index}'
+        if inplace:
+            ut.set_v_data(adata, property_name, rare_module_gene_mask)
+        else:
+            var_metrics[property_name] = rare_module_gene_mask
+            ut.log_return(property_name, rare_module_gene_mask)
+        rare_gene_mask |= rare_module_gene_mask
 
     if inplace:
-        ut.set_m_data(adata, 'rare_gene_modules',
-                      array_of_names_of_genes_of_modules,
-                      formatter=lambda matrix:
-                      '[ ' + ', '.join([f'[ {", ".join(list(array))} ]'
-                                        for array in matrix]) + ' ]')
-        ut.set_v_data(adata, 'genes_rare_gene_module', rare_module_of_genes,
-                      formatter=ut.groups_description)
-        ut.set_v_data(adata, 'rare_gene', rare_module_of_genes >= 0)
+        ut.set_v_data(adata, 'rare_gene', rare_gene_mask)
+    else:
+        var_metrics['rare_gene'] = rare_gene_mask
+        ut.log_return('rare_gene', rare_gene_mask)
+
+    if inplace:
         ut.set_o_data(adata, 'cells_rare_gene_module', rare_module_of_cells,
                       formatter=ut.groups_description)
         ut.set_o_data(adata, 'rare_cell', rare_module_of_cells >= 0)
         return None
 
     obs_metrics = ut.to_pandas_frame(index=adata.obs_names)
-    var_metrics = ut.to_pandas_frame(index=adata.var_names)
-
-    obs_metrics['cells_rare_gene_module'] = rare_module_of_cells
-    obs_metrics['rare_cell'] = rare_module_of_cells >= 0
-    var_metrics['genes_rare_gene_module'] = rare_module_of_genes
-    var_metrics['rare_gene'] = rare_module_of_genes >= 0
-
-    ut.log_return('rare_gene_modules', len(list_of_names_of_genes_of_modules))
-    ut.log_return('genes_rare_gene_module', rare_module_of_genes,
-                  formatter=ut.groups_description)
-    ut.log_return('rare_genes', rare_module_of_genes >= 0)
     ut.log_return('cells_rare_gene_module', rare_module_of_cells,
                   formatter=ut.groups_description)
-    ut.log_return('rare_cells', rare_module_of_cells >= 0)
+    ut.log_return('rare_cell', rare_module_of_cells >= 0)
 
-    return obs_metrics, var_metrics, array_of_names_of_genes_of_modules
+    return obs_metrics, var_metrics

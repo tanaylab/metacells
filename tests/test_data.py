@@ -34,6 +34,7 @@ def _load(path: str) -> Tuple[AnnData, Dict[str, Any]]:
         adata = sc.read(path)
 
     LOADED[path] = (adata, expected)
+    mc.ut.set_name(adata, path.split('/')[-1][:-5])
     return adata, expected
 
 
@@ -41,13 +42,18 @@ def test_find_rare_gene_modules() -> None:
     for path in glob('../metacells-test-data/*.h5ad'):
         adata, expected = _load(path)
 
-        mc.tl.find_rare_gene_modules(adata,
-                                     **expected.get('find_rare_gene_modules', {}))
+        mc.tl.find_rare_gene_modules(  #
+            adata,
+            forbidden_gene_names=expected['compute_direct_metacells']['forbidden_gene_names'],
+            **expected.get('find_rare_gene_modules', {}))
 
-        actual_rare_gene_modules = [
-            list(module_gene_names) for module_gene_names
-            in mc.ut.get_m_data(adata, 'rare_gene_modules')
-        ]
+        module_index = 0
+        actual_rare_gene_modules = []
+        while mc.ut.has_data(adata, f'rare_gene_module_{module_index}'):
+            actual_rare_gene_modules.append(sorted(adata.var_names[  #
+                mc.ut.get_v_numpy(adata, f'rare_gene_module_{module_index}')]))
+            module_index += 1
+
         expected_rare_gene_modules = expected['rare_gene_modules']
 
         assert actual_rare_gene_modules == expected_rare_gene_modules

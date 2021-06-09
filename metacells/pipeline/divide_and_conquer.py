@@ -438,6 +438,7 @@ def divide_and_conquer_pipeline(
     rare_min_modules_size_factor: float = pr.rare_min_modules_size_factor,
     rare_min_module_correlation: float = pr.rare_min_module_correlation,
     rare_min_related_gene_fold_factor: float = pr.rare_min_related_gene_fold_factor,
+    rare_max_related_gene_increase_factor: float = pr.rare_max_related_gene_increase_factor,
     rare_min_cell_module_total: int = pr.rare_min_cell_module_total,
     rare_max_cells_of_random_pile: int = pr.rare_max_cells_of_random_pile,
     rare_dissolve_min_robust_size_factor: Optional[float] = pr.rare_dissolve_min_robust_size_factor,
@@ -512,10 +513,6 @@ def divide_and_conquer_pipeline(
     Sets the following annotations in ``adata``:
 
     Unstructured Annotations
-        ``rare_gene_modules``
-            An array of rare gene modules, where every entry is the array of the names of the genes
-            of the module.
-
         ``pre_directs``, ``directs``
             The number of times we invoked
             :py:func:`metacells.pipeline.direct.compute_direct_metacells` for computing the
@@ -525,11 +522,10 @@ def divide_and_conquer_pipeline(
             (probabilities).
 
     Variable (Gene) Annotations
-        ``genes_rare_gene_modules``
-            The indices of the rare gene module(s) each gene belongs to, where every non-zero bit
-            indicates the gene participates in the matching rare gene module.
+        ``rare_gene_module_<N>``
+            A boolean mask for the genes in the rare gene module ``N``.
 
-        ``rare_genes``
+        ``rare_gene``
             A boolean mask for the genes in any of the rare gene modules.
 
         ``pre_high_total_gene``, ``high_total_gene``
@@ -560,7 +556,7 @@ def divide_and_conquer_pipeline(
             The index of the rare gene module each cell expresses the most, or ``-1`` in the common
             case it does not express any rare genes module.
 
-        ``rare_cells``
+        ``rare_cell``
             A boolean mask for the (few) cells that express a rare gene module.
 
         ``pre_cell_directs``, ``cell_directs``
@@ -615,6 +611,7 @@ def divide_and_conquer_pipeline(
        ``rare_min_modules_size_factor`` (default: {rare_min_modules_size_factor}),
        ``rare_min_module_correlation`` (default: {rare_min_module_correlation}),
        ``rare_min_related_gene_fold_factor`` (default: {rare_min_related_gene_fold_factor})
+       ``rare_max_related_gene_increase_factor`` (default: {rare_max_related_gene_increase_factor})
        ``rare_max_cells_of_random_pile`` (default: {rare_max_cells_of_random_pile})
        and
        ``rare_min_cell_module_total`` (default: {rare_min_cell_module_total}).
@@ -666,6 +663,7 @@ def divide_and_conquer_pipeline(
                                       min_modules_size_factor=rare_min_modules_size_factor,
                                       min_module_correlation=rare_min_module_correlation,
                                       min_related_gene_fold_factor=rare_min_related_gene_fold_factor,
+                                      max_related_gene_increase_factor=rare_max_related_gene_increase_factor,
                                       target_pile_size=target_pile_size,
                                       max_cells_of_random_pile=rare_max_cells_of_random_pile,
                                       min_cell_module_total=rare_min_cell_module_total)
