@@ -298,7 +298,7 @@ def _balance_ranks(
         ut.timed_parameters(size=size)
         max_index_of_each = \
             ut.to_numpy_vector(  #
-                dense_balanced_ranks.argmax(axis=1))  # type: ignore
+                dense_balanced_ranks.argmax(axis=1))
 
     dense_balanced_ranks += max_rank + 1 - 2**21
 

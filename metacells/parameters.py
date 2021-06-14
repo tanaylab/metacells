@@ -4,9 +4,8 @@ Defaults
 '''
 
 from math import sqrt
-from typing import Any, Optional, Union
+from typing import Optional, Union
 import metacells.utilities.typing as utt
-import leidenalg as la  # type: ignore
 
 #: The generic random seed. The default of ``0`` makes for a different result each time the code
 #: is run. For replicable results, provide a non-zero value. Used by too many functions to list
@@ -810,7 +809,3 @@ cover_fraction: float = 1/3.0
 #: and
 #: :py:func:`metacells.tools.layout.umap_by_distances`,
 noise_fraction: float = 0.1
-
-#: The default partition method. See
-#: :py:func:`metacells.pipeline.compute_clusters_by_features`.
-partition_method: Any = la.SurpriseVertexPartition
