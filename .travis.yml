@@ -20,6 +20,7 @@ before_install:
 
 install:
 - sudo apt-get install g++-7
+- pip install .[tests]
 
 script:
 - tox
