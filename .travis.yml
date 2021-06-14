@@ -20,6 +20,8 @@ before_install:
 
 install:
 - sudo apt-get install $CXX
+- pip install numpy --upgrade
+- pip install pandas --upgrade
 - pip install .[test] --upgrade
 
 script:
