@@ -23,9 +23,10 @@ install:
 - pip install numpy --upgrade
 - pip install packaging --upgrade
 - pip install .[test] --upgrade
-- python setup.py install
+- python setup.py build
 
 script:
-- export PYTHONPATH=$PWD/build/lib*:$PYTHONPATH
+- ls metacells
+- export PYTHONPATH=$PWD:$PYTHONPATH
 - echo $PYTHONPATH
 - pytest tests/test*.py
