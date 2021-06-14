@@ -23,6 +23,11 @@ install:
 - pip install numpy --upgrade
 - pip install packaging --upgrade
 - pip install tox --upgrade
+- pip install .[test]
 
 script:
+- export PYTHONPATH=$PWD:$PYTHONPATH
+- echo $PYTHONPATH
+- python setup.py build
+- python setup.py install
 - tox
