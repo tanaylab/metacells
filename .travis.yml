@@ -20,6 +20,10 @@ before_install:
 
 install:
 - sudo apt-get install g++-7
+- echo $CC
+- echo $CXX
+- $CC --version
+- $CXX --version
 - pip install .[tests]
 
 script:

@@ -95,9 +95,6 @@ namespace metacells {
 static std::mutex io_mutex;
 #endif
 
-static_assert(sizeof(float32_t) == 4);
-static_assert(sizeof(float64_t) == 8);
-
 /// Release the GIL to allow for actual parallelism.
 class WithoutGil {
 private:
