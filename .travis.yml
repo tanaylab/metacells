@@ -19,12 +19,12 @@ before_install:
 - eval "${MATRIX_EVAL}"
 
 install:
-- sudo apt-get install g++-7
 - echo $CC
 - echo $CXX
-- $CC --version
-- $CXX --version
-- pip install .[tests]
+- sudo apt-get install $CXX
+- gcc --version
+- pip install .
+- pip install tox
 
 script:
 - tox
