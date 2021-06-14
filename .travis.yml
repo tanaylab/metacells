@@ -20,7 +20,7 @@ before_install:
 
 install:
 - sudo apt-get install $CXX
-- pip install .[test]
+- pip install .[test] --upgrade
 
 script:
 - pytest tests/test*.py
