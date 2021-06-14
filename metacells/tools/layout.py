@@ -28,6 +28,7 @@ def umap_by_distances(
     *,
     prefix: str = 'umap',
     k: int = pr.umap_k,
+    dimensions: int = 2,
     min_dist: float = pr.umap_min_dist,
     spread: float = pr.umap_spread,
     random_seed: int = pr.random_seed,
@@ -48,16 +49,20 @@ def umap_by_distances(
 
     Observation (Cell) Annotations
         ``<prefix>_x``, ``<prefix>_y``
-            Coordinates for UMAP 2D projection of the observations.
+            Coordinates for UMAP 2D projection of the observations (if ``dimensions`` is 2).
+        ``<prefix>_u``, ``<prefix>_v``, ``<prefix>_3``
+            Coordinates for UMAP 3D projection of the observations (if ``dimensions`` is 3).
 
     **Computation Parameters**
 
-    1. Invoke UMAP to compute the layout using ``min_dist`` (default: {min_dist}), ``spread``
-       (default: {spread}) and ``k`` (default: {k}). If the spread is lower than the minimal
-       distance, it is raised. If ``random_seed`` (default: {random_seed}) is not zero, then it is
-       passed to UMAP to force the computation to be reproducible. However, this means UMAP will use
-       a single-threaded implementation that will be slower.
+    1. Invoke UMAP to compute a layout of some ``dimensions`` (default: {dimensions}D) using
+       ``min_dist`` (default: {min_dist}), ``spread`` (default: {spread}) and ``k`` (default: {k}).
+       If the spread is lower than the minimal distance, it is raised. If ``random_seed`` (default:
+       {random_seed}) is not zero, then it is passed to UMAP to force the computation to be
+       reproducible. However, this means UMAP will use a single-threaded implementation that will be
+       slower.
     '''
+    assert dimensions in (2, 3)
     if isinstance(distances, str):
         distances_matrix = ut.get_oo_proper(adata, distances)
     else:
@@ -79,6 +84,7 @@ def umap_by_distances(
                                 n_neighbors=n_neighbors,
                                 spread=spread,
                                 min_dist=min_dist,
+                                n_components=dimensions,
                                 random_state=random_state).fit_transform(distances_csr)
     except ValueError:
         # UMAP implementation doesn't know how to handle too few edges.
@@ -93,26 +99,27 @@ def umap_by_distances(
                                 min_dist=min_dist,
                                 random_state=random_state).fit_transform(distances_csr)
 
-    x_coordinates = ut.to_numpy_vector(coordinates[:, 0], copy=True)
-    y_coordinates = ut.to_numpy_vector(coordinates[:, 1], copy=True)
+    all_sizes = []
+    all_coordinates = []
+    for axis in range(dimensions):
+        axis_coordinates = ut.to_numpy_vector(coordinates[:, axis], copy=True)
+        min_coordinate = np.min(coordinates)
+        max_coordinate = np.max(coordinates)
+        size = max_coordinate - min_coordinate
+        assert size > 0
+        all_sizes.append(size)
+        all_coordinates.append(axis_coordinates)
 
-    x_min = np.min(x_coordinates)
-    y_min = np.min(y_coordinates)
+    if dimensions == 2:
+        all_names = ['x', 'y']
+    elif dimensions == 3:
+        all_names = ['u', 'v', 'w']
+    else:
+        assert False
 
-    x_max = np.max(x_coordinates)
-    y_max = np.max(y_coordinates)
-
-    x_size = x_max - x_min
-    y_size = y_max - y_min
-
-    assert x_size > 0
-    assert y_size > 0
-
-    if y_size > x_size:
-        x_coordinates, y_coordinates = y_coordinates, x_coordinates
-
-    ut.set_o_data(adata, f'{prefix}_x', x_coordinates)
-    ut.set_o_data(adata, f'{prefix}_y', y_coordinates)
+    order = np.argsort(all_sizes)
+    for axis, name in zip(order, all_names):
+        ut.set_o_data(adata, f'{prefix}_{name}', all_coordinates[axis])
 
 
 @ut.logged()

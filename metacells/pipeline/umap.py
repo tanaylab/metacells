@@ -141,6 +141,7 @@ def compute_umap_by_features(
     incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
     umap_k: int = pr.umap_k,
+    dimensions: int = 2,
     min_dist: float = pr.umap_min_dist,
     spread: float = pr.umap_spread,
     random_seed: int = pr.random_seed,
@@ -180,11 +181,8 @@ def compute_umap_by_features(
        {outgoing_degree_factor}) to compute a "skeleton" graph to overlay on top of the UMAP graph.
 
     2. Invoke :py:func:`metacells.tools.layout.umap_by_distances` using the distances, ``umap_k``
-       (default: {umap_k}), ``min_dist`` (default: {min_dist}), ``spread`` (default: {spread}) and the
-       ``random_seed`` (default: {random_seed}). Note that if the seed is not zero, the result will
-       be reproducible, but the computation will use only a single thread which will take longer to
-       complete.
-    '''
+       (default: {umap_k}), ``min_dist`` (default: {min_dist}), ``spread`` (default: {spread}),
+       dimensions (default: {dimensions})q    '''
     similarities = compute_knn_by_features(adata, what,
                                            max_top_feature_genes=max_top_feature_genes,
                                            similarity_value_normalization=similarity_value_normalization,
@@ -203,8 +201,9 @@ def compute_umap_by_features(
     np.fill_diagonal(distances, 0.0)
     distances = sparse.csr_matrix(distances)
 
-    tl.umap_by_distances(adata, distances, k=umap_k, min_dist=min_dist,
-                         spread=spread, random_seed=random_seed)
+    tl.umap_by_distances(adata, distances, k=umap_k, dimensions=dimensions,
+                         min_dist=min_dist, spread=spread,
+                         random_seed=random_seed)
 
 
 def _build_igraph(edge_weights: ut.Matrix) -> Tuple[ig.Graph, ut.NumpyVector]:
