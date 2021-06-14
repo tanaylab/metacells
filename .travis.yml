@@ -23,6 +23,7 @@ install:
 - pip install numpy --upgrade
 - pip install packaging --upgrade
 - pip install .[test] --upgrade
+- pip setup.py install
 
 script:
 - pytest tests/test*.py
