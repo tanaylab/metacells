@@ -26,8 +26,5 @@ install:
 - pip install .[test]
 
 script:
-- export PYTHONPATH=$PWD:$PYTHONPATH
-- echo $PYTHONPATH
-- python setup.py build
-- python setup.py install
+- python setup.py build_ext --inplace
 - tox
