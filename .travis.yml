@@ -19,12 +19,8 @@ before_install:
 - eval "${MATRIX_EVAL}"
 
 install:
-- echo $CC
-- echo $CXX
 - sudo apt-get install $CXX
-- gcc --version
-- pip install .
-- pip install tox
+- pip install .[test]
 
 script:
-- tox
+- pytest tests/test*.py

@@ -26,7 +26,6 @@ INSTALL_REQUIRES = [
 TESTS_REQUIRE = [
     'pytest',
     'pyyaml',
-    'tox',
 ]
 
 DEVELOP_REQUIRES = [
@@ -80,6 +79,7 @@ setup(
     install_requires=INSTALL_REQUIRES,
     tests_require=TESTS_REQUIRE,
     extras_require={  # TODO: Is this the proper way of expressing these dependencies?
+        'test': INSTALL_REQUIRES + TESTS_REQUIRE,
         'develop': INSTALL_REQUIRES + TESTS_REQUIRE + DEVELOP_REQUIRES
     },
 )
