@@ -1294,7 +1294,6 @@ def normalized_variance_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.Nu
     result[zeros_mask] = 0
     result *= variance_per_element
     result[zeros_mask] = 1
-    np.log2(result, out=result)
     return result
 
 
@@ -1306,8 +1305,8 @@ def relative_variance_per(
     window_size: int,
 ) -> utt.NumpyVector:
     '''
-    Return the (normalized_variance - median_normalized_variance_of_similar) of the values
-    ``per`` (``row`` or ``column``) of some ``matrix``.
+    Return the (log2(normalized_variance) - median(log2(normalized_variance_of_similar)) of the
+    values ``per`` (``row`` or ``column``) of some ``matrix``.
 
     If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
     efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
@@ -1315,6 +1314,8 @@ def relative_variance_per(
     ``column_major`` for operating on columns).
     '''
     normalized_variance_per_element = normalized_variance_per(matrix, per=per)
+    np.log2(normalized_variance_per_element,
+            out=normalized_variance_per_element)
     mean_per_element = mean_per(matrix, per=per)
     median_variance_per_element = \
         sliding_window_function(normalized_variance_per_element,

@@ -193,6 +193,7 @@ def compute_inner_normalized_variance(
     downsample_min_samples: int = pr.downsample_min_samples,
     downsample_min_cell_quantile: float = pr.downsample_min_cell_quantile,
     downsample_max_cell_quantile: float = pr.downsample_max_cell_quantile,
+    min_gene_total: int = pr.quality_min_gene_total,
     adata: AnnData,
     gdata: AnnData,
     group: Union[str, ut.Vector] = 'metacell',
@@ -242,7 +243,8 @@ def compute_inner_normalized_variance(
        {downsample_min_cell_quantile}), ``downsample_max_cell_quantile`` (default:
        {downsample_max_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
 
-    3. Compute the normalized variance of each gene based on the downsampled data.
+    3. Compute the normalized variance of each gene based on the downsampled data. Set the
+       result to ``nan`` for genes with less than ``min_gene_total`` (default: {min_gene_total}).
     '''
     cells_data = ut.get_vo_proper(adata, what, layout='row_major')
 
@@ -282,6 +284,7 @@ def compute_inner_normalized_variance(
                                 downsample_min_samples=downsample_min_samples,
                                 downsample_min_cell_quantile=downsample_min_cell_quantile,
                                 downsample_max_cell_quantile=downsample_max_cell_quantile,
+                                min_gene_total=min_gene_total,
                                 random_seed=random_seed,
                                 variance_per_gene_per_group=variance_per_gene_per_group,
                                 normalized_variance_per_gene_per_group=normalized_variance_per_gene_per_group)
@@ -301,6 +304,7 @@ def _collect_group_data(
     downsample_min_samples: int,
     downsample_min_cell_quantile: float,
     downsample_max_cell_quantile: float,
+    min_gene_total: int,
     random_seed: int,
     variance_per_gene_per_group: ut.NumpyMatrix,
     normalized_variance_per_gene_per_group: ut.NumpyMatrix,
@@ -340,22 +344,18 @@ def _collect_group_data(
 
     downsampled_data = ut.to_layout(downsampled_data, layout='column_major')
     total_per_gene = ut.sum_per(downsampled_data, per='column')
+    too_small_genes = total_per_gene < min_gene_total
+    if ut.logging_calc():
+        included_genes_count = len(too_small_genes) - np.sum(too_small_genes)
+        ut.log_calc(f'  included genes: {included_genes_count}')
 
-    sparse_data = ut.maybe_sparse_matrix(downsampled_data)
-    if sparse_data is not None:
-        squared_data = sparse_data.multiply(sparse_data)
-    else:
-        squared_data = downsampled_data * downsampled_data  # type: ignore
-    total_squared_per_gene = ut.sum_per(squared_data, per='column')
+    variance_per_gene = ut.variance_per(downsampled_data, per='column')
+    normalized_variance_per_gene = \
+        ut.normalized_variance_per(downsampled_data, per='column')
 
-    variance_per_gene = np.square(total_per_gene).astype(float)
-    variance_per_gene /= -cells_count
-    variance_per_gene += total_squared_per_gene
-    variance_per_gene /= cells_count
+    variance_per_gene[too_small_genes] = None
+    normalized_variance_per_gene[too_small_genes] = None
+
     variance_per_gene_per_group[group_index, :] = variance_per_gene
-
-    mean_per_gene = total_per_gene / cells_count
-    mean_per_gene[mean_per_gene <= 0] = 1
-    normalized_variance_per_gene = variance_per_gene / mean_per_gene
     normalized_variance_per_gene_per_group[group_index, :] = \
         normalized_variance_per_gene

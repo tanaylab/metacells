@@ -460,9 +460,9 @@ def _test_per(rows_matrix: ut.Matrix) -> None:
                        np.array([9/2 - (3/2)**2, 17/2 - (5/2)**2, 29/2 - (7/2)**2]))
 
     assert np.allclose(ut.normalized_variance_per(columns_matrix, per='column'),
-                       np.log2(np.array([(9/2 - (3/2)**2) / (3/2),
-                                         (17/2 - (5/2)**2) / (5/2),
-                                         (29/2 - (7/2)**2) / (7/2)])))
+                       np.array([(9/2 - (3/2)**2) / (3/2),
+                                 (17/2 - (5/2)**2) / (5/2),
+                                 (29/2 - (7/2)**2) / (7/2)]))
 
     dense = ut.to_numpy_matrix(ut.fraction_by(rows_matrix, by='row'))
     assert np.allclose(dense, np.array([[0/3, 1/3, 2/3], [3/12, 4/12, 5/12]]))

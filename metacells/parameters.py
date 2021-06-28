@@ -18,7 +18,7 @@ significant_gene_fraction: float = 1e-5
 
 #: The generic minimal "significant" gene normalized variance. See
 #: :py:func:`metacells.tools.high.find_high_normalized_variance_genes`.
-significant_gene_normalized_variance: float = 2.5
+significant_gene_normalized_variance: float = 2**2.5
 
 #: The generic minimal "significant" gene relative variance. See
 #: :py:func:`metacells.tools.high.find_high_relative_variance_genes`.
@@ -173,14 +173,14 @@ min_metacell_cells: int = 12
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 pile_min_split_size_factor: float = 1.25
 
-#: The generic minimal pile size factor, below which we should consider dissolving it. See
+#: The minimal pile size factor, below which we should consider dissolving it. See
 #: :py:const:`min_robust_size_factor`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 pile_min_robust_size_factor: float = min_robust_size_factor
 
-#: The maximal size factor of a pile, below which we can merge it. See
+#: The maximal size factor of a pile, below which we should merge it. See
 #: :py:const:`min_robust_size_factor`,
 #: :py:const:`max_merge_size_factor`,
 #: :py:const:`dissolve_min_convincing_size_factor`,
@@ -730,8 +730,7 @@ dissolve_min_convincing_size_factor: Optional[float] = max_merge_size_factor
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 rare_dissolve_min_convincing_size_factor: Optional[float] = None
 
-#: The minimal fold factor of a gene in a metacell to make it "convincing" when grouping rate gene
-#: module cells. See
+#: The minimal fold factor of a gene in a metacell to make it "convincing". See
 #: :py:const:`significant_gene_fold_factor`,
 #: :py:func:`metacells.tools.dissolve.dissolve_metacells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
@@ -809,3 +808,7 @@ cover_fraction: float = 1/3.0
 #: and
 #: :py:func:`metacells.tools.layout.umap_by_distances`,
 noise_fraction: float = 0.1
+
+#: The minimal total number of UMIs for a gene to compute meaningful quality statistics for it.
+#: See :py:func:`metacells.tools.quality.compute_inner_normalized_variance`.
+quality_min_gene_total: int = 40
