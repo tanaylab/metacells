@@ -2568,9 +2568,9 @@ struct OptimizePartitions {
         }
         if (with_orphans) {
             total_score += orphans_count * NodeScore().score();
-            return pow(2, total_score / nodes_count);
+            return total_score / nodes_count;
         } else {
-            return pow(2, total_score / (nodes_count - orphans_count));
+            return total_score / (nodes_count - orphans_count);
         }
     }
 
