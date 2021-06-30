@@ -24,12 +24,16 @@ def compute_obs_obs_similarity(
     what: Union[str, ut.Matrix] = '__x__',
     *,
     method: str = pr.similarity_method,
+    reproducible: bool = pr.reproducible,
     logistics_location: float = pr.logistics_location,
     logistics_scale: float = pr.logistics_scale,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
     Compute a measure of the similarity between the observations (cells) of ``what`` (default: {what}).
+
+    If ``reproducible`` (default: {reproducible}) is ``True``, a slower (still parallel) but
+    reproducible algorithm will be used to compute pearson correlations.
 
     The ``method`` (default: {method}) can be one of:
     * ``pearson`` for computing Pearson correlation.
@@ -69,6 +73,7 @@ def compute_obs_obs_similarity(
     '''
     return _compute_elements_similarity(adata, 'obs', 'row', what,
                                         method=method,
+                                        reproducible=reproducible,
                                         logistics_location=logistics_location,
                                         logistics_scale=logistics_scale,
                                         inplace=inplace)
@@ -82,12 +87,16 @@ def compute_var_var_similarity(
     what: Union[str, ut.Matrix] = '__x__',
     *,
     method: str = pr.similarity_method,
+    reproducible: bool = pr.reproducible,
     logistics_location: float = pr.logistics_location,
     logistics_scale: float = pr.logistics_scale,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
     Compute a measure of the similarity between the variables (genes) of ``what`` (default: {what}).
+
+    If ``reproducible`` (default: {reproducible}) is ``True``, a slower (still parallel) but
+    reproducible algorithm will be used to compute pearson correlations.
 
     **Input**
 
@@ -127,6 +136,7 @@ def compute_var_var_similarity(
     '''
     return _compute_elements_similarity(adata, 'var', 'column', what,
                                         method=method,
+                                        reproducible=reproducible,
                                         logistics_location=logistics_location,
                                         logistics_scale=logistics_scale,
                                         inplace=inplace)
@@ -139,6 +149,7 @@ def _compute_elements_similarity(
     what: Union[str, ut.Matrix],
     *,
     method: str,
+    reproducible: bool,
     logistics_location: float,
     logistics_scale: float,
     inplace: bool,
@@ -155,10 +166,11 @@ def _compute_elements_similarity(
             ut.logistics(data, location=logistics_location,
                          scale=logistics_scale, per=per)
     else:
-        similarity = ut.corrcoef(data, per=per)
+        similarity = ut.corrcoef(data, per=per, reproducible=reproducible)
 
     if method.endswith('_pearson'):
-        similarity = ut.corrcoef(similarity, per=None)
+        similarity = ut.corrcoef(similarity, per=None,
+                                 reproducible=reproducible)
 
     if inplace:
         to = elements + '_similarity'

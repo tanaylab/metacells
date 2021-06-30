@@ -41,9 +41,13 @@ def compute_knn_by_features(
     balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
+    reproducible: bool = pr.reproducible,
 ) -> ut.PandasFrame:
     '''
     Compute KNN graph between metacells based on feature genes.
+
+    If ``reproducible`` (default: {reproducible}) is ``True``, a slower (still parallel) but
+    reproducible algorithm will be used to compute pearson correlations.
 
     **Input**
 
@@ -109,6 +113,7 @@ def compute_knn_by_features(
     similarities = tl.compute_obs_obs_similarity(tdata,
                                                  top_feature_genes_fractions,
                                                  method=similarity_method,
+                                                 reproducible=reproducible,
                                                  logistics_location=logistics_location,
                                                  logistics_scale=logistics_scale,
                                                  inplace=False)
@@ -193,7 +198,8 @@ def compute_umap_by_features(
                                            k=skeleton_k,
                                            balanced_ranks_factor=balanced_ranks_factor,
                                            incoming_degree_factor=incoming_degree_factor,
-                                           outgoing_degree_factor=outgoing_degree_factor)
+                                           outgoing_degree_factor=outgoing_degree_factor,
+                                           reproducible=(random_seed != 0))
 
     distances = ut.to_numpy_matrix(similarities)
     distances *= -1

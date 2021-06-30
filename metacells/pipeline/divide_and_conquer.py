@@ -666,7 +666,8 @@ def divide_and_conquer_pipeline(
                                       max_related_gene_increase_factor=rare_max_related_gene_increase_factor,
                                       target_pile_size=target_pile_size,
                                       max_cells_of_random_pile=rare_max_cells_of_random_pile,
-                                      min_cell_module_total=rare_min_cell_module_total)
+                                      min_cell_module_total=rare_min_cell_module_total,
+                                      reproducible=(random_seed != 0))
 
             rare_module_of_cells = ut.get_o_numpy(adata, 'cells_rare_gene_module',
                                                   formatter=ut.groups_description)

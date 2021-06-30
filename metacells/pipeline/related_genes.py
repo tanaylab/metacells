@@ -107,6 +107,7 @@ def relate_genes(
 
     frame = tl.compute_var_var_similarity(fdata, what,
                                           method=genes_similarity_method,
+                                          reproducible=(random_seed != 0),
                                           inplace=False)
     assert frame is not None
     similarity = ut.to_layout(ut.to_numpy_matrix(frame), layout='row_major')

@@ -31,19 +31,40 @@ def test_expand_doc() -> None:
 
 
 def test_corrcoef() -> None:
+    np.random.seed(123456)
     matrix = sparse.rand(100, 10000, density=0.1, format='csr')
-    dense = matrix.toarray()
+    # matrix = sparse.rand(5, 20, density=0.3, format='csr')
+    dense = ut.to_layout(matrix.toarray(), layout='row_major')
     numpy_correlation = np.corrcoef(dense)
     assert numpy_correlation.shape == (100, 100)
 
-    sparse_correlation = ut.corrcoef(matrix, per='row')
-    assert sparse_correlation.shape == (100, 100)
-    assert np.allclose(sparse_correlation, numpy_correlation, atol=1e-6)
-
     dense = dense.T
-    dense_correlation = ut.corrcoef(dense, per='column')
-    assert dense_correlation.shape == (100, 100)
-    assert np.allclose(dense_correlation, numpy_correlation, atol=1e-6)
+
+    for reproducible in (False, True):
+        dense_correlation = ut.corrcoef(dense, per='column',
+                                        reproducible=reproducible)
+        assert dense_correlation.shape == (100, 100)
+        assert np.min(np.diag(dense_correlation)) == 1
+        assert np.max(np.diag(dense_correlation)) == 1
+        assert np.allclose(dense_correlation, numpy_correlation, atol=1e-6)
+
+        sparse_correlation = ut.corrcoef(matrix, per='row',
+                                         reproducible=reproducible)
+        assert sparse_correlation.shape == (100, 100)
+        assert np.min(np.diag(sparse_correlation)) == 1
+        assert np.max(np.diag(sparse_correlation)) == 1
+        assert np.allclose(sparse_correlation, numpy_correlation, atol=1e-6)
+
+    dense[:, :] = 0
+    for reproducible in (False, True):
+        zeros_correlation = ut.corrcoef(dense, per='column',
+                                        reproducible=reproducible)
+        assert zeros_correlation.shape == (100, 100)
+        assert np.min(np.diag(zeros_correlation)) == 1
+        assert np.max(np.diag(zeros_correlation)) == 1
+        np.fill_diagonal(zeros_correlation, 0)
+        assert np.min(zeros_correlation) == 0
+        assert np.max(zeros_correlation) == 0
 
 
 def test_logistics() -> None:

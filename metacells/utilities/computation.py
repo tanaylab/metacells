@@ -373,42 +373,45 @@ def corrcoef(
     matrix: utt.Matrix,
     *,
     per: Optional[str],
+    reproducible: bool,
 ) -> utt.NumpyMatrix:
     '''
-    Similar to for ``numpy.corrcoef``, but also works for a sparse ``matrix``.
+    Similar to for ``numpy.corrcoef``, but also works for a sparse ``matrix``, and can be
+    ``reproducible`` regardless of the number of cores used (at the cost of some slowdown).
+
+    If ``reproducible``, a slower (still parallel) but reproducible algorithm will be used.
+
+    Unlike ``numpy.corrcoef``, if given a row with identical values, instead of complaining about
+    division by zero, this will report a zero correlation. This makes sense for the intended usage
+    of computing similarities between cells/genes - an all-zero row has no data so we declare it to
+    be "not similar" to anything else.
 
     If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
     efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
     ``column``, and the matrix must be in the appropriate layout (``row_major`` operating on rows,
     ``column_major`` for operating on columns).
 
-    .. todo::
-
-        The :py:func:`corrcoef` always uses the dense implementation. Possibly a sparse
-        implementation might be faster.
-
-    .. todo::
-
-        The results of ``corrcoef`` are not replicable between runs if the matrix contains
-        non-integer values, because it uses numpy's ``matmul`` function, which produces slightly
-        different results depending on the number of CPUs used to compute the answer. There doesn't
-        seem to be a ``matmul_det`` variant which produces reproducible results.
-
     .. note::
 
         The result is always dense, as even for sparse data, the correlation is rarely exactly zero.
-
-    .. note::
-
-        This replicates the implementation from numpy, since the numpy implementation insists on
-        making a copy of the matrix, and doing the computations in double precision, which more than
-        doubles our memory usage, and slows down the computation with no significant benefit to our
-        final metacells results.
-
-        We save making copy of the matrix by subtracting the averages in-place and then adding them
-        back. This means that the matrix will be slightly perturbed, so computation done on it
-        before and after invoking this will give slightly different results.
     '''
+    if not reproducible:
+        return _corrcoef_fast(matrix, per)
+
+    _, dense, compressed = utt.to_proper_matrices(matrix)
+
+    if compressed is not None:
+        return _corrcoef_compressed_matrix(compressed, per)
+
+    assert dense is not None
+    return _corrcoef_dense_matrix(dense, per)
+
+
+@utm.timed_call('.irreproducible')
+def _corrcoef_fast(
+    matrix: utt.Matrix,
+    per: Optional[str],
+) -> utt.NumpyMatrix:
     per, dense = _get_dense_for('corrcoef', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
@@ -425,10 +428,53 @@ def corrcoef(
         X += row_averages[:, None]
         diagonal = np.diag(result)
         stddev = np.sqrt(diagonal)
+        stddev[stddev == 0] = 1
         result /= stddev[:, None]
         result /= stddev[None, :]
         np.clip(result, -1, 1, out=result)
+        np.fill_diagonal(result, 1.0)
 
+    return result
+
+
+@utm.timed_call('.dense')
+def _corrcoef_dense_matrix(
+    dense: utt.NumpyMatrix,
+    per: Optional[str],
+) -> utt.NumpyMatrix:
+    per, dense = _get_dense_for('corrcoef', dense, per)
+    if per == 'column':
+        dense = dense.T
+    utm.timed_parameters(results=dense.shape[0],
+                         elements=dense.shape[1])
+    extension_name = 'correlate_dense_%s_t' % dense.dtype
+    result = np.empty((dense.shape[0], dense.shape[0]), dtype='float32')
+    extension = getattr(xt, extension_name)
+    extension(dense, result)
+    return result
+
+
+@utm.timed_call('.compressed')
+def _corrcoef_compressed_matrix(
+    compressed: utt.CompressedMatrix,
+    per: Optional[str]
+) -> utt.NumpyMatrix:
+    if per is not None:
+        assert utt.is_layout(compressed, f'{per}_major')
+        if per == 'column':
+            compressed = compressed.transpose()
+
+    utm.timed_parameters(results=compressed.shape[0],
+                         elements=compressed.shape[1],
+                         nnz=compressed.nnz)
+    extension_name = 'correlate_compressed_%s_t_%s_t_%s_t' \
+        % (compressed.data.dtype, compressed.indices.dtype, compressed.indptr.dtype)
+    extension = getattr(xt, extension_name)
+    result = np.empty((compressed.shape[0], compressed.shape[0]),
+                      dtype='float32')
+    extension = getattr(xt, extension_name)
+    extension(compressed.data, compressed.indices,
+              compressed.indptr, compressed.shape[1], result)
     return result
 
 

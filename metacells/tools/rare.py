@@ -45,6 +45,7 @@ def find_rare_gene_modules(
     min_related_gene_fold_factor: float = pr.rare_min_related_gene_fold_factor,
     max_related_gene_increase_factor: float = pr.rare_max_related_gene_increase_factor,
     min_cell_module_total: int = pr.rare_min_cell_module_total,
+    reproducible: bool = pr.reproducible,
     inplace: bool = True,
 ) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame]]:
     '''
@@ -57,6 +58,9 @@ def find_rare_gene_modules(
     It is therefore useful to explicitly identify, in a pre-processing step, the few cells which
     express such rare gene modules. Once identified, these cells can be exempt from the global
     algorithm, or the global algorithm can be tweaked in some way to pay extra attention to them.
+
+    If ``reproducible`` (default: {reproducible}) is ``True``, a slower (still parallel) but
+    reproducible algorithm will be used to compute pearson correlations.
 
     **Input**
 
@@ -160,7 +164,8 @@ def find_rare_gene_modules(
     similarities_between_candidate_genes = \
         _genes_similarity(candidate_data=candidate_data,
                           what=what,
-                          method=genes_similarity_method)
+                          method=genes_similarity_method,
+                          reproducible=reproducible)
 
     linkage = \
         _cluster_genes(similarities_between_candidate_genes=similarities_between_candidate_genes,
@@ -256,10 +261,12 @@ def _genes_similarity(
     candidate_data: AnnData,
     what: Union[str, ut.Matrix],
     method: str,
+    reproducible: bool,
 ) -> ut.NumpyMatrix:
     similarity = \
         compute_var_var_similarity(candidate_data, what,
-                                   method=method, inplace=False)
+                                   method=method, reproducible=reproducible,
+                                   inplace=False)
     assert similarity is not None
     return ut.to_numpy_matrix(similarity, only_extract=True)
 

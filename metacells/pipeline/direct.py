@@ -266,13 +266,6 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     data = ut.get_vo_proper(fdata, 'downsampled', layout='row_major')
     data = ut.to_numpy_matrix(data, copy=True)
 
-    max_of_cells = ut.max_per(data, per='row')
-    min_of_cells = ut.min_per(data, per='row')
-    uniform_cell_indices = np.where(min_of_cells == max_of_cells)[0]
-    np.random.seed(random_seed)
-    for uniform_cell_index in uniform_cell_indices:
-        data[uniform_cell_index, :] = np.random.rand(fdata.n_vars)
-
     if cells_similarity_value_normalization > 0:
         data += cells_similarity_value_normalization
 
@@ -303,7 +296,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
         ut.log_calc('knn_k', knn_k)
 
         tl.compute_obs_obs_similarity(fdata, data,
-                                      method=cells_similarity_method)
+                                      method=cells_similarity_method,
+                                      reproducible=(random_seed != 0))
 
         tl.compute_obs_obs_knn_graph(fdata,
                                      k=knn_k,

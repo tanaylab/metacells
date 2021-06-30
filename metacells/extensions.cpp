@@ -3258,6 +3258,208 @@ score_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
     return optimizer.score(with_orphans);
 }
 
+struct Sums {
+    float64_t values;
+    float64_t squared;
+};
+
+template<typename D>
+static Sums
+sum_row_values(ConstArraySlice<D> input_row) {
+    const D* input_data = input_row.begin();
+    const size_t columns_count = input_row.size();
+    D sum_values = 0;
+    D sum_squared = 0;
+    // __asm__ __volatile__("int3");
+    for (size_t column_index = 0; column_index < columns_count; ++column_index) {
+        const auto value = input_data[column_index];
+        sum_values += value;
+        sum_squared += value * value;
+    }
+    return Sums{ float64_t(sum_values), float64_t(sum_squared) };
+}
+
+template<typename D>
+static float32_t
+correlate_dense_rows(ConstArraySlice<D> some_values,
+                     float64_t some_sum_values,
+                     float64_t some_sum_squared,
+                     ConstArraySlice<D> other_values,
+                     float64_t other_sum_values,
+                     float64_t other_sum_squared) {
+    const size_t columns_count = some_values.size();
+    const D* some_values_data = some_values.begin();
+    const D* other_values_data = other_values.begin();
+    D both_sum_values = 0;
+
+#ifdef __INTEL_COMPILER
+#    pragma simd
+#endif
+    for (size_t column_index = 0; column_index < columns_count; ++column_index) {
+        both_sum_values +=
+            float64_t(some_values_data[column_index] * other_values_data[column_index]);
+    }
+
+    float64_t correlation = columns_count * both_sum_values - some_sum_values * other_sum_values;
+    float64_t some_factor = columns_count * some_sum_squared - some_sum_values * some_sum_values;
+    float64_t other_factor =
+        columns_count * other_sum_squared - other_sum_values * other_sum_values;
+    float64_t both_factors = sqrt(some_factor * other_factor);
+    if (both_factors != 0) {
+        correlation /= both_factors;
+        return std::max(std::min(correlation, 1.0), -1.0);
+    } else {
+        return 0.0;
+    }
+}
+
+template<typename D>
+static void
+correlate_dense(const pybind11::array_t<D>& input_array,
+                pybind11::array_t<float32_t>& output_array) {
+    ConstMatrixSlice<D> input(input_array, "input");
+    MatrixSlice<float32_t> output(output_array, "output");
+
+    auto rows_count = input.rows_count();
+
+    FastAssertCompare(output.rows_count(), ==, input.rows_count());
+    FastAssertCompare(output.columns_count(), ==, input.rows_count());
+
+    TmpVectorFloat64 row_sum_values_raii;
+    auto row_sum_values = row_sum_values_raii.vector(rows_count);
+
+    TmpVectorFloat64 row_sum_squared_raii;
+    auto row_sum_squared = row_sum_squared_raii.vector(rows_count);
+
+    parallel_loop(rows_count, [&](size_t row_index) {
+        auto sums = sum_row_values(input.get_row(row_index));
+        row_sum_values[row_index] = sums.values;
+        row_sum_squared[row_index] = sums.squared;
+    });
+
+    const size_t iterations_count = (rows_count * (rows_count - 1)) / 2;
+
+    for (size_t entry_index = 0; entry_index < rows_count; ++entry_index) {
+        output.get_row(entry_index)[entry_index] = 1.0;
+    }
+
+    parallel_loop(iterations_count, [&](size_t iteration_index) {
+        size_t some_index = iteration_index / (rows_count - 1);
+        size_t other_index = iteration_index % (rows_count - 1);
+        if (other_index < rows_count - 1 - some_index) {
+            some_index = rows_count - 1 - some_index;
+        } else {
+            other_index = rows_count - 2 - other_index;
+        }
+        float32_t correlation = correlate_dense_rows(input.get_row(some_index),
+                                                     row_sum_values[some_index],
+                                                     row_sum_squared[some_index],
+                                                     input.get_row(other_index),
+                                                     row_sum_values[other_index],
+                                                     row_sum_squared[other_index]);
+        output.get_row(some_index)[other_index] = correlation;
+        output.get_row(other_index)[some_index] = correlation;
+    });
+}
+
+template<typename D, typename I>
+static float32_t
+correlate_compressed_rows(const size_t columns_count,
+                          ConstArraySlice<I> some_indices,
+                          ConstArraySlice<D> some_values,
+                          float64_t some_sum_values,
+                          float64_t some_sum_squared,
+                          ConstArraySlice<I> other_indices,
+                          ConstArraySlice<D> other_values,
+                          float64_t other_sum_values,
+                          float64_t other_sum_squared) {
+    float64_t both_sum_values = 0;
+    const size_t some_count = some_indices.size();
+    const size_t other_count = other_indices.size();
+    size_t some_location = 0;
+    size_t other_location = 0;
+    while (some_location < some_count && other_location < other_count) {
+        auto some_index = some_indices[some_location];
+        auto other_index = other_indices[other_location];
+        float64_t some_value = some_values[some_location];
+        float64_t other_value = other_values[other_location];
+        both_sum_values += some_value * other_value * (some_index == other_index);
+        some_location += some_index <= other_index;
+        other_location += other_index <= some_index;
+    }
+
+    float64_t correlation = columns_count * both_sum_values - some_sum_values * other_sum_values;
+    float64_t some_factor = columns_count * some_sum_squared - some_sum_values * some_sum_values;
+    float64_t other_factor =
+        columns_count * other_sum_squared - other_sum_values * other_sum_values;
+    float64_t both_factors = sqrt(some_factor * other_factor);
+    if (both_factors != 0) {
+        correlation /= both_factors;
+    } else {
+        correlation = 0;
+    }
+    return std::max(std::min(correlation, 1.0), -1.0);
+}
+
+template<typename D, typename I, typename P>
+static void
+correlate_compressed(const pybind11::array_t<D>& input_data_array,
+                     const pybind11::array_t<I>& input_indices_array,
+                     const pybind11::array_t<P>& input_indptr_array,
+                     size_t columns_count,
+                     pybind11::array_t<float32_t>& output_array) {
+    ConstCompressedMatrix<D, I, P> input(ConstArraySlice<D>(input_data_array, "input_data"),
+                                         ConstArraySlice<I>(input_indices_array, "input_indices"),
+                                         ConstArraySlice<P>(input_indptr_array, "input_indptr"),
+                                         columns_count,
+                                         "input");
+    MatrixSlice<float32_t> output(output_array, "output");
+
+    auto rows_count = input.bands_count();
+
+    FastAssertCompare(output.rows_count(), ==, input.bands_count());
+    FastAssertCompare(output.columns_count(), ==, input.bands_count());
+
+    TmpVectorFloat64 row_sum_values_raii;
+    auto row_sum_values = row_sum_values_raii.vector(rows_count);
+
+    TmpVectorFloat64 row_sum_squared_raii;
+    auto row_sum_squared = row_sum_squared_raii.vector(rows_count);
+
+    parallel_loop(rows_count, [&](size_t row_index) {
+        const auto sums = sum_row_values(input.get_band_data(row_index));
+        row_sum_values[row_index] = sums.values;
+        row_sum_squared[row_index] = sums.squared;
+    });
+
+    const size_t iterations_count = (rows_count * (rows_count - 1)) / 2;
+
+    for (size_t entry_index = 0; entry_index < rows_count; ++entry_index) {
+        output.get_row(entry_index)[entry_index] = 1.0;
+    }
+
+    parallel_loop(iterations_count, [&](size_t iteration_index) {
+        size_t some_index = iteration_index / (rows_count - 1);
+        size_t other_index = iteration_index % (rows_count - 1);
+        if (other_index < rows_count - 1 - some_index) {
+            some_index = rows_count - 1 - some_index;
+        } else {
+            other_index = rows_count - 2 - other_index;
+        }
+        const float32_t correlation = correlate_compressed_rows(columns_count,
+                                                                input.get_band_indices(some_index),
+                                                                input.get_band_data(some_index),
+                                                                row_sum_values[some_index],
+                                                                row_sum_squared[some_index],
+                                                                input.get_band_indices(other_index),
+                                                                input.get_band_data(other_index),
+                                                                row_sum_values[other_index],
+                                                                row_sum_squared[other_index]);
+        output.get_row(some_index)[other_index] = correlation;
+        output.get_row(other_index)[some_index] = correlation;
+    });
+}
+
 }  // namespace metacells
 
 PYBIND11_MODULE(extensions, module) {
@@ -3299,7 +3501,10 @@ PYBIND11_MODULE(extensions, module) {
                "Logistics distances for dense matrices.");                                        \
     module.def("cover_coordinates_" #D,                                                           \
                &metacells::cover_coordinates<D>,                                                  \
-               "Move points to achieve plot area coverage.");
+               "Move points to achieve plot area coverage.");                                     \
+    module.def("correlate_dense_" #D,                                                             \
+               &metacells::correlate_dense<D>,                                                    \
+               "Correlate rows of a dense matrix.");
 
 #define REGISTER_D_O(D, O)                          \
     module.def("downsample_array_" #D "_" #O,       \
@@ -3329,7 +3534,10 @@ PYBIND11_MODULE(extensions, module) {
                "Fold factors of compressed data.");          \
     module.def("auroc_compressed_matrix_" #D "_" #I "_" #P,  \
                &metacells::auroc_compressed_matrix<D, I, P>, \
-               "AUROC for compressed matrix.");
+               "AUROC for compressed matrix.");              \
+    module.def("correlate_compressed_" #D "_" #I "_" #P,     \
+               &metacells::correlate_compressed<D, I, P>,    \
+               "Correlate rows of a compressed matrix.");
 
     module.def("collect_top", &metacells::collect_top, "Collect the topmost elements.");
     module.def("collect_pruned", &metacells::collect_pruned, "Collect the topmost pruned edges.");

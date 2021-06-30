@@ -139,7 +139,8 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
         ht_genes_count = ht_data.shape[1]
 
         ht_gene_ht_gene_similarity_frame = \
-            compute_var_var_similarity(ht_data, 'downsampled', inplace=False)
+            compute_var_var_similarity(ht_data, 'downsampled', inplace=False,
+                                       reproducible=(random_seed != 0))
         assert ht_gene_ht_gene_similarity_frame is not None
 
         ht_gene_ht_gene_similarity_matrix = \

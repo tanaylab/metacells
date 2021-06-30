@@ -7,10 +7,15 @@ from math import sqrt
 from typing import Optional, Union
 import metacells.utilities.typing as utt
 
-#: The generic random seed. The default of ``0`` makes for a different result each time the code
-#: is run. For replicable results, provide a non-zero value. Used by too many functions to list
-#: here.
+#: The generic random seed. The default of ``0`` makes for a different result each time the code is
+#: run. For reproducible results, provide a non-zero value, and also see
+#: :py:func:`metacells.parameters.reproducible`. Used by too many functions to list here.
 random_seed: int = 0
+
+#: Whether to make the results reproducible, possibly at the cost of some slowdown. For reproducible
+#: results, specify a ``True`` values, and also see :py:func:`metacells.parameters.random_seed`.
+#: Used by too many functions to list here.
+reproducible: bool = False
 
 #: The generic minimal "significant" gene fraction. See
 #: :py:func:`metacells.tools.high.find_high_fraction_genes`.
