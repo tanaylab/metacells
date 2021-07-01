@@ -50,8 +50,8 @@ compilation. In Ubuntu the necessary tools can be installed using ``sudo apt-get
 build-essential`` - please refer to the documentation for your specific system. Make sure that not
 only ``gcc`` is installed, but also ``g++`` to allow for C++ compilation.
 
-.. todo::
-
-    Provide pre-build wheel binaries, especially for the unfortunates using Windows.
-
 You can check if all went well by running a variety of tests using ``pytest`` or ``tox``.
+
+The generated documentation contains a `vignette
+<https://github.com/tanaylab/metacells/blob/master/docs/source/vignette.rst>` which explains how to
+use this package.
