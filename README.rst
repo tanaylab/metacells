@@ -53,5 +53,5 @@ only ``gcc`` is installed, but also ``g++`` to allow for C++ compilation.
 You can check if all went well by running a variety of tests using ``pytest`` or ``tox``.
 
 The generated documentation contains a `vignette
-<https://github.com/tanaylab/metacells/blob/master/docs/source/vignette.rst>` which explains how to
+<https://github.com/tanaylab/metacells/blob/master/docs/source/vignette.rst>`_ which explains how to
 use this package.
