@@ -333,9 +333,9 @@ def _collect_group_data(
     group_data = cells_data[cell_indices, :]
 
     total_per_cell = ut.sum_per(group_data, per='row')
-    samples = round(min(max(downsample_min_samples,
-                            np.quantile(total_per_cell, downsample_min_cell_quantile)),
-                        np.quantile(total_per_cell, downsample_max_cell_quantile)))
+    samples = int(round(min(max(downsample_min_samples,
+                                np.quantile(total_per_cell, downsample_min_cell_quantile)),
+                            np.quantile(total_per_cell, downsample_max_cell_quantile))))
     if ut.logging_calc():
         ut.log_calc(f'  samples: {samples}')
     downsampled_data = \

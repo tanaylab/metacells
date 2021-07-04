@@ -277,7 +277,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
             median_cell_size = 1.0
         else:
             median_cell_size = float(np.median(effective_cell_sizes))
-        knn_k = round(target_metacell_size / median_cell_size)
+        knn_k = int(round(target_metacell_size / median_cell_size))
         if min_knn_k is not None:
             knn_k = max(knn_k, min_knn_k)
 

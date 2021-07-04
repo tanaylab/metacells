@@ -77,9 +77,9 @@ def downsample_cells(
     '''
     total_per_cell = ut.get_o_numpy(adata, what, sum=True)
 
-    samples = round(min(max(downsample_min_samples,
-                            np.quantile(total_per_cell, downsample_min_cell_quantile)),
-                        np.quantile(total_per_cell, downsample_max_cell_quantile)))
+    samples = int(round(min(max(downsample_min_samples,
+                                np.quantile(total_per_cell, downsample_min_cell_quantile)),
+                            np.quantile(total_per_cell, downsample_max_cell_quantile))))
 
     ut.log_calc('samples', samples)
 

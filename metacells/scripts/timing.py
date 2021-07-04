@@ -208,8 +208,8 @@ def _flame_main(
                          cpu=data[2] / 1_000_000_000)
         else:
             datum = dict(invocations=data[0],
-                         elapsed=round(data[1]),
-                         cpu=round(data[2]))
+                         elapsed=int(round(data[1])),
+                         cpu=int(round(data[2])))
         html = 'Elapsed Time: %.2f<br/>' \
                'CPU Time: %.2f<br/>' \
                'Utilization: %.0f%%<br/>' \

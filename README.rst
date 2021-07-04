@@ -37,6 +37,7 @@ to classify cell types, detect cell trajectories and/or lineage, build parametri
 behavior, etc. Using metacells as input for such analysis techniques should benefit both from the
 more robust, less noisy input; and also from the (~100-fold) reduction in the number of cells to
 analyze when dealing with large data (e.g. analyzing millions of individual cells).
+
 Installation
 ============
 

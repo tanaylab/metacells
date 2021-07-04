@@ -224,9 +224,9 @@ def _invocation(index: int) -> Any:
 
         global PROCESSORS_COUNT
         start_processor_index = \
-            round(PROCESSORS_COUNT * PROCESS_INDEX / PROCESSES_COUNT)
+            int(round(PROCESSORS_COUNT * PROCESS_INDEX / PROCESSES_COUNT))
         stop_processor_index = \
-            round(PROCESSORS_COUNT * (PROCESS_INDEX + 1) / PROCESSES_COUNT)
+            int(round(PROCESSORS_COUNT * (PROCESS_INDEX + 1) / PROCESSES_COUNT))
         PROCESSORS_COUNT = stop_processor_index - start_processor_index
 
         assert PROCESSORS_COUNT > 0
