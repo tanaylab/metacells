@@ -6,9 +6,18 @@ metacells documentation
 
   install
   intro
-  vignette
   todo
   license
+
+Vignettes
+=========
+
+.. toctree::
+  :maxdepth: 1
+
+  Metacells Vignette
+  Manual Analysis
+  Seurat Analysis
 
 API
 ===

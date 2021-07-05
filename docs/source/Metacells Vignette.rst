@@ -8,7 +8,7 @@ likely will be called out.
 
 You can download a working version of this vignette from
 `metacells_vignette.tgz <http://www.wisdom.weizmann.ac.il/~atanay/metac_data/metacells_vignette.tgz>`__.
-This will include both the Jupyter notebook file and the two associated
+This will include all the Jupyter notebook files and the two associated
 text files which are loaded in the code below.
 
 Preparation
@@ -30,10 +30,10 @@ on any visualization packages.
     import pandas as pd
     import scipy.sparse as sp
     import seaborn as sb
-    
+
     from math import hypot
     from matplotlib.collections import LineCollection
-    
+
     sb.set_style("white")
 
 Getting the raw data
@@ -72,9 +72,6 @@ The metacells package uses a convention where the ``__name__``
 unstructured property of the data contains its name for logging
 purposes; we initialize this name to ``PBMC`` below.
 
-**TODO**: Switch to a tar file containing all the needed files -
-possibly including this notebook as well?
-
 .. code:: ipython3
 
     raw = ad.read_h5ad('pbmc163k.h5ad')
@@ -82,7 +79,7 @@ possibly including this notebook as well?
     print(raw.shape)
 
 
-.. parsed-literal::
+.. code::
 
     (163234, 32738)
 
@@ -126,7 +123,7 @@ to refine it during the iterative analysis process.
     print(sorted(excluded_gene_names))
 
 
-.. parsed-literal::
+.. code::
 
     ['IGHMBP2', 'IGLL1', 'IGLL5', 'IGLON5', 'MT-ATP6', 'MT-ATP8', 'MT-CO1', 'MT-CO2', 'MT-CO3', 'MT-CYB', 'MT-ND1', 'MT-ND2', 'MT-ND3', 'MT-ND4', 'MT-ND4L', 'MT-ND5', 'MT-ND6', 'NEAT1', 'TMSB10', 'TMSB4X']
 
@@ -160,7 +157,7 @@ masks of your own based on your own criteria.
                               random_seed=123456)
 
 
-.. parsed-literal::
+.. code::
 
     set PBMC.var[properly_sampled_gene]: 22637 true (69.15%) out of 32738 bools
     set PBMC.var[excluded_gene]: 20 true (0.06109%) out of 32738 bools
@@ -180,7 +177,7 @@ customize it to use any list of per-gene masks instead.
     mc.pl.pick_clean_genes(raw)
 
 
-.. parsed-literal::
+.. code::
 
     set PBMC.var[clean_gene]: 22617 true (69.08%) out of 32738 bools
 
@@ -195,7 +192,7 @@ the raw file, and we’ll rename our variable refering to it for clarity.
     full = raw
 
 
-.. parsed-literal::
+.. code::
 
     /home/obk/.local/lib/python3.7/site-packages/anndata/_core/anndata.py:1192: FutureWarning: is_categorical is deprecated and will be removed in a future version.  Use is_categorical_dtype instead
       if is_string_dtype(df[key]) and not is_categorical(df[key])
@@ -221,20 +218,20 @@ for the minimal and maximal number of UMIs of cells we wish to analyze.
 
     properly_sampled_min_cell_total = 800
     properly_sampled_max_cell_total = 8000
-    
+
     total_umis_of_cells = mc.ut.get_o_numpy(full, name='__x__', sum=True)
-    
+
     plot = sb.distplot(total_umis_of_cells)
     plot.set(xlabel='UMIs', ylabel='Density', yticks=[])
     plot.axvline(x=properly_sampled_min_cell_total, color='darkgreen')
     plot.axvline(x=properly_sampled_max_cell_total, color='crimson')
-    
+
     too_small_cells_count = sum(total_umis_of_cells < properly_sampled_min_cell_total)
     too_large_cells_count = sum(total_umis_of_cells > properly_sampled_max_cell_total)
-    
+
     too_small_cells_percent = 100.0 * too_small_cells_count / len(total_umis_of_cells)
     too_large_cells_percent = 100.0 * too_large_cells_count / len(total_umis_of_cells)
-    
+
     print(f"Will exclude %s (%.2f%%) cells with less than %s UMIs"
           % (too_small_cells_count,
              too_small_cells_percent,
@@ -246,7 +243,7 @@ for the minimal and maximal number of UMIs of cells we wish to analyze.
 
 
 
-.. parsed-literal::
+.. code::
 
     Will exclude 12983 (7.95%) cells with less than 800 UMIs
     Will exclude 349 (0.21%) cells with more than 8000 UMIs
@@ -266,26 +263,26 @@ number of clean gene UMIs left to analyze.
 .. code:: ipython3
 
     properly_sampled_max_excluded_genes_fraction = 0.1
-    
+
     excluded_genes_data = mc.tl.filter_data(full, var_masks=['~clean_gene'])[0]
     excluded_umis_of_cells = mc.ut.get_o_numpy(excluded_genes_data, name='__x__', sum=True)
     excluded_fraction_of_umis_of_cells = excluded_umis_of_cells / total_umis_of_cells
-    
+
     plot = sb.distplot(excluded_fraction_of_umis_of_cells)
     plot.set(xlabel='Fraction of excluded gene UMIs', ylabel='Density', yticks=[])
     plot.axvline(x=properly_sampled_max_excluded_genes_fraction, color='crimson')
-    
+
     too_excluded_cells_count = sum(excluded_fraction_of_umis_of_cells > properly_sampled_max_excluded_genes_fraction)
-    
+
     too_excluded_cells_percent = 100.0 * too_excluded_cells_count / len(total_umis_of_cells)
-    
+
     print(f"Will exclude %s (%.2f%%) cells with more than %.2f%% excluded gene UMIs"
           % (too_excluded_cells_count,
              too_excluded_cells_percent,
              100.0 * properly_sampled_max_excluded_genes_fraction))
 
 
-.. parsed-literal::
+.. code::
 
     /home/obk/.local/lib/python3.7/site-packages/anndata/_core/anndata.py:1094: FutureWarning: is_categorical is deprecated and will be removed in a future version.  Use is_categorical_dtype instead
       if not is_categorical(df_full[k]):
@@ -293,7 +290,7 @@ number of clean gene UMIs left to analyze.
       res = method(*args, **kwargs)
 
 
-.. parsed-literal::
+.. code::
 
     Will exclude 256 (0.16%) cells with more than 10.00% excluded gene UMIs
 
@@ -321,7 +318,7 @@ masks of your own based on your own criteria.
         properly_sampled_max_excluded_genes_fraction=properly_sampled_max_excluded_genes_fraction)
 
 
-.. parsed-literal::
+.. code::
 
     /home/obk/.local/lib/python3.7/site-packages/anndata/_core/anndata.py:1094: FutureWarning: is_categorical is deprecated and will be removed in a future version.  Use is_categorical_dtype instead
       if not is_categorical(df_full[k]):
@@ -340,7 +337,7 @@ instead.
     mc.pl.pick_clean_cells(full)
 
 
-.. parsed-literal::
+.. code::
 
     set PBMC.obs[clean_cell]: 149825 true (91.79%) out of 163234 bools
 
@@ -357,7 +354,7 @@ data we’ll be analyzing.
     clean = mc.pl.extract_clean_data(full)
 
 
-.. parsed-literal::
+.. code::
 
     set PBMC.clean.obs[full_cell_index]: 149825 int64s
     set PBMC.clean.var[full_gene_index]: 22617 int64s
@@ -404,7 +401,7 @@ to refine it during the iterative analysis process.
     print(len(forbidden_gene_names))
 
 
-.. parsed-literal::
+.. code::
 
     4037
 
@@ -447,10 +444,10 @@ cores on your server. For ~2 million cells this takes ~10 minutes on a
                                       random_seed=123456)
 
 
-.. parsed-literal::
+.. code::
 
-    set PBMC.clean.uns[rare_gene_modules]: [ [ AZU1, ELANE, MPO, PRTN3 ], [ AC147651.3, ACRBP, AP001189.4, CA2, CCL19, CLDN5, CLEC1B, CLU, CMTM5, CXCL10, ESAM, GNG11, GP9, HBG2, ITGA2B, MYL9, NEXN, NRGN, PDZK1IP1, PF4, PPBP, PTCRA, RGS18, SDPR, SMIM5, SPARC, TMEM40, TREML1, TUBB1 ] ]
-    set PBMC.clean.var[genes_rare_gene_module]: 22584 outliers (99.85%) out of 22617 int32 elements with 2 groups with mean size 16.5
+    set PBMC.clean.var[rare_gene_module_0]: 4 true (0.01769%) out of 22617 bools
+    set PBMC.clean.var[rare_gene_module_1]: 29 true (0.1282%) out of 22617 bools
     set PBMC.clean.var[rare_gene]: 33 true (0.1459%) out of 22617 bools
     set PBMC.clean.obs[cells_rare_gene_module]: 149085 outliers (99.51%) out of 149825 int32 elements with 2 groups with mean size 370
     set PBMC.clean.obs[rare_cell]: 740 true (0.4939%) out of 149825 bools
@@ -460,28 +457,28 @@ cores on your server. For ~2 million cells this takes ~10 minutes on a
       res = method(*args, **kwargs)
     set PBMC.clean.uns[pre_directs]: 16
     set PBMC.clean.uns[directs]: 24
-    set PBMC.clean.var[pre_high_total_gene]: 8297 positive (36.68%) out of 22617 int32s
-    set PBMC.clean.var[high_total_gene]: 10428 positive (46.11%) out of 22617 int32s
-    set PBMC.clean.var[pre_high_relative_variance_gene]: 11740 positive (51.91%) out of 22617 int32s
-    set PBMC.clean.var[high_relative_variance_gene]: 13292 positive (58.77%) out of 22617 int32s
+    set PBMC.clean.var[pre_high_total_gene]: 8315 positive (36.76%) out of 22617 int32s
+    set PBMC.clean.var[high_total_gene]: 10398 positive (45.97%) out of 22617 int32s
+    set PBMC.clean.var[pre_high_relative_variance_gene]: 11682 positive (51.65%) out of 22617 int32s
+    set PBMC.clean.var[high_relative_variance_gene]: 13256 positive (58.61%) out of 22617 int32s
     set PBMC.clean.var[forbidden_gene]: 4037 true (17.85%) out of 22617 bools
-    set PBMC.clean.var[pre_feature_gene]: 421 positive (1.861%) out of 22617 int32s
-    set PBMC.clean.var[feature_gene]: 650 positive (2.874%) out of 22617 int32s
-    set PBMC.clean.var[pre_gene_deviant_votes]: 2396 positive (10.59%) out of 22617 int32s
-    set PBMC.clean.var[gene_deviant_votes]: 2365 positive (10.46%) out of 22617 int32s
-    set PBMC.clean.obs[pre_cell_directs]: 149825 int32s with mean 1.04
-    set PBMC.clean.obs[cell_directs]: 149825 int32s with mean 1.032
+    set PBMC.clean.var[pre_feature_gene]: 427 positive (1.888%) out of 22617 int32s
+    set PBMC.clean.var[feature_gene]: 622 positive (2.75%) out of 22617 int32s
+    set PBMC.clean.var[pre_gene_deviant_votes]: 2403 positive (10.62%) out of 22617 int32s
+    set PBMC.clean.var[gene_deviant_votes]: 2359 positive (10.43%) out of 22617 int32s
+    set PBMC.clean.obs[pre_cell_directs]: 149825 int32s with mean 1.038
+    set PBMC.clean.obs[cell_directs]: 149825 int32s with mean 1.031
     set PBMC.clean.obs[pre_pile]: 0 outliers (0%) out of 149825 int32 elements with 18 groups with mean size 8324
     set PBMC.clean.obs[pile]: 0 outliers (0%) out of 149825 int32 elements with 24 groups with mean size 6243
-    set PBMC.clean.obs[pre_candidate]: 0 outliers (0%) out of 149825 int32 elements with 1698 groups with mean size 88.24
-    set PBMC.clean.obs[candidate]: 0 outliers (0%) out of 149825 int32 elements with 1572 groups with mean size 95.31
+    set PBMC.clean.obs[pre_candidate]: 0 outliers (0%) out of 149825 int32 elements with 1728 groups with mean size 86.7
+    set PBMC.clean.obs[candidate]: 0 outliers (0%) out of 149825 int32 elements with 1569 groups with mean size 95.49
     set PBMC.clean.obs[pre_cell_deviant_votes]: 0 positive (0%) out of 149825 int32s
-    set PBMC.clean.obs[cell_deviant_votes]: 790 positive (0.5273%) out of 149825 int32s
+    set PBMC.clean.obs[cell_deviant_votes]: 764 positive (0.5099%) out of 149825 int32s
     set PBMC.clean.obs[pre_dissolved]: 0 true (0%) out of 149825 bools
-    set PBMC.clean.obs[dissolved]: 71 true (0.04739%) out of 149825 bools
-    set PBMC.clean.obs[pre_metacell]: 0 outliers (0%) out of 149825 int32 elements with 1666 groups with mean size 89.93
-    set PBMC.clean.obs[metacell]: 861 outliers (0.5747%) out of 149825 int32 elements with 1542 groups with mean size 96.6
-    set PBMC.clean.obs[outlier]: 861 true (0.5747%) out of 149825 bools
+    set PBMC.clean.obs[dissolved]: 150 true (0.1001%) out of 149825 bools
+    set PBMC.clean.obs[pre_metacell]: 0 outliers (0%) out of 149825 int32 elements with 1702 groups with mean size 88.03
+    set PBMC.clean.obs[metacell]: 914 outliers (0.61%) out of 149825 int32 elements with 1542 groups with mean size 96.57
+    set PBMC.clean.obs[outlier]: 914 true (0.61%) out of 149825 bools
 
 
 This has written many annotations for each cell (observation), the most
@@ -496,13 +493,13 @@ observation is a metacell:
     metacells = mc.pl.collect_metacells(clean, name='PBMC.metacells')
 
 
-.. parsed-literal::
+.. code::
 
     set PBMC.metacells.var[excluded_gene]: 0 true (0%) out of 22617 bools
     set PBMC.metacells.var[clean_gene]: 22617 true (100%) out of 22617 bools
     set PBMC.metacells.var[forbidden_gene]: 4037 true (17.85%) out of 22617 bools
-    set PBMC.metacells.var[pre_feature_gene]: 421 positive (1.861%) out of 22617 int32s
-    set PBMC.metacells.var[feature_gene]: 650 positive (2.874%) out of 22617 int32s
+    set PBMC.metacells.var[pre_feature_gene]: 427 positive (1.888%) out of 22617 int32s
+    set PBMC.metacells.var[feature_gene]: 622 positive (2.75%) out of 22617 int32s
     set PBMC.metacells.obs[pile]: 1542 int32s
     set PBMC.metacells.obs[candidate]: 1542 int32s
 
@@ -523,12 +520,12 @@ single-threaded implementation.
     mc.pl.compute_umap_by_features(metacells, min_dist=2.0, random_seed=123456)
 
 
-.. parsed-literal::
+.. code::
 
-    set PBMC.metacells.var[top_feature_gene]: 650 true (2.874%) out of 22617 bools
-    set PBMC.metacells.obsp[obs_balanced_ranks]: 13871 nonzero (0.5834%) out of 2377764 elements
-    set PBMC.metacells.obsp[obs_pruned_ranks]: 5239 nonzero (0.2203%) out of 2377764 elements
-    set PBMC.metacells.obsp[obs_outgoing_weights]: 5239 nonzero (0.2203%) out of 2377764 elements
+    set PBMC.metacells.var[top_feature_gene]: 622 true (2.75%) out of 22617 bools
+    set PBMC.metacells.obsp[obs_balanced_ranks]: 14049 nonzero (0.5908%) out of 2377764 elements
+    set PBMC.metacells.obsp[obs_pruned_ranks]: 5326 nonzero (0.224%) out of 2377764 elements
+    set PBMC.metacells.obsp[obs_outgoing_weights]: 5326 nonzero (0.224%) out of 2377764 elements
     /home/obk/.local/lib/python3.7/site-packages/umap/umap_.py:1330: RuntimeWarning: divide by zero encountered in power
       return 1.0 / (1.0 + a * x ** (2 * b))
     /home/obk/.local/lib/python3.7/site-packages/umap/umap_.py:1736: UserWarning: using precomputed metric; transform will be unavailable for new data and inverse_transform will be unavailable for all data
@@ -619,17 +616,20 @@ the “same” (or very similar) cell state together, since the grouping
 will obey some (artificial) maximal size limit.
 
 Thus, the best thing we can do now is to save the data, and feed it to a
-separate further data analysis pipeline.
+separate further data analysis pipeline. To import the data into Seurat,
+we first need to delete the special ``__name__`` property, since for
+some reason it breaks the Seurat importer.
 
 .. code:: ipython3
 
     clean.write('cells.h5ad')
     metacells.write('metacells.h5ad')
+    del metacells.uns['__name__']
+    metacells.write('for_seurat.h5ad')
 
 
-.. parsed-literal::
+.. code::
 
     /home/obk/.local/lib/python3.7/site-packages/anndata/_core/anndata.py:1192: FutureWarning: is_categorical is deprecated and will be removed in a future version.  Use is_categorical_dtype instead
       if is_string_dtype(df[key]) and not is_categorical(df[key])
-
 

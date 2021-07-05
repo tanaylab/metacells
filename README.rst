@@ -43,8 +43,7 @@ Installation
 
 In short: ``pip install metacells``. If you do not have ``sudo`` privileges, you might need to ``pip
 install --user metacells``. Note that ``metacells`` requires many "heavy" dependencies, most notably
-``numpy``, ``pandas``, ``scipy``, ``scanpy``, ``leidenalg``, which ``pip`` should automatically
-install for you.
+``numpy``, ``pandas``, ``scipy``, ``scanpy``, which ``pip`` should automatically install for you.
 
 The metacells package contains extensions written in C++, which means installing it requires
 compilation. In Ubuntu the necessary tools can be installed using ``sudo apt-get install
@@ -53,6 +52,11 @@ only ``gcc`` is installed, but also ``g++`` to allow for C++ compilation.
 
 You can check if all went well by running a variety of tests using ``pytest`` or ``tox``.
 
-The generated documentation contains a `vignette
-<https://github.com/tanaylab/metacells/blob/master/docs/source/vignette.rst>`_ which explains how to
-use this package.
+Vignettes
+=========
+
+The generated documentation contains the following vignettes:
+`Basic Metacells Vignette <https://github.com/tanaylab/metacells/blob/master/docs/source/Metacells_Vignette.rst>`_,
+`Manual Analysis Vignette <https://github.com/tanaylab/metacells/blob/master/docs/source/Manual_Analysis.rst>`_,
+and
+`Seurat Analysis Vignette <https://github.com/tanaylab/metacells/blob/master/docs/source/Seurat_Analysis.rst>`.
