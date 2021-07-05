@@ -59,4 +59,4 @@ The generated documentation contains the following vignettes:
 `Basic Metacells Vignette <https://github.com/tanaylab/metacells/blob/master/docs/source/Metacells_Vignette.rst>`_,
 `Manual Analysis Vignette <https://github.com/tanaylab/metacells/blob/master/docs/source/Manual_Analysis.rst>`_,
 and
-`Seurat Analysis Vignette <https://github.com/tanaylab/metacells/blob/master/docs/source/Seurat_Analysis.rst>`.
+`Seurat Analysis Vignette <https://github.com/tanaylab/metacells/blob/master/docs/source/Seurat_Analysis.rst>`_.
