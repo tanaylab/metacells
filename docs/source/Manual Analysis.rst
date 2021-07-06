@@ -61,25 +61,19 @@ than the number of metacells to help us detect internal structure. We
 have chosen K=32 for this example.
 
 We also need to decide on how to compute distances between metacells for
-the clustering. Here we chose to only look at “interesting” genes which
-are not in the forbidden genes list, and use the log of each such
-interesting gene expression (fraction in each cell). Again, other
-methods are also possible, as long as we generate reasonable quality
-clusters.
+the clustering. Here we chose to only look at the top feature genes (as
+selected for the UMAP projection the basic metacells vignette), and use
+the log of each such feature gene expression (fraction in each cell).
+Again, other methods are also possible, as long as we generate
+reasonable quality clusters.
 
 .. code:: r
 
     umis <- as.matrix(mdata$X)
     fractions <- umis / rowSums(umis)
     log_fractions <- log2(1e-5 + fractions)
-    genes_max <- apply(log_fractions, 2, max)
-    genes_min <- apply(log_fractions, 2, min)
-    genes_mask <- (genes_max - genes_min) > 3 & genes_max > -12
-    names(genes_mask) <- mdata$var_names
-    forbidden_genes <- as.character(t(read.table('forbidden_gene_names.txt')))
-    genes_mask[forbidden_genes] <- FALSE
-    interesting_log_fractions <- log_fractions[,genes_mask]
-    dim(interesting_log_fractions)
+    feature_log_fractions <- log_fractions[,mdata$var$top_feature_gene]
+    dim(feature_log_fractions)
 
 
 
@@ -90,18 +84,18 @@ clusters.
     .list-inline>li {display: inline-block}
     .list-inline>li:not(:last-child)::after {content: "\00b7"; padding: 0 .5ex}
     </style>
-    <ol class=list-inline><li>1542</li><li>1930</li></ol>
+    <ol class=list-inline><li>1542</li><li>622</li></ol>
 
 
 
-This has given us a matrix of 1542 metacells and 1930 genes expression
+This has given us a matrix of 1542 metacells and 622 genes expression
 levels in each one. We can now use this to cluster the metacells into
 coarse groups:
 
 .. code:: r
 
     set.seed(123456)
-    k_means <- stats::kmeans(log_fractions, centers=32)
+    k_means <- stats::kmeans(feature_log_fractions, centers=32)
     cluster_of_metacells <- as.integer(k_means$cluster)
     mdata$obs$cluster <- cluster_of_metacells
 
@@ -114,7 +108,7 @@ structure, using the same interesting genes.
 
 .. code:: r
 
-    color_of_clusters <- data_colors(interesting_log_fractions, group=mdata$obs$cluster)
+    color_of_clusters <- data_colors(feature_log_fractions, group=mdata$obs$cluster)
 
 For example, we can use these colors to display the 2D UMAP projection
 computed by the basic metacells vignette:

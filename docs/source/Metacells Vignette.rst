@@ -535,8 +535,9 @@ single-threaded implementation.
 
 
 This filled in ``umap_x`` and ``umap_y`` per-metacell (observation)
-annotations, which can be used to generate 2D projectiondiagrams.
-Typically such diagrams use additional metadata (such as type
+annotations, which can be used to generate 2D projection diagrams (it
+also filled in a boolean ``top_feature_gene`` mask designating the genes
+used). Typically such diagrams use additional metadata (such as type
 annotations) to color the points, but here we just show the raw
 projection:
 
