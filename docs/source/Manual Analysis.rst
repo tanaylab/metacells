@@ -18,12 +18,14 @@ using:
 
     require('anndata')
     require('stats')
-    source('/home/obk/chameleon/R/chameleon.R')
+    require('chameleon')
 
 
 .. code::
 
     Loading required package: anndata
+
+    Loading required package: chameleon
 
 
 
@@ -108,7 +110,7 @@ structure, using the same interesting genes.
 
 .. code:: r
 
-    color_of_clusters <- data_colors(feature_log_fractions, group=mdata$obs$cluster)
+    color_of_clusters <- chameleon::data_colors(feature_log_fractions, group=mdata$obs$cluster)
 
 For example, we can use these colors to display the 2D UMAP projection
 computed by the basic metacells vignette:
