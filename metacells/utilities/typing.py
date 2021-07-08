@@ -60,10 +60,18 @@ from typing import (Any, Collection, Iterator, Optional, Sized, Tuple, TypeVar,
 import numpy as np
 import pandas as pd  # type: ignore
 import scipy.sparse as sp  # type: ignore
-from typing_extensions import Protocol
 
 import metacells.utilities.documentation as utd
 import metacells.utilities.timing as utm
+
+try:
+    from typing_extensions import Protocol
+except ModuleNotFoundError:
+    class Protocol:  # type: ignore
+        """
+        Placeholder if we don't have ``typing_extensions``.
+        """
+
 
 __all__ = [
     'CPP_DATA_TYPES',
