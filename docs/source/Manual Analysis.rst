@@ -17,8 +17,11 @@ using:
 .. code:: r
 
     require('anndata')
-    require('stats')
     require('chameleon')
+    require('pheatmap')
+    require('pracma')
+    require('stats')
+
 
 
 .. code::
@@ -26,6 +29,10 @@ using:
     Loading required package: anndata
 
     Loading required package: chameleon
+
+    Loading required package: pheatmap
+
+    Loading required package: pracma
 
 
 
@@ -40,6 +47,93 @@ forbidden genes for use below.
 
     mdata <- anndata::read_h5ad('metacells.h5ad')
     forbidden_genes <- as.character(t(read.table('forbidden_gene_names.txt')))
+
+Metacells Marker Genes
+----------------------
+
+A possible starting point for anlayzing the data is looking at the genes
+that are different in each metacell vs. the rest of the population. Such
+marker genes are good candidates for investigating the captured cell
+behaviors. We’ll start by converting the raw UMIs counts to a log scale
+for more convenient analysis:
+
+.. code:: r
+
+    umis <- as.matrix(mdata$X)
+    fractions <- umis / rowSums(umis)
+    log_fractions <- log2(1e-5 + fractions)
+
+We can use this matrix to, for each metacell, look for a few genes that
+are most entriched in it compated to the overall population:
+
+.. code:: r
+
+    genes_per_metacell <- 2
+    minimal_max_log_fraction_of_interesting_genes <- -10
+    minimal_relative_log_fraction_of_candidate_genes <- 2
+
+    median_log_fractions_of_genes <- apply(log_fractions, 2, median)
+    relative_log_fractions <- sweep(log_fractions, 2, median_log_fractions_of_genes)
+    max_log_fractions_of_genes <- apply(log_fractions, 2, max)
+
+    interesting_genes_mask <- (max_log_fractions_of_genes
+                            >= minimal_max_log_fraction_of_interesting_genes)
+    marker_genes <- unique(
+        unlist(
+            apply(
+                relative_log_fractions[,interesting_genes_mask],
+                1,
+                function(relative_log_fraction_of_metacell) {
+                    candidate_genes_mask <- (relative_log_fraction_of_metacell
+                                          >= minimal_relative_log_fraction_of_candidate_genes)
+                    names(
+                        head(
+                            sort(-relative_log_fraction_of_metacell[candidate_genes_mask]),
+                            n=genes_per_metacell
+                        )
+                    )
+                }
+            )
+        )
+    )
+    print(length(marker_genes))
+
+
+.. code::
+
+    [1] 84
+
+
+This gave us 84 genes to look at (you can get more or less genes
+modifying the parameters, especially ``genes_per_metacell``). We can
+visualize the structure of the data using these genes, which could be a
+first step towards understaning the different cell behaviors:
+
+.. code:: r
+
+    breaks <- pracma::interp1(0:7, c(-3, -2, -1, 0, 1, 2, 3, 4), 0:140/20)
+    colors <- colorRampPalette(c('darkred', 'red', 'white', 'white', 'lightblue', 'blue', 'darkblue'))(141)
+    options(repr.plot.width = 23, repr.plot.height = 13)
+    pheatmap::pheatmap(
+        t(relative_log_fractions[,marker_genes]),
+        treeheight_col=0,
+        treeheight_row=0,
+        cellwidth=1,
+        cellheight=10,
+        show_rownames=TRUE,
+        show_colnames=FALSE,
+        main='Metacell Marker Genes',
+        color=colors,
+        breaks=breaks,
+        legend=TRUE
+    )
+
+
+
+.. image:: output_10_0.png
+   :width: 1380px
+   :height: 780px
+
 
 Clustering
 ----------
@@ -122,9 +216,9 @@ computed by the basic metacells vignette:
 
 
 
-.. image:: output_12_0.png
-   :width: 420px
-   :height: 420px
+.. image:: output_18_0.png
+   :width: 1380px
+   :height: 780px
 
 
 This shows us a pretty nice locality of the clusters in the 2D UMAP
