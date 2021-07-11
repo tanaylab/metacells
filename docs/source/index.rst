@@ -15,9 +15,9 @@ Vignettes
 .. toctree::
   :maxdepth: 1
 
-  Metacells Vignette
-  Manual Analysis
-  Seurat Analysis
+  Metacells_Vignette
+  Manual_Analysis
+  Seurat_Analysis
 
 API
 ===
