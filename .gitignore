@@ -19,3 +19,5 @@ sphinx/timing_script.rst
 tags
 timing*.csv
 .tox
+vignettes/*_files/*
+vignettes/*.h5*

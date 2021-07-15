@@ -2,14 +2,9 @@ Metacells Vignette
 ==================
 
 This vignette demonstrates step-by-step use of the metacells package to
-analyze scRNA-seq data. It is expected that these steps will be modified
-when analyzing other data sets, and points where such modifications are
-likely will be called out.
-
-You can download a working Jupyter notebook version of this vignette
-from
-`metacells_vignette.tgz <http://www.wisdom.weizmann.ac.il/~atanay/metac_data/metacells_vignette.tgz>`__.
-This will include all the Jupyter notebook files.
+analyze scRNA-seq data. The latest version of this vignette is available
+in
+`Github <https://github.com/tanaylab/metacells/blob/master/sphinx/Manual_Analysis.rst>`__.
 
 Preparation
 -----------
@@ -33,7 +28,9 @@ on any visualization packages.
 
     from math import hypot
     from matplotlib.collections import LineCollection
+    from IPython.display import set_matplotlib_formats
 
+    set_matplotlib_formats('svg')
     sb.set_style("white")
 
 Getting the raw data
@@ -240,7 +237,7 @@ for the minimal and maximal number of UMIs of cells we wish to analyze.
 
 
 
-.. image:: output_18_1.png
+.. image:: Metacells_Vignette_18_1.svg
 
 
 Thresholds on the fractionof excluded gene UMIs
@@ -286,7 +283,7 @@ number of clean gene UMIs left to analyze.
 
 
 
-.. image:: output_20_2.png
+.. image:: Metacells_Vignette_20_2.svg
 
 
 Automating clean cells selection
@@ -444,51 +441,51 @@ similarity between them:
 
 
 
-.. image:: output_34_0.png
+.. image:: Metacells_Vignette_34_0.svg
 
 
 
-.. image:: output_34_1.png
+.. image:: Metacells_Vignette_34_1.svg
 
 
 
-.. image:: output_34_2.png
+.. image:: Metacells_Vignette_34_2.svg
 
 
 
-.. image:: output_34_3.png
+.. image:: Metacells_Vignette_34_3.svg
 
 
 
-.. image:: output_34_4.png
+.. image:: Metacells_Vignette_34_4.svg
 
 
 
-.. image:: output_34_5.png
+.. image:: Metacells_Vignette_34_5.svg
 
 
 
-.. image:: output_34_6.png
+.. image:: Metacells_Vignette_34_6.svg
 
 
 
-.. image:: output_34_7.png
+.. image:: Metacells_Vignette_34_7.svg
 
 
 
-.. image:: output_34_8.png
+.. image:: Metacells_Vignette_34_8.svg
 
 
 
-.. image:: output_34_9.png
+.. image:: Metacells_Vignette_34_9.svg
 
 
 
-.. image:: output_34_10.png
+.. image:: Metacells_Vignette_34_10.svg
 
 
 
-.. image:: output_34_11.png
+.. image:: Metacells_Vignette_34_11.svg
 
 
 We can now extend the list of forbidden genes to include additional
@@ -681,7 +678,7 @@ projection:
 
 
 
-.. image:: output_47_0.png
+.. image:: Metacells_Vignette_47_0.svg
 
 
 We can also visualize the (skeleton) KNN graph on top of the UMAP. Long
@@ -711,7 +708,7 @@ out the short edges:
 
 
 
-.. image:: output_49_0.png
+.. image:: Metacells_Vignette_49_0.svg
 
 
 Further analysis

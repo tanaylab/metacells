@@ -3,10 +3,9 @@ Metacells Manual Analysis Vignette
 
 This vignette demonstrates a possible manual analysis of the metacells
 generated from the basic `metacells
-vignette <Metacells_Vignette.html>`__. The
-`metacells_vignette.tgz <http://www.wisdom.weizmann.ac.il/~atanay/metac_data/metacells_vignette.tgz>`__
-file contains the basic metacells vignette jupyter notebook as well
-as this one.
+vignette <Metacells_Vignette.html>`__. The latest version of this
+vignette is available in
+`Github <https://github.com/tanaylab/metacells/blob/master/sphinx/Metacells_Vignette.rst>`__.
 
 Preparation
 -----------
@@ -22,6 +21,7 @@ using:
     require('pheatmap')
     require('pracma')
     require('stats')
+    options(jupyter.plot_mimetypes = 'image/svg+xml')
 
 
 
@@ -138,9 +138,7 @@ first step towards understaning the different cell behaviors:
 
 
 
-.. image:: output_10_0.png
-   :width: 1380px
-   :height: 780px
+.. image:: Manual_Analysis_10_0.svg
 
 
 Clustering
@@ -224,9 +222,7 @@ computed by the basic metacells vignette:
 
 
 
-.. image:: output_18_0.png
-   :width: 1380px
-   :height: 780px
+.. image:: Manual_Analysis_18_0.svg
 
 
 This shows us a pretty nice locality of the clusters in the 2D UMAP
@@ -256,9 +252,7 @@ effectors, using the GNLY and GZMK gene expression levels:
 
 
 
-.. image:: output_21_0.png
-   :width: 1380px
-   :height: 780px
+.. image:: Manual_Analysis_21_0.svg
 
 
 Full Analysis and MCView

@@ -4,9 +4,9 @@ Metacells Seurat Analysis Vignette
 This vignette demonstrates a possible
 `Seurat <https://satijalab.org/seurat/index.html>`__ analysis of the
 metacells generated from the basic `metacells
-vignette <Metacells_Vignette.html>`__. The
-`metacells_vignette.tgz <http://www.wisdom.weizmann.ac.il/~atanay/metac_data/metacells_vignette.tgz>`__
-file contains the basic vignette jupyter notebook as well as this one.
+vignette <Metacells_Vignette.html>`__. The latest version of this
+vignette is available in
+`Github <https://github.com/tanaylab/metacells/blob/master/sphinx/Seurat_Analysis.rst>`__.
 
 Preparation
 -----------
@@ -24,6 +24,8 @@ non-standard.
     library(Seurat)
     library(SeuratData)
     library(SeuratDisk)
+    options(jupyter.plot_mimetypes = 'image/svg+xml')
+
 
 
 .. code::
@@ -144,7 +146,5 @@ we’ll just do some simple PCA analysis based on the Seurat
 
 
 
-.. image:: output_6_1.png
-   :width: 420px
-   :height: 420px
+.. image:: Seurat_Analysis_6_1.svg
 

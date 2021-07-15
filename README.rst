@@ -63,8 +63,4 @@ and
 `Seurat Analysis Vignette <https://metacells.readthedocs.io/en/latest/Seurat_Analysis.html>`_.
 
 You can also access their very latest version in the `Github repository
-<https://github.com/tanaylab/metacells>`_ in:
-`Github Basic Metacells Vignette <https://github.com/tanaylab/metacells/blob/master/sphinx/Metacells_Vignette.rst>`_,
-`Github Manual Analysis Vignette <https://github.com/tanaylab/metacells/blob/master/sphinx/Manual_Analysis.rst>`_,
-and
-`Github Seurat Analysis Vignette <https://github.com/tanaylab/metacells/blob/master/sphinx/Seurat_Analysis.rst>`_.
+<https://github.com/tanaylab/metacells/tree/master/sphinx>`_.
