@@ -550,7 +550,46 @@ no fewer than a quarter of this size (that is, a minimum of 40,000 UMIs
 per metacell), where metacells smaller than half the size (that is,
 between 40,000 UMIs and 80,000 UMIs) are “especially distinct”. These
 ratios and relevant thresholds can all be controlled using additional
-parameters.
+parameters. #### Parallelism
+
+By default, the implementation uses all the physical cores of the system
+(ignoring hyper-threading as using them actually reduces performance).
+It is possible to reduce the number of cores used by invoking
+``mc.ut.set_processors_count`` (or set the
+``METACELLS_PROCESSORS_COUNT`` environment variable), if one wants to
+avoid taking all the physical cores for some reason. More importantly,
+one may want to use ``mc.pl.set_max_parallel_piles`` (or set the
+``METACELLS_MAX_PARALLEL_PILES`` environment variable) to reduce the
+number of piles processed in parallel. Processing each pile takes a
+significant amount of memory (several GBs, depending on how dense the
+cells UMIs matrix is). On a server with a high core count and a limited
+amount of memory, this can cause the computation to crash with an error
+message complaining about failed allocations or some other indication of
+running out of memory, especially if other memory-intensive programs are
+running at the same time. Note that the implementation also needs to
+load the full data set into memory, which takes a large amount of memory
+regardless of computing the piles, and again varies depending on how
+dense the cells UMIs matrix is.
+
+The ``mc.pl.guess_max_parallel_piles`` function can be invoked after
+loading the input cells data and before computing the metacells, and
+will return a hopefully reasonable guess for the maximal number of
+parallel piles to use, based on the density of the input, the amount of
+RAM available, and the target pile size. That said, this is just a
+(conservative) guess. When running very large data sets (millions of
+cells), it is best to avoid any other heavy computations on the same
+server, keep an eye on the memory usage, and tweak the parameters if
+needed.
+
+The expected run-time of the computation will depend on the size of the
+data, the density of the UMIs map, and the amount of parallelism used.
+It can take well over an hour to fully analyze a dataset of millions of
+cells on a large server (with dozens of physical processors), and this
+will consume hundreds of gigabytes of memory. Luckily, smaller data sets
+(like the ~160K PBMC dataset we use here) only take a few minutes to
+compute on such a strong server, using only a few tens of gigabytes.
+This makes it possible to analyze such data sets on a strong modern
+laptop with 16GB (or better yet, 32GB) of RAM.
 
 Grouping into Metacells
 ~~~~~~~~~~~~~~~~~~~~~~~
@@ -559,6 +598,19 @@ We can finally compute the metacells. We are only running this on ~160K
 cells, still this may take a few minutes, depending on the number of
 cores on your server. For ~2 million cells this takes ~10 minutes on a
 28-core server.
+
+.. code:: ipython3
+
+    max_parallel_piles = mc.pl.guess_max_parallel_piles(clean)
+    print(max_parallel_piles)
+    mc.pl.set_max_parallel_piles(max_parallel_piles)
+
+
+
+.. code::
+
+    61
+
 
 .. code:: ipython3
 
@@ -574,6 +626,51 @@ cores on your server. For ~2 million cells this takes ~10 minutes on a
       if not is_categorical(df_full[k]):
     /home/obk/.local/lib/python3.7/site-packages/pandas/core/arrays/categorical.py:2487: FutureWarning: The `inplace` parameter in pandas.Categorical.remove_unused_categories is deprecated and will be removed in a future version.
       res = method(*args, **kwargs)
+    set PBMC.clean.var[rare_gene_module_0]: 4 true (0.01769%) out of 22617 bools
+    set PBMC.clean.var[rare_gene_module_1]: 29 true (0.1282%) out of 22617 bools
+    set PBMC.clean.var[rare_gene]: 33 true (0.1459%) out of 22617 bools
+    set PBMC.clean.obs[cells_rare_gene_module]: 149102 outliers (99.52%) out of 149825 int32 elements with 2 groups with mean size 361.5
+    set PBMC.clean.obs[rare_cell]: 723 true (0.4826%) out of 149825 bools
+    /home/obk/.local/lib/python3.7/site-packages/anndata/_core/anndata.py:1094: FutureWarning: is_categorical is deprecated and will be removed in a future version.  Use is_categorical_dtype instead
+      if not is_categorical(df_full[k]):
+    /home/obk/.local/lib/python3.7/site-packages/pandas/core/arrays/categorical.py:2487: FutureWarning: The `inplace` parameter in pandas.Categorical.remove_unused_categories is deprecated and will be removed in a future version.
+      res = method(*args, **kwargs)
+    set PBMC.clean.uns[pre_directs]: 16
+    set PBMC.clean.uns[directs]: 25
+    set PBMC.clean.var[pre_high_total_gene]: 8318 positive (36.78%) out of 22617 int32s
+    set PBMC.clean.var[high_total_gene]: 10468 positive (46.28%) out of 22617 int32s
+    set PBMC.clean.var[pre_high_relative_variance_gene]: 11732 positive (51.87%) out of 22617 int32s
+    set PBMC.clean.var[high_relative_variance_gene]: 13356 positive (59.05%) out of 22617 int32s
+    set PBMC.clean.var[forbidden_gene]: 106 true (0.4687%) out of 22617 bools
+    set PBMC.clean.var[pre_feature_gene]: 476 positive (2.105%) out of 22617 int32s
+    set PBMC.clean.var[feature_gene]: 724 positive (3.201%) out of 22617 int32s
+    set PBMC.clean.var[pre_gene_deviant_votes]: 2393 positive (10.58%) out of 22617 int32s
+    set PBMC.clean.var[gene_deviant_votes]: 2364 positive (10.45%) out of 22617 int32s
+    set PBMC.clean.obs[pre_cell_directs]: 149825 int32s with mean 1.041
+    set PBMC.clean.obs[cell_directs]: 149825 int32s with mean 1.032
+    set PBMC.clean.obs[pre_pile]: 0 outliers (0%) out of 149825 int32 elements with 18 groups with mean size 8324
+    set PBMC.clean.obs[pile]: 0 outliers (0%) out of 149825 int32 elements with 25 groups with mean size 5993
+    set PBMC.clean.obs[pre_candidate]: 0 outliers (0%) out of 149825 int32 elements with 1666 groups with mean size 89.93
+    set PBMC.clean.obs[candidate]: 0 outliers (0%) out of 149825 int32 elements with 1575 groups with mean size 95.13
+    set PBMC.clean.obs[pre_cell_deviant_votes]: 0 positive (0%) out of 149825 int32s
+    set PBMC.clean.obs[cell_deviant_votes]: 741 positive (0.4946%) out of 149825 int32s
+    set PBMC.clean.obs[pre_dissolved]: 0 true (0%) out of 149825 bools
+    set PBMC.clean.obs[dissolved]: 0 true (0%) out of 149825 bools
+    set PBMC.clean.obs[pre_metacell]: 0 outliers (0%) out of 149825 int32 elements with 1630 groups with mean size 91.92
+    set PBMC.clean.obs[metacell]: 741 outliers (0.4946%) out of 149825 int32 elements with 1546 groups with mean size 96.43
+    set PBMC.clean.obs[outlier]: 741 true (0.4946%) out of 149825 bools
+
+
+.. code:: ipython3
+
+    mc.pl.divide_and_conquer_pipeline(clean,
+                                      forbidden_gene_names=forbidden_gene_names,
+                                      #target_metacell_size=...,
+                                      random_seed=123456)
+
+
+.. code::
+
     set PBMC.clean.var[rare_gene_module_0]: 4 true (0.01769%) out of 22617 bools
     set PBMC.clean.var[rare_gene_module_1]: 29 true (0.1282%) out of 22617 bools
     set PBMC.clean.var[rare_gene]: 33 true (0.1459%) out of 22617 bools
@@ -678,7 +775,7 @@ projection:
 
 
 
-.. image:: Metacells_Vignette_47_0.svg
+.. image:: Metacells_Vignette_49_0.svg
 
 
 We can also visualize the (skeleton) KNN graph on top of the UMAP. Long
@@ -708,7 +805,7 @@ out the short edges:
 
 
 
-.. image:: Metacells_Vignette_49_0.svg
+.. image:: Metacells_Vignette_51_0.svg
 
 
 Further analysis

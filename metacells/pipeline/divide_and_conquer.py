@@ -5,6 +5,7 @@ Divide and Conquer
 
 import gc
 import os
+import psutil
 import sys
 from re import Pattern
 from typing import (Any, Callable, Collection, Dict, List, NamedTuple,
@@ -22,6 +23,7 @@ from .direct import compute_direct_metacells
 __all__ = [
     'set_max_parallel_piles',
     'get_max_parallel_piles',
+    'guess_max_parallel_piles',
     'divide_and_conquer_pipeline',
     'compute_divide_and_conquer_metacells',
 ]
@@ -60,6 +62,40 @@ def get_max_parallel_piles() -> int:
     '''
     global MAX_PARALLEL_PILES
     return MAX_PARALLEL_PILES
+
+
+@ut.expand_doc()
+def guess_max_parallel_piles(
+    cells: AnnData,
+    *,
+    max_gbs: Optional[float] = None,
+    target_pile_size: int = pr.target_pile_size,
+) -> int:
+    '''
+    Try and guess a reasonable maximal number of piles to use for computing metacells for the
+    specified `cells` using at most `max_gbs` of memory (by default, all the machine has) and
+    assuming the `target_pile_size` (default: {target_pile_size}).
+
+    Note this is only a (conservative) guess. A too-low number would slow down the computation by
+    using less processors than it could. A too-high number might cause the computation to crash,
+    running out of memory.
+
+    .. todo::
+
+        Ideally the system would self tune (avoid spawning more parallel processes for computing
+        piles when getting close to the memory limit). This is "not easy" to achieve using Python's
+        parallel programming APIs.
+    '''
+    used_gbs = psutil.Process(os.getpid()).memory_info().rss \
+        / (1024.0 * 1024.0 * 1024.0)
+    pile_gbs = \
+        used_gbs \
+        * (target_pile_size * target_pile_size * 96) \
+        / (cells.n_vars * cells.n_obs)
+    max_gbs = ut.hardware_info()['memsize'] / 1024.0
+    available_gbs = max_gbs - used_gbs * 3
+    max_piles = max(int(available_gbs / pile_gbs), 1)
+    return max_piles
 
 
 class ResultAnnotation(NamedTuple):
