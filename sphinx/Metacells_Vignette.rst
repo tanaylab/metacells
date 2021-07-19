@@ -146,12 +146,21 @@ masks of your own based on your own criteria.
 
 .. code::
 
+    TODOX: RSS BEFORE 1095241728 = 1.020 GB
     set PBMC.var[properly_sampled_gene]: 22637 true (69.15%) out of 32738 bools
+    TODOX: RSS AFTER 1935110144 = 1.802 GB
     set PBMC.var[excluded_gene]: 20 true (0.06109%) out of 32738 bools
     /home/obk/.local/lib/python3.7/site-packages/anndata/_core/anndata.py:1094: FutureWarning: is_categorical is deprecated and will be removed in a future version.  Use is_categorical_dtype instead
       if not is_categorical(df_full[k]):
     /home/obk/.local/lib/python3.7/site-packages/pandas/core/arrays/categorical.py:2487: FutureWarning: The `inplace` parameter in pandas.Categorical.remove_unused_categories is deprecated and will be removed in a future version.
       res = method(*args, **kwargs)
+    TODOX: RSS BEFORE 1985273856 = 1.849 GB
+    TODOX: RSS AFTER 2134958080 = 1.988 GB
+    TODOX: RSS AFTER 2184450048 = 2.034 GB
+    TODOX: RSS AFTER 2214182912 = 2.062 GB
+    TODOX: RSS AFTER 2310266880 = 2.152 GB
+    TODOX: RSS AFTER 2409975808 = 2.244 GB
+    TODOX: RSS AFTER 2423754752 = 2.257 GB
     set PBMC.var[noisy_lonely_gene]: 0 true (0%) out of 32738 bools
 
 
@@ -345,6 +354,7 @@ data we’ll be analyzing.
 
     set PBMC.clean.obs[full_cell_index]: 149825 int64s
     set PBMC.clean.var[full_gene_index]: 22617 int64s
+    TODOX: RSS AFTER 2826104832 = 2.632 GB
 
 
 Initial forbidden genes
@@ -400,12 +410,24 @@ to matter.
 
 .. code::
 
+    TODOX: RSS BEFORE 2874056704 = 2.677 GB
+    TODOX: RSS AFTER 2874179584 = 2.677 GB
+    TODOX: RSS AFTER 2907066368 = 2.707 GB
+    TODOX: RSS AFTER 2907197440 = 2.708 GB
+    TODOX: RSS AFTER 2955689984 = 2.753 GB
+    TODOX: RSS AFTER 2955730944 = 2.753 GB
     set PBMC.clean.var[related_genes_module]: 21549 outliers (95.28%) out of 22617 int32 elements with 73 groups with mean size 14.63
     set PBMC.clean.varp[related_genes_similarity]: 22617 X 22617 float32s
+    TODOX: RSS AFTER 2978623488 = 2.774 GB
 
 
-This discovered 73 gene modules with ~15 genes in each one. Let us look
-at the modules containing suspect genes:
+This discovered 73 gene modules with ~15 genes in each one. In general,
+it may prove beneficial to look at each and every one of them. This
+would give us some idea about (most of) the gene modules that
+characterize the cell types in the data, and for our purpose now, may
+suggest additional lateral gene modules unrelated to our original
+suspect genes. However, to keep this vignette simple, let us just look
+at the modules containing already suspect genes:
 
 .. code:: ipython3
 
@@ -609,7 +631,7 @@ cores on your server. For ~2 million cells this takes ~10 minutes on a
 
 .. code::
 
-    61
+    62
 
 
 .. code:: ipython3
@@ -622,10 +644,13 @@ cores on your server. For ~2 million cells this takes ~10 minutes on a
 
 .. code::
 
+    TODOX: RSS BEFORE 3014680576 = 2.808 GB
     /home/obk/.local/lib/python3.7/site-packages/anndata/_core/anndata.py:1094: FutureWarning: is_categorical is deprecated and will be removed in a future version.  Use is_categorical_dtype instead
       if not is_categorical(df_full[k]):
     /home/obk/.local/lib/python3.7/site-packages/pandas/core/arrays/categorical.py:2487: FutureWarning: The `inplace` parameter in pandas.Categorical.remove_unused_categories is deprecated and will be removed in a future version.
       res = method(*args, **kwargs)
+    TODOX: RSS BEFORE 3929161728 = 3.659 GB
+    TODOX: RSS AFTER 3929178112 = 3.659 GB
     set PBMC.clean.var[rare_gene_module_0]: 4 true (0.01769%) out of 22617 bools
     set PBMC.clean.var[rare_gene_module_1]: 29 true (0.1282%) out of 22617 bools
     set PBMC.clean.var[rare_gene]: 33 true (0.1459%) out of 22617 bools
@@ -635,51 +660,182 @@ cores on your server. For ~2 million cells this takes ~10 minutes on a
       if not is_categorical(df_full[k]):
     /home/obk/.local/lib/python3.7/site-packages/pandas/core/arrays/categorical.py:2487: FutureWarning: The `inplace` parameter in pandas.Categorical.remove_unused_categories is deprecated and will be removed in a future version.
       res = method(*args, **kwargs)
-    set PBMC.clean.uns[pre_directs]: 16
-    set PBMC.clean.uns[directs]: 25
-    set PBMC.clean.var[pre_high_total_gene]: 8318 positive (36.78%) out of 22617 int32s
-    set PBMC.clean.var[high_total_gene]: 10468 positive (46.28%) out of 22617 int32s
-    set PBMC.clean.var[pre_high_relative_variance_gene]: 11732 positive (51.87%) out of 22617 int32s
-    set PBMC.clean.var[high_relative_variance_gene]: 13356 positive (59.05%) out of 22617 int32s
-    set PBMC.clean.var[forbidden_gene]: 106 true (0.4687%) out of 22617 bools
-    set PBMC.clean.var[pre_feature_gene]: 476 positive (2.105%) out of 22617 int32s
-    set PBMC.clean.var[feature_gene]: 724 positive (3.201%) out of 22617 int32s
-    set PBMC.clean.var[pre_gene_deviant_votes]: 2393 positive (10.58%) out of 22617 int32s
-    set PBMC.clean.var[gene_deviant_votes]: 2364 positive (10.45%) out of 22617 int32s
-    set PBMC.clean.obs[pre_cell_directs]: 149825 int32s with mean 1.041
-    set PBMC.clean.obs[cell_directs]: 149825 int32s with mean 1.032
-    set PBMC.clean.obs[pre_pile]: 0 outliers (0%) out of 149825 int32 elements with 18 groups with mean size 8324
-    set PBMC.clean.obs[pile]: 0 outliers (0%) out of 149825 int32 elements with 25 groups with mean size 5993
-    set PBMC.clean.obs[pre_candidate]: 0 outliers (0%) out of 149825 int32 elements with 1666 groups with mean size 89.93
-    set PBMC.clean.obs[candidate]: 0 outliers (0%) out of 149825 int32 elements with 1575 groups with mean size 95.13
-    set PBMC.clean.obs[pre_cell_deviant_votes]: 0 positive (0%) out of 149825 int32s
-    set PBMC.clean.obs[cell_deviant_votes]: 741 positive (0.4946%) out of 149825 int32s
-    set PBMC.clean.obs[pre_dissolved]: 0 true (0%) out of 149825 bools
-    set PBMC.clean.obs[dissolved]: 0 true (0%) out of 149825 bools
-    set PBMC.clean.obs[pre_metacell]: 0 outliers (0%) out of 149825 int32 elements with 1630 groups with mean size 91.92
-    set PBMC.clean.obs[metacell]: 741 outliers (0.4946%) out of 149825 int32 elements with 1546 groups with mean size 96.43
-    set PBMC.clean.obs[outlier]: 741 true (0.4946%) out of 149825 bools
-
-
-.. code:: ipython3
-
-    mc.pl.divide_and_conquer_pipeline(clean,
-                                      forbidden_gene_names=forbidden_gene_names,
-                                      #target_metacell_size=...,
-                                      random_seed=123456)
-
-
-.. code::
-
-    set PBMC.clean.var[rare_gene_module_0]: 4 true (0.01769%) out of 22617 bools
-    set PBMC.clean.var[rare_gene_module_1]: 29 true (0.1282%) out of 22617 bools
-    set PBMC.clean.var[rare_gene]: 33 true (0.1459%) out of 22617 bools
-    set PBMC.clean.obs[cells_rare_gene_module]: 149102 outliers (99.52%) out of 149825 int32 elements with 2 groups with mean size 361.5
-    set PBMC.clean.obs[rare_cell]: 723 true (0.4826%) out of 149825 bools
-    /home/obk/.local/lib/python3.7/site-packages/anndata/_core/anndata.py:1094: FutureWarning: is_categorical is deprecated and will be removed in a future version.  Use is_categorical_dtype instead
-      if not is_categorical(df_full[k]):
-    /home/obk/.local/lib/python3.7/site-packages/pandas/core/arrays/categorical.py:2487: FutureWarning: The `inplace` parameter in pandas.Categorical.remove_unused_categories is deprecated and will be removed in a future version.
-      res = method(*args, **kwargs)
+    TODOX: RSS BEFORE 4646555648 = 4.327 GB
+    TODOX: RSS AFTER 5030961152 = 4.685 GB
+    TODOX: RSS BEFORE 5031763968 = 4.686 GB
+    TODOX: RSS AFTER 5031706624 = 4.686 GB
+    TODOX: RSS BEFORE 5032509440 = 4.687 GB
+    TODOX: RSS AFTER 5032083456 = 4.686 GB
+    TODOX: RSS BEFORE 5032886272 = 4.687 GB
+    TODOX: RSS AFTER 5032148992 = 4.687 GB
+    TODOX: RSS BEFORE 5032943616 = 4.687 GB
+    TODOX: RSS AFTER 5032222720 = 4.687 GB
+    TODOX: RSS BEFORE 5033025536 = 4.687 GB
+    TODOX: RSS AFTER 5031645184 = 4.686 GB
+    TODOX: RSS BEFORE 5032448000 = 4.687 GB
+    TODOX: RSS AFTER 5032083456 = 4.686 GB
+    TODOX: RSS BEFORE 5032886272 = 4.687 GB
+    TODOX: RSS AFTER 5031432192 = 4.686 GB
+    TODOX: RSS BEFORE 5032230912 = 4.687 GB
+    TODOX: RSS AFTER 5032046592 = 4.686 GB
+    TODOX: RSS BEFORE 5032849408 = 4.687 GB
+    TODOX: RSS AFTER 5031063552 = 4.686 GB
+    TODOX: RSS AFTER 5031608320 = 4.686 GB
+    TODOX: RSS BEFORE 5031866368 = 4.686 GB
+    TODOX: RSS BEFORE 5032411136 = 4.687 GB
+    TODOX: RSS AFTER 5030539264 = 4.685 GB
+    TODOX: RSS BEFORE 5031342080 = 4.686 GB
+    TODOX: RSS AFTER 5031809024 = 4.686 GB
+    TODOX: RSS BEFORE 5032611840 = 4.687 GB
+    TODOX: RSS AFTER 5030760448 = 4.685 GB
+    TODOX: RSS BEFORE 5031563264 = 4.686 GB
+    TODOX: RSS AFTER 5031682048 = 4.686 GB
+    TODOX: RSS BEFORE 5032484864 = 4.687 GB
+    TODOX: RSS AFTER 5108674560 = 4.758 GB
+    TODOX: RSS BEFORE 5108678656 = 4.758 GB
+    TODOX: RSS AFTER 5109886976 = 4.759 GB
+    TODOX: RSS BEFORE 5109899264 = 4.759 GB
+    TODOX: RSS AFTER 5111005184 = 4.760 GB
+    TODOX: RSS BEFORE 5111017472 = 4.760 GB
+    TODOX: RSS AFTER 5108752384 = 4.758 GB
+    TODOX: RSS BEFORE 5108756480 = 4.758 GB
+    TODOX: RSS AFTER 5110546432 = 4.760 GB
+    TODOX: RSS BEFORE 5110550528 = 4.760 GB
+    TODOX: RSS AFTER 5110984704 = 4.760 GB
+    TODOX: RSS BEFORE 5110988800 = 4.760 GB
+    TODOX: RSS AFTER 5111357440 = 4.760 GB
+    TODOX: RSS BEFORE 5111369728 = 4.760 GB
+    TODOX: RSS AFTER 5110550528 = 4.760 GB
+    TODOX: RSS BEFORE 5110554624 = 4.760 GB
+    TODOX: RSS AFTER 5109022720 = 4.758 GB
+    TODOX: RSS BEFORE 5109026816 = 4.758 GB
+    TODOX: RSS AFTER 5110087680 = 4.759 GB
+    TODOX: RSS BEFORE 5110091776 = 4.759 GB
+    TODOX: RSS AFTER 5109846016 = 4.759 GB
+    TODOX: RSS BEFORE 5109850112 = 4.759 GB
+    TODOX: RSS AFTER 5110411264 = 4.759 GB
+    TODOX: RSS BEFORE 5110415360 = 4.759 GB
+    TODOX: RSS AFTER 5110161408 = 4.759 GB
+    TODOX: RSS BEFORE 5110165504 = 4.759 GB
+    TODOX: RSS AFTER 5109288960 = 4.758 GB
+    TODOX: RSS BEFORE 5109293056 = 4.758 GB
+    TODOX: RSS AFTER 5109800960 = 4.759 GB
+    TODOX: RSS BEFORE 5109805056 = 4.759 GB
+    TODOX: RSS AFTER 5108862976 = 4.758 GB
+    TODOX: RSS AFTER 5108989952 = 4.758 GB
+    TODOX: RSS BEFORE 5108994048 = 4.758 GB
+    TODOX: RSS AFTER 5108998144 = 4.758 GB
+    TODOX: RSS AFTER 5110661120 = 4.760 GB
+    TODOX: RSS AFTER 5111123968 = 4.760 GB
+    TODOX: RSS AFTER 5111820288 = 4.761 GB
+    TODOX: RSS AFTER 5108785152 = 4.758 GB
+    TODOX: RSS AFTER 5111824384 = 4.761 GB
+    TODOX: RSS AFTER 5110005760 = 4.759 GB
+    TODOX: RSS AFTER 5112274944 = 4.761 GB
+    TODOX: RSS AFTER 5112279040 = 4.761 GB
+    TODOX: RSS AFTER 5110124544 = 4.759 GB
+    TODOX: RSS AFTER 5110251520 = 4.759 GB
+    TODOX: RSS AFTER 5110128640 = 4.759 GB
+    TODOX: RSS AFTER 5110255616 = 4.759 GB
+    TODOX: RSS AFTER 5110198272 = 4.759 GB
+    TODOX: RSS AFTER 5109911552 = 4.759 GB
+    TODOX: RSS AFTER 5111476224 = 4.760 GB
+    TODOX: RSS AFTER 5110272000 = 4.759 GB
+    TODOX: RSS AFTER 5111103488 = 4.760 GB
+    TODOX: RSS AFTER 5111099392 = 4.760 GB
+    TODOX: RSS AFTER 5111103488 = 4.760 GB
+    TODOX: RSS AFTER 5111107584 = 4.760 GB
+    TODOX: RSS AFTER 5109133312 = 4.758 GB
+    TODOX: RSS AFTER 5112086528 = 4.761 GB
+    TODOX: RSS AFTER 5112090624 = 4.761 GB
+    TODOX: RSS AFTER 5110296576 = 4.759 GB
+    TODOX: RSS AFTER 5110300672 = 4.759 GB
+    TODOX: RSS AFTER 5110657024 = 4.760 GB
+    TODOX: RSS AFTER 5110116352 = 4.759 GB
+    TODOX: RSS AFTER 5110120448 = 4.759 GB
+    TODOX: RSS AFTER 5111635968 = 4.761 GB
+    TODOX: RSS AFTER 5111640064 = 4.761 GB
+    TODOX: RSS AFTER 5110521856 = 4.760 GB
+    TODOX: RSS AFTER 5110636544 = 4.760 GB
+    TODOX: RSS AFTER 5110640640 = 4.760 GB
+    TODOX: RSS AFTER 5111095296 = 4.760 GB
+    TODOX: RSS AFTER 5109956608 = 4.759 GB
+    TODOX: RSS AFTER 5111255040 = 4.760 GB
+    TODOX: RSS AFTER 5111259136 = 4.760 GB
+    TODOX: RSS AFTER 5109981184 = 4.759 GB
+    TODOX: RSS AFTER 5109399552 = 4.758 GB
+    TODOX: RSS AFTER 5109985280 = 4.759 GB
+    TODOX: RSS AFTER 5109428224 = 4.759 GB
+    TODOX: RSS AFTER 5109432320 = 4.759 GB
+    TODOX: RSS BEFORE 4649021440 = 4.330 GB
+    TODOX: RSS BEFORE 4649029632 = 4.330 GB
+    TODOX: RSS AFTER 4798529536 = 4.469 GB
+    TODOX: RSS AFTER 4824993792 = 4.494 GB
+    TODOX: RSS AFTER 4825022464 = 4.494 GB
+    TODOX: RSS AFTER 4970782720 = 4.629 GB
+    TODOX: RSS AFTER 5116534784 = 4.765 GB
+    TODOX: RSS AFTER 5262282752 = 4.901 GB
+    TODOX: RSS AFTER 5456281600 = 5.082 GB
+    TODOX: RSS BEFORE 5478780928 = 5.103 GB
+    TODOX: RSS AFTER 5478969344 = 5.103 GB
+    TODOX: RSS AFTER 5478973440 = 5.103 GB
+    TODOX: RSS AFTER 5579018240 = 5.196 GB
+    TODOX: RSS BEFORE 5579812864 = 5.197 GB
+    TODOX: RSS AFTER 5509771264 = 5.131 GB
+    TODOX: RSS BEFORE 5510574080 = 5.132 GB
+    TODOX: RSS AFTER 5528203264 = 5.149 GB
+    TODOX: RSS BEFORE 5529006080 = 5.149 GB
+    TODOX: RSS AFTER 5604868096 = 5.220 GB
+    TODOX: RSS BEFORE 5605670912 = 5.221 GB
+    TODOX: RSS AFTER 5561790464 = 5.180 GB
+    TODOX: RSS BEFORE 5562593280 = 5.181 GB
+    TODOX: RSS AFTER 5529133056 = 5.149 GB
+    TODOX: RSS BEFORE 5529137152 = 5.149 GB
+    TODOX: RSS AFTER 5631389696 = 5.245 GB
+    TODOX: RSS BEFORE 5631393792 = 5.245 GB
+    TODOX: RSS AFTER 5732687872 = 5.339 GB
+    TODOX: RSS BEFORE 5733490688 = 5.340 GB
+    TODOX: RSS AFTER 5547311104 = 5.166 GB
+    TODOX: RSS BEFORE 5547315200 = 5.166 GB
+    TODOX: RSS AFTER 5665710080 = 5.277 GB
+    TODOX: RSS BEFORE 5665714176 = 5.277 GB
+    TODOX: RSS AFTER 5863669760 = 5.461 GB
+    TODOX: RSS BEFORE 5864468480 = 5.462 GB
+    TODOX: RSS AFTER 5839716352 = 5.439 GB
+    TODOX: RSS BEFORE 5840519168 = 5.439 GB
+    TODOX: RSS AFTER 5613084672 = 5.228 GB
+    TODOX: RSS BEFORE 5613088768 = 5.228 GB
+    TODOX: RSS AFTER 5836013568 = 5.435 GB
+    TODOX: RSS BEFORE 5836017664 = 5.435 GB
+    TODOX: RSS AFTER 5533491200 = 5.153 GB
+    TODOX: RSS AFTER 5631492096 = 5.245 GB
+    TODOX: RSS AFTER 5533511680 = 5.153 GB
+    TODOX: RSS BEFORE 5533515776 = 5.153 GB
+    TODOX: RSS AFTER 5533519872 = 5.153 GB
+    TODOX: RSS AFTER 5631516672 = 5.245 GB
+    TODOX: RSS AFTER 5631520768 = 5.245 GB
+    TODOX: RSS AFTER 5936386048 = 5.529 GB
+    TODOX: RSS BEFORE 5936390144 = 5.529 GB
+    TODOX: RSS AFTER 5665812480 = 5.277 GB
+    TODOX: RSS AFTER 5547421696 = 5.166 GB
+    TODOX: RSS AFTER 5670629376 = 5.281 GB
+    TODOX: RSS AFTER 5670633472 = 5.281 GB
+    TODOX: RSS AFTER 5547446272 = 5.166 GB
+    TODOX: RSS AFTER 5547450368 = 5.166 GB
+    TODOX: RSS AFTER 5927886848 = 5.521 GB
+    TODOX: RSS BEFORE 5927890944 = 5.521 GB
+    TODOX: RSS AFTER 5613187072 = 5.228 GB
+    TODOX: RSS AFTER 5613211648 = 5.228 GB
+    TODOX: RSS AFTER 5613215744 = 5.228 GB
+    TODOX: RSS AFTER 5927989248 = 5.521 GB
+    TODOX: RSS AFTER 5928013824 = 5.521 GB
+    TODOX: RSS AFTER 5928017920 = 5.521 GB
+    TODOX: RSS AFTER 5836124160 = 5.435 GB
+    TODOX: RSS AFTER 5840355328 = 5.439 GB
+    TODOX: RSS AFTER 5840359424 = 5.439 GB
+    TODOX: RSS AFTER 5936496640 = 5.529 GB
+    TODOX: RSS AFTER 5941403648 = 5.533 GB
+    TODOX: RSS AFTER 5941407744 = 5.533 GB
     set PBMC.clean.uns[pre_directs]: 16
     set PBMC.clean.uns[directs]: 25
     set PBMC.clean.var[pre_high_total_gene]: 8318 positive (36.78%) out of 22617 int32s
@@ -720,6 +876,8 @@ observation is a metacell:
 
 .. code::
 
+    TODOX: RSS BEFORE 6062354432 = 5.646 GB
+    TODOX: RSS AFTER 6202273792 = 5.776 GB
     set PBMC.metacells.var[excluded_gene]: 0 true (0%) out of 22617 bools
     set PBMC.metacells.var[clean_gene]: 22617 true (100%) out of 22617 bools
     set PBMC.metacells.var[forbidden_gene]: 106 true (0.4687%) out of 22617 bools
@@ -775,7 +933,7 @@ projection:
 
 
 
-.. image:: Metacells_Vignette_49_0.svg
+.. image:: Metacells_Vignette_48_0.svg
 
 
 We can also visualize the (skeleton) KNN graph on top of the UMAP. Long
@@ -805,7 +963,7 @@ out the short edges:
 
 
 
-.. image:: Metacells_Vignette_51_0.svg
+.. image:: Metacells_Vignette_50_0.svg
 
 
 Further analysis

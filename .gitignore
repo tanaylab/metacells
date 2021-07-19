@@ -21,3 +21,5 @@ timing*.csv
 .tox
 vignettes/*_files/*
 vignettes/*.h5*
+vignettes/*.rst
+vignettes/.ipyn*
