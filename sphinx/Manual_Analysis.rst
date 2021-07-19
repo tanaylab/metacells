@@ -115,7 +115,11 @@ are most entriched in it compated to the overall population:
 This gave us 84 genes to look at (you can get more or less genes
 modifying the parameters, especially ``genes_per_metacell``). We can
 visualize the structure of the data using these genes, which could be a
-first step towards understaning the different cell behaviors:
+first step towards understanding the different cell behaviors. Note that
+some of the genes might be forbidden from being used as feature genes;
+this can either guide us towards forbidding more genes, or towards
+changing our mind about whether some genes were actually lateral and
+should be forbidden from being used as features.
 
 .. code:: r
 
@@ -132,116 +136,11 @@ first step towards understaning the different cell behaviors:
     forbidden_colors <- c('gray', 'black')
     names(forbidden_colors) <- c('Allowed', 'Forbidden')
     annotation_colors <- list(forbidden=forbidden_colors)
-    print(annotation_row)
-    print(annotation_colors)
-    print(rownames(t(relative_log_fractions[,marker_genes])))
-
-
-
-.. code::
-
-                  forbidden
-    MPO             Allowed
-    PRSS57          Allowed
-    TPSAB1          Allowed
-    KIAA0125        Allowed
-    PPBP            Allowed
-    PF4             Allowed
-    SPINK2          Allowed
-    FCER1A        Forbidden
-    PRSS1           Allowed
-    PTGDS           Allowed
-    GZMB            Allowed
-    S100A8          Allowed
-    S100A9          Allowed
-    CST3            Allowed
-    HLA-DRA         Allowed
-    KLRB1           Allowed
-    CCR7            Allowed
-    CD8B            Allowed
-    RP11-291B21.2   Allowed
-    IL32            Allowed
-    AQP3            Allowed
-    GZMA            Allowed
-    S100B           Allowed
-    ACTN1           Allowed
-    BTG2            Allowed
-    FGFBP2          Allowed
-    CFD           Forbidden
-    GZMK            Allowed
-    LGALS1          Allowed
-    CCL5            Allowed
-    GNLY            Allowed
-    IL7R            Allowed
-    LMNA            Allowed
-    ANXA2           Allowed
-    TYROBP          Allowed
-    GZMH            Allowed
-    NKG7            Allowed
-    RP11-620J15.3   Allowed
-    DNTT            Allowed
-    IGFBP7          Allowed
-    ACY3            Allowed
-    SOX4            Allowed
-    AVP             Allowed
-    PRSS3           Allowed
-    IGJ             Allowed
-    APOC1           Allowed
-    VPREB1          Allowed
-    CD8A            Allowed
-    MS4A1           Allowed
-    HLA-DRB1        Allowed
-    CST7            Allowed
-    HLA-DRB5        Allowed
-    HLA-DQA1        Allowed
-    MZB1            Allowed
-    HLA-DPB1        Allowed
-    STMN1         Forbidden
-    HMGB2           Allowed
-    ID2             Allowed
-    HOPX            Allowed
-    LYAR            Allowed
-    LYZ             Allowed
-    FCGR3A          Allowed
-    C1QA            Allowed
-    CFP           Forbidden
-    SELL            Allowed
-    CLU             Allowed
-    CEBPD           Allowed
-    DUSP1           Allowed
-    CD79A           Allowed
-    AL928768.3      Allowed
-    TCL1A           Allowed
-    PGRMC1          Allowed
-    $forbidden
-      Allowed Forbidden
-       "gray"   "black"
-
-     [1] "MPO"           "PRSS57"        "TPSAB1"        "KIAA0125"
-     [5] "PPBP"          "PF4"           "SPINK2"        "FCER1A"
-     [9] "PRSS1"         "PTGDS"         "GZMB"          "S100A8"
-    [13] "S100A9"        "CST3"          "HLA-DRA"       "KLRB1"
-    [17] "CCR7"          "CD8B"          "RP11-291B21.2" "IL32"
-    [21] "AQP3"          "GZMA"          "S100B"         "ACTN1"
-    [25] "BTG2"          "FGFBP2"        "CFD"           "GZMK"
-    [29] "LGALS1"        "CCL5"          "GNLY"          "IL7R"
-    [33] "LMNA"          "ANXA2"         "TYROBP"        "GZMH"
-    [37] "NKG7"          "RP11-620J15.3" "DNTT"          "IGFBP7"
-    [41] "ACY3"          "SOX4"          "AVP"           "PRSS3"
-    [45] "IGJ"           "APOC1"         "VPREB1"        "CD8A"
-    [49] "MS4A1"         "HLA-DRB1"      "CST7"          "HLA-DRB5"
-    [53] "HLA-DQA1"      "MZB1"          "HLA-DPB1"      "STMN1"
-    [57] "HMGB2"         "ID2"           "HOPX"          "LYAR"
-    [61] "LYZ"           "FCGR3A"        "C1QA"          "CFP"
-    [65] "SELL"          "CLU"           "CEBPD"         "DUSP1"
-    [69] "CD79A"         "AL928768.3"    "TCL1A"         "PGRMC1"
-
-
-.. code:: r
 
     breaks <- pracma::interp1(0:7, c(-3, -2, -1, 0, 1, 2, 3, 4), 0:140/20)
     colors <- colorRampPalette(c('darkred', 'red', 'white', 'white', 'lightblue', 'blue', 'darkblue'))(141)
     options(repr.plot.width = 25, repr.plot.height = 13)
+
     pheatmap::pheatmap(
         t(relative_log_fractions[,marker_genes]),
         treeheight_col=0,
@@ -261,7 +160,7 @@ first step towards understaning the different cell behaviors:
 
 
 
-.. image:: Manual_Analysis_11_0.svg
+.. image:: Manual_Analysis_10_0.svg
 
 
 Clustering
@@ -345,7 +244,7 @@ computed by the basic metacells vignette:
 
 
 
-.. image:: Manual_Analysis_19_0.svg
+.. image:: Manual_Analysis_18_0.svg
 
 
 This shows us a pretty nice locality of the clusters in the 2D UMAP
@@ -375,7 +274,7 @@ effectors, using the GNLY and GZMK gene expression levels:
 
 
 
-.. image:: Manual_Analysis_22_0.svg
+.. image:: Manual_Analysis_21_0.svg
 
 
 Full Analysis and MCView
