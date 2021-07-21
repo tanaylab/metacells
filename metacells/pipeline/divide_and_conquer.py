@@ -5,7 +5,6 @@ Divide and Conquer
 
 import gc
 import os
-import psutil
 import sys
 from re import Pattern
 from typing import (Any, Callable, Collection, Dict, List, NamedTuple,
@@ -67,18 +66,23 @@ def get_max_parallel_piles() -> int:
 @ut.expand_doc()
 def guess_max_parallel_piles(
     cells: AnnData,
+    what: str = '__x__',
     *,
-    max_gbs: Optional[float] = None,
+    max_gbs: float = 0,
     target_pile_size: int = pr.target_pile_size,
 ) -> int:
     '''
     Try and guess a reasonable maximal number of piles to use for computing metacells for the
-    specified `cells` using at most `max_gbs` of memory (by default, all the machine has) and
-    assuming the `target_pile_size` (default: {target_pile_size}).
+    specified ``cells`` using at most ``max_gbs`` of memory (default: 0, all the machine has; if
+    zero or negative, is relative to the machines memory) and assuming some ``target_pile_size``
+    (default: {target_pile_size}).
 
-    Note this is only a (conservative) guess. A too-low number would slow down the computation by
-    using less processors than it could. A too-high number might cause the computation to crash,
-    running out of memory.
+    .. note::
+
+        This is only a best-effort guess. A too-low number would slow down the computation by using
+        less processors than it could. A too-high number might cause the computation to crash,
+        running out of memory. So: use with care, YMMV, keep an eye on memory usage and other
+        applications running in parallel to the computation, and apply common sense.
 
     .. todo::
 
@@ -86,16 +90,16 @@ def guess_max_parallel_piles(
         piles when getting close to the memory limit). This is "not easy" to achieve using Python's
         parallel programming APIs.
     '''
-    used_gbs = psutil.Process(os.getpid()).memory_info().rss \
-        / (1024.0 * 1024.0 * 1024.0)
-    pile_gbs = \
-        used_gbs \
-        * (target_pile_size * target_pile_size * 96) \
-        / (cells.n_vars * cells.n_obs)
-    max_gbs = ut.hardware_info()['memsize'] / 1024.0
-    available_gbs = max_gbs - used_gbs * 3
-    max_piles = max(int(available_gbs / pile_gbs), 1)
-    return max_piles
+    cells_nnz = ut.nnz_matrix(ut.get_vo_proper(cells, what))
+    pile_nnz = cells_nnz * target_pile_size / cells.n_obs
+    parallel_processes = ut.get_processors_count()
+    if max_gbs <= 0:
+        max_gbs += ut.hardware_info()['memsize'] / 1024.0
+    parallel_piles = int((max_gbs
+                          - cells_nnz * 6.5e-8
+                          - parallel_processes / 13)
+                         / (pile_nnz * 13e-8))
+    return max(parallel_piles, 1)
 
 
 class ResultAnnotation(NamedTuple):
@@ -1536,6 +1540,7 @@ def _run_parallel_piles(
 
     with ut.timed_step('.piles'):
         gc.collect()
+        ut.logger().debug('MAX_PARALLEL_PILES: %s', get_max_parallel_piles())
         return list(ut.parallel_map(compute_pile_metacells, piles_count,
                                     max_processors=get_max_parallel_piles()))
 
