@@ -11,6 +11,7 @@ from typing import (Any, Callable, Collection, Dict, List, NamedTuple,
                     Optional, Union)
 
 import numpy as np
+import psutil as ps
 from anndata import AnnData
 
 import metacells.parameters as pr
@@ -94,7 +95,7 @@ def guess_max_parallel_piles(
     pile_nnz = cells_nnz * target_pile_size / cells.n_obs
     parallel_processes = ut.get_processors_count()
     if max_gbs <= 0:
-        max_gbs += ut.hardware_info()['memsize'] / 1024.0
+        max_gbs += ps.virtual_memory().total / (1024 * 1024 * 1024)
     parallel_piles = int((max_gbs
                           - cells_nnz * 6.5e-8
                           - parallel_processes / 13)

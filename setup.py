@@ -18,6 +18,7 @@ INSTALL_REQUIRES = [
     'importlib-metadata',
     'numpy',
     'pandas',
+    'psutil',
     'scipy',
     'python-igraph',
     'threadpoolctl',
