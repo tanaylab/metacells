@@ -442,7 +442,7 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
 
     if hasattr(value, 'ndim'):
         if value.ndim == 2:
-            text = f'{value.shape[0]} X {value.shape[1]} {utt.matrix_dtype(value)}s'
+            text = f'{value.__class__.__name__} {value.shape[0]} X {value.shape[1]} {utt.matrix_dtype(value)}s'
             return text + checksum
 
         if value.ndim == 1:
