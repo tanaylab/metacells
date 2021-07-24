@@ -94,6 +94,7 @@ def guess_max_parallel_piles(
     pile_nnz = cells_nnz * target_pile_size / cells.n_obs
     parallel_processes = ut.get_processors_count()
     if max_gbs <= 0:
+        assert max_gbs > -1
         max_gbs += 1
         max_gbs *= ut.hardware_info()['memsize'] / 1024.0
     parallel_piles = int((max_gbs
