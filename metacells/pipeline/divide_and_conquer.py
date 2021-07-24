@@ -63,19 +63,19 @@ def get_max_parallel_piles() -> int:
     return MAX_PARALLEL_PILES
 
 
-@ut.expand_doc()
+@ut.expand_doc(percent=round((1+pr.max_gbs)*100))
 def guess_max_parallel_piles(
     cells: AnnData,
     what: str = '__x__',
     *,
-    max_gbs: float = 0,
+    max_gbs: float = pr.max_gbs,
     target_pile_size: int = pr.target_pile_size,
 ) -> int:
     '''
     Try and guess a reasonable maximal number of piles to use for computing metacells for the
-    specified ``cells`` using at most ``max_gbs`` of memory (default: 0, all the machine has; if
-    zero or negative, is relative to the machines memory) and assuming some ``target_pile_size``
-    (default: {target_pile_size}).
+    specified ``cells`` using at most ``max_gbs`` of memory (default: {max_gbs}, that is
+    {percent}% of all the machine has - if zero or negative, is relative to the machines memory) and
+    assuming some ``target_pile_size`` (default: {target_pile_size}).
 
     .. note::
 
@@ -94,7 +94,8 @@ def guess_max_parallel_piles(
     pile_nnz = cells_nnz * target_pile_size / cells.n_obs
     parallel_processes = ut.get_processors_count()
     if max_gbs <= 0:
-        max_gbs += ut.hardware_info()['memsize'] / 1024.0
+        max_gbs += 1
+        max_gbs *= ut.hardware_info()['memsize'] / 1024.0
     parallel_piles = int((max_gbs
                           - cells_nnz * 6.5e-8
                           - parallel_processes / 13)

@@ -817,3 +817,8 @@ noise_fraction: float = 0.1
 #: The minimal total number of UMIs for a gene to compute meaningful quality statistics for it.
 #: See :py:func:`metacells.tools.quality.compute_inner_normalized_variance`.
 quality_min_gene_total: int = 40
+
+#: The maximal amount of memory to use when guessing the number of parallel piles. If zero or
+#: negative, is the fraction of the machine's total RAM to use as a safety buffer. See
+#: :py:func:`metacells.pipeline.divide_and_conquer.guess_max_parallel_piles`.
+max_gbs: float = -0.1
