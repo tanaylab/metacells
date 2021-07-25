@@ -57,7 +57,7 @@ FreeBSD, Mac OSX and Windows, but YMMV.
 import ctypes
 import os
 import sys
-from multiprocessing import Pool, Value
+from multiprocessing import Value, get_context
 from threading import current_thread
 from typing import Any, Callable, Iterable, Optional, TypeVar
 
@@ -161,7 +161,8 @@ def parallel_map(
     of processes used to at most the specified value.
 
     If this ends up using a single process, runs the function serially. Otherwise, fork new
-    processes to execute the function invocations (using ``multiprocessing.Pool.map``).
+    processes to execute the function invocations (using
+    ``multiprocessing.get_context('fork').Pool.map``).
 
     The downside is that this is slow, and you need to set up **mutable** shared memory (e.g. for
     large results) in advance. The upside is that each of these processes starts with a shared
@@ -201,7 +202,7 @@ def parallel_map(
         utm.flush_timing()
         with utm.timed_step('parallel_map'):
             utm.timed_parameters(index=MAP_INDEX, processes=PROCESSES_COUNT)
-            with Pool(PROCESSES_COUNT) as pool:
+            with get_context('fork').Pool(PROCESSES_COUNT) as pool:
                 return pool.map(_invocation, range(invocations))
     finally:
         IS_MAIN_PROCESS = True
