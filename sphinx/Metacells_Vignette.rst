@@ -401,7 +401,7 @@ to matter.
 .. code::
 
     set PBMC.clean.var[related_genes_module]: 21549 outliers (95.28%) out of 22617 int32 elements with 73 groups with mean size 14.63
-    set PBMC.clean.varp[related_genes_similarity]: 22617 X 22617 float32s
+    set PBMC.clean.varp[related_genes_similarity]: csr_matrix 22617 X 22617 float32s
 
 
 This discovered 73 gene modules with ~15 genes in each one. In general,
@@ -609,7 +609,7 @@ laptop with 16GB (or better yet, 32GB) of RAM.
 
 .. code::
 
-    627
+    563
 
 
 Grouping into Metacells

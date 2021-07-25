@@ -24,11 +24,17 @@ Metacells_Vignette.rst: Metacells_Vignette.ipynb pbmc163k.h5ad
 
 Manual_Analysis.rst: Manual_Analysis.ipynb Metacells_Vignette.rst
 	rm -rf Manual_Analysis_files
+	mv Manual_Analysis.ipynb Manual_Analysis.ipynb.original
+	sed 's:image/png:image/svg+xml:' Manual_Analysis.ipynb.original > Manual_Analysis.ipynb
 	jupyter nbconvert --execute --to=rst Manual_Analysis.ipynb
+	mv Manual_Analysis.ipynb.original Manual_Analysis.ipynb
 
 Seurat_Analysis.rst: Seurat_Analysis.ipynb Metacells_Vignette.rst
 	rm -rf Seurat_Analysis_files
+	mv Seurat_Analysis.ipynb Seurat_Analysis.ipynb.original
+	sed 's:image/png:image/svg+xml:' Seurat_Analysis.ipynb.original > Seurat_Analysis.ipynb
 	jupyter nbconvert --execute --to=rst Seurat_Analysis.ipynb
+	mv Seurat_Analysis.ipynb.original Seurat_Analysis.ipynb
 
 pbmc163k.h5ad:
 	echo "curl http://www.wisdom.weizmann.ac.il/~atanay/metac_data/pbmc163k.h5ad.gz | gzcat -d > $?"

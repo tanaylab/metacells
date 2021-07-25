@@ -23,3 +23,4 @@ vignettes/*_files/*
 vignettes/*.h5*
 vignettes/*.rst
 vignettes/.ipyn*
+vignettes/*.original
