@@ -1,8 +1,9 @@
 /// C++ extensions to support the metacells package.";
 
+#include <iostream>
+
 #if ASSERT_LEVEL > 0
 #    undef NDEBUG
-#    include <iostream>
 #    include <mutex>
 #    include <sstream>
 #    include <thread>
@@ -3452,6 +3453,19 @@ correlate_compressed(const pybind11::array_t<D>& input_data_array,
 }  // namespace metacells
 
 PYBIND11_MODULE(extensions, module) {
+#ifdef CHECK_AVX2
+    if (!__builtin_cpu_supports("avx2")) {
+        std::cerr << "Python metacells was compiled using AVX2, "
+                  << "but this computer does not support it.\n"
+                  << "To use metacells on this computer, "
+                  << "install it from the source using:\n"
+                  << "    pip install metacells --install-option='--native'\n"
+                  << "This will require you have a C++ compiler installed (g++ or clang).\n"
+                  << std::endl;
+        exit(EXIT_FAILURE);
+    }
+#endif
+
     module.doc() = "C++ extensions to support the metacells package.";
 
     module.def("set_threads_count",

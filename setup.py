@@ -1,7 +1,41 @@
+import os
 import pathlib
 from glob import glob
 
 from setuptools import Extension, find_packages, setup
+from setuptools.command.develop import develop
+from setuptools.command.install import install
+
+if os.name == "nt":
+    raise NotImplementedError("Python metacells does not support native windows.\nInstead, "
+                              "install Windows Subsystem for Linux, and metacells within it.")
+
+
+class CommandMixin(object):
+    user_options = [(  #
+        'native',
+        None,
+        'Do not use precompiled (AVX2) wheel, '
+        'instead compile on this machine, '
+        'targeting its native architecture'
+    )]
+
+    def initialize_options(self):
+        super().initialize_options()
+        self.native = None
+
+
+class InstallCommand(CommandMixin, install):
+    user_options = \
+        getattr(install, 'user_options', []) \
+        + CommandMixin.user_options
+
+
+class DevelopCommand(CommandMixin, develop):
+    user_options = \
+        getattr(develop, 'user_options', []) \
+        + CommandMixin.user_options
+
 
 CWD = pathlib.Path(__file__).parent
 
@@ -39,6 +73,22 @@ DEVELOP_REQUIRES = [
     'typing_extensions'
 ]
 
+
+BASE_COMPILE_ARGS = ['-std=c++14', '-ffast-math', '-fassociative-math']
+NATIVE_COMPILE_ARGS = ['-march=native', '-mtune=native']
+WHEEL_COMPILE_ARGS = ['-mavx2']
+
+BASE_MACROS = [('ASSERT_LEVEL', 1)]  # 0 for none, 1 for fast, 2 for slow.
+NATIVE_MACROS = []
+WHEEL_MACROS = [('CHECK_AVX2', 1)]
+
+if str(os.getenv('WHEEL', '')) == '':
+    EXTRA_COMPILE_ARGS = BASE_COMPILE_ARGS + NATIVE_COMPILE_ARGS
+    DEFINE_MACROS = BASE_MACROS + NATIVE_MACROS
+else:
+    EXTRA_COMPILE_ARGS = BASE_COMPILE_ARGS + WHEEL_COMPILE_ARGS
+    DEFINE_MACROS = BASE_MACROS + WHEEL_MACROS
+
 setup(
     name='metacells',
     use_scm_version=dict(write_to='metacells/version.py'),
@@ -63,11 +113,8 @@ setup(
             'metacells.extensions',
             include_dirs=['pybind11/include'],
             sources=['metacells/extensions.cpp'],
-            extra_compile_args=['-std=c++14',
-                                '-mavx2', '-ffast-math', '-fassociative-math'],
-            define_macros=[
-                ('ASSERT_LEVEL', 1),  # 0 for none, 1 for fast, 2 for slow.
-            ],
+            extra_compile_args=EXTRA_COMPILE_ARGS,
+            define_macros=DEFINE_MACROS,
         ),
     ],
     entry_points={'console_scripts': [
@@ -82,4 +129,8 @@ setup(
         'test': INSTALL_REQUIRES + TESTS_REQUIRE,
         'develop': INSTALL_REQUIRES + TESTS_REQUIRE + DEVELOP_REQUIRES
     },
+    cmdclass={
+        'install': InstallCommand,
+        'develop': DevelopCommand,
+    }
 )
