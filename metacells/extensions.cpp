@@ -6,7 +6,6 @@
 #    include <mutex>
 #    include <sstream>
 #    include <thread>
-#    include <unistd.h>
 
 static std::mutex writer_mutex;
 
@@ -86,8 +85,14 @@ static thread_local AtomicWriter writer;
 #include <random>
 #include <thread>
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846 // Thank you Microsoft.
+#endif
+
 typedef float float32_t;
 typedef double float64_t;
+typedef unsigned char uint8_t;
+typedef unsigned int uint_t;
 
 namespace metacells {
 
@@ -145,13 +150,11 @@ public:
         FastAssertCompareWhat(array.data(1) - array.data(0), ==, 1, name);
     }
 
-    template<typename I>
-    std::pair<ConstArraySlice, ConstArraySlice> split(const I size) const {
+    std::pair<ConstArraySlice, ConstArraySlice> split(const size_t size) const {
         return std::make_pair(slice(0, size), slice(size, m_size));
     }
 
-    template<typename I, typename J>
-    ConstArraySlice slice(const I start, const J stop) const {
+    ConstArraySlice slice(const size_t start, const size_t stop) const {
         FastAssertCompareWhat(0, <=, start, m_name);
         FastAssertCompareWhat(start, <=, stop, m_name);
         FastAssertCompareWhat(stop, <=, m_size, m_name);
@@ -160,8 +163,7 @@ public:
 
     size_t size() const { return m_size; }
 
-    template<typename I>
-    const T& operator[](const I index) const {
+    const T& operator[](const size_t index) const {
         SlowAssertCompareWhat(0, <=, index, m_name);
         SlowAssertCompareWhat(index, <, m_size, m_name);
         return m_data[index];
@@ -196,13 +198,11 @@ public:
         FastAssertCompareWhat(array.data(1) - array.data(0), ==, 1, name);
     }
 
-    template<typename I>
-    std::pair<ArraySlice, ArraySlice> split(const I size) {
+    std::pair<ArraySlice, ArraySlice> split(const size_t size) {
         return std::make_pair(slice(0, size), slice(size, m_size));
     }
 
-    template<typename I, typename J>
-    ArraySlice slice(const I start, const J stop) {
+    ArraySlice slice(const size_t start, const size_t stop) {
         FastAssertCompareWhat(0, <=, start, m_name);
         FastAssertCompareWhat(start, <=, stop, m_name);
         FastAssertCompareWhat(stop, <=, m_size, m_name);
@@ -211,8 +211,7 @@ public:
 
     size_t size() const { return m_size; }
 
-    template<typename I>
-    T& operator[](const I index) {
+    T& operator[](const size_t index) {
         SlowAssertCompareWhat(0, <=, index, m_name);
         SlowAssertCompareWhat(index, <, m_size, m_name);
         return m_data[index];
@@ -267,8 +266,7 @@ public:
         FastAssertCompareWhat(m_columns_count, <=, m_rows_offset, name);
     }
 
-    template<typename I>
-    ConstArraySlice<T> get_row(I row_index) const {
+    ConstArraySlice<T> get_row(size_t row_index) const {
         FastAssertCompareWhat(0, <=, row_index, m_name);
         FastAssertCompareWhat(row_index, <, m_rows_count, m_name);
         return ConstArraySlice<T>(m_data + row_index * m_rows_offset, m_columns_count, m_name);
@@ -312,8 +310,7 @@ public:
         FastAssertCompareWhat(m_columns_count, <=, m_rows_offset, name);
     }
 
-    template<typename I>
-    ArraySlice<T> get_row(I row_index) const {
+    ArraySlice<T> get_row(size_t row_index) const {
         FastAssertCompareWhat(0, <=, row_index, m_name);
         FastAssertCompareWhat(row_index, <, m_rows_count, m_name);
         return ArraySlice<T>(m_data + row_index * m_rows_offset, m_columns_count, m_name);
@@ -343,7 +340,7 @@ public:
     ConstCompressedMatrix(ConstArraySlice<D>&& data,
                           ConstArraySlice<I>&& indices,
                           ConstArraySlice<P>&& indptr,
-                          const I elements_count,
+                          const size_t elements_count,
                           const char* const name)
       : m_data(data)
       , m_indices(indices)
@@ -365,15 +362,13 @@ public:
 
     size_t elements_count() const { return m_elements_count; }
 
-    template<typename J>
-    ConstArraySlice<I> get_band_indices(const J band_index) const {
+    ConstArraySlice<I> get_band_indices(const size_t band_index) const {
         auto start_position = m_indptr[band_index];
         auto stop_position = m_indptr[band_index + 1];
         return m_indices.slice(start_position, stop_position);
     }
 
-    template<typename J>
-    ConstArraySlice<D> get_band_data(const J band_index) const {
+    ConstArraySlice<D> get_band_data(const size_t band_index) const {
         auto start_position = m_indptr[band_index];
         auto stop_position = m_indptr[band_index + 1];
         return m_data.slice(start_position, stop_position);
@@ -395,7 +390,7 @@ public:
     CompressedMatrix(ArraySlice<D>&& data,
                      ArraySlice<I>&& indices,
                      ArraySlice<P>&& indptr,
-                     const I elements_count,
+                     const size_t elements_count,
                      const char* const name)
       : m_data(data)
       , m_indices(indices)
@@ -423,15 +418,13 @@ public:
 
     ArraySlice<P> indptr() { return m_indptr; }
 
-    template<typename J>
-    ArraySlice<I> get_band_indices(const J band_index) {
+    ArraySlice<I> get_band_indices(const size_t band_index) {
         auto start_position = m_indptr[band_index];
         auto stop_position = m_indptr[band_index + 1];
         return m_indices.slice(start_position, stop_position);
     }
 
-    template<typename J>
-    ArraySlice<D> get_band_data(const J band_index) {
+    ArraySlice<D> get_band_data(const size_t band_index) {
         auto start_position = m_indptr[band_index];
         auto stop_position = m_indptr[band_index + 1];
         return m_data.slice(start_position, stop_position);
@@ -498,10 +491,9 @@ serial_loop(const size_t size, std::function<void(size_t)> serial_body) {
 }
 */
 
-template<typename T>
-static T
-ceil_power_of_two(const T size) {
-    return 1 << T(ceil(log2(size)));
+static size_t
+ceil_power_of_two(const size_t size) {
+    return size_t(1) << size_t(ceil(log2(float64_t(size))));
 }
 
 static size_t
@@ -660,7 +652,7 @@ downsample_slice(ConstArraySlice<D> input,
     }
 
     if (input.size() == 1) {
-        output[0] = float64_t(samples) < float64_t(input[0]) ? samples : input[0];
+        output[0] = O(float64_t(samples) < float64_t(input[0]) ? samples : input[0]);
         return;
     }
 
@@ -676,7 +668,7 @@ downsample_slice(ConstArraySlice<D> input,
         return;
     }
 
-    std::fill(output.begin(), output.end(), 0);
+    std::fill(output.begin(), output.end(), O(0));
 
     std::minstd_rand random(random_seed);
     for (size_t index = 0; index < samples; ++index) {
@@ -783,7 +775,7 @@ serial_collect_compressed_band(const size_t input_band_index,
 
         auto output_element_offset = output_indptr[output_band_index]++;
 
-        output_indices[output_element_offset] = output_element_index;
+        output_indices[output_element_offset] = I(output_element_index);
         output_data[output_element_offset] = output_element_data;
     }
 }
@@ -820,7 +812,7 @@ parallel_collect_compressed_band(const size_t input_band_index,
         auto output_element_offset =
             atomic_output_element_offset->fetch_add(1, std::memory_order_relaxed);
 
-        output_indices[output_element_offset] = output_element_index;
+        output_indices[output_element_offset] = I(output_element_index);
         output_data[output_element_offset] = output_element_data;
     }
 }
@@ -907,7 +899,7 @@ sort_band(const size_t band_index, CompressedMatrix<D, I, P>& matrix) {
     for (size_t location = 0; location < tmp_size; ++location) {
         size_t position = tmp_positions[location];
         tmp_indices[location] = band_indices[position];
-        tmp_values[location] = band_data[position];
+        tmp_values[location] = float64_t(band_data[position]);
     }
 
     std::copy(tmp_indices.begin(), tmp_indices.end(), band_indices.begin());
@@ -990,7 +982,7 @@ collect_top_row(const size_t row_index,
 #endif
     for (size_t location = 0; location < degree; ++location) {
         size_t position = tmp_positions[location];
-        row_data[position] = location + 1;
+        row_data[position] = float32_t(location + 1);
     }
 }
 
@@ -1086,7 +1078,7 @@ collect_pruned(const size_t pruned_degree,
         ConstArraySlice<float32_t>(input_pruned_values_data, "input_pruned_values_data"),
         ConstArraySlice<int32_t>(input_pruned_values_indices, "input_pruned_values_indices"),
         ConstArraySlice<int64_t>(input_pruned_values_indptr, "pruned_values_indptr"),
-        size,
+        int32_t(size),
         "pruned_values");
 
     ArraySlice<float32_t> output_pruned_values(output_pruned_values_array, "output_pruned_values");
@@ -1288,9 +1280,9 @@ fold_factor_dense(pybind11::array_t<D>& data_array,
             const auto column_fraction = fraction_of_columns[column_index];
             const auto expected = row_total * column_fraction;
             auto& value = row_data[column_index];
-            value = log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE;
+            value = D(log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE);
             if (value < min_gene_fold_factor) {
-                value = 0.0;
+                value = 0;
             }
         }
     });
@@ -1330,9 +1322,9 @@ fold_factor_compressed(pybind11::array_t<D>& data_array,
             const auto element_fraction = fraction_of_elements[element_index];
             const auto expected = band_total * element_fraction;
             auto& value = band_data[position];
-            value = log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE;
+            value = D(log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE);
             if (value < min_gene_fold_factor) {
-                value = 0.0;
+                value = 0;
             }
         }
     });
@@ -1365,8 +1357,8 @@ collect_distinct_abs_folds(ArraySlice<int32_t> gene_indices,
 
     for (size_t position = 0; position < gene_indices.size(); ++position) {
         size_t gene_index = tmp_indices[position];
-        gene_indices[position] = gene_index;
-        gene_folds[position] = fold_in_cell[gene_index];
+        gene_indices[position] = int32_t(gene_index);
+        gene_folds[position] = float32_t(fold_in_cell[gene_index]);
     }
 }
 
@@ -1397,8 +1389,8 @@ collect_distinct_high_folds(ArraySlice<int32_t> gene_indices,
 
     for (size_t position = 0; position < gene_indices.size(); ++position) {
         size_t gene_index = tmp_indices[position];
-        gene_indices[position] = gene_index;
-        gene_folds[position] = fold_in_cell[gene_index];
+        gene_indices[position] = int32_t(gene_index);
+        gene_folds[position] = float32_t(fold_in_cell[gene_index]);
     }
 }
 
@@ -1808,7 +1800,7 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
     FastAssertCompare(x_size, >, 0);
     FastAssertCompare(y_size, >, 0);
 
-    const auto point_diameter = cover_diameter(points_count, x_size * y_size, cover_fraction);
+    const auto point_diameter = cover_diameter(points_count, float64_t(x_size) * float64_t(y_size), cover_fraction);
 
     const auto x_step = point_diameter;
     const auto y_step = point_diameter * sqrt(3.0) / 2.0;
@@ -1986,11 +1978,11 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
     for (size_t point_index = 0; point_index < points_count; ++point_index) {
         const auto x_index = location_of_points[point_index][0];
         const auto y_index = location_of_points[point_index][1];
-        spaced_y_coordinates[point_index] = (y_index + noise(random)) * y_step + y_min;
+        spaced_y_coordinates[point_index] = D((y_index + noise(random)) * y_step + y_min);
         if (y_index % 2 == 0) {
-            spaced_x_coordinates[point_index] = (x_index + noise(random)) * x_step + x_min;
+            spaced_x_coordinates[point_index] = D((x_index + noise(random)) * x_step + x_min);
         } else {
-            spaced_x_coordinates[point_index] = (x_index + noise(random) - 0.5) * x_step + x_min;
+            spaced_x_coordinates[point_index] = D((x_index + noise(random) - 0.5) * x_step + x_min);
         }
     }
 }
@@ -2103,7 +2095,7 @@ store_seed_node(ConstCompressedMatrix<float32_t, int32_t, int32_t>& outgoing_wei
 
     tmp_positions.erase(std::remove_if(tmp_positions.begin(),
                                        tmp_positions.end(),
-                                       [&](int position) {
+                                       [&](size_t position) {
                                            return seed_of_nodes[seed_incoming_nodes[position]] >= 0;
                                        }),
                         tmp_positions.end());
@@ -2119,13 +2111,13 @@ store_seed_node(ConstCompressedMatrix<float32_t, int32_t, int32_t>& outgoing_wei
     }
 
     FastAssertCompare(seed_of_nodes[seed_node_index], <, 0);
-    seed_of_nodes[seed_node_index] = seed_index;
+    seed_of_nodes[seed_node_index] = int32_t(seed_index);
     connected_nodes[seed_node_index].clear();
 
     for (auto position : tmp_positions) {
         auto node_index = seed_incoming_nodes[position];
         connected_nodes[node_index].clear();
-        seed_of_nodes[node_index] = seed_index;
+        seed_of_nodes[node_index] = int32_t(seed_index);
     }
 
     auto outgoing_nodes = outgoing_weights.get_band_indices(seed_node_index);
@@ -2151,7 +2143,7 @@ keep_large_candidates(std::vector<size_t>& tmp_candidates,
                       const std::vector<std::vector<int32_t>>& connected_nodes) {
     tmp_candidates.erase(std::remove_if(tmp_candidates.begin(),
                                         tmp_candidates.end(),
-                                        [&](int candidate_node_index) {
+                                        [&](size_t candidate_node_index) {
                                             return connected_nodes[candidate_node_index].size()
                                                    == 0;
                                         }),
@@ -2180,7 +2172,7 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
         ConstArraySlice<float32_t>(outgoing_weights_data_array, "outgoing_weights_data"),
         ConstArraySlice<int32_t>(outgoing_weights_indices_array, "outgoing_weights_indices"),
         ConstArraySlice<int32_t>(outgoing_weights_indptr_array, "outgoing_weights_indptr"),
-        nodes_count,
+        int32_t(nodes_count),
         "outgoing_weights");
     FastAssertCompare(outgoing_weights.bands_count(), ==, nodes_count);
 
@@ -2188,7 +2180,7 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
         ConstArraySlice<float32_t>(incoming_weights_data_array, "incoming_weights_data"),
         ConstArraySlice<int32_t>(incoming_weights_indices_array, "incoming_weights_indices"),
         ConstArraySlice<int32_t>(incoming_weights_indptr_array, "incoming_weights_indptr"),
-        nodes_count,
+        int32_t(nodes_count),
         "incoming_weights");
     FastAssertCompare(incoming_weights.bands_count(), ==, nodes_count);
 
@@ -2204,7 +2196,7 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
     std::iota(tmp_candidates.begin(), tmp_candidates.end(), 0);
     tmp_candidates.erase(std::remove_if(tmp_candidates.begin(),
                                         tmp_candidates.end(),
-                                        [&](int candidate_node_index) {
+                                        [&](size_t candidate_node_index) {
                                             return seed_of_nodes[candidate_node_index] >= 0;
                                         }),
                          tmp_candidates.end());
@@ -2249,7 +2241,7 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
         while (tmp_candidates.size() > 0 && seeds_count < max_seeds_count) {
             auto node_index = tmp_candidates.back();
             tmp_candidates.pop_back();
-            seed_of_nodes[node_index] = seeds_count;
+            seed_of_nodes[node_index] = int32_t(seeds_count);
             seeds_count += 1;
         }
     }
@@ -2273,7 +2265,7 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
                     if (!did_find_first_node) {
                         did_find_first_node = true;
                     } else {
-                        seed_of_nodes[node_index] = seeds_count;
+                        seed_of_nodes[node_index] = int32_t(seeds_count);
                         seeds_count += 1;
                         failed_attempts = 0;
                         break;
@@ -2515,13 +2507,13 @@ struct OptimizePartitions {
             ConstArraySlice<float32_t>(outgoing_weights_array, "outgoing_weights_array"),
             ConstArraySlice<int32_t>(outgoing_indices_array, "outgoing_indices_array"),
             ConstArraySlice<int32_t>(outgoing_indptr_array, "outgoing_indptr_array"),
-            outgoing_indptr_array.size() - 1,
+            int32_t(outgoing_indptr_array.size() - 1),
             "outgoing_weights"))
       , incoming_weights(ConstCompressedMatrix<float32_t, int32_t, int32_t>(
             ConstArraySlice<float32_t>(incoming_weights_array, "incoming_weights_array"),
             ConstArraySlice<int32_t>(incoming_indices_array, "incoming_indices_array"),
             ConstArraySlice<int32_t>(incoming_indptr_array, "incoming_indptr_array"),
-            incoming_indptr_array.size() - 1,
+            int32_t(incoming_indptr_array.size() - 1),
             "incoming_weights"))
       , nodes_count(outgoing_weights.bands_count())
       , partition_of_nodes(partition_of_nodes_array, "partition_of_nodes")
@@ -2558,12 +2550,12 @@ struct OptimizePartitions {
         }
         */
 
-        float64_t total_score = nodes_count * log2(nodes_count) - incoming_scale;
+        float64_t total_score = nodes_count * log2(float64_t(nodes_count)) - incoming_scale;
         size_t orphans_count = nodes_count;
         for (size_t partition_index = 0; partition_index < partitions_count; ++partition_index) {
             const float64_t score_of_partition = score_of_partitions[partition_index];
             const size_t size_of_partition = size_of_partitions[partition_index];
-            total_score += score_of_partition - size_of_partition * log2(size_of_partition);
+            total_score += score_of_partition - size_of_partition * log2(float64_t(size_of_partition));
             orphans_count -= size_of_partition;
         }
         if (with_orphans) {
@@ -2635,7 +2627,7 @@ struct OptimizePartitions {
         auto tmp_indices = indices_raii.vector(nodes_count);
         std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
 
-        std::vector<u_char> frozen_nodes(nodes_count, u_char(1));
+        std::vector<uint8_t> frozen_nodes(nodes_count, uint8_t(1));
         size_t frozen_count = 0;
         for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
             auto partition_index = partition_of_nodes[node_index];
@@ -2732,7 +2724,7 @@ struct OptimizePartitions {
                                         random,
                                         temperature)) {
                     frozen_count -= frozen_nodes[node_index];
-                    frozen_nodes[node_index] = u_char(0);
+                    frozen_nodes[node_index] = uint8_t(0);
                     did_improve = true;
                     ++improved;
                     LOCATED_LOG(false)              //
@@ -2741,7 +2733,7 @@ struct OptimizePartitions {
                         << std::endl;
                 } else {
                     frozen_count -= frozen_nodes[node_index];
-                    frozen_nodes[node_index] = u_char(0);
+                    frozen_nodes[node_index] = uint8_t(0);
                     temperature_of_nodes[node_index] = temperature * (1 - cooldown_node);
                     ++unimproved;
                     LOCATED_LOG(false)                                           //
@@ -2938,7 +2930,7 @@ struct OptimizePartitions {
                 outgoing_node_index = node_outgoing_indices[outgoing_position];
                 outgoing_edge_weight = node_outgoing_weights[outgoing_position];
             } else {
-                outgoing_node_index = nodes_count;
+                outgoing_node_index = int32_t(nodes_count);
                 outgoing_edge_weight = 0;
             }
 
@@ -2946,7 +2938,7 @@ struct OptimizePartitions {
                 incoming_node_index = node_incoming_indices[incoming_position];
                 incoming_edge_weight = node_incoming_weights[incoming_position];
             } else {
-                incoming_node_index = nodes_count;
+                incoming_node_index = int32_t(nodes_count);
                 incoming_edge_weight = 0;
             }
         }
@@ -2966,10 +2958,10 @@ struct OptimizePartitions {
             const size_t old_size = size_of_partitions[current_partition_index];
             const size_t new_size = old_size - 1;
             const float64_t old_score = score_of_partitions[current_partition_index];
-            const float64_t old_adjusted_score = old_score - old_size * log2(old_size);
+            const float64_t old_adjusted_score = old_score - old_size * log2(float64_t(old_size));
             const float64_t cold_diff = tmp_partition_cold_diffs[current_partition_index];
             const float64_t new_score = old_score + cold_diff;
-            const float64_t new_adjusted_score = new_score - new_size * log2(new_size);
+            const float64_t new_adjusted_score = new_score - new_size * log2(float64_t(new_size));
             const float64_t adjusted_cold_diff = new_adjusted_score - old_adjusted_score;
             LOCATED_LOG(false)                                              //
                 << " current_partition_index: " << current_partition_index  //
@@ -2999,8 +2991,8 @@ struct OptimizePartitions {
             const float64_t old_score = score_of_partitions[partition_index];
             const float64_t cold_diff = tmp_partition_cold_diffs[partition_index];
             const float64_t new_score = old_score + cold_diff;
-            const float64_t old_adjusted_score = old_score - old_size * log2(old_size);
-            const float64_t new_adjusted_score = new_score - new_size * log2(new_size);
+            const float64_t old_adjusted_score = old_score - old_size * log2(float64_t(old_size));
+            const float64_t new_adjusted_score = new_score - new_size * log2(float64_t(new_size));
             const float64_t adjusted_cold_diff = new_adjusted_score - old_adjusted_score;
             const float64_t total_diff =
                 (current_hot_diff + hot_diff) * temperature
@@ -3036,7 +3028,7 @@ struct OptimizePartitions {
             }
             chosen_partition_index = random() % partitions_count;
         } else {
-            chosen_partition_index = tmp_partitions[random() % tmp_partitions.size()];
+            chosen_partition_index = int32_t(tmp_partitions[random() % tmp_partitions.size()]);
         }
 
         LOCATED_LOG(false)                                            //
@@ -3124,7 +3116,7 @@ struct OptimizePartitions {
                 outgoing_node_index = node_outgoing_indices[outgoing_position];
                 outgoing_edge_weight = node_outgoing_weights[outgoing_position];
             } else {
-                outgoing_node_index = nodes_count;
+                outgoing_node_index = int32_t(nodes_count);
                 outgoing_edge_weight = 0;
             }
 
@@ -3132,7 +3124,7 @@ struct OptimizePartitions {
                 incoming_node_index = node_incoming_indices[incoming_position];
                 incoming_edge_weight = node_incoming_weights[incoming_position];
             } else {
-                incoming_node_index = nodes_count;
+                incoming_node_index = int32_t(nodes_count);
                 incoming_edge_weight = 0;
             }
         }
@@ -3296,8 +3288,7 @@ correlate_dense_rows(ConstArraySlice<D> some_values,
 #    pragma simd
 #endif
     for (size_t column_index = 0; column_index < columns_count; ++column_index) {
-        both_sum_values +=
-            float64_t(some_values_data[column_index] * other_values_data[column_index]);
+        both_sum_values += some_values_data[column_index] * other_values_data[column_index];
     }
 
     float64_t correlation = columns_count * both_sum_values - some_sum_values * other_sum_values;
@@ -3307,7 +3298,7 @@ correlate_dense_rows(ConstArraySlice<D> some_values,
     float64_t both_factors = sqrt(some_factor * other_factor);
     if (both_factors != 0) {
         correlation /= both_factors;
-        return std::max(std::min(correlation, 1.0), -1.0);
+        return std::max(std::min(float32_t(correlation), float32_t(1.0)), float32_t(-1.0));
     } else {
         return 0.0;
     }
@@ -3381,8 +3372,8 @@ correlate_compressed_rows(const size_t columns_count,
     while (some_location < some_count && other_location < other_count) {
         auto some_index = some_indices[some_location];
         auto other_index = other_indices[other_location];
-        float64_t some_value = some_values[some_location];
-        float64_t other_value = other_values[other_location];
+        float64_t some_value = float64_t(some_values[some_location]);
+        float64_t other_value = float64_t(other_values[other_location]);
         both_sum_values += some_value * other_value * (some_index == other_index);
         some_location += some_index <= other_index;
         other_location += other_index <= some_index;
@@ -3398,7 +3389,7 @@ correlate_compressed_rows(const size_t columns_count,
     } else {
         correlation = 0;
     }
-    return std::max(std::min(correlation, 1.0), -1.0);
+    return std::max(std::min(float32_t(correlation), float32_t(1.0)), float32_t(-1.0));
 }
 
 template<typename D, typename I, typename P>
