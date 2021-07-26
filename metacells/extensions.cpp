@@ -85,10 +85,6 @@ static thread_local AtomicWriter writer;
 #include <random>
 #include <thread>
 
-#ifndef M_PI
-#define M_PI 3.14159265358979323846 // Thank you Microsoft.
-#endif
-
 typedef float float32_t;
 typedef double float64_t;
 typedef unsigned char uint8_t;
@@ -1800,7 +1796,8 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
     FastAssertCompare(x_size, >, 0);
     FastAssertCompare(y_size, >, 0);
 
-    const auto point_diameter = cover_diameter(points_count, float64_t(x_size) * float64_t(y_size), cover_fraction);
+    const auto point_diameter =
+        cover_diameter(points_count, float64_t(x_size) * float64_t(y_size), cover_fraction);
 
     const auto x_step = point_diameter;
     const auto y_step = point_diameter * sqrt(3.0) / 2.0;
@@ -2555,7 +2552,8 @@ struct OptimizePartitions {
         for (size_t partition_index = 0; partition_index < partitions_count; ++partition_index) {
             const float64_t score_of_partition = score_of_partitions[partition_index];
             const size_t size_of_partition = size_of_partitions[partition_index];
-            total_score += score_of_partition - size_of_partition * log2(float64_t(size_of_partition));
+            total_score +=
+                score_of_partition - size_of_partition * log2(float64_t(size_of_partition));
             orphans_count -= size_of_partition;
         }
         if (with_orphans) {

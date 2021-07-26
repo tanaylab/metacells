@@ -45,10 +45,19 @@ In short: ``pip install metacells``. If you do not have ``sudo`` privileges, you
 install --user metacells``. Note that ``metacells`` requires many "heavy" dependencies, most notably
 ``numpy``, ``pandas``, ``scipy``, ``scanpy``, which ``pip`` should automatically install for you.
 
-The metacells package contains extensions written in C++, which means installing it requires
-compilation. In Ubuntu the necessary tools can be installed using ``sudo apt-get install
-build-essential`` - please refer to the documentation for your specific system. Make sure that not
-only ``gcc`` is installed, but also ``g++`` to allow for C++ compilation.
+The metacells package contains extensions written in C++. The ``metacells`` distribution provides
+pre-compiled Python wheels for both Linux and MacOS, so installing it using ``pip`` should not
+require a C++ compilation step (note these wheels are compiled to use AVX2, and will not work on
+older CPUs which are limited to SSE). Manually installing ``metacells`` from the sources (e.g.,
+installing the latest version from github) does require such a compilation step (and allows you to
+override the compiler flags to replace ``-mavx2`` with ``-march=native -mtune=native`` to get the
+maximal performance for your specific hardware). Please refer to the documentation for your specific
+system on how to install the C++ compiler. In Ubuntu, the necessary tools can be installed using
+``sudo apt-get install build-essential``.
+
+Note: ``metacells`` only runs natively on Linux and MacOS. To run it on a Windows computer, you must
+activate `Windows Subsystem for Linux <https://docs.microsoft.com/en-us/windows/wsl>`_ and install
+``metacells`` within it.
 
 You can check if all went well by running a variety of tests using ``pytest`` or ``tox``.
 
