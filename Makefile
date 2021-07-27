@@ -78,6 +78,10 @@ README.rst: prefix.rst sphinx/intro.rst sphinx/install.rst references.rst LICENS
 dist:
 	python setup.py sdist
 
+bdist:
+	rm -rf build
+	WHEEL=1 python setup.py bdist_wheel
+
 clean:
 	rm -rf `cat .gitignore`
 

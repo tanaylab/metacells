@@ -120,7 +120,7 @@ setup(
     entry_points={'console_scripts': [
         'metacells_timing=metacells.scripts.timing:main',
     ]},
-    packages=find_packages(),
+    packages=find_packages(exclude=['*tests*']),
     python_requires='>=3.7',
     setup_requires=SETUP_REQUIRES,
     install_requires=INSTALL_REQUIRES,
