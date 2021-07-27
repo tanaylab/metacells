@@ -76,7 +76,7 @@ DEVELOP_REQUIRES = [
 
 BASE_COMPILE_ARGS = ['-std=c++14', '-ffast-math', '-fassociative-math']
 NATIVE_COMPILE_ARGS = ['-march=native', '-mtune=native']
-if 'arm' in platform.uname().processor:
+if 'arm' in platform.processor():
     WHEEL_COMPILE_ARGS = []
 else:
     WHEEL_COMPILE_ARGS = ['-mavx2']
