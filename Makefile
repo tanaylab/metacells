@@ -79,8 +79,9 @@ dist:
 	python setup.py sdist
 
 bdist:
-	rm -rf build
+	rm -rf build dist/*.whl
 	WHEEL=1 python setup.py bdist_wheel
+	auditwheel repair dist/*.whl
 
 clean:
 	rm -rf `cat .gitignore`
