@@ -1,5 +1,6 @@
 import os
 import pathlib
+import platform
 from glob import glob
 
 from setuptools import Extension, find_packages, setup
@@ -73,10 +74,12 @@ DEVELOP_REQUIRES = [
     'typing_extensions'
 ]
 
-
 BASE_COMPILE_ARGS = ['-std=c++14', '-ffast-math', '-fassociative-math']
 NATIVE_COMPILE_ARGS = ['-march=native', '-mtune=native']
-WHEEL_COMPILE_ARGS = ['-mavx2']
+if 'arm' in platform.uname().processor:
+    WHEEL_COMPILE_ARGS = []
+else:
+    WHEEL_COMPILE_ARGS = ['-mavx2']
 
 BASE_MACROS = [('ASSERT_LEVEL', 1)]  # 0 for none, 1 for fast, 2 for slow.
 NATIVE_MACROS = []
@@ -100,7 +103,7 @@ setup(
     author_email='oren@ben-kiki.org',
     license='MIT',
     classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 3.7',
         'Topic :: Software Development :: Libraries',
