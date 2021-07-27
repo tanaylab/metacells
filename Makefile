@@ -81,6 +81,7 @@ dist:
 bdist:
 	rm -rf build dist/*.whl
 	WHEEL=1 python setup.py bdist_wheel
+	check-wheel-contents dist/*.whl
 	auditwheel repair dist/*.whl
 
 clean:
