@@ -76,10 +76,10 @@ DEVELOP_REQUIRES = [
 
 BASE_COMPILE_ARGS = ['-std=c++14', '-ffast-math', '-fassociative-math']
 NATIVE_COMPILE_ARGS = ['-march=native', '-mtune=native']
-if 'arm' in platform.processor():
-    WHEEL_COMPILE_ARGS = []
-else:
+if platform.processor() == 'x86_64':
     WHEEL_COMPILE_ARGS = ['-mavx2']
+else:
+    WHEEL_COMPILE_ARGS = []
 
 BASE_MACROS = [('ASSERT_LEVEL', 1)]  # 0 for none, 1 for fast, 2 for slow.
 NATIVE_MACROS = []
