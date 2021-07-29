@@ -5,20 +5,11 @@
 version: 2
 
 sphinx:
-  configuration: doc/source/conf.py
+  configuration: sphinx/conf.py
 
-# conda:
-#   environment: build-doc.yml
-
-# Optionally build your docs in additional formats such as PDF and ePub
 formats: all
 
-# Optionally set the version of Python and requirements required to build your docs
 python:
   version: 3.7
   install:
   - requirements: sphinx/requirements.txt
-
-submodules:
-  include: all
-  recursive: true
