@@ -1116,9 +1116,7 @@ shuffle_band(const size_t band_index, CompressedMatrix<D, I, P>& matrix, const s
     std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
 
     std::minstd_rand random(random_seed);
-    std::random_shuffle(tmp_indices.begin(), tmp_indices.end(), [&](size_t n) {
-        return random() % n;
-    });
+    std::shuffle(tmp_indices.begin(), tmp_indices.end(), random);
 
     auto band_indices = matrix.get_band_indices(band_index);
     tmp_indices = tmp_indices.slice(0, band_indices.size());
@@ -1151,7 +1149,7 @@ static void
 shuffle_row(const size_t row_index, MatrixSlice<D>& matrix, const size_t random_seed) {
     std::minstd_rand random(random_seed);
     auto row = matrix.get_row(row_index);
-    std::random_shuffle(row.begin(), row.end(), [&](size_t n) { return random() % n; });
+    std::shuffle(row.begin(), row.end(), random);
 }
 
 /// See the Python `metacell.utilities.computation.shuffle_matrix` function.
@@ -1831,9 +1829,7 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
         while (point_index >= 0) {
             ssize_t other_point_index = point_index_of_location[x_index][y_index];
             if (other_point_index >= 0) {
-                std::random_shuffle(delta_indices.begin(), delta_indices.end(), [&](size_t n) {
-                    return random() % n;
-                });
+                std::shuffle(delta_indices.begin(), delta_indices.end(), random);
                 for (auto delta_index : delta_indices) {
                     auto delta_x = DELTAS[y_index % 2][delta_index][0];
                     auto delta_y = DELTAS[y_index % 2][delta_index][1];
@@ -1855,9 +1851,7 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
             }
 
             if (other_point_index >= 0) {
-                std::random_shuffle(delta_indices.begin(), delta_indices.end(), [&](size_t n) {
-                    return random() % n;
-                });
+                std::shuffle(delta_indices.begin(), delta_indices.end(), random);
                 for (auto delta_index : delta_indices) {
                     auto delta_x = DELTAS[y_index % 2][delta_index][0];
                     auto delta_y = DELTAS[y_index % 2][delta_index][1];
@@ -1918,9 +1912,7 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
             auto current_distance =
                 distance(x_index, y_index, preferred_x_index, preferred_y_index);
 
-            std::random_shuffle(delta_indices.begin(), delta_indices.end(), [&](size_t n) {
-                return random() % n;
-            });
+            std::shuffle(delta_indices.begin(), delta_indices.end(), random);
             for (auto delta_index : delta_indices) {
                 auto delta_x = DELTAS[y_index % 2][delta_index][0];
                 auto delta_y = DELTAS[y_index % 2][delta_index][1];
@@ -2232,9 +2224,7 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
     FastAssertCompare(strong_seeds_count, >, given_seeds_count);
 
     if (seeds_count < max_seeds_count) {
-        std::random_shuffle(tmp_candidates.begin(), tmp_candidates.end(), [&](size_t n) {
-            return random() % n;
-        });
+        std::shuffle(tmp_candidates.begin(), tmp_candidates.end(), random);
 
         while (tmp_candidates.size() > 0 && seeds_count < max_seeds_count) {
             auto node_index = tmp_candidates.back();
@@ -2247,9 +2237,7 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
     if (seeds_count < max_seeds_count) {
         tmp_candidates.resize(nodes_count);
         std::iota(tmp_candidates.begin(), tmp_candidates.end(), 0);
-        std::random_shuffle(tmp_candidates.begin(), tmp_candidates.end(), [&](size_t n) {
-            return random() % n;
-        });
+        std::shuffle(tmp_candidates.begin(), tmp_candidates.end(), random);
 
         size_t failed_attempts = 0;
         while (seeds_count < max_seeds_count) {
@@ -2695,9 +2683,7 @@ struct OptimizePartitions {
                     << std::endl;
             }
 
-            std::random_shuffle(tmp_indices.begin(), tmp_indices.end(), [&](size_t n) {
-                return random() % n;
-            });
+            std::shuffle(tmp_indices.begin(), tmp_indices.end(), random);
             size_t skipped = 0;
             size_t improved = 0;
             size_t unimproved = 0;
@@ -3259,11 +3245,10 @@ static Sums
 sum_row_values(ConstArraySlice<D> input_row) {
     const D* input_data = input_row.begin();
     const size_t columns_count = input_row.size();
-    D sum_values = 0;
-    D sum_squared = 0;
-    // __asm__ __volatile__("int3");
+    float64_t sum_values = 0;
+    float64_t sum_squared = 0;
     for (size_t column_index = 0; column_index < columns_count; ++column_index) {
-        const auto value = input_data[column_index];
+        const float64_t value = input_data[column_index];
         sum_values += value;
         sum_squared += value * value;
     }
@@ -3281,13 +3266,14 @@ correlate_dense_rows(ConstArraySlice<D> some_values,
     const size_t columns_count = some_values.size();
     const D* some_values_data = some_values.begin();
     const D* other_values_data = other_values.begin();
-    D both_sum_values = 0;
+    float64_t both_sum_values = 0;
 
 #ifdef __INTEL_COMPILER
 #    pragma simd
 #endif
     for (size_t column_index = 0; column_index < columns_count; ++column_index) {
-        both_sum_values += some_values_data[column_index] * other_values_data[column_index];
+        both_sum_values +=
+            float64_t(some_values_data[column_index]) * float64_t(other_values_data[column_index]);
     }
 
     float64_t correlation = columns_count * both_sum_values - some_sum_values * other_sum_values;

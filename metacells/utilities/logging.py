@@ -398,7 +398,9 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
 
     checksum = ''
 #   if utt.is_1d(value) and 'U' not in str(value.dtype) and 'o' not in str(value.dtype):
-#       checksum = f' checksum: {utt.shaped_checksum(value)}'
+#       checksum = ' checksum: %.20e' % utt.shaped_checksum(value)
+#   elif utt.is_2d(value):
+#       checksum = ' checksum: %.20e' % utt.shaped_checksum(value)
 
     if formatter is not None:
         value = formatter(value)
