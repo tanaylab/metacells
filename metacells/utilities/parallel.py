@@ -47,10 +47,6 @@ FreeBSD, Mac OSX and Windows, but YMMV.
 
 .. todo::
 
-    Look into using TBB instead of OpenMP for the inner threads for better efficiency.
-
-.. todo::
-
     Re-implement all the package in a single language more suitable for scientific computing. Julia
     is looking like a good combination of convenience and performance...
 '''

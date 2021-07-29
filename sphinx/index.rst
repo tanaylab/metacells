@@ -1,13 +1,13 @@
-metacells documentation
-=======================
+Metacells
+=========
 
 .. toctree::
   :maxdepth: 1
 
   install
   intro
-  todo
   license
+  todo
 
 Vignettes
 =========

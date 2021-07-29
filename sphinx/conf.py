@@ -14,6 +14,7 @@ import os
 import sys
 
 version = os.popen('cd ..; python setup.py --version').read().strip()
+sys.path.insert(0, os.path.abspath('..'))
 
 # -- General configuration ------------------------------------------------
 

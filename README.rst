@@ -1,3 +1,21 @@
+Metacells - Single-cell RNA Sequencing Analysis
+===============================================
+
+.. image:: https://travis-ci.org/tanaylab/metacells.svg?branch=master
+    :target: https://travis-ci.org/tanaylab/metacells
+    :alt: Build Status
+
+.. image:: https://readthedocs.org/projects/metacells/badge/?version=latest
+    :target: https://metacells.readthedocs.io/en/latest/?badge=latest
+    :alt: Documentation Status
+
+*TODO*
+
+The metacells package implements the improved metacell algorithm [2]_ for single-cell RNA sequencing
+(scRNA-seq) data analysis within the `scipy https://www.scipy.org/` framework. The original metacell
+algorithm [1]_ was implemented in R. The python package contains various algorithmic improvements
+and is scalable for larger data sets (millions of cells).
+
 Metacell Analysis
 =================
 
@@ -49,10 +67,10 @@ The metacells package contains extensions written in C++. The ``metacells`` dist
 pre-compiled Python wheels for both Linux and MacOS, so installing it using ``pip`` should not
 require a C++ compilation step.
 
-Note these pre-compiled wheels were built to use AVX2, and will not work on older CPUs which are
-limited to SSE. Also, these wheels will not make use of any newer instructions (such as AVX512),
-even if available. While these wheels may not the perfect match for the machine you are running on,
-they are expected to work well for most machines.
+Note that for X86 CPUs, these pre-compiled wheels were built to use AVX2, and will not work on older
+CPUs which are limited to SSE. Also, these wheels will not make use of any newer instructions (such
+as AVX512), even if available. While these wheels may not the perfect match for the machine you are
+running on, they are expected to work well for most machines.
 
 To see the native capabilities of your machine, you can ``grep flags /proc/cpuinfo | head -1`` which
 will give you a long list of supported CPU features in an arbitrary order, which may include
@@ -64,7 +82,6 @@ You can avoid installing the pre-compiled wheel by running ``pip install metacel
 machine, optimizing for its native capabilities, whatever these may be. However, this requires you
 to have a C++ compiler installed (either ``g++`` or ``clang``), and it will take much longer to
 complete the installation.
-
 Vignettes
 =========
 
@@ -77,3 +94,35 @@ and
 
 You can also access their very latest version in the `Github repository
 <https://github.com/tanaylab/metacells/tree/master/sphinx>`_.
+
+References
+==========
+
+Please cite the references appropriately in case they are used.
+
+.. [1] Baran, Y., Bercovich, A., Sebe-Pedros, A. et al. MetaCell: analysis of single-cell RNA-seq
+   data using K-nn graph partitions. Genome Biol 20, 206 (2019).
+   `10.1186/s13059-019-1812-2 <https://doi.org/10.1186/s13059-019-1812-2>`_
+
+.. [2] *TODO*.
+
+License (MIT)
+=============
+
+Copyright © 2020, 2021 Weizmann Institute of Science
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+associated documentation files (the "Software"), to deal in the Software without restriction,
+including without limitation the rights to use, copy, modify, merge, publish, distribute,
+sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial
+portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
+OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+

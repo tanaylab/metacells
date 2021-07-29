@@ -93,8 +93,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
 
     .. todo::
 
-        Should :py:func:`compute_direct_metacells` avoid computing the graph and running
-        ``leidenalg`` for a very small number of cells?
+        Should :py:func:`compute_direct_metacells` avoid computing the graph and partition it for a
+        very small number of cells?
 
     **Input**
 

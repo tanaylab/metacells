@@ -5,7 +5,7 @@
 
 all: for-commit
 
-for-commit: reformat format isort rst unstaged todo mypy pylint test docs tox
+for-commit: README.rst reformat format isort rst unstaged todo mypy pylint test docs tox
 
 reformat: .clang-formatted
 	autopep8 -i -r metacells tests setup.py
@@ -43,7 +43,7 @@ test: build
 tox:
 	tox
 
-docs: sphinx/timing_script.rst
+docs: sphinx/timing_script.rst README.rst
 	sphinx-build -W -b html sphinx sphinx/generated
 
 sphinx/timing_script.rst: \
@@ -73,16 +73,10 @@ LICENSE.rst: sphinx/license.rst
 	cp $? $@
 
 README.rst: prefix.rst sphinx/intro.rst sphinx/install.rst references.rst LICENSE.rst
-	cat $? > $@
+	cat prefix.rst sphinx/intro.rst sphinx/install.rst references.rst LICENSE.rst > $@
 
 dist:
 	python setup.py sdist
-
-bdist:
-	rm -rf build dist/*.whl
-	WHEEL=1 python setup.py bdist_wheel
-	check-wheel-contents dist/*.whl
-	auditwheel repair dist/*.whl
 
 clean:
 	rm -rf `cat .gitignore`
