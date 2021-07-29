@@ -59,11 +59,13 @@ from typing import Any, Callable, Iterable, Optional, TypeVar
 
 from threadpoolctl import threadpool_limits  # type: ignore
 
-import metacells.extensions as xt  # type: ignore
 import metacells.utilities.documentation as utd
 import metacells.utilities.hardware_info as uth
 import metacells.utilities.logging as utl
 import metacells.utilities.timing as utm
+
+if not 'sphinx' in sys.argv[0]:
+    import metacells.extensions as xt  # type: ignore
 
 __all__ = [
     'is_main_process',

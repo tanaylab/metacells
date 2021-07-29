@@ -18,6 +18,7 @@ analysis pipeline.
 '''
 
 import re
+import sys
 from math import ceil, floor
 from re import Pattern
 from typing import (Any, Callable, Collection, List, Optional, Tuple, TypeVar,
@@ -28,10 +29,12 @@ import numpy as np
 import pandas as pd  # type: ignore
 import scipy.sparse as sp  # type: ignore
 
-import metacells.extensions as xt  # type: ignore
 import metacells.utilities.documentation as utd
 import metacells.utilities.timing as utm
 import metacells.utilities.typing as utt
+
+if not 'sphinx' in sys.argv[0]:
+    import metacells.extensions as xt  # type: ignore
 
 __all__ = [
     'allow_inefficient_layout',

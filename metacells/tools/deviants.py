@@ -3,6 +3,7 @@ Deviants
 --------
 '''
 
+import sys
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -10,9 +11,11 @@ import scipy.sparse as sparse  # type: ignore
 import scipy.stats as stats  # type: ignore
 from anndata import AnnData
 
-import metacells.extensions as xt  # type: ignore
 import metacells.parameters as pr
 import metacells.utilities as ut
+
+if not 'sphinx' in sys.argv[0]:
+    import metacells.extensions as xt  # type: ignore
 
 __all__ = [
     'find_deviant_cells',
