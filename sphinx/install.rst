@@ -28,3 +28,4 @@ You can avoid installing the pre-compiled wheel by running ``pip install metacel
 machine, optimizing for its native capabilities, whatever these may be. However, this requires you
 to have a C++ compiler installed (either ``g++`` or ``clang``), and it will take much longer to
 complete the installation.
+
