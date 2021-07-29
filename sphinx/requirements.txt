@@ -1,0 +1,8 @@
+# TODO: Replicated from setup.py
+scanpy
+importlib-metadata
+numpy
+pandas
+scipy
+python-igraph
+threadpoolctl

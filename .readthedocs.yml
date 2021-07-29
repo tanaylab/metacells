@@ -17,8 +17,7 @@ formats: all
 python:
   version: 3.7
   install:
-    - method: pip
-      path: .
+  - requirements: sphinx/requirements.txt
 
 submodules:
   include: all

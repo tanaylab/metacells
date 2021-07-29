@@ -46,7 +46,7 @@ SETUP_REQUIRES = [
     'setuptools_scm',
 ]
 
-# TODO: Repeated in setup.cfg
+# TODO: Repeated in setup.cfg, sphinx/requirements.txt
 
 INSTALL_REQUIRES = [
     'scanpy',
