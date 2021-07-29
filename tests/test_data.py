@@ -90,4 +90,7 @@ def test_direct_pipeline() -> None:
             np.nanmean(mc.ut.get_vo_proper(mdata, 'inner_normalized_variance',
                                            layout='column_major'))
 
+        # mc.ut.log_calc('PATH', path)
+        # mc.ut.log_calc('EXPECT', expected_results)
+        # mc.ut.log_calc('ACTUAL', actual_results)
         assert np.allclose([expected_results], [actual_results])

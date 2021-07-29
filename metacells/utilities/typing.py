@@ -968,5 +968,5 @@ def shaped_checksum(shaped: Shaped) -> float:
     if is_1d(shaped):
         values = to_numpy_vector(shaped)
     else:
-        values = to_numpy_matrix(shaped).flatten()  # type: ignore
+        values = to_numpy_matrix(shaped).ravel()  # type: ignore
     return np.nansum(values.astype('float64') * (1 + np.arange(len(values))))

@@ -378,23 +378,33 @@ def test_sum_groups() -> None:
     assert np.allclose(results[1], expected_sizes)
 
 
-def test_shuffle_dense_matrix() -> None:
+def test_shuffle_dense_rows_matrix() -> None:
     dense = \
         np.array([[0, 1, 2], [3, 0, 4], [5, 6, 0], [7, 8, 9]], dtype='float')
     ut.shuffle_matrix(dense, per='row', random_seed=123456)
     expected = \
-        np.array([[2, 0, 1], [3, 0, 4], [6, 0, 5], [9, 8, 7]], dtype='float')
+        np.array([[0, 2, 1], [3, 4, 0], [5, 0, 6], [7, 8, 9]], dtype='float')
     assert np.allclose(dense, expected)
 
 
-def test_shuffle_sparse_matrix() -> None:
+def test_shuffle_sparse_rows_matrix() -> None:
     sparse_csr = \
+        sparse.csr_matrix(np.array([[0, 1, 2], [3, 0, 4], [5, 6, 0], [7, 8, 9]],
+                                   dtype='float'))
+    ut.shuffle_matrix(sparse_csr, per='row', random_seed=123456)
+    expected = \
+        np.array([[1, 0, 2], [3, 0, 4], [5, 0, 6], [7, 8, 9]], dtype='float')
+    assert np.allclose(sparse_csr.todense(), expected)
+
+
+def test_shuffle_sparse_columns_matrix() -> None:
+    sparse_csc = \
         sparse.csc_matrix(np.array([[0, 1, 2], [3, 0, 4], [5, 6, 0], [7, 8, 9]],
                                    dtype='float'))
-    ut.shuffle_matrix(sparse_csr, per='column', random_seed=123456)
+    ut.shuffle_matrix(sparse_csc, per='column', random_seed=123456)
     expected = \
-        np.array([[5, 1, 9], [7, 6, 2], [0, 0, 4], [3, 8, 0]], dtype='float')
-    assert np.allclose(sparse_csr.todense(), expected)
+        np.array([[3, 1, 9], [0, 0, 4], [7, 6, 2], [5, 8, 0]], dtype='float')
+    assert np.allclose(sparse_csc.todense(), expected)
 
 
 def test_rank_matrix() -> None:
