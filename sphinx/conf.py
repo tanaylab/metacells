@@ -14,7 +14,9 @@ import os
 import sys
 
 version = os.popen('cd ..; python setup.py --version').read().strip()
+print('ADD %s to PYTHONPATH' % os.path.abspath('..'))
 sys.path.insert(0, os.path.abspath('..'))
+import metacells
 
 # -- General configuration ------------------------------------------------
 
