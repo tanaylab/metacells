@@ -12,7 +12,10 @@ jobs:
         python-version: [37]
 
     steps:
-      - uses: actions/checkout@v2
+      - name: Checkout repository and submodules
+        uses: actions/checkout@v2
+        with:
+          submodules: recursive
 
       - uses: actions/setup-python@v2  # Used to host cibuildwheel
       - name: Install cibuildwheel
