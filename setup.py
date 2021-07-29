@@ -78,12 +78,13 @@ BASE_COMPILE_ARGS = ['-std=c++14', '-ffast-math', '-fassociative-math']
 NATIVE_COMPILE_ARGS = ['-march=native', '-mtune=native']
 if platform.processor() == 'x86_64':
     WHEEL_COMPILE_ARGS = ['-mavx2']
+    WHEEL_MACROS = [('CHECK_AVX2', 1)]
 else:
     WHEEL_COMPILE_ARGS = []
+    WHEEL_MACROS = []
 
 BASE_MACROS = [('ASSERT_LEVEL', 1)]  # 0 for none, 1 for fast, 2 for slow.
 NATIVE_MACROS = []
-WHEEL_MACROS = [('CHECK_AVX2', 1)]
 
 if str(os.getenv('WHEEL', '')) == '':
     EXTRA_COMPILE_ARGS = BASE_COMPILE_ARGS + NATIVE_COMPILE_ARGS
