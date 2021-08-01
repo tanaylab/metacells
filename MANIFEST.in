@@ -5,3 +5,5 @@ include pybind11/include/pybind11/*
 include pybind11/include/pybind11/*/*
 include tests/*.py
 include tox.ini
+exclude sphinx/*
+exclude vignettes/*

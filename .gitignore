@@ -9,6 +9,7 @@ flame*.html
 junk*
 metacells/*.so
 metacells/version.py
+metacells/should_check_avx2.py
 .nfs*
 *.npy
 __pycache__
