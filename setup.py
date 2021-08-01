@@ -89,6 +89,7 @@ with open('metacells/should_check_avx2.py', 'w') as file:
         EXTRA_COMPILE_ARGS = BASE_COMPILE_ARGS + ['-mavx2']
         file.write("SHOULD_CHECK_AVX2 = True\n")
     else:
+        EXTRA_COMPILE_ARGS = []
         file.write("SHOULD_CHECK_AVX2 = False\n")
 
 setup(
