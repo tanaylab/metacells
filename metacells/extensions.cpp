@@ -3257,12 +3257,12 @@ sum_row_values(ConstArraySlice<D> input_row) {
 
 template<typename D>
 static float32_t
-correlate_dense_rows(ConstArraySlice<D> some_values,
-                     float64_t some_sum_values,
-                     float64_t some_sum_squared,
-                     ConstArraySlice<D> other_values,
-                     float64_t other_sum_values,
-                     float64_t other_sum_squared) {
+correlate_two_dense_rows(ConstArraySlice<D> some_values,
+                         float64_t some_sum_values,
+                         float64_t some_sum_squared,
+                         ConstArraySlice<D> other_values,
+                         float64_t other_sum_values,
+                         float64_t other_sum_squared) {
     const size_t columns_count = some_values.size();
     const D* some_values_data = some_values.begin();
     const D* other_values_data = other_values.begin();
@@ -3289,6 +3289,111 @@ correlate_dense_rows(ConstArraySlice<D> some_values,
     }
 }
 
+struct SevenCorrelations {
+    float64_t correlations[7];
+};
+
+template<typename D>
+static SevenCorrelations
+correlate_seven_dense_rows(ConstMatrixSlice<D> values,
+                           const std::vector<float64_t>& row_sum_values,
+                           const std::vector<float64_t>& row_sum_squared,
+                           const size_t some_index,
+                           const size_t other_begin_index) {
+    const size_t columns_count = values.columns_count();
+
+    const D* const some_values_data = values.get_row(some_index).begin();
+    const D* const other_0_values_data = values.get_row(other_begin_index + 0).begin();
+    const D* const other_1_values_data = values.get_row(other_begin_index + 1).begin();
+    const D* const other_2_values_data = values.get_row(other_begin_index + 2).begin();
+    const D* const other_3_values_data = values.get_row(other_begin_index + 3).begin();
+    const D* const other_4_values_data = values.get_row(other_begin_index + 4).begin();
+    const D* const other_5_values_data = values.get_row(other_begin_index + 5).begin();
+    const D* const other_6_values_data = values.get_row(other_begin_index + 6).begin();
+
+    float64_t both_0_sum_values = 0;
+    float64_t both_1_sum_values = 0;
+    float64_t both_2_sum_values = 0;
+    float64_t both_3_sum_values = 0;
+    float64_t both_4_sum_values = 0;
+    float64_t both_5_sum_values = 0;
+    float64_t both_6_sum_values = 0;
+
+    // __asm__("int3");
+
+#ifdef __INTEL_COMPILER
+#    pragma simd
+#endif
+    for (size_t column_index = 0; column_index < columns_count; ++column_index) {
+        const float64_t some_value = float64_t(some_values_data[column_index]);
+        both_0_sum_values += some_value * float64_t(other_0_values_data[column_index]);
+        both_1_sum_values += some_value * float64_t(other_1_values_data[column_index]);
+        both_2_sum_values += some_value * float64_t(other_2_values_data[column_index]);
+        both_3_sum_values += some_value * float64_t(other_3_values_data[column_index]);
+        both_4_sum_values += some_value * float64_t(other_4_values_data[column_index]);
+        both_5_sum_values += some_value * float64_t(other_5_values_data[column_index]);
+        both_6_sum_values += some_value * float64_t(other_6_values_data[column_index]);
+    }
+
+    const float64_t some_sum_values = row_sum_values[some_index];
+    const float64_t other_0_sum_values = row_sum_values[other_begin_index + 0];
+    const float64_t other_1_sum_values = row_sum_values[other_begin_index + 1];
+    const float64_t other_2_sum_values = row_sum_values[other_begin_index + 2];
+    const float64_t other_3_sum_values = row_sum_values[other_begin_index + 3];
+    const float64_t other_4_sum_values = row_sum_values[other_begin_index + 4];
+    const float64_t other_5_sum_values = row_sum_values[other_begin_index + 5];
+    const float64_t other_6_sum_values = row_sum_values[other_begin_index + 6];
+
+    const float64_t some_sum_squared = row_sum_squared[some_index];
+    const float64_t other_0_sum_squared = row_sum_squared[other_begin_index + 0];
+    const float64_t other_1_sum_squared = row_sum_squared[other_begin_index + 1];
+    const float64_t other_2_sum_squared = row_sum_squared[other_begin_index + 2];
+    const float64_t other_3_sum_squared = row_sum_squared[other_begin_index + 3];
+    const float64_t other_4_sum_squared = row_sum_squared[other_begin_index + 4];
+    const float64_t other_5_sum_squared = row_sum_squared[other_begin_index + 5];
+    const float64_t other_6_sum_squared = row_sum_squared[other_begin_index + 6];
+
+    SevenCorrelations results;
+#define COLLECT_RESULTS(WHICH_OTHER)                                                              \
+    {                                                                                             \
+        results.correlations[WHICH_OTHER] = columns_count * both_##WHICH_OTHER##_sum_values       \
+                                            - some_sum_values * other_##WHICH_OTHER##_sum_values; \
+        const float64_t some_factor =                                                             \
+            columns_count * some_sum_squared - some_sum_values * some_sum_values;                 \
+        const float64_t other_factor =                                                            \
+            columns_count * other_##WHICH_OTHER##_sum_squared                                     \
+            - other_##WHICH_OTHER##_sum_values * other_##WHICH_OTHER##_sum_values;                \
+        const float64_t both_factors = sqrt(some_factor * other_factor);                          \
+        if (both_factors != 0) {                                                                  \
+            results.correlations[WHICH_OTHER] /= both_factors;                                    \
+            results.correlations[WHICH_OTHER] =                                                   \
+                std::max(std::min(results.correlations[WHICH_OTHER], 1.0), -1.0);                 \
+        } else {                                                                                  \
+            results.correlations[WHICH_OTHER] = 0.0;                                              \
+        }                                                                                         \
+    }
+    COLLECT_RESULTS(0)
+    COLLECT_RESULTS(1)
+    COLLECT_RESULTS(2)
+    COLLECT_RESULTS(3)
+    COLLECT_RESULTS(4)
+    COLLECT_RESULTS(5)
+    COLLECT_RESULTS(6)
+
+    return results;
+}
+
+static size_t
+unrolled_iterations_count(const size_t rows_count, const size_t unroll_size) {
+    const size_t full_rows_groups_count = (rows_count - 1) / unroll_size;
+    const size_t full_rows_groups_sum = (full_rows_groups_count * (full_rows_groups_count + 1)) / 2;
+    const size_t last_rows_count = (rows_count - 1) % unroll_size;
+    const size_t last_rows_size = size_t(ceil((rows_count - 1.0) / unroll_size));
+    const size_t iterations_count =
+        full_rows_groups_sum * unroll_size + last_rows_count * last_rows_size;
+    return iterations_count;
+}
+
 template<typename D>
 static void
 correlate_dense(const pybind11::array_t<D>& input_array,
@@ -3313,28 +3418,62 @@ correlate_dense(const pybind11::array_t<D>& input_array,
         row_sum_squared[row_index] = sums.squared;
     });
 
-    const size_t iterations_count = (rows_count * (rows_count - 1)) / 2;
-
     for (size_t entry_index = 0; entry_index < rows_count; ++entry_index) {
         output.get_row(entry_index)[entry_index] = 1.0;
     }
 
+    const size_t unroll_size = 7;
+    const size_t iterations_count = unrolled_iterations_count(rows_count, unroll_size);
+
     parallel_loop(iterations_count, [&](size_t iteration_index) {
-        size_t some_index = iteration_index / (rows_count - 1);
-        size_t other_index = iteration_index % (rows_count - 1);
-        if (other_index < rows_count - 1 - some_index) {
-            some_index = rows_count - 1 - some_index;
-        } else {
-            other_index = rows_count - 2 - other_index;
+        size_t min_rows_count = size_t(round(
+            (sqrt(unroll_size * (unroll_size + 8.0 * iteration_index)) - unroll_size + 1.0) / 2.0));
+        size_t min_rows_iterations_count = unrolled_iterations_count(min_rows_count, unroll_size);
+
+        while (min_rows_count > 1 and min_rows_iterations_count > iteration_index) {
+            min_rows_count -= 1;
+            min_rows_iterations_count = unrolled_iterations_count(min_rows_count, unroll_size);
         }
-        float32_t correlation = correlate_dense_rows(input.get_row(some_index),
-                                                     row_sum_values[some_index],
-                                                     row_sum_squared[some_index],
-                                                     input.get_row(other_index),
-                                                     row_sum_values[other_index],
-                                                     row_sum_squared[other_index]);
-        output.get_row(some_index)[other_index] = correlation;
-        output.get_row(other_index)[some_index] = correlation;
+
+        while (true) {
+            const size_t up_min_rows_iterations_count =
+                unrolled_iterations_count(min_rows_count + 1, unroll_size);
+            if (up_min_rows_iterations_count > iteration_index) {
+                break;
+            }
+            min_rows_count += 1;
+            min_rows_iterations_count = up_min_rows_iterations_count;
+        }
+
+        const size_t some_index = min_rows_count;
+        const size_t extra_iterations = iteration_index - min_rows_iterations_count;
+        const size_t other_begin_index = extra_iterations * unroll_size;
+        const size_t other_end_index = std::min(other_begin_index + unroll_size, some_index);
+
+        if (other_begin_index + 7 == other_end_index) {
+            const SevenCorrelations results = correlate_seven_dense_rows(input,
+                                                                         row_sum_values,
+                                                                         row_sum_squared,
+                                                                         some_index,
+                                                                         other_begin_index);
+            for (int which_other = 0; which_other < 7; ++which_other) {
+                const size_t other_index = other_begin_index + which_other;
+                output.get_row(some_index)[other_index] = results.correlations[which_other];
+                output.get_row(other_index)[some_index] = results.correlations[which_other];
+            }
+        } else {
+            for (size_t other_index = other_begin_index; other_index != other_end_index;
+                 ++other_index) {
+                float32_t correlation = correlate_two_dense_rows(input.get_row(some_index),
+                                                                 row_sum_values[some_index],
+                                                                 row_sum_squared[some_index],
+                                                                 input.get_row(other_index),
+                                                                 row_sum_values[other_index],
+                                                                 row_sum_squared[other_index]);
+                output.get_row(some_index)[other_index] = correlation;
+                output.get_row(other_index)[some_index] = correlation;
+            }
+        }
     });
 }
 
