@@ -836,7 +836,7 @@ def divide_and_conquer_pipeline(
             with ut.log_step('collect common cells results:'):
                 common_results = SubsetResults(cdata,
                                                is_direct=not is_divide_and_conquer,
-                                               pre_target='preliminary',
+                                               pre_target='preliminary' if is_divide_and_conquer else None,
                                                final_target='final')
                 common_results.collect(adata, counts)
 
