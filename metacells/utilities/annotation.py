@@ -1033,7 +1033,7 @@ def set_o_data(
     utl.log_set(adata, 'o', name, data, formatter=formatter)
 
     if not isinstance(data, list):
-        assert utt.is_canonical(data)
+        utt.mustbe_canonical(data)
         if not utt.frozen(data):
             utt.freeze(data)
 
@@ -1054,7 +1054,7 @@ def set_v_data(
     '''
     utl.log_set(adata, 'v', name, data, formatter=formatter)
 
-    assert utt.is_canonical(data)
+    utt.mustbe_canonical(data)
     if not utt.frozen(data):
         utt.freeze(data)
 
@@ -1075,7 +1075,7 @@ def set_oo_data(
     '''
     utl.log_set(adata, 'oo', name, data, formatter=formatter)
 
-    assert utt.is_canonical(data)
+    utt.mustbe_canonical(data)
     if not utt.frozen(data):
         utt.freeze(data)
 
@@ -1096,7 +1096,7 @@ def set_vv_data(
     '''
     utl.log_set(adata, 'vv', name, data, formatter=formatter)
 
-    assert utt.is_canonical(data)
+    utt.mustbe_canonical(data)
     if not utt.frozen(data):
         utt.freeze(data)
 
@@ -1117,7 +1117,7 @@ def set_oa_data(
     '''
     utl.log_set(adata, 'oa', name, data, formatter=formatter)
 
-    assert utt.is_canonical(data)
+    utt.mustbe_canonical(data)
     if not utt.frozen(data):
         utt.freeze(data)
 
@@ -1138,7 +1138,7 @@ def set_va_data(
     '''
     utl.log_set(adata, 'va', name, data, formatter=formatter)
 
-    assert utt.is_canonical(data)
+    utt.mustbe_canonical(data)
     if not utt.frozen(data):
         utt.freeze(data)
 
@@ -1157,7 +1157,7 @@ def set_vo_data(
     '''
     utl.log_set(adata, 'vo', name, data, formatter=formatter)
 
-    assert utt.is_canonical(data)
+    utt.mustbe_canonical(data)
     if not utt.frozen(data):
         utt.freeze(data)
 

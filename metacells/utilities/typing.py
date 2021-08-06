@@ -136,6 +136,7 @@ __all__ = [
     'is_contiguous',
     'to_contiguous',
 
+    'mustbe_canonical',
     'is_canonical',
     'eliminate_zeros',
     'sort_indices',
@@ -880,6 +881,57 @@ def to_contiguous(vector: Vector, *, copy: bool = False) -> NumpyVector:
         dense = np.copy(dense)
         assert dense.flags.c_contiguous and dense.flags.f_contiguous
     return dense
+
+
+def mustbe_canonical(shaped: Shaped) -> None:
+    '''
+    Assert that some data is in canonical format.
+
+    For numpy matrices or vectors, this means the data is contiguous (for matrices, in either
+    row-major or column-major order).
+
+    For sparse matrices, it means the data is in COO format, or compressed (CSC or CSR format), with
+    sorted indices and no duplicates.
+
+    In general, we'd like all the data stored in ``AnnData`` to be canonical.
+    '''
+    assert hasattr(shaped, 'ndim'), \
+        'non-canonical shaped data: has no ndim attribute'
+
+    if is_1d(shaped):
+        is_contiguous_shape = is_contiguous(shaped)  # type: ignore
+        assert is_contiguous_shape, \
+            'non-canonical vector: non-contiguous 1D data'
+        return
+
+    assert is_2d(shaped)
+    matrix: Matrix = shaped  # type: ignore
+
+    sparse = maybe_sparse_matrix(matrix)
+    if sparse is None:
+        assert matrix_layout(matrix) is not None, \
+            'non-canonical dense matrix: is not in row-major or column-major layout'
+        return
+
+    assert sparse.getformat() in ('coo', 'csr', 'csc'), \
+        'non-canonical sparse matrix: is not in COO, CSR or CSC format'
+
+    if hasattr(sparse, 'has_canonical_format'):
+        assert getattr(sparse, 'has_canonical_format'), \
+            'non-canonical sparse matrix: might have duplicate indices'
+
+    if hasattr(sparse, 'has_sorted_indices'):
+        assert getattr(sparse, 'has_sorted_indices'), \
+            'non-canonical sparse matrix: might have unsorted indices'
+
+    compressed = maybe_compressed_matrix(matrix)
+    if compressed is not None:
+        assert is_contiguous(compressed.indptr), \
+            'non-canonical CSC/CSR matrix: indptr array is not contiguous'
+        assert is_contiguous(compressed.data), \
+            'non-canonical CSC/CSR matrix: data array is not contiguous'
+        assert is_contiguous(compressed.indices), \
+            'non-canonical CSC/CSR matrix: indices array is not contiguous'
 
 
 def is_canonical(shaped: Shaped) -> bool:  # pylint: disable=too-many-return-statements
