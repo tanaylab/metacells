@@ -1660,8 +1660,8 @@ def patterns_matches(
     invert: bool = False,
 ) -> utt.NumpyVector:
     '''
-    Given a collection of ``strings``, return a boolean mask specifying which of them match the
-    given regular expression ``patterns``.
+    Given a collection of (case-insensitive) ``strings``, return a boolean mask specifying which of
+    them match the given regular expression ``patterns``.
 
     If ``invert`` (default: {invert}), invert the mask.
     '''
@@ -1670,10 +1670,13 @@ def patterns_matches(
 
     utm.timed_parameters(patterns=len(patterns), strings=len(strings))
 
-    pattern: Pattern = \
-        re.compile('|'.join([alternative if isinstance(alternative, str)
-                             else alternative.pattern
-                             for alternative in patterns]))
+    unified_pattern = \
+        '(' \
+        + ')|('.join([alternative if isinstance(alternative, str)
+                      else alternative.pattern
+                      for alternative in patterns]) \
+        + ')'
+    pattern: Pattern = re.compile(unified_pattern, re.IGNORECASE)
 
     mask = np.array([bool(pattern.match(string)) for string in strings])
 

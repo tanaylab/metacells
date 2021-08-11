@@ -2995,7 +2995,7 @@ struct OptimizePartitions {
                 << " adjusted_cold_diff: " << adjusted_cold_diff  //
                 << " total_diff: " << total_diff                  //
                 << std::endl;
-            if (total_diff > 0) {
+            if (total_diff > EPSILON) {
                 tmp_partitions.push_back(partition_index);
             }
         }
