@@ -28,7 +28,7 @@ def find_named_genes(
     invert: bool = False,
 ) -> Optional[ut.PandasSeries]:
     '''
-    Find genes by their name.
+    Find genes by their (case-insensitive) name.
 
     This creates a mask of all the genes whose name appears in ``names`` or matches any of the
     ``patterns``. If ``invert`` (default: {invert}), invert the resulting mask.
@@ -43,8 +43,10 @@ def find_named_genes(
     if names is None:
         names_mask = np.zeros(adata.n_vars, dtype='bool')
     else:
-        names_set = set(names)
-        names_mask = np.array([name in names_set for name in adata.var_names])
+        lower_names_set = {name.lower() for name in names}
+        names_mask = np.array([  #
+            name.lower() in lower_names_set for name in adata.var_names
+        ])
 
     if patterns is None:
         patterns_mask = np.zeros(adata.n_vars, dtype='bool')
