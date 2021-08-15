@@ -2181,15 +2181,14 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
     std::vector<std::vector<int32_t>> connected_nodes =
         collect_connected_nodes(incoming_weights, seed_of_nodes);
 
-    TmpVectorSizeT candidates_raii;
-    auto tmp_candidates = candidates_raii.vector(nodes_count);
-    std::iota(tmp_candidates.begin(), tmp_candidates.end(), 0);
-    tmp_candidates.erase(std::remove_if(tmp_candidates.begin(),
-                                        tmp_candidates.end(),
-                                        [&](size_t candidate_node_index) {
-                                            return seed_of_nodes[candidate_node_index] >= 0;
-                                        }),
-                         tmp_candidates.end());
+    TmpVectorSizeT tmp_candidates_raii;
+    auto tmp_candidates = tmp_candidates_raii.vector(nodes_count);
+    tmp_candidates.clear();
+    for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
+        if (seed_of_nodes[node_index] < 0) {
+            tmp_candidates.push_back(node_index);
+        }
+    }
 
     std::minstd_rand random(random_seed);
     size_t given_seeds_count =
@@ -2224,42 +2223,32 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
     FastAssertCompare(strong_seeds_count, >, given_seeds_count);
 
     if (seeds_count < max_seeds_count) {
-        std::shuffle(tmp_candidates.begin(), tmp_candidates.end(), random);
+        tmp_candidates.clear();
+        for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
+            if (seed_of_nodes[node_index] < 0) {
+                tmp_candidates.push_back(node_index);
+            }
+        }
+        std::sort(tmp_candidates.begin(),
+                  tmp_candidates.end(),
+                  [&](const size_t left_node_index, const size_t right_node_index) {
+                      const auto left_node_incoming =
+                          incoming_weights.get_band_indices(left_node_index);
+                      const auto right_node_incoming =
+                          incoming_weights.get_band_indices(right_node_index);
+                      const auto left_node_outgoing =
+                          outgoing_weights.get_band_indices(left_node_index);
+                      const auto right_node_outgoing =
+                          outgoing_weights.get_band_indices(right_node_index);
+                      return (left_node_incoming.size() + 1) * (left_node_outgoing.size() + 1)
+                             > (right_node_incoming.size() + 1) * (right_node_outgoing.size() + 1);
+                  });
 
         while (tmp_candidates.size() > 0 && seeds_count < max_seeds_count) {
             auto node_index = tmp_candidates.back();
             tmp_candidates.pop_back();
             seed_of_nodes[node_index] = int32_t(seeds_count);
-            seeds_count += 1;
-        }
-    }
-
-    if (seeds_count < max_seeds_count) {
-        tmp_candidates.resize(nodes_count);
-        std::iota(tmp_candidates.begin(), tmp_candidates.end(), 0);
-        std::shuffle(tmp_candidates.begin(), tmp_candidates.end(), random);
-
-        size_t failed_attempts = 0;
-        while (seeds_count < max_seeds_count) {
-            auto seed_index =
-                random() % (strong_seeds_count - given_seeds_count) + given_seeds_count;
-            bool did_find_first_node = false;
-
-            failed_attempts += 1;
-            for (auto node_index : tmp_candidates) {
-                if (size_t(seed_of_nodes[node_index]) == seed_index) {
-                    if (!did_find_first_node) {
-                        did_find_first_node = true;
-                    } else {
-                        seed_of_nodes[node_index] = int32_t(seeds_count);
-                        seeds_count += 1;
-                        failed_attempts = 0;
-                        break;
-                    }
-                }
-            }
-
-            FastAssertCompare(failed_attempts, <, 10 * (strong_seeds_count - given_seeds_count));
+            ++seeds_count;
         }
     }
 
@@ -2327,7 +2316,7 @@ initial_size_of_partitions(ConstArraySlice<int32_t> partitions_of_nodes) {
         if (size_t(partition_index) >= size_of_partitions.size()) {
             size_of_partitions.resize(partition_index + 1);
         }
-        size_of_partitions[partition_index] += 1;
+        ++size_of_partitions[partition_index];
     }
 
     for (size_t partition_index = 0; partition_index < size_of_partitions.size();
@@ -2621,7 +2610,7 @@ struct OptimizePartitions {
             if (0 <= partition_index && partition_index < int32_t(cold_partitions)) {
                 temperature_of_nodes[node_index] = cold_temperature;
                 frozen_nodes[node_index] = 1;
-                frozen_count += 1;
+                ++frozen_count;
             } else {
                 temperature_of_nodes[node_index] = 1.0;
                 frozen_nodes[node_index] = 0;
@@ -3134,7 +3123,7 @@ struct OptimizePartitions {
             size_of_partitions[from_partition_index] -= 1;
         }
 
-        size_of_partitions[to_partition_index] += 1;
+        ++size_of_partitions[to_partition_index];
     }
 
     void update_scores_of_partition(size_t current_partition_index,
@@ -3441,7 +3430,7 @@ correlate_dense(const pybind11::array_t<D>& input_array,
             if (up_min_rows_iterations_count > iteration_index) {
                 break;
             }
-            min_rows_count += 1;
+            ++min_rows_count;
             min_rows_iterations_count = up_min_rows_iterations_count;
         }
 

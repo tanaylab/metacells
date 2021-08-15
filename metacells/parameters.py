@@ -508,6 +508,13 @@ cells_similarity_value_normalization: float = 1/significant_value
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 cells_similarity_method: str = similarity_method
 
+#: Whether to compute group-group similarity using the log (base 2) of the data. See
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+groups_similarity_log_data: bool = True
+
 #: The method to use to compute group-group similarity. See
 #: :py:const:`cells_similarity_method`
 #: and
