@@ -3585,6 +3585,12 @@ PYBIND11_MODULE(extensions, module) {
                &metacells::score_partitions,
                "Compute the quality score for metacells.");
 
+    module.def("collect_top", &metacells::collect_top, "Collect the topmost elements.");
+
+    module.def("collect_pruned", &metacells::collect_pruned, "Collect the topmost pruned edges.");
+
+    module.def("top_distinct", &metacells::top_distinct, "Collect the topmost distinct genes.");
+
 #define REGISTER_D(D)                                                                             \
     module.def("shuffle_matrix_" #D, &metacells::shuffle_matrix<D>, "Shuffle matrix data.");      \
     module.def("rank_rows_" #D,                                                                   \
@@ -3610,6 +3616,17 @@ PYBIND11_MODULE(extensions, module) {
                &metacells::correlate_dense<D>,                                                    \
                "Correlate rows of a dense matrix.");
 
+    REGISTER_D(int8_t)
+    REGISTER_D(int16_t)
+    REGISTER_D(int32_t)
+    REGISTER_D(int64_t)
+    REGISTER_D(uint8_t)
+    REGISTER_D(uint16_t)
+    REGISTER_D(uint32_t)
+    REGISTER_D(uint64_t)
+    REGISTER_D(float32_t)
+    REGISTER_D(float64_t)
+
 #define REGISTER_D_O(D, O)                          \
     module.def("downsample_array_" #D "_" #O,       \
                &metacells::downsample_array<D, O>,  \
@@ -3618,10 +3635,66 @@ PYBIND11_MODULE(extensions, module) {
                &metacells::downsample_matrix<D, O>, \
                "Downsample matrix data.");
 
+#define REGISTER_DS_O(O)       \
+    REGISTER_D_O(int8_t, O)    \
+    REGISTER_D_O(int16_t, O)   \
+    REGISTER_D_O(int32_t, O)   \
+    REGISTER_D_O(int64_t, O)   \
+    REGISTER_D_O(uint8_t, O)   \
+    REGISTER_D_O(uint16_t, O)  \
+    REGISTER_D_O(uint32_t, O)  \
+    REGISTER_D_O(uint64_t, O)  \
+    REGISTER_D_O(float32_t, O) \
+    REGISTER_D_O(float64_t, O)
+
+    REGISTER_DS_O(int8_t)
+    REGISTER_DS_O(int16_t)
+    REGISTER_DS_O(int32_t)
+    REGISTER_DS_O(int64_t)
+    REGISTER_DS_O(uint8_t)
+    REGISTER_DS_O(uint16_t)
+    REGISTER_DS_O(uint32_t)
+    REGISTER_DS_O(uint64_t)
+    REGISTER_DS_O(float32_t)
+    REGISTER_DS_O(float64_t)
+
 #define REGISTER_D_P_O(D, P, O)                            \
     module.def("downsample_compressed_" #D "_" #P "_" #O,  \
                &metacells::downsample_compressed<D, P, O>, \
                "Downsample compressed data.");
+
+#define REGISTER_DS_P_O(P, O)       \
+    REGISTER_D_P_O(int8_t, P, O)    \
+    REGISTER_D_P_O(int16_t, P, O)   \
+    REGISTER_D_P_O(int32_t, P, O)   \
+    REGISTER_D_P_O(int64_t, P, O)   \
+    REGISTER_D_P_O(uint8_t, P, O)   \
+    REGISTER_D_P_O(uint16_t, P, O)  \
+    REGISTER_D_P_O(uint32_t, P, O)  \
+    REGISTER_D_P_O(uint64_t, P, O)  \
+    REGISTER_D_P_O(float32_t, P, O) \
+    REGISTER_D_P_O(float64_t, P, O)
+
+#define REGISTER_DS_PS_O(O)      \
+    REGISTER_DS_P_O(int8_t, O)   \
+    REGISTER_DS_P_O(int16_t, O)  \
+    REGISTER_DS_P_O(int32_t, O)  \
+    REGISTER_DS_P_O(int64_t, O)  \
+    REGISTER_DS_P_O(uint8_t, O)  \
+    REGISTER_DS_P_O(uint16_t, O) \
+    REGISTER_DS_P_O(uint32_t, O) \
+    REGISTER_DS_P_O(uint64_t, O)
+
+    REGISTER_DS_PS_O(int8_t)
+    REGISTER_DS_PS_O(int16_t)
+    REGISTER_DS_PS_O(int32_t)
+    REGISTER_DS_PS_O(int64_t)
+    REGISTER_DS_PS_O(uint8_t)
+    REGISTER_DS_PS_O(uint16_t)
+    REGISTER_DS_PS_O(uint32_t)
+    REGISTER_DS_PS_O(uint64_t)
+    REGISTER_DS_PS_O(float32_t)
+    REGISTER_DS_PS_O(float64_t)
 
 #define REGISTER_D_I_P(D, I, P)                              \
     module.def("collect_compressed_" #D "_" #I "_" #P,       \
@@ -3643,293 +3716,34 @@ PYBIND11_MODULE(extensions, module) {
                &metacells::correlate_compressed<D, I, P>,    \
                "Correlate rows of a compressed matrix.");
 
-    module.def("collect_top", &metacells::collect_top, "Collect the topmost elements.");
-    module.def("collect_pruned", &metacells::collect_pruned, "Collect the topmost pruned edges.");
-    module.def("top_distinct", &metacells::top_distinct, "Collect the topmost distinct genes.");
+#define REGISTER_DS_I_P(I, P)       \
+    REGISTER_D_I_P(int8_t, I, P)    \
+    REGISTER_D_I_P(int16_t, I, P)   \
+    REGISTER_D_I_P(int32_t, I, P)   \
+    REGISTER_D_I_P(int64_t, I, P)   \
+    REGISTER_D_I_P(uint8_t, I, P)   \
+    REGISTER_D_I_P(uint16_t, I, P)  \
+    REGISTER_D_I_P(uint32_t, I, P)  \
+    REGISTER_D_I_P(uint64_t, I, P)  \
+    REGISTER_D_I_P(float32_t, I, P) \
+    REGISTER_D_I_P(float64_t, I, P)
 
-    REGISTER_D(float32_t)
-    REGISTER_D(float64_t)
-    REGISTER_D(int32_t)
-    REGISTER_D(int64_t)
-    REGISTER_D(uint32_t)
-    REGISTER_D(uint64_t)
+#define REGISTER_DS_IS_P(P)      \
+    REGISTER_DS_I_P(int8_t, P)   \
+    REGISTER_DS_I_P(int16_t, P)  \
+    REGISTER_DS_I_P(int32_t, P)  \
+    REGISTER_DS_I_P(int64_t, P)  \
+    REGISTER_DS_I_P(uint8_t, P)  \
+    REGISTER_DS_I_P(uint16_t, P) \
+    REGISTER_DS_I_P(uint32_t, P) \
+    REGISTER_DS_I_P(uint64_t, P)
 
-    REGISTER_D_O(float32_t, float32_t)
-    REGISTER_D_O(float32_t, float64_t)
-    REGISTER_D_O(float32_t, int32_t)
-    REGISTER_D_O(float32_t, int64_t)
-    REGISTER_D_O(float32_t, uint32_t)
-    REGISTER_D_O(float32_t, uint64_t)
-    REGISTER_D_O(float64_t, float32_t)
-    REGISTER_D_O(float64_t, float64_t)
-    REGISTER_D_O(float64_t, int32_t)
-    REGISTER_D_O(float64_t, int64_t)
-    REGISTER_D_O(float64_t, uint32_t)
-    REGISTER_D_O(float64_t, uint64_t)
-    REGISTER_D_O(int32_t, float32_t)
-    REGISTER_D_O(int32_t, float64_t)
-    REGISTER_D_O(int32_t, int32_t)
-    REGISTER_D_O(int32_t, int64_t)
-    REGISTER_D_O(int32_t, uint32_t)
-    REGISTER_D_O(int32_t, uint64_t)
-    REGISTER_D_O(int64_t, float32_t)
-    REGISTER_D_O(int64_t, float64_t)
-    REGISTER_D_O(int64_t, int32_t)
-    REGISTER_D_O(int64_t, int64_t)
-    REGISTER_D_O(int64_t, uint32_t)
-    REGISTER_D_O(int64_t, uint64_t)
-    REGISTER_D_O(uint32_t, float32_t)
-    REGISTER_D_O(uint32_t, float64_t)
-    REGISTER_D_O(uint32_t, int32_t)
-    REGISTER_D_O(uint32_t, int64_t)
-    REGISTER_D_O(uint32_t, uint32_t)
-    REGISTER_D_O(uint32_t, uint64_t)
-    REGISTER_D_O(uint64_t, float32_t)
-    REGISTER_D_O(uint64_t, float64_t)
-    REGISTER_D_O(uint64_t, int32_t)
-    REGISTER_D_O(uint64_t, int64_t)
-    REGISTER_D_O(uint64_t, uint32_t)
-    REGISTER_D_O(uint64_t, uint64_t)
-
-    REGISTER_D_P_O(float32_t, int32_t, float32_t)
-    REGISTER_D_P_O(float32_t, int32_t, float64_t)
-    REGISTER_D_P_O(float32_t, int32_t, int32_t)
-    REGISTER_D_P_O(float32_t, int32_t, int64_t)
-    REGISTER_D_P_O(float32_t, int32_t, uint32_t)
-    REGISTER_D_P_O(float32_t, int32_t, uint64_t)
-    REGISTER_D_P_O(float32_t, int64_t, float32_t)
-    REGISTER_D_P_O(float32_t, int64_t, float64_t)
-    REGISTER_D_P_O(float32_t, int64_t, int32_t)
-    REGISTER_D_P_O(float32_t, int64_t, int64_t)
-    REGISTER_D_P_O(float32_t, int64_t, uint32_t)
-    REGISTER_D_P_O(float32_t, int64_t, uint64_t)
-    REGISTER_D_P_O(float32_t, uint32_t, float32_t)
-    REGISTER_D_P_O(float32_t, uint32_t, float64_t)
-    REGISTER_D_P_O(float32_t, uint32_t, int32_t)
-    REGISTER_D_P_O(float32_t, uint32_t, int64_t)
-    REGISTER_D_P_O(float32_t, uint32_t, uint32_t)
-    REGISTER_D_P_O(float32_t, uint32_t, uint64_t)
-    REGISTER_D_P_O(float32_t, uint64_t, float32_t)
-    REGISTER_D_P_O(float32_t, uint64_t, float64_t)
-    REGISTER_D_P_O(float32_t, uint64_t, int64_t)
-    REGISTER_D_P_O(float32_t, uint64_t, int64_t)
-    REGISTER_D_P_O(float32_t, uint64_t, uint32_t)
-    REGISTER_D_P_O(float32_t, uint64_t, uint64_t)
-    REGISTER_D_P_O(float64_t, int32_t, float32_t)
-    REGISTER_D_P_O(float64_t, int32_t, float64_t)
-    REGISTER_D_P_O(float64_t, int32_t, int32_t)
-    REGISTER_D_P_O(float64_t, int32_t, int64_t)
-    REGISTER_D_P_O(float64_t, int32_t, uint32_t)
-    REGISTER_D_P_O(float64_t, int32_t, uint64_t)
-    REGISTER_D_P_O(float64_t, int64_t, float32_t)
-    REGISTER_D_P_O(float64_t, int64_t, float64_t)
-    REGISTER_D_P_O(float64_t, int64_t, int32_t)
-    REGISTER_D_P_O(float64_t, int64_t, int64_t)
-    REGISTER_D_P_O(float64_t, int64_t, uint32_t)
-    REGISTER_D_P_O(float64_t, int64_t, uint64_t)
-    REGISTER_D_P_O(float64_t, uint32_t, float32_t)
-    REGISTER_D_P_O(float64_t, uint32_t, float64_t)
-    REGISTER_D_P_O(float64_t, uint32_t, int32_t)
-    REGISTER_D_P_O(float64_t, uint32_t, int64_t)
-    REGISTER_D_P_O(float64_t, uint32_t, uint32_t)
-    REGISTER_D_P_O(float64_t, uint32_t, uint64_t)
-    REGISTER_D_P_O(float64_t, uint64_t, float32_t)
-    REGISTER_D_P_O(float64_t, uint64_t, float64_t)
-    REGISTER_D_P_O(float64_t, uint64_t, int64_t)
-    REGISTER_D_P_O(float64_t, uint64_t, int64_t)
-    REGISTER_D_P_O(float64_t, uint64_t, uint32_t)
-    REGISTER_D_P_O(float64_t, uint64_t, uint64_t)
-    REGISTER_D_P_O(int32_t, int32_t, float32_t)
-    REGISTER_D_P_O(int32_t, int32_t, float64_t)
-    REGISTER_D_P_O(int32_t, int32_t, int32_t)
-    REGISTER_D_P_O(int32_t, int32_t, int64_t)
-    REGISTER_D_P_O(int32_t, int32_t, uint32_t)
-    REGISTER_D_P_O(int32_t, int32_t, uint64_t)
-    REGISTER_D_P_O(int32_t, int64_t, float32_t)
-    REGISTER_D_P_O(int32_t, int64_t, float64_t)
-    REGISTER_D_P_O(int32_t, int64_t, int32_t)
-    REGISTER_D_P_O(int32_t, int64_t, int64_t)
-    REGISTER_D_P_O(int32_t, int64_t, uint32_t)
-    REGISTER_D_P_O(int32_t, int64_t, uint64_t)
-    REGISTER_D_P_O(int32_t, uint32_t, float32_t)
-    REGISTER_D_P_O(int32_t, uint32_t, float64_t)
-    REGISTER_D_P_O(int32_t, uint32_t, int32_t)
-    REGISTER_D_P_O(int32_t, uint32_t, int64_t)
-    REGISTER_D_P_O(int32_t, uint32_t, uint32_t)
-    REGISTER_D_P_O(int32_t, uint32_t, uint64_t)
-    REGISTER_D_P_O(int32_t, uint64_t, float32_t)
-    REGISTER_D_P_O(int32_t, uint64_t, float64_t)
-    REGISTER_D_P_O(int32_t, uint64_t, int64_t)
-    REGISTER_D_P_O(int32_t, uint64_t, int64_t)
-    REGISTER_D_P_O(int32_t, uint64_t, uint32_t)
-    REGISTER_D_P_O(int32_t, uint64_t, uint64_t)
-    REGISTER_D_P_O(int64_t, int32_t, float32_t)
-    REGISTER_D_P_O(int64_t, int32_t, float64_t)
-    REGISTER_D_P_O(int64_t, int32_t, int32_t)
-    REGISTER_D_P_O(int64_t, int32_t, int64_t)
-    REGISTER_D_P_O(int64_t, int32_t, uint32_t)
-    REGISTER_D_P_O(int64_t, int32_t, uint64_t)
-    REGISTER_D_P_O(int64_t, int64_t, float32_t)
-    REGISTER_D_P_O(int64_t, int64_t, float64_t)
-    REGISTER_D_P_O(int64_t, int64_t, int32_t)
-    REGISTER_D_P_O(int64_t, int64_t, int64_t)
-    REGISTER_D_P_O(int64_t, int64_t, uint32_t)
-    REGISTER_D_P_O(int64_t, int64_t, uint64_t)
-    REGISTER_D_P_O(int64_t, uint32_t, float32_t)
-    REGISTER_D_P_O(int64_t, uint32_t, float64_t)
-    REGISTER_D_P_O(int64_t, uint32_t, int32_t)
-    REGISTER_D_P_O(int64_t, uint32_t, int64_t)
-    REGISTER_D_P_O(int64_t, uint32_t, uint32_t)
-    REGISTER_D_P_O(int64_t, uint32_t, uint64_t)
-    REGISTER_D_P_O(int64_t, uint64_t, float32_t)
-    REGISTER_D_P_O(int64_t, uint64_t, float64_t)
-    REGISTER_D_P_O(int64_t, uint64_t, int64_t)
-    REGISTER_D_P_O(int64_t, uint64_t, int64_t)
-    REGISTER_D_P_O(int64_t, uint64_t, uint32_t)
-    REGISTER_D_P_O(int64_t, uint64_t, uint64_t)
-    REGISTER_D_P_O(uint32_t, int32_t, float32_t)
-    REGISTER_D_P_O(uint32_t, int32_t, float64_t)
-    REGISTER_D_P_O(uint32_t, int32_t, int32_t)
-    REGISTER_D_P_O(uint32_t, int32_t, int64_t)
-    REGISTER_D_P_O(uint32_t, int32_t, uint32_t)
-    REGISTER_D_P_O(uint32_t, int32_t, uint64_t)
-    REGISTER_D_P_O(uint32_t, int64_t, float32_t)
-    REGISTER_D_P_O(uint32_t, int64_t, float64_t)
-    REGISTER_D_P_O(uint32_t, int64_t, int32_t)
-    REGISTER_D_P_O(uint32_t, int64_t, int64_t)
-    REGISTER_D_P_O(uint32_t, int64_t, uint32_t)
-    REGISTER_D_P_O(uint32_t, int64_t, uint64_t)
-    REGISTER_D_P_O(uint32_t, uint32_t, float32_t)
-    REGISTER_D_P_O(uint32_t, uint32_t, float64_t)
-    REGISTER_D_P_O(uint32_t, uint32_t, int32_t)
-    REGISTER_D_P_O(uint32_t, uint32_t, int64_t)
-    REGISTER_D_P_O(uint32_t, uint32_t, uint32_t)
-    REGISTER_D_P_O(uint32_t, uint32_t, uint64_t)
-    REGISTER_D_P_O(uint32_t, uint64_t, float32_t)
-    REGISTER_D_P_O(uint32_t, uint64_t, float64_t)
-    REGISTER_D_P_O(uint32_t, uint64_t, int64_t)
-    REGISTER_D_P_O(uint32_t, uint64_t, int64_t)
-    REGISTER_D_P_O(uint32_t, uint64_t, uint32_t)
-    REGISTER_D_P_O(uint32_t, uint64_t, uint64_t)
-    REGISTER_D_P_O(uint64_t, int32_t, float32_t)
-    REGISTER_D_P_O(uint64_t, int32_t, float64_t)
-    REGISTER_D_P_O(uint64_t, int32_t, int32_t)
-    REGISTER_D_P_O(uint64_t, int32_t, int64_t)
-    REGISTER_D_P_O(uint64_t, int32_t, uint32_t)
-    REGISTER_D_P_O(uint64_t, int32_t, uint64_t)
-    REGISTER_D_P_O(uint64_t, int64_t, float32_t)
-    REGISTER_D_P_O(uint64_t, int64_t, float64_t)
-    REGISTER_D_P_O(uint64_t, int64_t, int32_t)
-    REGISTER_D_P_O(uint64_t, int64_t, int64_t)
-    REGISTER_D_P_O(uint64_t, int64_t, uint32_t)
-    REGISTER_D_P_O(uint64_t, int64_t, uint64_t)
-    REGISTER_D_P_O(uint64_t, uint32_t, float32_t)
-    REGISTER_D_P_O(uint64_t, uint32_t, float64_t)
-    REGISTER_D_P_O(uint64_t, uint32_t, int32_t)
-    REGISTER_D_P_O(uint64_t, uint32_t, int64_t)
-    REGISTER_D_P_O(uint64_t, uint32_t, uint32_t)
-    REGISTER_D_P_O(uint64_t, uint32_t, uint64_t)
-    REGISTER_D_P_O(uint64_t, uint64_t, float32_t)
-    REGISTER_D_P_O(uint64_t, uint64_t, float64_t)
-    REGISTER_D_P_O(uint64_t, uint64_t, int64_t)
-    REGISTER_D_P_O(uint64_t, uint64_t, int64_t)
-    REGISTER_D_P_O(uint64_t, uint64_t, uint32_t)
-    REGISTER_D_P_O(uint64_t, uint64_t, uint64_t)
-
-    REGISTER_D_I_P(float32_t, int32_t, int32_t)
-    REGISTER_D_I_P(float32_t, int32_t, int64_t)
-    REGISTER_D_I_P(float32_t, int32_t, uint32_t)
-    REGISTER_D_I_P(float32_t, int32_t, uint64_t)
-    REGISTER_D_I_P(float32_t, int64_t, int32_t)
-    REGISTER_D_I_P(float32_t, int64_t, int64_t)
-    REGISTER_D_I_P(float32_t, int64_t, uint32_t)
-    REGISTER_D_I_P(float32_t, int64_t, uint64_t)
-    REGISTER_D_I_P(float32_t, uint32_t, int32_t)
-    REGISTER_D_I_P(float32_t, uint32_t, int64_t)
-    REGISTER_D_I_P(float32_t, uint32_t, uint32_t)
-    REGISTER_D_I_P(float32_t, uint32_t, uint64_t)
-    REGISTER_D_I_P(float32_t, uint64_t, int32_t)
-    REGISTER_D_I_P(float32_t, uint64_t, int64_t)
-    REGISTER_D_I_P(float32_t, uint64_t, uint32_t)
-    REGISTER_D_I_P(float32_t, uint64_t, uint64_t)
-    REGISTER_D_I_P(float64_t, int32_t, int32_t)
-    REGISTER_D_I_P(float64_t, int32_t, int64_t)
-    REGISTER_D_I_P(float64_t, int32_t, uint32_t)
-    REGISTER_D_I_P(float64_t, int32_t, uint64_t)
-    REGISTER_D_I_P(float64_t, int64_t, int32_t)
-    REGISTER_D_I_P(float64_t, int64_t, int64_t)
-    REGISTER_D_I_P(float64_t, int64_t, uint32_t)
-    REGISTER_D_I_P(float64_t, int64_t, uint64_t)
-    REGISTER_D_I_P(float64_t, uint32_t, int32_t)
-    REGISTER_D_I_P(float64_t, uint32_t, int64_t)
-    REGISTER_D_I_P(float64_t, uint32_t, uint32_t)
-    REGISTER_D_I_P(float64_t, uint32_t, uint64_t)
-    REGISTER_D_I_P(float64_t, uint64_t, int32_t)
-    REGISTER_D_I_P(float64_t, uint64_t, int64_t)
-    REGISTER_D_I_P(float64_t, uint64_t, uint32_t)
-    REGISTER_D_I_P(float64_t, uint64_t, uint64_t)
-    REGISTER_D_I_P(int32_t, int32_t, int32_t)
-    REGISTER_D_I_P(int32_t, int32_t, int64_t)
-    REGISTER_D_I_P(int32_t, int32_t, uint32_t)
-    REGISTER_D_I_P(int32_t, int32_t, uint64_t)
-    REGISTER_D_I_P(int32_t, int64_t, int32_t)
-    REGISTER_D_I_P(int32_t, int64_t, int64_t)
-    REGISTER_D_I_P(int32_t, int64_t, uint32_t)
-    REGISTER_D_I_P(int32_t, int64_t, uint64_t)
-    REGISTER_D_I_P(int32_t, uint32_t, int32_t)
-    REGISTER_D_I_P(int32_t, uint32_t, int64_t)
-    REGISTER_D_I_P(int32_t, uint32_t, uint32_t)
-    REGISTER_D_I_P(int32_t, uint32_t, uint64_t)
-    REGISTER_D_I_P(int32_t, uint64_t, int32_t)
-    REGISTER_D_I_P(int32_t, uint64_t, int64_t)
-    REGISTER_D_I_P(int32_t, uint64_t, uint32_t)
-    REGISTER_D_I_P(int32_t, uint64_t, uint64_t)
-    REGISTER_D_I_P(int64_t, int32_t, int32_t)
-    REGISTER_D_I_P(int64_t, int32_t, int64_t)
-    REGISTER_D_I_P(int64_t, int32_t, uint32_t)
-    REGISTER_D_I_P(int64_t, int32_t, uint64_t)
-    REGISTER_D_I_P(int64_t, int64_t, int32_t)
-    REGISTER_D_I_P(int64_t, int64_t, int64_t)
-    REGISTER_D_I_P(int64_t, int64_t, uint32_t)
-    REGISTER_D_I_P(int64_t, int64_t, uint64_t)
-    REGISTER_D_I_P(int64_t, uint32_t, int32_t)
-    REGISTER_D_I_P(int64_t, uint32_t, int64_t)
-    REGISTER_D_I_P(int64_t, uint32_t, uint32_t)
-    REGISTER_D_I_P(int64_t, uint32_t, uint64_t)
-    REGISTER_D_I_P(int64_t, uint64_t, int32_t)
-    REGISTER_D_I_P(int64_t, uint64_t, int64_t)
-    REGISTER_D_I_P(int64_t, uint64_t, uint32_t)
-    REGISTER_D_I_P(int64_t, uint64_t, uint64_t)
-    REGISTER_D_I_P(uint32_t, int32_t, int32_t)
-    REGISTER_D_I_P(uint32_t, int32_t, int64_t)
-    REGISTER_D_I_P(uint32_t, int32_t, uint32_t)
-    REGISTER_D_I_P(uint32_t, int32_t, uint64_t)
-    REGISTER_D_I_P(uint32_t, int64_t, int32_t)
-    REGISTER_D_I_P(uint32_t, int64_t, int64_t)
-    REGISTER_D_I_P(uint32_t, int64_t, uint32_t)
-    REGISTER_D_I_P(uint32_t, int64_t, uint64_t)
-    REGISTER_D_I_P(uint32_t, uint32_t, int32_t)
-    REGISTER_D_I_P(uint32_t, uint32_t, int64_t)
-    REGISTER_D_I_P(uint32_t, uint32_t, uint32_t)
-    REGISTER_D_I_P(uint32_t, uint32_t, uint64_t)
-    REGISTER_D_I_P(uint32_t, uint64_t, int32_t)
-    REGISTER_D_I_P(uint32_t, uint64_t, int64_t)
-    REGISTER_D_I_P(uint32_t, uint64_t, uint32_t)
-    REGISTER_D_I_P(uint32_t, uint64_t, uint64_t)
-    REGISTER_D_I_P(uint64_t, int32_t, int32_t)
-    REGISTER_D_I_P(uint64_t, int32_t, int64_t)
-    REGISTER_D_I_P(uint64_t, int32_t, uint32_t)
-    REGISTER_D_I_P(uint64_t, int32_t, uint64_t)
-    REGISTER_D_I_P(uint64_t, int64_t, int32_t)
-    REGISTER_D_I_P(uint64_t, int64_t, int64_t)
-    REGISTER_D_I_P(uint64_t, int64_t, uint32_t)
-    REGISTER_D_I_P(uint64_t, int64_t, uint64_t)
-    REGISTER_D_I_P(uint64_t, uint32_t, int32_t)
-    REGISTER_D_I_P(uint64_t, uint32_t, int64_t)
-    REGISTER_D_I_P(uint64_t, uint32_t, uint32_t)
-    REGISTER_D_I_P(uint64_t, uint32_t, uint64_t)
-    REGISTER_D_I_P(uint64_t, uint64_t, int32_t)
-    REGISTER_D_I_P(uint64_t, uint64_t, int64_t)
-    REGISTER_D_I_P(uint64_t, uint64_t, uint32_t)
-    REGISTER_D_I_P(uint64_t, uint64_t, uint64_t)
+    REGISTER_DS_IS_P(int8_t)
+    REGISTER_DS_IS_P(int16_t)
+    REGISTER_DS_IS_P(int32_t)
+    REGISTER_DS_IS_P(int64_t)
+    REGISTER_DS_IS_P(uint8_t)
+    REGISTER_DS_IS_P(uint16_t)
+    REGISTER_DS_IS_P(uint32_t)
+    REGISTER_DS_IS_P(uint64_t)
 }
