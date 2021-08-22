@@ -1656,7 +1656,7 @@ static float32_t
 logistics_dense_vectors(ConstArraySlice<D> left,
                         ConstArraySlice<D> right,
                         const float64_t location,
-                        const float64_t scale) {
+                        const float64_t slope) {
     FastAssertCompare(right.size(), ==, left.size());
 
     const size_t size = left.size();
@@ -1665,7 +1665,7 @@ logistics_dense_vectors(ConstArraySlice<D> left,
 
     for (size_t index = 0; index < size; ++index) {
         float64_t diff = fabs(left[index] - right[index]);
-        result += 1 / (1 + exp(scale * (location - diff)));
+        result += 1 / (1 + exp(slope * (location - diff)));
     }
 
     return float32_t(result / size);
@@ -1676,7 +1676,7 @@ static void
 logistics_dense_matrix(const pybind11::array_t<D>& values_array,
                        pybind11::array_t<float32_t>& logistics_array,
                        const float64_t location,
-                       const float64_t scale) {
+                       const float64_t slope) {
     ConstMatrixSlice<D> values(values_array, "values");
     MatrixSlice<float32_t> logistics(logistics_array, "logistics");
 
@@ -1702,7 +1702,7 @@ logistics_dense_matrix(const pybind11::array_t<D>& values_array,
         float32_t logistic = logistics_dense_vectors(values.get_row(some_index),
                                                      values.get_row(other_index),
                                                      location,
-                                                     scale);
+                                                     slope);
         logistics.get_row(some_index)[other_index] = logistic;
         logistics.get_row(other_index)[some_index] = logistic;
     });
@@ -1714,7 +1714,7 @@ logistics_dense_matrices(const pybind11::array_t<D>& rows_values_array,
                          const pybind11::array_t<D>& columns_values_array,
                          pybind11::array_t<float32_t>& logistics_array,
                          const float64_t location,
-                         const float64_t scale) {
+                         const float64_t slope) {
     ConstMatrixSlice<D> rows_values(rows_values_array, "rows_values");
     ConstMatrixSlice<D> columns_values(columns_values_array, "columns_values");
     MatrixSlice<float32_t> logistics(logistics_array, "logistics");
@@ -1734,7 +1734,7 @@ logistics_dense_matrices(const pybind11::array_t<D>& rows_values_array,
         float32_t logistic = logistics_dense_vectors(rows_values.get_row(row_index),
                                                      columns_values.get_row(column_index),
                                                      location,
-                                                     scale);
+                                                     slope);
         logistics.get_row(row_index)[column_index] = logistic;
     });
 }

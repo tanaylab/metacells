@@ -93,13 +93,13 @@ similarity_method: str = 'pearson'
 #: :py:func:`metacells.utilities.computation.logistics`.
 logistics_location: float = 0.8
 
-#: The default scale for the logistics function. See
+#: The default slope for the logistics function. See
 #: :py:func:`metacells.pipeline.umap.compute_umap_by_features`,
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
 #: :py:func:`metacells.tools.similarity.compute_var_var_similarity`.
 #: and
 #: :py:func:`metacells.utilities.computation.logistics`.
-logistics_scale: float = 0.5
+logistics_slope: float = 0.5
 
 #: The generic target number of observations (cells) in a pile, allowing us to
 #: directly compute groups (metacells) for it. See
