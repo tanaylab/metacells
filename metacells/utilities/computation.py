@@ -490,7 +490,7 @@ def logistics(
     per: Optional[str]
 ) -> utt.NumpyMatrix:
     '''
-    Compute a similarity matrix, similar to for ``numpy.corrcoef``, but uses the logistics function.
+    Compute a distances matrix using the logistics function.
 
     This computes, for each pair of vectors, the mean of ``1/(1+exp(-scale*(abs(x-y)-location)))``
     of each of the elements. Typically this is applied to the log of the raw data.

@@ -26,7 +26,7 @@ def compute_obs_obs_similarity(
     method: str = pr.similarity_method,
     reproducible: bool = pr.reproducible,
     logistics_location: float = pr.logistics_location,
-    logistics_scale: float = pr.logistics_scale,
+    logistics_slope: float = pr.logistics_slope,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
@@ -41,7 +41,7 @@ def compute_obs_obs_similarity(
     * ``logistics`` for computing the logistics function.
     * ``logistics_pearson`` for computing correlations-of-logistics.
 
-    If using the logistics function, use the ``logistics_scale`` (default: {logistics_scale}) and
+    If using the logistics function, use the ``logistics_slope`` (default: {logistics_slope}) and
     ``logistics_location`` (default: {logistics_location}).
 
     **Input**
@@ -75,7 +75,7 @@ def compute_obs_obs_similarity(
                                         method=method,
                                         reproducible=reproducible,
                                         logistics_location=logistics_location,
-                                        logistics_scale=logistics_scale,
+                                        logistics_slope=logistics_slope,
                                         inplace=inplace)
 
 
@@ -89,7 +89,7 @@ def compute_var_var_similarity(
     method: str = pr.similarity_method,
     reproducible: bool = pr.reproducible,
     logistics_location: float = pr.logistics_location,
-    logistics_scale: float = pr.logistics_scale,
+    logistics_slope: float = pr.logistics_slope,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     '''
@@ -110,7 +110,7 @@ def compute_var_var_similarity(
     * ``logistics`` for computing the logistics function.
     * ``logistics_pearson`` for computing correlations-of-logistics.
 
-    If using the logistics function, use the ``logistics_scale`` (default: {logistics_scale}) and
+    If using the logistics function, use the ``logistics_slope`` (default: {logistics_slope}) and
     ``logistics_location`` (default: {logistics_location}).
 
     **Returns**
@@ -138,7 +138,7 @@ def compute_var_var_similarity(
                                         method=method,
                                         reproducible=reproducible,
                                         logistics_location=logistics_location,
-                                        logistics_scale=logistics_scale,
+                                        logistics_slope=logistics_slope,
                                         inplace=inplace)
 
 
@@ -151,7 +151,7 @@ def _compute_elements_similarity(
     method: str,
     reproducible: bool,
     logistics_location: float,
-    logistics_scale: float,
+    logistics_slope: float,
     inplace: bool,
 ) -> Optional[ut.PandasFrame]:
     assert elements in ('obs', 'var')
@@ -164,7 +164,9 @@ def _compute_elements_similarity(
     if method.startswith('logistics'):
         similarity = \
             ut.logistics(data, location=logistics_location,
-                         scale=logistics_scale, per=per)
+                         scale=logistics_slope, per=per)
+        similarity *= -1
+        similarity += 1
     else:
         similarity = ut.corrcoef(data, per=per, reproducible=reproducible)
 

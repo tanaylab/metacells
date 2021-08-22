@@ -36,7 +36,7 @@ def compute_knn_by_features(
     similarity_log_data: bool = pr.umap_similarity_log_data,
     similarity_method: str = pr.umap_similarity_method,
     logistics_location: float = pr.logistics_location,
-    logistics_scale: float = pr.logistics_scale,
+    logistics_slope: float = pr.logistics_slope,
     k: int,
     balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     incoming_degree_factor: float = pr.knn_incoming_degree_factor,
@@ -83,7 +83,7 @@ def compute_knn_by_features(
 
     4. Invoke :py:func:`metacells.tools.similarity.compute_obs_obs_similarity` using
        ``similarity_method`` (default: {similarity_method}), ``logistics_location`` (default:
-       {logistics_location}) and ``logistics_scale`` (default: {logistics_scale}) and convert this
+       {logistics_slope}) and ``logistics_slope`` (default: {logistics_slope}) and convert this
        to distances.
 
     5. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` using the distances,
@@ -115,7 +115,7 @@ def compute_knn_by_features(
                                                  method=similarity_method,
                                                  reproducible=reproducible,
                                                  logistics_location=logistics_location,
-                                                 logistics_scale=logistics_scale,
+                                                 logistics_slope=logistics_slope,
                                                  inplace=False)
     assert similarities is not None
 
@@ -140,7 +140,7 @@ def compute_umap_by_features(
     similarity_log_data: bool = pr.umap_similarity_log_data,
     similarity_method: str = pr.umap_similarity_method,
     logistics_location: float = pr.logistics_location,
-    logistics_scale: float = pr.logistics_scale,
+    logistics_slope: float = pr.logistics_slope,
     skeleton_k: int = pr.skeleton_k,
     balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     incoming_degree_factor: float = pr.knn_incoming_degree_factor,
@@ -180,7 +180,7 @@ def compute_umap_by_features(
        ``similarity_value_normalization`` (default: {similarity_value_normalization}),
        ``similarity_log_data`` (default: {similarity_log_data}), ``similarity_method`` (default:
        {similarity_method}), ``logistics_location`` (default: {logistics_location}),
-       ``logistics_scale`` (default: {logistics_scale}), ``skeleton_k``` (default: {skeleton_k}),
+       ``logistics_slope`` (default: {logistics_slope}), ``skeleton_k``` (default: {skeleton_k}),
        ``balanced_ranks_factor`` (default: {balanced_ranks_factor}), ``incoming_degree_factor``
        (default: {incoming_degree_factor}), ``outgoing_degree_factor`` (default:
        {outgoing_degree_factor}) to compute a "skeleton" graph to overlay on top of the UMAP graph.
@@ -194,7 +194,7 @@ def compute_umap_by_features(
                                            similarity_log_data=similarity_log_data,
                                            similarity_method=similarity_method,
                                            logistics_location=logistics_location,
-                                           logistics_scale=logistics_scale,
+                                           logistics_slope=logistics_slope,
                                            k=skeleton_k,
                                            balanced_ranks_factor=balanced_ranks_factor,
                                            incoming_degree_factor=incoming_degree_factor,
