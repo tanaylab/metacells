@@ -160,15 +160,16 @@ def _compute_elements_similarity(
                       'logistics', 'logistics_pearson')
 
     data = ut.get_vo_proper(adata, what, layout=f'{per}_major')
+    dense = ut.to_numpy_matrix(data)
 
     if method.startswith('logistics'):
         similarity = \
-            ut.logistics(data, location=logistics_location,
-                         scale=logistics_slope, per=per)
+            ut.logistics(dense, location=logistics_location,
+                         slope=logistics_slope, per=per)
         similarity *= -1
         similarity += 1
     else:
-        similarity = ut.corrcoef(data, per=per, reproducible=reproducible)
+        similarity = ut.corrcoef(dense, per=per, reproducible=reproducible)
 
     if method.endswith('_pearson'):
         similarity = ut.corrcoef(similarity, per=None,

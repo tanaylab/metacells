@@ -32,25 +32,25 @@ def test_expand_doc() -> None:
 
 def test_corrcoef() -> None:
     np.random.seed(123456)
-    matrix = sparse.rand(100, 10000, density=0.1, format='csr')
+    matrix = sparse.rand(101, 10101, density=0.1, format='csr')
     # matrix = sparse.rand(5, 20, density=0.3, format='csr')
     dense = ut.to_layout(matrix.toarray(), layout='row_major')
     numpy_correlation = np.corrcoef(dense)
-    assert numpy_correlation.shape == (100, 100)
+    assert numpy_correlation.shape == (101, 101)
 
     dense = dense.T
 
     for reproducible in (False, True):
         dense_correlation = ut.corrcoef(dense, per='column',
                                         reproducible=reproducible)
-        assert dense_correlation.shape == (100, 100)
+        assert dense_correlation.shape == (101, 101)
         assert np.min(np.diag(dense_correlation)) == 1
         assert np.max(np.diag(dense_correlation)) == 1
         assert np.allclose(dense_correlation, numpy_correlation, atol=1e-6)
 
         sparse_correlation = ut.corrcoef(matrix, per='row',
                                          reproducible=reproducible)
-        assert sparse_correlation.shape == (100, 100)
+        assert sparse_correlation.shape == (101, 101)
         assert np.min(np.diag(sparse_correlation)) == 1
         assert np.max(np.diag(sparse_correlation)) == 1
         assert np.allclose(sparse_correlation, numpy_correlation, atol=1e-6)
@@ -59,7 +59,7 @@ def test_corrcoef() -> None:
     for reproducible in (False, True):
         zeros_correlation = ut.corrcoef(dense, per='column',
                                         reproducible=reproducible)
-        assert zeros_correlation.shape == (100, 100)
+        assert zeros_correlation.shape == (101, 101)
         assert np.min(np.diag(zeros_correlation)) == 1
         assert np.max(np.diag(zeros_correlation)) == 1
         np.fill_diagonal(zeros_correlation, 0)
@@ -67,22 +67,103 @@ def test_corrcoef() -> None:
         assert np.max(zeros_correlation) == 0
 
 
+def test_cross_corrcoef() -> None:
+    np.random.seed(123456)
+    first_matrix = \
+        ut.to_numpy_matrix(sparse.rand(51, 10101, density=0.1, format='csr'))
+    second_matrix = \
+        ut.to_numpy_matrix(sparse.rand(101, 10101, density=0.1, format='csr'))
+
+    first_dense = ut.to_layout(first_matrix, layout='row_major')
+    second_dense = ut.to_layout(second_matrix, layout='row_major')
+    fast_results = ut.cross_corrcoef_rows(first_dense, second_dense,
+                                          reproducible=True)
+
+    slow_results = np.zeros((51, 101), dtype='float')
+    for row in range(51):
+        for column in range(101):
+            slow_results[row, column] = \
+                np.corrcoef(first_dense[row, :], second_dense[column, :])[0, 1]
+    slow_results[np.isnan(slow_results)] = 0
+
+    assert fast_results.shape == slow_results.shape
+    assert np.allclose(fast_results, slow_results, atol=1e-6)
+
+
+def test_pairs_corrcoef() -> None:
+    np.random.seed(123456)
+    first_matrix = \
+        ut.to_numpy_matrix(sparse.rand(100, 100, density=0.1, format='csr'))
+    second_matrix = \
+        ut.to_numpy_matrix(sparse.rand(100, 100, density=0.1, format='csr'))
+
+    first_dense = ut.to_layout(first_matrix, layout='row_major')
+    second_dense = ut.to_layout(second_matrix, layout='row_major')
+    fast_results = ut.pairs_corrcoef_rows(first_dense, second_dense,
+                                          reproducible=True)
+
+    slow_results = np.zeros(100, dtype='float')
+    for row in range(100):
+        slow_results[row] = \
+            np.corrcoef(first_dense[row], second_dense[row])[0, 1]
+    slow_results[np.isnan(slow_results)] = 0
+
+    assert fast_results.shape == slow_results.shape
+    assert np.allclose(fast_results, slow_results, atol=1e-6)
+
+
 def test_logistics() -> None:
     matrix = np.array([[0, 0, 0, 0, 0, 0],
                        [1, 1, 1, 1, 1, 1],
                        [0, 0, 0, 1, 1, 1]], dtype='float64')
     same_value = 1 / (1 + np.exp(-5 * (0 - 0.8)))
+    scale = 1 / (1 - same_value)
     diff_value = 1 / (1 + np.exp(-5 * (1 - 0.8)))
-    results = ut.logistics(matrix, per='row')
+    normalized_value = (diff_value - same_value) * scale
+    results = ut.logistics(matrix, per='row', location=0.8, slope=5)
     assert np.allclose(results[0, 0], 0)
     assert np.allclose(results[1, 1], 0)
     assert np.allclose(results[2, 2], 0)
-    assert np.allclose(results[0, 1], diff_value)
-    assert np.allclose(results[1, 0], diff_value)
-    assert np.allclose(results[0, 2], (diff_value + same_value) / 2)
-    assert np.allclose(results[2, 0], (diff_value + same_value) / 2)
-    assert np.allclose(results[1, 2], (diff_value + same_value) / 2)
-    assert np.allclose(results[2, 1], (diff_value + same_value) / 2)
+    assert np.allclose(results[0, 1], normalized_value)
+    assert np.allclose(results[1, 0], normalized_value)
+    assert np.allclose(results[0, 2], normalized_value / 2)
+    assert np.allclose(results[2, 0], normalized_value / 2)
+    assert np.allclose(results[1, 2], normalized_value / 2)
+    assert np.allclose(results[2, 1], normalized_value / 2)
+
+
+def test_cross_logistics() -> None:
+    first_matrix = np.array([[0, 0, 0, 0, 0, 0],
+                             [1, 1, 1, 1, 1, 1]], dtype='float64')
+    second_matrix = np.array([[1, 1, 1, 1, 1, 1],
+                              [0, 0, 0, 1, 1, 1]], dtype='float64')
+    same_value = 1 / (1 + np.exp(-5 * (0 - 0.8)))
+    scale = 1 / (1 - same_value)
+    diff_value = 1 / (1 + np.exp(-5 * (1 - 0.8)))
+    normalized_value = (diff_value - same_value) * scale
+    results = ut.cross_logistics_rows(first_matrix, second_matrix,
+                                      location=0.8, slope=5)
+
+    assert np.allclose(results[0, 0], normalized_value)
+    assert np.allclose(results[0, 1], normalized_value / 2)
+    assert np.allclose(results[1, 1], normalized_value / 2)
+    assert np.allclose(results[1, 0], 0)
+
+
+def test_pairs_logistics() -> None:
+    first_matrix = np.array([[0, 0, 0, 0, 0, 0],
+                             [1, 1, 1, 1, 1, 1]], dtype='float64')
+    second_matrix = np.array([[1, 1, 1, 1, 1, 1],
+                              [0, 0, 0, 1, 1, 1]], dtype='float64')
+    same_value = 1 / (1 + np.exp(-5 * (0 - 0.8)))
+    scale = 1 / (1 - same_value)
+    diff_value = 1 / (1 + np.exp(-5 * (1 - 0.8)))
+    normalized_value = (diff_value - same_value) * scale
+    results = ut.pairs_logistics_rows(first_matrix, second_matrix,
+                                      location=0.8, slope=5)
+
+    assert np.allclose(results[0], normalized_value)
+    assert np.allclose(results[1], normalized_value / 2)
 
 
 def test_relayout_matrix() -> None:

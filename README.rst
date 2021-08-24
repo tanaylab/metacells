@@ -65,10 +65,10 @@ The metacells package contains extensions written in C++. The ``metacells`` dist
 pre-compiled Python wheels for both Linux and MacOS, so installing it using ``pip`` should not
 require a C++ compilation step.
 
-Note that for X86 CPUs, these pre-compiled wheels were built to use AVX2, and will not work on older
-CPUs which are limited to SSE. Also, these wheels will not make use of any newer instructions (such
-as AVX512), even if available. While these wheels may not the perfect match for the machine you are
-running on, they are expected to work well for most machines.
+Note that for X86 CPUs, these pre-compiled wheels were built to use AVX2 (Haswell/Excavator CPUs or
+newer), and will not work on older CPUs which are limited to SSE. Also, these wheels will not make
+use of any newer instructions (such as AVX512), even if available. While these wheels may not the
+perfect match for the machine you are running on, they are expected to work well for most machines.
 
 To see the native capabilities of your machine, you can ``grep flags /proc/cpuinfo | head -1`` which
 will give you a long list of supported CPU features in an arbitrary order, which may include
@@ -77,9 +77,12 @@ to test whether AVX2 is/not supported by your machine.
 
 You can avoid installing the pre-compiled wheel by running ``pip install metacells
 --install-option='--native'``. This will force ``pip`` to compile the C++ extensions locally on your
-machine, optimizing for its native capabilities, whatever these may be. However, this requires you
-to have a C++ compiler installed (either ``g++`` or ``clang``), and it will take much longer to
-complete the installation.
+machine, optimizing for its native capabilities, whatever these may be. This will take much longer
+but may give you faster results (note: the results will **not** be exactly the same as when running
+the precompiled wheel due to differences in floating-point rounding). Also, this requires you to
+have a C++ compiler which supports C++14 installed (either ``g++`` or ``clang``). Installing a C++
+compiler depends on your specific system; if you are using ``conda``, ``CONDA_BUILD=1 conda activate
+mc2`` should work.
 
 Vignettes
 =========

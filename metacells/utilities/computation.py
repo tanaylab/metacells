@@ -42,7 +42,11 @@ __all__ = [
     'sort_compressed_indices',
 
     'corrcoef',
+    'cross_corrcoef_rows',
+    'pairs_corrcoef_rows',
     'logistics',
+    'cross_logistics_rows',
+    'pairs_logistics_rows',
 
     'log_data',
 
@@ -380,7 +384,8 @@ def corrcoef(
 ) -> utt.NumpyMatrix:
     '''
     Similar to for ``numpy.corrcoef``, but also works for a sparse ``matrix``, and can be
-    ``reproducible`` regardless of the number of cores used (at the cost of some slowdown).
+    ``reproducible`` regardless of the number of cores used (at the cost of some slowdown). It only
+    works for matrices with a float or double element data type.
 
     If ``reproducible``, a slower (still parallel) but reproducible algorithm will be used.
 
@@ -398,24 +403,19 @@ def corrcoef(
 
         The result is always dense, as even for sparse data, the correlation is rarely exactly zero.
     '''
-    if not reproducible:
-        return _corrcoef_fast(matrix, per)
+    per, dense = _get_dense_for('corrcoef', matrix, per)
 
-    _, dense, compressed = utt.to_proper_matrices(matrix)
+    if not reproducible or str(dense.dtype) not in ('float', 'double', 'float32', 'float64'):
+        return _corrcoef_fast(dense, per)
 
-    if compressed is not None:
-        return _corrcoef_compressed_matrix(compressed, per)
-
-    assert dense is not None
-    return _corrcoef_dense_matrix(dense, per)
+    return _corrcoef_reproducible(dense, per)
 
 
 @utm.timed_call('.irreproducible')
 def _corrcoef_fast(
-    matrix: utt.Matrix,
-    per: Optional[str],
+    dense: utt.NumpyMatrix,
+    per: str,
 ) -> utt.NumpyMatrix:
-    per, dense = _get_dense_for('corrcoef', matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
     utm.timed_parameters(results=dense.shape[axis],
@@ -440,12 +440,11 @@ def _corrcoef_fast(
     return result
 
 
-@utm.timed_call('.dense')
-def _corrcoef_dense_matrix(
+@utm.timed_call('.reproducible')
+def _corrcoef_reproducible(
     dense: utt.NumpyMatrix,
-    per: Optional[str],
+    per: str,
 ) -> utt.NumpyMatrix:
-    per, dense = _get_dense_for('corrcoef', dense, per)
     if per == 'column':
         dense = dense.T
     utm.timed_parameters(results=dense.shape[0],
@@ -457,43 +456,108 @@ def _corrcoef_dense_matrix(
     return result
 
 
-@utm.timed_call('.compressed')
-def _corrcoef_compressed_matrix(
-    compressed: utt.CompressedMatrix,
-    per: Optional[str]
+@utm.timed_call()
+def cross_corrcoef_rows(
+    first_matrix: utt.NumpyMatrix,
+    second_matrix: utt.NumpyMatrix,
+    *,
+    reproducible: bool,  # pylint: disable=unused-argument
 ) -> utt.NumpyMatrix:
-    if per is not None:
-        assert utt.is_layout(compressed, f'{per}_major')
-        if per == 'column':
-            compressed = compressed.transpose()
+    '''
+    Similar to for ``numpy.corrcoef``, but computes the correlations between each row of the
+    ``first_matrix`` and each row of the ``second_matrix``. The result matrix contains one row per
+    row of the first matrix and one column per row of the second matrix. Both matrices must be
+    dense, in row-major layout, have the same (float or double) element data type, and contain the
+    same number of columns.
 
-    utm.timed_parameters(results=compressed.shape[0],
-                         elements=compressed.shape[1],
-                         nnz=compressed.nnz)
-    extension_name = 'correlate_compressed_%s_t_%s_t_%s_t' \
-        % (compressed.data.dtype, compressed.indices.dtype, compressed.indptr.dtype)
-    extension = getattr(xt, extension_name)
-    result = np.empty((compressed.shape[0], compressed.shape[0]),
+    If ``reproducible``, a slower (still parallel) but reproducible algorithm will be used.
+
+    Unlike ``numpy.corrcoef``, if given a row with identical values, instead of complaining about
+    division by zero, this will report a zero correlation. This makes sense for the intended usage
+    of computing similarities between cells/genes - an all-zero row has no data so we declare it to
+    be "not similar" to anything else.
+
+    .. note::
+
+        This only works for floating-point matrices.
+
+    .. todo::
+
+        Implement a fast algorithm for the non-reproducible case.
+    '''
+    first_matrix = utt.mustbe_numpy_matrix(first_matrix)
+    second_matrix = utt.mustbe_numpy_matrix(second_matrix)
+    assert utt.matrix_layout(first_matrix) == 'row_major'
+    assert utt.matrix_layout(second_matrix) == 'row_major'
+    assert first_matrix.shape[1] == second_matrix.shape[1]
+    assert first_matrix.dtype == second_matrix.dtype
+
+    extension_name = 'cross_correlate_dense_%s_t' % first_matrix.dtype
+    result = np.empty((first_matrix.shape[0], second_matrix.shape[0]),
                       dtype='float32')
     extension = getattr(xt, extension_name)
-    extension(compressed.data, compressed.indices,
-              compressed.indptr, compressed.shape[1], result)
+    extension(first_matrix, second_matrix, result)
+    return result
+
+
+@utm.timed_call()
+def pairs_corrcoef_rows(
+    first_matrix: utt.NumpyMatrix,
+    second_matrix: utt.NumpyMatrix,
+    *,
+    reproducible: bool,  # pylint: disable=unused-argument
+) -> utt.NumpyMatrix:
+    '''
+    Similar to for ``numpy.corrcoef``, but computes the correlations between each row of the
+    ``first_matrix`` and each matching row of the ``second_matrix``. Both matrices must be dense, in
+    row-major layout, have the same (float or double) element data type, and the same shape.
+
+    If ``reproducible``, a slower (still parallel) but reproducible algorithm will be used.
+
+    Unlike ``numpy.corrcoef``, if given a row with identical values, instead of complaining about
+    division by zero, this will report a zero correlation. This makes sense for the intended usage
+    of computing similarities between cells/genes - an all-zero row has no data so we declare it to
+    be "not similar" to anything else.
+
+    .. note::
+
+        This only works for floating-point matrices.
+
+    .. todo::
+
+        Implement a fast algorithm for the non-reproducible case.
+    '''
+    first_matrix = utt.mustbe_numpy_matrix(first_matrix)
+    second_matrix = utt.mustbe_numpy_matrix(second_matrix)
+    assert utt.matrix_layout(first_matrix) == 'row_major'
+    assert utt.matrix_layout(second_matrix) == 'row_major'
+    assert first_matrix.shape == second_matrix.shape
+    assert first_matrix.dtype == second_matrix.dtype
+
+    extension_name = 'pairs_correlate_dense_%s_t' % first_matrix.dtype
+    result = np.empty(first_matrix.shape[0], dtype='float32')
+    extension = getattr(xt, extension_name)
+    extension(first_matrix, second_matrix, result)
     return result
 
 
 @utm.timed_call()
 def logistics(
-    matrix: utt.Matrix,
+    matrix: utt.NumpyMatrix,
     *,
-    location: float = 0.8,
-    scale: float = 5,
+    location: float,
+    slope: float,
     per: Optional[str]
 ) -> utt.NumpyMatrix:
     '''
-    Compute a distances matrix using the logistics function.
+    Compute a matrix of distances between each pair of rows in a dense (float or double) matrix
+    using the logistics function.
 
-    This computes, for each pair of vectors, the mean of ``1/(1+exp(-scale*(abs(x-y)-location)))``
-    of each of the elements. Typically this is applied to the log of the raw data.
+    The raw value of the logistics distance between a pair of vectors ``x`` and ``y`` is the mean of
+    ``1/(1+exp(-slope*(abs(x[i]-y[i])-location)))``. This has a minimum of
+    ``1/(1+exp(slope*location))`` for identical vectors and an (asymptotic) maximum of 1. We
+    normalize this to a range between 0 and 1, to be useful as a distance measure (with a zero
+    distance between identical vectors).
 
     If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
     efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
@@ -517,10 +581,67 @@ def logistics(
     if per == 'column':
         dense = dense.T
 
-    extension_name = 'logistics_dense_matrix_%s_t' % dense.dtype
+    extension_name = 'logistics_dense_%s_t' % dense.dtype
     result = np.empty((dense.shape[0], dense.shape[0]), dtype='float32')
     extension = getattr(xt, extension_name)
-    extension(dense, result, location, scale)
+    extension(dense, result, location, slope)
+    return result
+
+
+@utm.timed_call()
+def cross_logistics_rows(
+    first_matrix: utt.NumpyMatrix,
+    second_matrix: utt.NumpyMatrix,
+    *,
+    location: float,
+    slope: float,
+) -> utt.NumpyMatrix:
+    '''
+    Similar to for :py:func:`logistics`, but computes the distances between each row of the
+    ``first_matrix`` and each row of the ``second_matrix``. The result matrix contains one row per
+    row of the first matrix and one column per row of the second matrix. Both matrices must be
+    dense, in row-major layout, have the same (float or double) element data type, and contain the
+    same number of columns.
+    '''
+    first_matrix = utt.mustbe_numpy_matrix(first_matrix)
+    second_matrix = utt.mustbe_numpy_matrix(second_matrix)
+    assert utt.matrix_layout(first_matrix) == 'row_major'
+    assert utt.matrix_layout(second_matrix) == 'row_major'
+    assert first_matrix.shape[1] == second_matrix.shape[1]
+    assert first_matrix.dtype == second_matrix.dtype
+
+    extension_name = 'cross_logistics_dense_%s_t' % first_matrix.dtype
+    result = np.empty((first_matrix.shape[0], second_matrix.shape[0]),
+                      dtype='float32')
+    extension = getattr(xt, extension_name)
+    extension(first_matrix, second_matrix, location, slope, result)
+    return result
+
+
+@utm.timed_call()
+def pairs_logistics_rows(
+    first_matrix: utt.NumpyMatrix,
+    second_matrix: utt.NumpyMatrix,
+    *,
+    location: float,
+    slope: float,
+) -> utt.NumpyVector:
+    '''
+    Similar to for :py:func:`logistics`, but computes the distances between each row of the
+    ``first_matrix`` and each matching row of the ``second_matrix``. Both matrices must be dense, in
+    row-major layout, have the same (float or double) element data type, and the same shape.
+    '''
+    first_matrix = utt.mustbe_numpy_matrix(first_matrix)
+    second_matrix = utt.mustbe_numpy_matrix(second_matrix)
+    assert utt.matrix_layout(first_matrix) == 'row_major'
+    assert utt.matrix_layout(second_matrix) == 'row_major'
+    assert first_matrix.shape == second_matrix.shape
+    assert first_matrix.dtype == second_matrix.dtype
+
+    extension_name = 'pairs_logistics_dense_%s_t' % first_matrix.dtype
+    result = np.empty(first_matrix.shape[0], dtype='float32')
+    extension = getattr(xt, extension_name)
+    extension(first_matrix, second_matrix, location, slope, result)
     return result
 
 

@@ -1,5 +1,6 @@
 /// C++ extensions to support the metacells package.";
 
+#include <immintrin.h>
 #include <iostream>
 
 #if ASSERT_LEVEL > 0
@@ -90,6 +91,24 @@ typedef float float32_t;
 typedef double float64_t;
 typedef unsigned char uint8_t;
 typedef unsigned int uint_t;
+
+/*
+#ifdef USE_AVX2
+static std::ostream&
+operator<<(std::ostream& os, const __m256d& avx2) {
+    return os << "[" << ((float64_t*)&avx2)[0] << "," << ((float64_t*)&avx2)[1] << ","
+              << ((float64_t*)&avx2)[2] << "," << ((float64_t*)&avx2)[3] << "]";
+}
+
+static std::ostream&
+operator<<(std::ostream& os, const __m256& avx2) {
+    return os << "[" << ((float32_t*)&avx2)[0] << "," << ((float32_t*)&avx2)[1] << ","
+              << ((float32_t*)&avx2)[2] << "," << ((float32_t*)&avx2)[3] << ","
+              << ((float32_t*)&avx2)[4] << "," << ((float32_t*)&avx2)[5] << ","
+              << ((float32_t*)&avx2)[6] << "," << ((float32_t*)&avx2)[7] << "]";
+}
+#endif
+*/
 
 namespace metacells {
 
@@ -1651,94 +1670,6 @@ auroc_compressed_matrix(const pybind11::array_t<D>& values_data_array,
     });
 }
 
-template<typename D>
-static float32_t
-logistics_dense_vectors(ConstArraySlice<D> left,
-                        ConstArraySlice<D> right,
-                        const float64_t location,
-                        const float64_t slope) {
-    FastAssertCompare(right.size(), ==, left.size());
-
-    const size_t size = left.size();
-
-    float64_t result = 0;
-
-    for (size_t index = 0; index < size; ++index) {
-        float64_t diff = fabs(left[index] - right[index]);
-        result += 1 / (1 + exp(slope * (location - diff)));
-    }
-
-    return float32_t(result / size);
-}
-
-template<typename D>
-static void
-logistics_dense_matrix(const pybind11::array_t<D>& values_array,
-                       pybind11::array_t<float32_t>& logistics_array,
-                       const float64_t location,
-                       const float64_t slope) {
-    ConstMatrixSlice<D> values(values_array, "values");
-    MatrixSlice<float32_t> logistics(logistics_array, "logistics");
-
-    const size_t rows_count = values.rows_count();
-
-    FastAssertCompare(logistics.columns_count(), ==, rows_count);
-    FastAssertCompare(logistics.rows_count(), ==, rows_count);
-
-    const size_t iterations_count = (rows_count * (rows_count - 1)) / 2;
-
-    for (size_t entry_index = 0; entry_index < rows_count; ++entry_index) {
-        logistics.get_row(entry_index)[entry_index] = 0;
-    }
-
-    parallel_loop(iterations_count, [&](size_t iteration_index) {
-        size_t some_index = iteration_index / (rows_count - 1);
-        size_t other_index = iteration_index % (rows_count - 1);
-        if (other_index < rows_count - 1 - some_index) {
-            some_index = rows_count - 1 - some_index;
-        } else {
-            other_index = rows_count - 2 - other_index;
-        }
-        float32_t logistic = logistics_dense_vectors(values.get_row(some_index),
-                                                     values.get_row(other_index),
-                                                     location,
-                                                     slope);
-        logistics.get_row(some_index)[other_index] = logistic;
-        logistics.get_row(other_index)[some_index] = logistic;
-    });
-}
-
-template<typename D>
-static void
-logistics_dense_matrices(const pybind11::array_t<D>& rows_values_array,
-                         const pybind11::array_t<D>& columns_values_array,
-                         pybind11::array_t<float32_t>& logistics_array,
-                         const float64_t location,
-                         const float64_t slope) {
-    ConstMatrixSlice<D> rows_values(rows_values_array, "rows_values");
-    ConstMatrixSlice<D> columns_values(columns_values_array, "columns_values");
-    MatrixSlice<float32_t> logistics(logistics_array, "logistics");
-
-    const size_t rows_count = rows_values.rows_count();
-    const size_t columns_count = columns_values.rows_count();
-
-    FastAssertCompare(logistics.rows_count(), ==, rows_count);
-    FastAssertCompare(logistics.columns_count(), ==, columns_count);
-
-    const size_t iterations_count = rows_count * columns_count;
-
-    parallel_loop(iterations_count, [&](size_t iteration_index) {
-        size_t row_index = iterations_count / columns_count;
-        size_t column_index = iterations_count % columns_count;
-
-        float32_t logistic = logistics_dense_vectors(rows_values.get_row(row_index),
-                                                     columns_values.get_row(column_index),
-                                                     location,
-                                                     slope);
-        logistics.get_row(row_index)[column_index] = logistic;
-    });
-}
-
 static float64_t
 cover_diameter(size_t points_count, float64_t area, float64_t cover_fraction) {
     float64_t point_area = area * cover_fraction / points_count;
@@ -3224,15 +3155,143 @@ score_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
     return optimizer.score(with_orphans);
 }
 
+template<typename F>
+static float64_t
+logistics_two_dense_rows(ConstArraySlice<F> first_row,
+                         ConstArraySlice<F> second_row,
+                         const float64_t location,
+                         const float64_t slope) {
+    FastAssertCompare(second_row.size(), ==, first_row.size());
+
+    const size_t size = first_row.size();
+
+    float64_t result = 0;
+
+#ifdef __INTEL_COMPILER
+#    pragma simd
+#endif
+    for (size_t index = 0; index < size; ++index) {
+        float64_t diff = fabs(first_row[index] - second_row[index]);
+        result += 1 / (1 + exp(slope * (location - diff)));
+    }
+
+    return result / size;
+}
+
+template<typename F>
+static void
+logistics_dense(const pybind11::array_t<F>& input_array,
+                pybind11::array_t<float32_t>& output_array,
+                const float64_t location,
+                const float64_t slope) {
+    ConstMatrixSlice<F> input(input_array, "input");
+    MatrixSlice<float32_t> output(output_array, "output");
+
+    const size_t rows_count = input.rows_count();
+
+    FastAssertCompare(output.columns_count(), ==, rows_count);
+    FastAssertCompare(output.rows_count(), ==, rows_count);
+
+    const size_t iterations_count = (rows_count * (rows_count - 1)) / 2;
+
+    for (size_t entry_index = 0; entry_index < rows_count; ++entry_index) {
+        output.get_row(entry_index)[entry_index] = 0;
+    }
+
+    float64_t min_dist = float32_t(1.0 / (1.0 + exp(slope * location)));
+    float64_t scale = 1.0 / (1.0 - min_dist);
+    parallel_loop(iterations_count, [&](size_t iteration_index) {
+        size_t some_index = iteration_index / (rows_count - 1);
+        size_t other_index = iteration_index % (rows_count - 1);
+        if (other_index < rows_count - 1 - some_index) {
+            some_index = rows_count - 1 - some_index;
+        } else {
+            other_index = rows_count - 2 - other_index;
+        }
+        float64_t logistic = logistics_two_dense_rows(input.get_row(some_index),
+                                                      input.get_row(other_index),
+                                                      location,
+                                                      slope);
+        logistic = (logistic - min_dist) * scale;
+        output.get_row(some_index)[other_index] = float32_t(logistic);
+        output.get_row(other_index)[some_index] = float32_t(logistic);
+    });
+}
+
+template<typename F>
+static void
+cross_logistics_dense(const pybind11::array_t<F>& first_input_array,
+                      const pybind11::array_t<F>& second_input_array,
+                      const float64_t location,
+                      const float64_t slope,
+                      pybind11::array_t<float32_t>& output_array) {
+    ConstMatrixSlice<F> first_input(first_input_array, "input");
+    ConstMatrixSlice<F> second_input(second_input_array, "input");
+    MatrixSlice<float32_t> output(output_array, "output");
+
+    const auto first_rows_count = first_input.rows_count();
+    const auto second_rows_count = second_input.rows_count();
+    FastAssertCompare(second_input.columns_count(), ==, first_input.columns_count());
+
+    FastAssertCompare(output.rows_count(), ==, first_rows_count);
+    FastAssertCompare(output.columns_count(), ==, second_rows_count);
+
+    float64_t min_dist = float32_t(1.0 / (1.0 + exp(slope * location)));
+    float64_t scale = 1.0 / (1.0 - min_dist);
+    parallel_loop(first_rows_count, [&](size_t first_row_index) {
+        auto output_row = output.get_row(first_row_index);
+        const auto first_input_row = first_input.get_row(first_row_index);
+
+        for (size_t second_row_index = 0; second_row_index < second_rows_count;
+             ++second_row_index) {
+            const float64_t logistic =
+                logistics_two_dense_rows(first_input_row,
+                                         second_input.get_row(second_row_index),
+                                         location,
+                                         slope);
+            output_row[second_row_index] = float32_t((logistic - min_dist) * scale);
+        }
+    });
+}
+
+template<typename F>
+static void
+pairs_logistics_dense(const pybind11::array_t<F>& first_input_array,
+                      const pybind11::array_t<F>& second_input_array,
+                      const float64_t location,
+                      const float64_t slope,
+                      pybind11::array_t<float32_t>& output_array) {
+    ConstMatrixSlice<F> first_input(first_input_array, "input");
+    ConstMatrixSlice<F> second_input(second_input_array, "input");
+    ArraySlice<float32_t> output(output_array, "output");
+
+    const auto rows_count = first_input.rows_count();
+    const auto columns_count = first_input.columns_count();
+
+    FastAssertCompare(second_input.rows_count(), ==, rows_count);
+    FastAssertCompare(second_input.columns_count(), ==, columns_count);
+    FastAssertCompare(output.size(), ==, rows_count);
+
+    float64_t min_dist = float32_t(1.0 / (1.0 + exp(slope * location)));
+    float64_t scale = 1.0 / (1.0 - min_dist);
+    parallel_loop(rows_count, [&](size_t row_index) {
+        const float32_t logistic = logistics_two_dense_rows(first_input.get_row(row_index),
+                                                            second_input.get_row(row_index),
+                                                            location,
+                                                            slope);
+        output[row_index] = float32_t((logistic - min_dist) * scale);
+    });
+}
+
 struct Sums {
     float64_t values;
     float64_t squared;
 };
 
-template<typename D>
+template<typename F>
 static Sums
-sum_row_values(ConstArraySlice<D> input_row) {
-    const D* input_data = input_row.begin();
+sum_row_values(ConstArraySlice<F> input_row) {
+    const F* const input_data = input_row.begin();
     const size_t columns_count = input_row.size();
     float64_t sum_values = 0;
     float64_t sum_squared = 0;
@@ -3241,28 +3300,30 @@ sum_row_values(ConstArraySlice<D> input_row) {
         sum_values += value;
         sum_squared += value * value;
     }
-    return Sums{ float64_t(sum_values), float64_t(sum_squared) };
+    return Sums{ sum_values, sum_squared };
 }
 
-template<typename D>
+template<typename F>
 static float32_t
-correlate_two_dense_rows(ConstArraySlice<D> some_values,
+correlate_two_dense_rows(ConstArraySlice<F> some_values,
                          float64_t some_sum_values,
                          float64_t some_sum_squared,
-                         ConstArraySlice<D> other_values,
+                         ConstArraySlice<F> other_values,
                          float64_t other_sum_values,
                          float64_t other_sum_squared) {
     const size_t columns_count = some_values.size();
-    const D* some_values_data = some_values.begin();
-    const D* other_values_data = other_values.begin();
-    float64_t both_sum_values = 0;
+    const F* const some_values_data = some_values.begin();
+    const F* const other_values_data = other_values.begin();
 
+    float64_t both_sum_values = 0;
+    size_t column_index = 0;
 #ifdef __INTEL_COMPILER
 #    pragma simd
 #endif
-    for (size_t column_index = 0; column_index < columns_count; ++column_index) {
-        both_sum_values +=
-            float64_t(some_values_data[column_index]) * float64_t(other_values_data[column_index]);
+    for (; column_index < columns_count; ++column_index) {
+        const float64_t some_values = float64_t(some_values_data[column_index]);
+        const float64_t other_values = float64_t(other_values_data[column_index]);
+        both_sum_values += some_values * other_values;
     }
 
     float64_t correlation = columns_count * both_sum_values - some_sum_values * other_sum_values;
@@ -3278,99 +3339,301 @@ correlate_two_dense_rows(ConstArraySlice<D> some_values,
     }
 }
 
-struct SevenCorrelations {
-    float64_t correlations[7];
+#ifdef USE_AVX2
+template<>
+float32_t
+correlate_two_dense_rows(ConstArraySlice<float64_t> some_values,
+                         float64_t some_sum_values,
+                         float64_t some_sum_squared,
+                         ConstArraySlice<float64_t> other_values,
+                         float64_t other_sum_values,
+                         float64_t other_sum_squared) {
+    const size_t columns_count = some_values.size();
+    const float64_t* const some_values_data = some_values.begin();
+    const float64_t* const other_values_data = other_values.begin();
+
+    float64_t both_sum_values = 0;
+    size_t column_index = 0;
+    size_t avx2_columns_count = (columns_count / 4) * 4;
+    __m256d both_sum_avx2 = _mm256_set_pd(0.0, 0.0, 0.0, 0.0);
+    for (; column_index < avx2_columns_count; column_index += 4) {
+        __m256d some_values_avx2 = _mm256_loadu_pd(some_values_data + column_index);
+        __m256d other_values_avx2 = _mm256_loadu_pd(other_values_data + column_index);
+        both_sum_avx2 = _mm256_fmadd_pd(some_values_avx2, other_values_avx2, both_sum_avx2);
+    }
+    both_sum_values = *(float64_t*)&both_sum_avx2[0] + *(float64_t*)&both_sum_avx2[1]
+                      + *(float64_t*)&both_sum_avx2[2] + *(float64_t*)&both_sum_avx2[3];
+#    ifdef __INTEL_COMPILER
+#        pragma simd
+#    endif
+    for (; column_index < columns_count; ++column_index) {
+        const float64_t some_values = float64_t(some_values_data[column_index]);
+        const float64_t other_values = float64_t(other_values_data[column_index]);
+        both_sum_values += some_values * other_values;
+    }
+
+    float64_t correlation = columns_count * both_sum_values - some_sum_values * other_sum_values;
+    float64_t some_factor = columns_count * some_sum_squared - some_sum_values * some_sum_values;
+    float64_t other_factor =
+        columns_count * other_sum_squared - other_sum_values * other_sum_values;
+    float64_t both_factors = sqrt(some_factor * other_factor);
+    if (both_factors != 0) {
+        correlation /= both_factors;
+        return std::max(std::min(float32_t(correlation), float32_t(1.0)), float32_t(-1.0));
+    } else {
+        return 0.0;
+    }
+}
+
+template<>
+float32_t
+correlate_two_dense_rows(ConstArraySlice<float32_t> some_values,
+                         float64_t some_sum_values,
+                         float64_t some_sum_squared,
+                         ConstArraySlice<float32_t> other_values,
+                         float64_t other_sum_values,
+                         float64_t other_sum_squared) {
+    const size_t columns_count = some_values.size();
+    const float32_t* const some_values_data = some_values.begin();
+    const float32_t* const other_values_data = other_values.begin();
+
+    size_t column_index = 0;
+    size_t avx2_columns_count = (columns_count / 8) * 8;
+    __m256 both_sum_avx2 = _mm256_set_ps(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    for (; column_index < avx2_columns_count; column_index += 8) {
+        __m256 some_values_avx2 = _mm256_loadu_ps(some_values_data + column_index);
+        __m256 other_values_avx2 = _mm256_loadu_ps(other_values_data + column_index);
+        both_sum_avx2 = _mm256_fmadd_ps(some_values_avx2, other_values_avx2, both_sum_avx2);
+    }
+    float64_t both_sum_values = *(float32_t*)&both_sum_avx2[0] + *(float32_t*)&both_sum_avx2[1]
+                                + *(float32_t*)&both_sum_avx2[2] + *(float32_t*)&both_sum_avx2[3]
+                                + *(float32_t*)&both_sum_avx2[4] + *(float32_t*)&both_sum_avx2[5]
+                                + *(float32_t*)&both_sum_avx2[6] + *(float32_t*)&both_sum_avx2[7];
+#    ifdef __INTEL_COMPILER
+#        pragma simd
+#    endif
+    for (; column_index < columns_count; ++column_index) {
+        const float32_t some_values = some_values_data[column_index];
+        const float32_t other_values = other_values_data[column_index];
+        both_sum_values += some_values * other_values;
+    }
+
+    float64_t correlation = columns_count * both_sum_values - some_sum_values * other_sum_values;
+    float64_t some_factor = columns_count * some_sum_squared - some_sum_values * some_sum_values;
+    float64_t other_factor =
+        columns_count * other_sum_squared - other_sum_values * other_sum_values;
+    float64_t both_factors = sqrt(some_factor * other_factor);
+    if (both_factors != 0) {
+        correlation /= both_factors;
+        return std::max(std::min(float32_t(correlation), float32_t(1.0)), float32_t(-1.0));
+    } else {
+        return 0.0;
+    }
+}
+#endif
+
+#define MANY_ROWS 8
+
+struct ManyCorrelations {
+    float64_t correlations[MANY_ROWS];
 };
 
-template<typename D>
-static SevenCorrelations
-correlate_seven_dense_rows(ConstMatrixSlice<D> values,
-                           const std::vector<float64_t>& row_sum_values,
-                           const std::vector<float64_t>& row_sum_squared,
-                           const size_t some_index,
-                           const size_t other_begin_index) {
+template<typename F>
+static ManyCorrelations
+correlate_many_dense_rows(const F* const some_values_data,
+                          ConstMatrixSlice<F> values,
+                          const float64_t some_sum_values,
+                          const float64_t some_sum_squared,
+                          const std::vector<float64_t>& row_sum_values,
+                          const std::vector<float64_t>& row_sum_squared,
+                          const size_t other_begin_index) {
     const size_t columns_count = values.columns_count();
 
-    const D* const some_values_data = values.get_row(some_index).begin();
-    const D* const other_0_values_data = values.get_row(other_begin_index + 0).begin();
-    const D* const other_1_values_data = values.get_row(other_begin_index + 1).begin();
-    const D* const other_2_values_data = values.get_row(other_begin_index + 2).begin();
-    const D* const other_3_values_data = values.get_row(other_begin_index + 3).begin();
-    const D* const other_4_values_data = values.get_row(other_begin_index + 4).begin();
-    const D* const other_5_values_data = values.get_row(other_begin_index + 5).begin();
-    const D* const other_6_values_data = values.get_row(other_begin_index + 6).begin();
-
-    float64_t both_0_sum_values = 0;
-    float64_t both_1_sum_values = 0;
-    float64_t both_2_sum_values = 0;
-    float64_t both_3_sum_values = 0;
-    float64_t both_4_sum_values = 0;
-    float64_t both_5_sum_values = 0;
-    float64_t both_6_sum_values = 0;
-
-    // __asm__("int3");
-
+    const F* other_values_data[MANY_ROWS];
+    F both_sum_values[MANY_ROWS];
+    for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
+        other_values_data[which_other] = values.get_row(other_begin_index + which_other).begin();
+        both_sum_values[which_other] = 0;
+    }
 #ifdef __INTEL_COMPILER
 #    pragma simd
 #endif
     for (size_t column_index = 0; column_index < columns_count; ++column_index) {
-        const float64_t some_value = float64_t(some_values_data[column_index]);
-        both_0_sum_values += some_value * float64_t(other_0_values_data[column_index]);
-        both_1_sum_values += some_value * float64_t(other_1_values_data[column_index]);
-        both_2_sum_values += some_value * float64_t(other_2_values_data[column_index]);
-        both_3_sum_values += some_value * float64_t(other_3_values_data[column_index]);
-        both_4_sum_values += some_value * float64_t(other_4_values_data[column_index]);
-        both_5_sum_values += some_value * float64_t(other_5_values_data[column_index]);
-        both_6_sum_values += some_value * float64_t(other_6_values_data[column_index]);
+        const F some_value = some_values_data[column_index];
+        for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
+            both_sum_values[which_other] +=
+                some_value * other_values_data[which_other][column_index];
+        }
     }
 
-    const float64_t some_sum_values = row_sum_values[some_index];
-    const float64_t other_0_sum_values = row_sum_values[other_begin_index + 0];
-    const float64_t other_1_sum_values = row_sum_values[other_begin_index + 1];
-    const float64_t other_2_sum_values = row_sum_values[other_begin_index + 2];
-    const float64_t other_3_sum_values = row_sum_values[other_begin_index + 3];
-    const float64_t other_4_sum_values = row_sum_values[other_begin_index + 4];
-    const float64_t other_5_sum_values = row_sum_values[other_begin_index + 5];
-    const float64_t other_6_sum_values = row_sum_values[other_begin_index + 6];
-
-    const float64_t some_sum_squared = row_sum_squared[some_index];
-    const float64_t other_0_sum_squared = row_sum_squared[other_begin_index + 0];
-    const float64_t other_1_sum_squared = row_sum_squared[other_begin_index + 1];
-    const float64_t other_2_sum_squared = row_sum_squared[other_begin_index + 2];
-    const float64_t other_3_sum_squared = row_sum_squared[other_begin_index + 3];
-    const float64_t other_4_sum_squared = row_sum_squared[other_begin_index + 4];
-    const float64_t other_5_sum_squared = row_sum_squared[other_begin_index + 5];
-    const float64_t other_6_sum_squared = row_sum_squared[other_begin_index + 6];
-
-    SevenCorrelations results;
-#define COLLECT_RESULTS(WHICH_OTHER)                                                              \
-    {                                                                                             \
-        results.correlations[WHICH_OTHER] = columns_count * both_##WHICH_OTHER##_sum_values       \
-                                            - some_sum_values * other_##WHICH_OTHER##_sum_values; \
-        const float64_t some_factor =                                                             \
-            columns_count * some_sum_squared - some_sum_values * some_sum_values;                 \
-        const float64_t other_factor =                                                            \
-            columns_count * other_##WHICH_OTHER##_sum_squared                                     \
-            - other_##WHICH_OTHER##_sum_values * other_##WHICH_OTHER##_sum_values;                \
-        const float64_t both_factors = sqrt(some_factor * other_factor);                          \
-        if (both_factors != 0) {                                                                  \
-            results.correlations[WHICH_OTHER] /= both_factors;                                    \
-            results.correlations[WHICH_OTHER] =                                                   \
-                std::max(std::min(results.correlations[WHICH_OTHER], 1.0), -1.0);                 \
-        } else {                                                                                  \
-            results.correlations[WHICH_OTHER] = 0.0;                                              \
-        }                                                                                         \
+    ManyCorrelations results;
+    for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
+        const float64_t other_sum_values = row_sum_values[other_begin_index + which_other];
+        const float64_t other_sum_squared = row_sum_squared[other_begin_index + which_other];
+        results.correlations[which_other] = columns_count * float64_t(both_sum_values[which_other])
+                                            - some_sum_values * other_sum_values;
+        const float64_t some_factor =
+            columns_count * some_sum_squared - some_sum_values * some_sum_values;
+        const float64_t other_factor =
+            columns_count * other_sum_squared - other_sum_values * other_sum_values;
+        const float64_t both_factors = sqrt(some_factor * other_factor);
+        if (both_factors != 0) {
+            results.correlations[which_other] /= both_factors;
+            results.correlations[which_other] =
+                std::max(std::min(results.correlations[which_other], 1.0), -1.0);
+        } else {
+            results.correlations[which_other] = 0.0;
+        }
     }
-    COLLECT_RESULTS(0)
-    COLLECT_RESULTS(1)
-    COLLECT_RESULTS(2)
-    COLLECT_RESULTS(3)
-    COLLECT_RESULTS(4)
-    COLLECT_RESULTS(5)
-    COLLECT_RESULTS(6)
 
     return results;
 }
+
+#ifdef USE_AVX2
+template<>
+ManyCorrelations
+correlate_many_dense_rows(const float64_t* const some_values_data,
+                          ConstMatrixSlice<float64_t> values,
+                          const float64_t some_sum_values,
+                          const float64_t some_sum_squared,
+                          const std::vector<float64_t>& row_sum_values,
+                          const std::vector<float64_t>& row_sum_squared,
+                          const size_t other_begin_index) {
+    const size_t columns_count = values.columns_count();
+
+    const float64_t* other_values_data[MANY_ROWS];
+    __m256d both_sum_avx2[MANY_ROWS];
+    for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
+        other_values_data[which_other] = values.get_row(other_begin_index + which_other).begin();
+        both_sum_avx2[which_other] = _mm256_set_pd(0.0, 0.0, 0.0, 0.0);
+    }
+
+    size_t column_index = 0;
+    size_t avx2_columns_count = (columns_count / 4) * 4;
+    for (; column_index < avx2_columns_count; column_index += 4) {
+        __m256d some_values_avx2 = _mm256_loadu_pd(some_values_data + column_index);
+        for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
+            __m256d other_values_avx2 =
+                _mm256_loadu_pd(other_values_data[which_other] + column_index);
+            both_sum_avx2[which_other] =
+                _mm256_fmadd_pd(some_values_avx2, other_values_avx2, both_sum_avx2[which_other]);
+        }
+    }
+    float64_t both_sum_values[MANY_ROWS];
+    for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
+        both_sum_values[which_other] = *(float64_t*)&both_sum_avx2[which_other][0]
+                                       + *(float64_t*)&both_sum_avx2[which_other][1]
+                                       + *(float64_t*)&both_sum_avx2[which_other][2]
+                                       + *(float64_t*)&both_sum_avx2[which_other][3];
+    }
+#    ifdef __INTEL_COMPILER
+#        pragma simd
+#    endif
+    for (; column_index < columns_count; ++column_index) {
+        const float64_t some_value = some_values_data[column_index];
+        for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
+            both_sum_values[which_other] +=
+                some_value * other_values_data[which_other][column_index];
+        }
+    }
+
+    ManyCorrelations results;
+    for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
+        const float64_t other_sum_values = row_sum_values[other_begin_index + which_other];
+        const float64_t other_sum_squared = row_sum_squared[other_begin_index + which_other];
+        results.correlations[which_other] = columns_count * float64_t(both_sum_values[which_other])
+                                            - some_sum_values * other_sum_values;
+        const float64_t some_factor =
+            columns_count * some_sum_squared - some_sum_values * some_sum_values;
+        const float64_t other_factor =
+            columns_count * other_sum_squared - other_sum_values * other_sum_values;
+        const float64_t both_factors = sqrt(some_factor * other_factor);
+        if (both_factors != 0) {
+            results.correlations[which_other] /= both_factors;
+            results.correlations[which_other] =
+                std::max(std::min(results.correlations[which_other], 1.0), -1.0);
+        } else {
+            results.correlations[which_other] = 0.0;
+        }
+    }
+
+    return results;
+}
+
+template<>
+ManyCorrelations
+correlate_many_dense_rows(const float32_t* const some_values_data,
+                          ConstMatrixSlice<float32_t> values,
+                          const float64_t some_sum_values,
+                          const float64_t some_sum_squared,
+                          const std::vector<float64_t>& row_sum_values,
+                          const std::vector<float64_t>& row_sum_squared,
+                          const size_t other_begin_index) {
+    const size_t columns_count = values.columns_count();
+
+    const float32_t* other_values_data[MANY_ROWS];
+    __m256 both_sum_avx2[MANY_ROWS];
+    for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
+        other_values_data[which_other] = values.get_row(other_begin_index + which_other).begin();
+        both_sum_avx2[which_other] = _mm256_set_ps(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0);
+    }
+
+    size_t column_index = 0;
+    size_t avx2_columns_count = (columns_count / 8) * 8;
+    for (; column_index < avx2_columns_count; column_index += 8) {
+        __m256 some_values_avx2 = _mm256_loadu_ps(some_values_data + column_index);
+        for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
+            __m256 other_values_avx2 =
+                _mm256_loadu_ps(other_values_data[which_other] + column_index);
+            both_sum_avx2[which_other] =
+                _mm256_fmadd_ps(some_values_avx2, other_values_avx2, both_sum_avx2[which_other]);
+        }
+    }
+    float64_t both_sum_values[MANY_ROWS];
+    for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
+        both_sum_values[which_other] = *(float32_t*)&both_sum_avx2[which_other][0]
+                                       + *(float32_t*)&both_sum_avx2[which_other][1]
+                                       + *(float32_t*)&both_sum_avx2[which_other][2]
+                                       + *(float32_t*)&both_sum_avx2[which_other][3]
+                                       + *(float32_t*)&both_sum_avx2[which_other][4]
+                                       + *(float32_t*)&both_sum_avx2[which_other][5]
+                                       + *(float32_t*)&both_sum_avx2[which_other][6]
+                                       + *(float32_t*)&both_sum_avx2[which_other][7];
+    }
+#    ifdef __INTEL_COMPILER
+#        pragma simd
+#    endif
+    for (; column_index < columns_count; ++column_index) {
+        const float32_t some_value = some_values_data[column_index];
+        for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
+            both_sum_values[which_other] +=
+                some_value * other_values_data[which_other][column_index];
+        }
+    }
+
+    ManyCorrelations results;
+    for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
+        const float64_t other_sum_values = row_sum_values[other_begin_index + which_other];
+        const float64_t other_sum_squared = row_sum_squared[other_begin_index + which_other];
+        results.correlations[which_other] = columns_count * float64_t(both_sum_values[which_other])
+                                            - some_sum_values * other_sum_values;
+        const float64_t some_factor =
+            columns_count * some_sum_squared - some_sum_values * some_sum_values;
+        const float64_t other_factor =
+            columns_count * other_sum_squared - other_sum_values * other_sum_values;
+        const float64_t both_factors = sqrt(some_factor * other_factor);
+        if (both_factors != 0) {
+            results.correlations[which_other] /= both_factors;
+            results.correlations[which_other] =
+                std::max(std::min(results.correlations[which_other], 1.0), -1.0);
+        } else {
+            results.correlations[which_other] = 0.0;
+        }
+    }
+
+    return results;
+}
+#endif
 
 static size_t
 unrolled_iterations_count(const size_t rows_count, const size_t unroll_size) {
@@ -3383,14 +3646,14 @@ unrolled_iterations_count(const size_t rows_count, const size_t unroll_size) {
     return iterations_count;
 }
 
-template<typename D>
+template<typename F>
 static void
-correlate_dense(const pybind11::array_t<D>& input_array,
+correlate_dense(const pybind11::array_t<F>& input_array,
                 pybind11::array_t<float32_t>& output_array) {
-    ConstMatrixSlice<D> input(input_array, "input");
+    ConstMatrixSlice<F> input(input_array, "input");
     MatrixSlice<float32_t> output(output_array, "output");
 
-    auto rows_count = input.rows_count();
+    const auto rows_count = input.rows_count();
 
     FastAssertCompare(output.rows_count(), ==, input.rows_count());
     FastAssertCompare(output.columns_count(), ==, input.rows_count());
@@ -3402,7 +3665,7 @@ correlate_dense(const pybind11::array_t<D>& input_array,
     auto row_sum_squared = row_sum_squared_raii.vector(rows_count);
 
     parallel_loop(rows_count, [&](size_t row_index) {
-        auto sums = sum_row_values(input.get_row(row_index));
+        const auto sums = sum_row_values(input.get_row(row_index));
         row_sum_values[row_index] = sums.values;
         row_sum_squared[row_index] = sums.squared;
     });
@@ -3411,7 +3674,7 @@ correlate_dense(const pybind11::array_t<D>& input_array,
         output.get_row(entry_index)[entry_index] = 1.0;
     }
 
-    const size_t unroll_size = 7;
+    const size_t unroll_size = MANY_ROWS;
     const size_t iterations_count = unrolled_iterations_count(rows_count, unroll_size);
 
     parallel_loop(iterations_count, [&](size_t iteration_index) {
@@ -3439,13 +3702,16 @@ correlate_dense(const pybind11::array_t<D>& input_array,
         const size_t other_begin_index = extra_iterations * unroll_size;
         const size_t other_end_index = std::min(other_begin_index + unroll_size, some_index);
 
-        if (other_begin_index + 7 == other_end_index) {
-            const SevenCorrelations results = correlate_seven_dense_rows(input,
-                                                                         row_sum_values,
-                                                                         row_sum_squared,
-                                                                         some_index,
-                                                                         other_begin_index);
-            for (int which_other = 0; which_other < 7; ++which_other) {
+        if (other_begin_index + MANY_ROWS == other_end_index) {
+            const ManyCorrelations results =
+                correlate_many_dense_rows(input.get_row(some_index).begin(),
+                                          input,
+                                          row_sum_values[some_index],
+                                          row_sum_squared[some_index],
+                                          row_sum_values,
+                                          row_sum_squared,
+                                          other_begin_index);
+            for (int which_other = 0; which_other < MANY_ROWS; ++which_other) {
                 const size_t other_index = other_begin_index + which_other;
                 output.get_row(some_index)[other_index] = results.correlations[which_other];
                 output.get_row(other_index)[some_index] = results.correlations[which_other];
@@ -3466,101 +3732,98 @@ correlate_dense(const pybind11::array_t<D>& input_array,
     });
 }
 
-template<typename D, typename I>
-static float32_t
-correlate_compressed_rows(const size_t columns_count,
-                          ConstArraySlice<I> some_indices,
-                          ConstArraySlice<D> some_values,
-                          float64_t some_sum_values,
-                          float64_t some_sum_squared,
-                          ConstArraySlice<I> other_indices,
-                          ConstArraySlice<D> other_values,
-                          float64_t other_sum_values,
-                          float64_t other_sum_squared) {
-    float64_t both_sum_values = 0;
-    const size_t some_count = some_indices.size();
-    const size_t other_count = other_indices.size();
-    size_t some_location = 0;
-    size_t other_location = 0;
-    while (some_location < some_count && other_location < other_count) {
-        auto some_index = some_indices[some_location];
-        auto other_index = other_indices[other_location];
-        float64_t some_value = float64_t(some_values[some_location]);
-        float64_t other_value = float64_t(other_values[other_location]);
-        both_sum_values += some_value * other_value * (some_index == other_index);
-        some_location += some_index <= other_index;
-        other_location += other_index <= some_index;
-    }
-
-    float64_t correlation = columns_count * both_sum_values - some_sum_values * other_sum_values;
-    float64_t some_factor = columns_count * some_sum_squared - some_sum_values * some_sum_values;
-    float64_t other_factor =
-        columns_count * other_sum_squared - other_sum_values * other_sum_values;
-    float64_t both_factors = sqrt(some_factor * other_factor);
-    if (both_factors != 0) {
-        correlation /= both_factors;
-    } else {
-        correlation = 0;
-    }
-    return std::max(std::min(float32_t(correlation), float32_t(1.0)), float32_t(-1.0));
-}
-
-template<typename D, typename I, typename P>
+template<typename F>
 static void
-correlate_compressed(const pybind11::array_t<D>& input_data_array,
-                     const pybind11::array_t<I>& input_indices_array,
-                     const pybind11::array_t<P>& input_indptr_array,
-                     size_t columns_count,
-                     pybind11::array_t<float32_t>& output_array) {
-    ConstCompressedMatrix<D, I, P> input(ConstArraySlice<D>(input_data_array, "input_data"),
-                                         ConstArraySlice<I>(input_indices_array, "input_indices"),
-                                         ConstArraySlice<P>(input_indptr_array, "input_indptr"),
-                                         columns_count,
-                                         "input");
+cross_correlate_dense(const pybind11::array_t<F>& first_input_array,
+                      const pybind11::array_t<F>& second_input_array,
+                      pybind11::array_t<float32_t>& output_array) {
+    ConstMatrixSlice<F> first_input(first_input_array, "input");
+    ConstMatrixSlice<F> second_input(second_input_array, "input");
     MatrixSlice<float32_t> output(output_array, "output");
 
-    auto rows_count = input.bands_count();
+    const auto first_rows_count = first_input.rows_count();
+    const auto second_rows_count = second_input.rows_count();
+    FastAssertCompare(second_input.columns_count(), ==, first_input.columns_count());
 
-    FastAssertCompare(output.rows_count(), ==, input.bands_count());
-    FastAssertCompare(output.columns_count(), ==, input.bands_count());
+    FastAssertCompare(output.rows_count(), ==, first_rows_count);
+    FastAssertCompare(output.columns_count(), ==, second_rows_count);
 
-    TmpVectorFloat64 row_sum_values_raii;
-    auto row_sum_values = row_sum_values_raii.vector(rows_count);
+    TmpVectorFloat64 second_row_sum_values_raii;
+    auto second_row_sum_values = second_row_sum_values_raii.vector(second_rows_count);
 
-    TmpVectorFloat64 row_sum_squared_raii;
-    auto row_sum_squared = row_sum_squared_raii.vector(rows_count);
+    TmpVectorFloat64 second_row_sum_squared_raii;
+    auto second_row_sum_squared = second_row_sum_squared_raii.vector(second_rows_count);
 
-    parallel_loop(rows_count, [&](size_t row_index) {
-        const auto sums = sum_row_values(input.get_band_data(row_index));
-        row_sum_values[row_index] = sums.values;
-        row_sum_squared[row_index] = sums.squared;
+    parallel_loop(second_rows_count, [&](size_t second_row_index) {
+        const auto sums = sum_row_values(second_input.get_row(second_row_index));
+        second_row_sum_values[second_row_index] = sums.values;
+        second_row_sum_squared[second_row_index] = sums.squared;
     });
 
-    const size_t iterations_count = (rows_count * (rows_count - 1)) / 2;
+    parallel_loop(first_rows_count, [&](size_t first_row_index) {
+        auto output_row = output.get_row(first_row_index);
+        const auto first_input_row = first_input.get_row(first_row_index);
+        const auto sums = sum_row_values(first_input_row);
+        const float64_t first_row_sum_values = sums.values;
+        const float64_t first_row_sum_squared = sums.squared;
 
-    for (size_t entry_index = 0; entry_index < rows_count; ++entry_index) {
-        output.get_row(entry_index)[entry_index] = 1.0;
-    }
-
-    parallel_loop(iterations_count, [&](size_t iteration_index) {
-        size_t some_index = iteration_index / (rows_count - 1);
-        size_t other_index = iteration_index % (rows_count - 1);
-        if (other_index < rows_count - 1 - some_index) {
-            some_index = rows_count - 1 - some_index;
-        } else {
-            other_index = rows_count - 2 - other_index;
+        size_t second_row_index = 0;
+        while (second_row_index < second_rows_count) {
+            if (second_row_index + MANY_ROWS <= second_rows_count) {
+                const ManyCorrelations results = correlate_many_dense_rows(first_input_row.begin(),
+                                                                           second_input,
+                                                                           first_row_sum_values,
+                                                                           first_row_sum_squared,
+                                                                           second_row_sum_values,
+                                                                           second_row_sum_squared,
+                                                                           second_row_index);
+                for (int which_other = 0; which_other < MANY_ROWS; ++which_other) {
+                    output_row[second_row_index] = results.correlations[which_other];
+                    ++second_row_index;
+                }
+            } else {
+                output_row[second_row_index] =
+                    correlate_two_dense_rows(first_input_row,
+                                             first_row_sum_values,
+                                             first_row_sum_squared,
+                                             second_input.get_row(second_row_index),
+                                             second_row_sum_values[second_row_index],
+                                             second_row_sum_squared[second_row_index]);
+                ++second_row_index;
+            }
         }
-        const float32_t correlation = correlate_compressed_rows(columns_count,
-                                                                input.get_band_indices(some_index),
-                                                                input.get_band_data(some_index),
-                                                                row_sum_values[some_index],
-                                                                row_sum_squared[some_index],
-                                                                input.get_band_indices(other_index),
-                                                                input.get_band_data(other_index),
-                                                                row_sum_values[other_index],
-                                                                row_sum_squared[other_index]);
-        output.get_row(some_index)[other_index] = correlation;
-        output.get_row(other_index)[some_index] = correlation;
+    });
+}
+
+template<typename F>
+static void
+pairs_correlate_dense(const pybind11::array_t<F>& first_input_array,
+                      const pybind11::array_t<F>& second_input_array,
+                      pybind11::array_t<float32_t>& output_array) {
+    ConstMatrixSlice<F> first_input(first_input_array, "input");
+    ConstMatrixSlice<F> second_input(second_input_array, "input");
+    ArraySlice<float32_t> output(output_array, "output");
+
+    const auto rows_count = first_input.rows_count();
+    const auto columns_count = first_input.columns_count();
+
+    FastAssertCompare(second_input.rows_count(), ==, rows_count);
+    FastAssertCompare(second_input.columns_count(), ==, columns_count);
+    FastAssertCompare(output.size(), ==, rows_count);
+
+    parallel_loop(rows_count, [&](size_t row_index) {
+        const auto first_input_row = first_input.get_row(row_index);
+        const auto second_input_row = second_input.get_row(row_index);
+
+        const auto first_sums = sum_row_values(first_input_row);
+        const auto second_sums = sum_row_values(second_input_row);
+
+        output[row_index] = correlate_two_dense_rows(first_input_row,
+                                                     first_sums.values,
+                                                     first_sums.squared,
+                                                     second_input_row,
+                                                     second_sums.values,
+                                                     second_sums.squared);
     });
 }
 
@@ -3603,18 +3866,9 @@ PYBIND11_MODULE(extensions, module) {
     module.def("auroc_dense_matrix_" #D,                                                          \
                &metacells::auroc_dense_matrix<D>,                                                 \
                "AUROC for dense matrix.");                                                        \
-    module.def("logistics_dense_matrix_" #D,                                                      \
-               &metacells::logistics_dense_matrix<D>,                                             \
-               "Logistics distances for dense matrix.");                                          \
-    module.def("logistics_dense_matrices_" #D,                                                    \
-               &metacells::logistics_dense_matrices<D>,                                           \
-               "Logistics distances for dense matrices.");                                        \
     module.def("cover_coordinates_" #D,                                                           \
                &metacells::cover_coordinates<D>,                                                  \
-               "Move points to achieve plot area coverage.");                                     \
-    module.def("correlate_dense_" #D,                                                             \
-               &metacells::correlate_dense<D>,                                                    \
-               "Correlate rows of a dense matrix.");
+               "Move points to achieve plot area coverage.");
 
     REGISTER_D(int8_t)
     REGISTER_D(int16_t)
@@ -3626,6 +3880,29 @@ PYBIND11_MODULE(extensions, module) {
     REGISTER_D(uint64_t)
     REGISTER_D(float32_t)
     REGISTER_D(float64_t)
+
+#define REGISTER_F(F)                                      \
+    module.def("logistics_dense_" #F,                      \
+               &metacells::logistics_dense<F>,             \
+               "Correlate rows of dense matrices.");       \
+    module.def("cross_logistics_dense_" #F,                \
+               &metacells::cross_logistics_dense<F>,       \
+               "Cross-logistics rows of dense matrices."); \
+    module.def("pairs_logistics_dense_" #F,                \
+               &metacells::pairs_logistics_dense<F>,       \
+               "Pairs-logistics rows of dense matrices."); \
+    module.def("correlate_dense_" #F,                      \
+               &metacells::correlate_dense<F>,             \
+               "Correlate rows of dense matrices.");       \
+    module.def("cross_correlate_dense_" #F,                \
+               &metacells::cross_correlate_dense<F>,       \
+               "Cross-correlate rows of dense matrices."); \
+    module.def("pairs_correlate_dense_" #F,                \
+               &metacells::pairs_correlate_dense<F>,       \
+               "Pairs-correlate rows of dense matrices.");
+
+    REGISTER_F(float32_t)
+    REGISTER_F(float64_t)
 
 #define REGISTER_D_O(D, O)                          \
     module.def("downsample_array_" #D "_" #O,       \
@@ -3711,10 +3988,7 @@ PYBIND11_MODULE(extensions, module) {
                "Fold factors of compressed data.");          \
     module.def("auroc_compressed_matrix_" #D "_" #I "_" #P,  \
                &metacells::auroc_compressed_matrix<D, I, P>, \
-               "AUROC for compressed matrix.");              \
-    module.def("correlate_compressed_" #D "_" #I "_" #P,     \
-               &metacells::correlate_compressed<D, I, P>,    \
-               "Correlate rows of a compressed matrix.");
+               "AUROC for compressed matrix.");
 
 #define REGISTER_DS_I_P(I, P)       \
     REGISTER_D_I_P(int8_t, I, P)    \

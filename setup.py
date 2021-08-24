@@ -84,7 +84,8 @@ with open('metacells/should_check_avx2.py', 'w') as file:
         COMPILE_ARGS += ['-march=native', '-mtune=native']
         file.write("SHOULD_CHECK_AVX2 = False\n")
     elif platform.processor() == 'x86_64':
-        COMPILE_ARGS += ['-mavx2']
+        COMPILE_ARGS += ['-march=haswell', '-mtune=broadwell']
+        DEFINE_MACROS.append(('USE_AVX2', 1))
         file.write("SHOULD_CHECK_AVX2 = True\n")
     else:
         file.write("SHOULD_CHECK_AVX2 = False\n")
