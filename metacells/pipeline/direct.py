@@ -31,9 +31,9 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     feature_downsample_min_samples: int = pr.feature_downsample_min_samples,
     feature_downsample_min_cell_quantile: float = pr.feature_downsample_min_cell_quantile,
     feature_downsample_max_cell_quantile: float = pr.feature_downsample_max_cell_quantile,
-    feature_min_gene_total: int = pr.feature_min_gene_total,
-    feature_min_gene_top3: int = pr.feature_min_gene_top3,
-    feature_min_gene_relative_variance: float = pr.feature_min_gene_relative_variance,
+    feature_min_gene_total: Optional[int] = pr.feature_min_gene_total,
+    feature_min_gene_top3: Optional[int] = pr.feature_min_gene_top3,
+    feature_min_gene_relative_variance: Optional[float] = pr.feature_min_gene_relative_variance,
     forbidden_gene_names: Optional[Collection[str]] = None,
     forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
@@ -176,6 +176,11 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        similarity between each pair of cells, using the
        ``cells_similarity_method`` (default: {cells_similarity_method}).
 
+    5. Invoke :py:func:`metacells.pipeline.collect.compute_effective_cell_sizes` using
+       ``max_cell_size`` (default: {max_cell_size}), ``max_cell_size_factor`` (default:
+       {max_cell_size_factor}) and ``cell_sizes`` (default: {cell_sizes}) to get the effective cell
+       sizes to use.
+
     5. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a
        K-Nearest-Neighbors graph, using the
        ``knn_balanced_ranks_factor`` (default: {knn_balanced_ranks_factor}),
@@ -201,8 +206,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        ``random_seed`` (default: {random_seed})
        to make this replicable. This tries to build metacells of the
        ``target_metacell_size`` (default: {target_metacell_size})
-       using the
-       ``cell_sizes`` (default: {cell_sizes}).
+       using the effective cell sizes.
 
     7. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
        :py:func:`metacells.tools.deviants.find_deviant_cells` to remove deviants from the candidate
@@ -216,8 +220,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        :py:func:`metacells.tools.dissolve.dissolve_metacells` to dissolve small unconvincing
        metacells, using the same
        ``target_metacell_size`` (default: {target_metacell_size}),
-       and
-       ``cell_sizes`` (default: {cell_sizes}),
+       and the effective cell sizes
        and the
        ``dissolve_min_robust_size_factor`` (default: {dissolve_min_robust_size_factor}),
        ``dissolve_min_convincing_size_factor`` (default: {dissolve_min_convincing_size_factor}),

@@ -465,7 +465,7 @@ feature_downsample_max_cell_quantile: float = downsample_max_cell_quantile
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-feature_min_gene_relative_variance: float = 0.1
+feature_min_gene_relative_variance: Optional[float] = 0.1
 
 #: The minimal number of downsampled UMIs of a gene to be considered a "feature". See
 #: :py:func:`metacells.tools.high.find_high_total_genes`,
@@ -474,7 +474,7 @@ feature_min_gene_relative_variance: float = 0.1
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-feature_min_gene_total: int = 50
+feature_min_gene_total: Optional[int] = 50
 
 #: The minimal number of the top-3rd downsampled UMIs of a gene to be considered a "feature". See
 #: :py:func:`metacells.tools.high.find_high_topN_genes`,
@@ -483,7 +483,7 @@ feature_min_gene_total: int = 50
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-feature_min_gene_top3: int = 4
+feature_min_gene_top3: Optional[int] = 4
 
 #: Whether to compute cell-cell similarity using the log (base 2) of the data. See
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
@@ -520,6 +520,20 @@ groups_similarity_log_data: bool = True
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 groups_similarity_method: str = similarity_method
+
+#: Whether to compute group self-similarity using the log (base 2) of the data. See
+#: :py:func:`metacells.pipeline.consistency.compute_groups_self_consistency`.
+self_similarity_log_data: bool = True
+
+#: The normalization factor to use after computing the fractions of the data for
+#: computing group self similarity. See
+#: :py:func:`metacells.pipeline.consistency.compute_groups_self_consistency`.
+self_similarity_value_normalization: float = 1e-5
+
+#: The method to use to compute group self-consistency. See
+#: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
+#: :py:func:`metacells.pipeline.consistency.compute_groups_self_consistency`.
+self_similarity_method: str = 'logistics'
 
 #: The target K for building the K-Nearest-Neighbors graph. See
 #: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
