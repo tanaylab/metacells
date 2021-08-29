@@ -9,7 +9,7 @@ General Tools
 .. automodule:: metacells.tools.apply
     :members:
 
-.. automodule:: metacells.tools.project
+.. automodule:: metacells.tools.convey
     :members:
 
 Filtering the Data

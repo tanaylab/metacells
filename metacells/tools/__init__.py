@@ -14,6 +14,7 @@ All the functions included here are exported under ``metacells.tl``.
 
 from .apply import *
 from .candidates import *
+from .convey import *
 from .deviants import *
 from .dissolve import *
 from .distinct import *
@@ -26,7 +27,6 @@ from .layout import *
 from .mask import *
 from .named import *
 from .noisy_lonely import *
-from .project import *
 from .properly_sampled import *
 from .quality import *
 from .rare import *
