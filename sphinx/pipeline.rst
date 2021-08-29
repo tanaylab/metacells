@@ -24,3 +24,6 @@ Pipeline
 .. automodule:: metacells.pipeline.umap
     :members:
 
+.. automodule:: metacells.pipeline.consistency
+    :members:
+

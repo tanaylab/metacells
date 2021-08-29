@@ -33,7 +33,7 @@ def compute_obs_obs_similarity(
     Compute a measure of the similarity between the observations (cells) of ``what`` (default: {what}).
 
     If ``reproducible`` (default: {reproducible}) is ``True``, a slower (still parallel) but
-    reproducible algorithm will be used to compute pearson correlations.
+    reproducible algorithm will be used to compute Pearson correlations.
 
     The ``method`` (default: {method}) can be one of:
     * ``pearson`` for computing Pearson correlation.

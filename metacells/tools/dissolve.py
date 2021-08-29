@@ -69,7 +69,7 @@ def dissolve_metacells(
        each has a size of one. These parameters are typically identical to these passed to
        :py:func:`metacells.tools.candidates.compute_candidate_metacells`.
 
-    4. If ``min_robust_size_factor` (default: {min_robust_size_factor}) is specified, then any
+    4. If ``min_robust_size_factor`` (default: {min_robust_size_factor}) is specified, then any
        metacell whose total size is at least ``target_metacell_size * min_robust_size_factor`` is
        preserved.
 
