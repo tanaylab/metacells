@@ -1151,6 +1151,7 @@ shuffle_compressed(pybind11::array_t<D>& data_array,
                    pybind11::array_t<P>& indptr_array,
                    const size_t elements_count,
                    const size_t random_seed) {
+    WithoutGil without_gil{};
     CompressedMatrix<D, I, P> matrix(ArraySlice<D>(data_array, "data"),
                                      ArraySlice<I>(indices_array, "indices"),
                                      ArraySlice<P>(indptr_array, "indptr"),
@@ -1175,6 +1176,7 @@ shuffle_row(const size_t row_index, MatrixSlice<D>& matrix, const size_t random_
 template<typename D>
 static void
 shuffle_matrix(pybind11::array_t<D>& matrix_array, const size_t random_seed) {
+    WithoutGil without_gil{};
     MatrixSlice<D> matrix(matrix_array, "matrix");
 
     parallel_loop(matrix.rows_count(), [&](size_t row_index) {
@@ -1207,6 +1209,7 @@ static void
 rank_rows(const pybind11::array_t<D>& input_matrix,
           pybind11::array_t<D>& output_array,
           const size_t rank) {
+    WithoutGil without_gil{};
     ConstMatrixSlice<D> input(input_matrix, "input");
     ArraySlice<D> output(output_array, "array");
 
@@ -1278,6 +1281,7 @@ fold_factor_dense(pybind11::array_t<D>& data_array,
                   const float64_t min_gene_fold_factor,
                   const pybind11::array_t<D>& total_of_rows_array,
                   const pybind11::array_t<D>& fraction_of_columns_array) {
+    WithoutGil without_gil{};
     MatrixSlice<D> data(data_array, "data");
     ConstArraySlice<D> total_of_rows(total_of_rows_array, "total_of_rows");
     ConstArraySlice<D> fraction_of_columns(fraction_of_columns_array, "fraction_of_columns");
@@ -1311,6 +1315,7 @@ fold_factor_compressed(pybind11::array_t<D>& data_array,
                        const float64_t min_gene_fold_factor,
                        const pybind11::array_t<D>& total_of_bands_array,
                        const pybind11::array_t<D>& fraction_of_elements_array) {
+    WithoutGil without_gil{};
     ConstArraySlice<D> total_of_bands(total_of_bands_array, "total_of_bands");
     ConstArraySlice<D> fraction_of_elements(fraction_of_elements_array, "fraction_of_elements");
 
@@ -1413,6 +1418,7 @@ top_distinct(pybind11::array_t<int32_t>& gene_indices_array,
              pybind11::array_t<float32_t>& gene_folds_array,
              const pybind11::array_t<float64_t>& fold_in_cells_array,
              bool consider_low_folds) {
+    WithoutGil without_gil{};
     MatrixSlice<float32_t> gene_folds(gene_folds_array, "gene_folds");
     MatrixSlice<int32_t> gene_indices(gene_indices_array, "gene_indices");
     ConstMatrixSlice<float64_t> fold_in_cells(fold_in_cells_array, "fold_in_cells");
@@ -1542,6 +1548,7 @@ auroc_dense_matrix(const pybind11::array_t<D>& values_array,
                    const float64_t normalization,
                    pybind11::array_t<float64_t>& folds_array,
                    pybind11::array_t<float64_t>& aurocs_array) {
+    WithoutGil without_gil{};
     ConstMatrixSlice<D> values(values_array, "values");
     ConstArraySlice<bool> column_labels(column_labels_array, "column_labels");
     ConstArraySlice<float32_t> column_scales(column_scales_array, "column_scales");
@@ -1648,6 +1655,7 @@ auroc_compressed_matrix(const pybind11::array_t<D>& values_data_array,
                         float64_t normalization,
                         pybind11::array_t<float64_t>& band_folds_array,
                         pybind11::array_t<float64_t>& band_aurocs_array) {
+    WithoutGil without_gil{};
     ConstCompressedMatrix<D, I, P> values(ConstArraySlice<D>(values_data_array, "values_data"),
                                           ConstArraySlice<I>(values_indices_array,
                                                              "values_indices"),
@@ -1699,6 +1707,7 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
                   const float64_t cover_fraction,
                   const float64_t noise_fraction,
                   const size_t random_seed) {
+    WithoutGil without_gil{};
     FastAssertCompare(cover_fraction, >, 0);
     FastAssertCompare(cover_fraction, <, 1);
     FastAssertCompare(noise_fraction, >=, 0);
@@ -2085,6 +2094,7 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
              const float32_t min_seed_size_quantile,
              const float32_t max_seed_size_quantile,
              pybind11::array_t<int32_t>& seed_of_nodes_array) {
+    WithoutGil without_gil{};
     ArraySlice<int32_t> seed_of_nodes = ArraySlice<int32_t>(seed_of_nodes_array, "seed_of_nodes");
     size_t nodes_count = seed_of_nodes.size();
     FastAssertCompare(nodes_count, >, 0);
@@ -3100,6 +3110,7 @@ optimize_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                     pybind11::array_t<int32_t>& partition_of_nodes_array,
                     int32_t cold_partitions,
                     float64_t cold_temperature) {
+    WithoutGil without_gil{};
     OptimizePartitions optimizer(outgoing_weights_array,
                                  outgoing_indices_array,
                                  outgoing_indptr_array,
@@ -3145,6 +3156,7 @@ score_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                  const pybind11::array_t<int32_t>& incoming_indptr_array,
                  pybind11::array_t<int32_t>& partition_of_nodes_array,
                  bool with_orphans) {
+    WithoutGil without_gil{};
     OptimizePartitions optimizer(outgoing_weights_array,
                                  outgoing_indices_array,
                                  outgoing_indptr_array,
@@ -3184,6 +3196,7 @@ logistics_dense(const pybind11::array_t<F>& input_array,
                 pybind11::array_t<float32_t>& output_array,
                 const float64_t location,
                 const float64_t slope) {
+    WithoutGil without_gil{};
     ConstMatrixSlice<F> input(input_array, "input");
     MatrixSlice<float32_t> output(output_array, "output");
 
@@ -3225,6 +3238,7 @@ cross_logistics_dense(const pybind11::array_t<F>& first_input_array,
                       const float64_t location,
                       const float64_t slope,
                       pybind11::array_t<float32_t>& output_array) {
+    WithoutGil without_gil{};
     ConstMatrixSlice<F> first_input(first_input_array, "input");
     ConstMatrixSlice<F> second_input(second_input_array, "input");
     MatrixSlice<float32_t> output(output_array, "output");
@@ -3261,6 +3275,7 @@ pairs_logistics_dense(const pybind11::array_t<F>& first_input_array,
                       const float64_t location,
                       const float64_t slope,
                       pybind11::array_t<float32_t>& output_array) {
+    WithoutGil without_gil{};
     ConstMatrixSlice<F> first_input(first_input_array, "input");
     ConstMatrixSlice<F> second_input(second_input_array, "input");
     ArraySlice<float32_t> output(output_array, "output");
@@ -3650,6 +3665,7 @@ template<typename F>
 static void
 correlate_dense(const pybind11::array_t<F>& input_array,
                 pybind11::array_t<float32_t>& output_array) {
+    WithoutGil without_gil{};
     ConstMatrixSlice<F> input(input_array, "input");
     MatrixSlice<float32_t> output(output_array, "output");
 
@@ -3737,6 +3753,7 @@ static void
 cross_correlate_dense(const pybind11::array_t<F>& first_input_array,
                       const pybind11::array_t<F>& second_input_array,
                       pybind11::array_t<float32_t>& output_array) {
+    WithoutGil without_gil{};
     ConstMatrixSlice<F> first_input(first_input_array, "input");
     ConstMatrixSlice<F> second_input(second_input_array, "input");
     MatrixSlice<float32_t> output(output_array, "output");
@@ -3800,6 +3817,7 @@ static void
 pairs_correlate_dense(const pybind11::array_t<F>& first_input_array,
                       const pybind11::array_t<F>& second_input_array,
                       pybind11::array_t<float32_t>& output_array) {
+    WithoutGil without_gil{};
     ConstMatrixSlice<F> first_input(first_input_array, "input");
     ConstMatrixSlice<F> second_input(second_input_array, "input");
     ArraySlice<float32_t> output(output_array, "output");
