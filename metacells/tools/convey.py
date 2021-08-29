@@ -1,6 +1,6 @@
 '''
-Project
--------
+Convey
+------
 '''
 
 from typing import Any, Callable, Optional
@@ -11,16 +11,16 @@ from anndata import AnnData
 import metacells.utilities as ut
 
 __all__ = [
-    'project_group_to_obs',
-    'project_obs_to_obs',
-    'project_obs_to_group',
-    'project_obs_obs_to_group_group',
+    'convey_group_to_obs',
+    'convey_obs_to_obs',
+    'convey_obs_to_group',
+    'convey_obs_obs_to_group_group',
 ]
 
 
 @ut.logged()
 @ut.timed_call()
-def project_group_to_obs(
+def convey_group_to_obs(
     *,
     adata: AnnData,
     gdata: AnnData,
@@ -56,7 +56,7 @@ def project_group_to_obs(
 
 @ut.logged()
 @ut.timed_call()
-def project_obs_to_obs(
+def convey_obs_to_obs(
     *,
     adata: AnnData,
     bdata: AnnData,
@@ -91,7 +91,7 @@ def project_obs_to_obs(
 
 @ut.logged()
 @ut.timed_call()
-def project_obs_to_group(
+def convey_obs_to_group(
     *,
     adata: AnnData,
     gdata: AnnData,
@@ -130,7 +130,7 @@ def project_obs_to_group(
 
 @ut.logged()
 @ut.timed_call()
-def project_obs_obs_to_group_group(
+def convey_obs_obs_to_group_group(
     *,
     adata: AnnData,
     gdata: AnnData,
