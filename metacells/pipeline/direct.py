@@ -34,6 +34,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     feature_min_gene_total: Optional[int] = pr.feature_min_gene_total,
     feature_min_gene_top3: Optional[int] = pr.feature_min_gene_top3,
     feature_min_gene_relative_variance: Optional[float] = pr.feature_min_gene_relative_variance,
+    feature_gene_names: Optional[Collection[str]] = None,
+    feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     forbidden_gene_names: Optional[Collection[str]] = None,
     forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
@@ -158,11 +160,11 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        ``feature_downsample_max_cell_quantile`` (default: {feature_downsample_max_cell_quantile}),
        ``feature_min_gene_total`` (default: {feature_min_gene_total}), ``feature_min_gene_top3``
        (default: {feature_min_gene_top3}), ``feature_min_gene_relative_variance (default:
-       {feature_min_gene_relative_variance}), ``forbidden_gene_names`` (default:
-       {forbidden_gene_names}), ``forbidden_gene_patterns`` (default: {forbidden_gene_patterns})
-       and
-       ``random_seed`` (default: {random_seed})
-       to make this replicable.
+       {feature_min_gene_relative_variance}), ``feature_gene_names`` (default:
+       {feature_gene_names}), ``feature_gene_patterns`` (default: {feature_gene_patterns}),
+       ``forbidden_gene_names`` (default: {forbidden_gene_names}), ``forbidden_gene_patterns``
+       (default: {forbidden_gene_patterns}) and ``random_seed`` (default: {random_seed}) to make
+       this replicable.
 
     2. Compute the fractions of each variable in each cell, and add the
        ``cells_similarity_value_normalization`` (default: {cells_similarity_value_normalization}) to
@@ -236,6 +238,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
                              min_gene_relative_variance=feature_min_gene_relative_variance,
                              min_gene_total=feature_min_gene_total,
                              min_gene_top3=feature_min_gene_top3,
+                             forced_gene_names=feature_gene_names,
+                             forced_gene_patterns=feature_gene_patterns,
                              forbidden_gene_names=forbidden_gene_names,
                              forbidden_gene_patterns=forbidden_gene_patterns,
                              random_seed=random_seed)
