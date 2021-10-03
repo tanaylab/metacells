@@ -17,7 +17,7 @@ __all__ = [
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def combine_masks(  # pylint: disable=too-many-branches
+def combine_masks(  # pylint: disable=too-many-branches,too-many-statements
     adata: AnnData,
     masks: List[str],
     *,
@@ -39,17 +39,29 @@ def combine_masks(  # pylint: disable=too-many-branches
     **Computation Parameters**
 
     1. For each of the mask in ``masks``, fetch it. Silently ignore missing masks if the name has a
-       ``?`` suffix. Invert the mask if the name has a ``~`` suffix. Bitwise-AND the appropriate
-       (observations or variables) mask with the result.
+       ``?`` suffix. Invert the mask if the name has a ``~`` prefix. If the name has a ``|`` prefix
+       (before the ``~`` prefix, if any), then bitwise-OR the mask into the OR mask, otherwise
+       bitwise-AND the mask into the AND mask.
 
-    2. If ``invert`` (default: {invert}), invert the result combined mask.
+    2. Combine (bitwise-OR) the AND mask and the OR mask into a single mask.
+
+    3. If ``invert`` (default: {invert}), invert the result combined mask.
     '''
     assert len(masks) > 0
 
     per: Optional[str] = None
 
+    and_mask: Optional[ut.NumpyVector] = None
+    or_mask: Optional[ut.NumpyVector] = None
+
     for mask_name in masks:
         log_mask_name = mask_name
+
+        if mask_name[0] == '|':
+            is_or = True
+            mask_name = mask_name[1:]
+        else:
+            is_or = False
 
         if mask_name[0] == '~':
             invert_mask = True
@@ -82,17 +94,37 @@ def combine_masks(  # pylint: disable=too-many-branches
         if invert_mask:
             mask = ~mask
 
+        if ut.logging_calc():
+            ut.log_calc(log_mask_name, mask)
+
         if per is None:
             per = mask_per
-            combined_mask = mask
         else:
             if mask_per != per:
                 raise \
                     ValueError('mixing per-observation and per-variable masks')
-            combined_mask = combined_mask & mask
 
-        if ut.logging_calc():
-            ut.log_calc(log_mask_name, mask)
+        if is_or:
+            if or_mask is None:
+                or_mask = mask
+            else:
+                or_mask = or_mask | mask
+        else:
+            if and_mask is None:
+                and_mask = mask
+            else:
+                and_mask = and_mask & mask
+
+    if and_mask is not None:
+        if or_mask is not None:
+            combined_mask = and_mask | or_mask
+        else:
+            combined_mask = and_mask
+    else:
+        if or_mask is not None:
+            combined_mask = or_mask
+        else:
+            raise ValueError('no masks to combine')
 
     if invert:
         combined_mask = ~combined_mask
@@ -108,4 +140,5 @@ def combine_masks(  # pylint: disable=too-many-branches
         ut.set_o_data(adata, to, combined_mask)
     else:
         ut.set_v_data(adata, to, combined_mask)
+
     return None

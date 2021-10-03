@@ -31,6 +31,8 @@ def extract_feature_data(
     min_gene_relative_variance: Optional[float] = pr.feature_min_gene_relative_variance,
     min_gene_total: Optional[int] = pr.feature_min_gene_total,
     min_gene_top3: Optional[int] = pr.feature_min_gene_top3,
+    forced_gene_names: Optional[Collection[str]] = None,
+    forced_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     forbidden_gene_names: Optional[Collection[str]] = None,
     forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     random_seed: int = 0,
@@ -70,6 +72,9 @@ def extract_feature_data(
             A boolean mask of genes which are forbidden from being chosen as "feature" genes based
             on their name.
 
+        ``forced_gene``
+            A boolean mask of the "forced" genes.
+
         ``feature_gene``
             A boolean mask of the "feature" genes.
 
@@ -81,19 +86,22 @@ def extract_feature_data(
        {downsample_min_cell_quantile}), ``downsample_max_cell_quantile`` (default:
        {downsample_max_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
 
-    2. Invoke :py:func:`metacells.tools.high.find_high_total_genes` to select high-expression
+    2. Invoke :py:func:`metacells.tools.named.find_named_genes` to force genes as being used as
+       features based on their name, using ``forced_gene_names`` and ``forbidden_gene_patterns``.
+
+    3. Invoke :py:func:`metacells.tools.high.find_high_total_genes` to select high-expression
        feature genes (based on the downsampled data), using ``min_gene_total``.
 
-    3. Invoke :py:func:`metacells.tools.high.find_high_relative_variance_genes` to select
+    4. Invoke :py:func:`metacells.tools.high.find_high_relative_variance_genes` to select
        high-variance feature genes (based on the downsampled data), using
        ``min_gene_relative_variance``.
 
-    4. Invoke :py:func:`metacells.tools.named.find_named_genes` to forbid genes from being used as
-       feature genes, based on their name. using the ``forbidden_gene_names`` (default:
+    5. Invoke :py:func:`metacells.tools.named.find_named_genes` to forbid genes from being used as
+       feature genes, based on their name, using the ``forbidden_gene_names`` (default:
        {forbidden_gene_names}) and ``forbidden_gene_patterns`` (default: {forbidden_gene_patterns}).
        This is stored in an intermediate per-variable (gene) ``forbidden_genes`` boolean mask.
 
-    5. Invoke :py:func:`metacells.tools.filter.filter_data` to slice just the selected
+    6. Invoke :py:func:`metacells.tools.filter.filter_data` to slice just the selected
        "feature" genes using the ``name`` (default: {name}).
     '''
     tl.downsample_cells(adata, what,
@@ -103,6 +111,14 @@ def extract_feature_data(
                         random_seed=random_seed)
 
     var_masks = []
+
+    if forced_gene_names is not None \
+            or forced_gene_patterns is not None:
+        var_masks.append('|forced_gene')
+        tl.find_named_genes(adata,
+                            to='forced_gene',
+                            names=forced_gene_names,
+                            patterns=forced_gene_patterns)
 
     if min_gene_top3 is not None:
         var_masks.append('high_top3_gene')
