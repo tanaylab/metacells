@@ -49,6 +49,7 @@ SETUP_REQUIRES = [
 # TODO: Repeated in setup.cfg, sphinx/requirements.txt
 
 INSTALL_REQUIRES = [
+    'cvxpy',
     'scanpy',
     'importlib-metadata',
     'numpy',

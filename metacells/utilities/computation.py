@@ -19,12 +19,14 @@ analysis pipeline.
 
 import re
 import sys
-from math import ceil, floor
+from math import ceil, floor, sqrt
 from re import Pattern
 from typing import (Any, Callable, Collection, List, Optional, Tuple, TypeVar,
                     Union, overload)
 from warnings import catch_warnings, filterwarnings, warn
 
+import cvxpy
+import igraph as ig  # type: ignore
 import numpy as np
 import pandas as pd  # type: ignore
 import scipy.sparse as sp  # type: ignore
@@ -103,6 +105,9 @@ __all__ = [
 
     'random_piles',
     'group_piles',
+
+    'represent',
+    'min_cut',
 ]
 
 
@@ -2208,3 +2213,118 @@ def group_piles(
     assert np.min(group_of_groups) == 0
     group_of_group_of_elements = group_of_groups[group_of_elements]
     return group_of_group_of_elements
+
+
+@utm.timed_call()
+def represent(
+    goal: utt.NumpyVector,
+    basis: utt.NumpyMatrix,
+) -> Optional[Tuple[float, utt.NumpyVector]]:
+    '''
+    Represent a ``goal`` vector as a weighted average of the row vectors of some ``basis`` matrix.
+
+    This computes a non-negative weight for each matrix row, such that the sum of weights is 1,
+    minimizing the distance (L2 norm) between the goal vector and the weighted average of the basis
+    vectors. This is a convex problem quadratic subject to a linear constraint, so ``cvxpy`` solves
+    it efficiently.
+
+    The return value is a tuple with the score of the weights vector, and the weights vector itself.
+    '''
+    rows_count, columns_count = basis.shape
+    assert columns_count == len(goal)
+
+    variables = cvxpy.Variable(rows_count, nonneg=True)
+    constraints = [cvxpy.sum(variables) == 1]
+    objective = cvxpy.norm(goal - variables @ basis, 2)
+
+    problem = cvxpy.Problem(cvxpy.Minimize(objective), constraints)
+    result = problem.solve()
+
+    if result is None:
+        return None
+    return (float(result), utt.to_numpy_vector(variables.value))
+
+
+@utm.timed_call()
+def min_cut(  # pylint: disable=too-many-branches,too-many-statements
+    weights: utt.Matrix
+) -> Tuple[ig.Cut, Optional[float]]:
+    '''
+    Find the minimal cut that will split an undirected graph (with a symmetrical ``weights``
+    matrix).
+
+    Returns the ``igraph.Cut`` object describing the cut, and the scale-invariant strength of the
+    cut edges. This strength is the ratio between the mean weight of an edge connecting a random
+    node in each partition and the mean weight of an edge connecting two random nodes inside a
+    random partition. If either of the partitions contains no edges (e.g. contains a single node),
+    the strength will be ``None``.
+    '''
+    assert weights.shape[0] == weights.shape[1]
+    nodes_count = weights.shape[0]
+    edges: List[Tuple[int, int]] = []
+    weight_of_edges: List[float] = []
+
+    _, dense, compressed = utt.to_proper_matrices(weights)
+    if dense is not None:
+        for source in range(nodes_count):
+            for target in range(source):
+                weight = dense[source, target]
+                if weight > 0:
+                    edges.append((source, target))
+                    weight_of_edges.append(weight)
+    else:
+        assert compressed is not None
+        for source in range(nodes_count):
+            offsets = range(compressed.indptr[source],
+                            compressed.indptr[source + 1])
+            for target, weight in zip(compressed.indices[offsets], compressed.data[offsets]):
+                if target >= source:
+                    break
+                edges.append((source, target))
+                weight_of_edges.append(weight)
+
+    graph = ig.Graph(n=nodes_count, edges=edges)
+    cut = graph.mincut(capacity=weight_of_edges)
+
+    is_second = np.zeros(nodes_count, dtype='bool')
+    is_second[cut.partition[1]] = True
+    first_size = len(cut.partition[0])
+    second_size = len(cut.partition[1])
+    assert first_size + second_size == nodes_count
+
+    cut_total_weight = 0.0
+    first_total_weight = 0.0
+    second_total_weight = 0.0
+    for ((source, target), weight) in zip(edges, weight_of_edges):
+        if is_second[source]:
+            if is_second[target]:
+                second_total_weight += weight
+            else:
+                cut_total_weight += weight
+        else:
+            if is_second[target]:
+                cut_total_weight += weight
+            else:
+                first_total_weight += weight
+
+    if cut_total_weight == 0:
+        return (cut, 0.0)
+
+    if first_total_weight > 0 and second_total_weight > 0:
+        cut_edges_count = first_size * second_size
+        first_edges_count = (first_size * (first_size - 1)) / 2
+        second_edges_count = (second_size * (second_size - 1)) / 2
+        total_edges_count = (nodes_count * (nodes_count - 1)) / 2
+        assert cut_edges_count + first_edges_count + \
+            second_edges_count == total_edges_count
+
+        cut_mean_weight = cut_total_weight / cut_edges_count
+        first_mean_weight = first_total_weight / first_edges_count
+        second_mean_weight = second_total_weight / second_edges_count
+        inner_mean_weight = sqrt(first_mean_weight * second_mean_weight)
+
+        cut_strength: Optional[float] = cut_mean_weight / inner_mean_weight
+    else:
+        cut_strength = None
+
+    return (cut, cut_strength)

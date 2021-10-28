@@ -59,6 +59,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     candidates_min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
     candidates_min_metacell_cells: Optional[int] = pr.min_metacell_cells,
+    candidates_max_split_min_cut_strength: Optional[float] = pr.max_split_min_cut_strength,
+    candidates_min_cut_seed_cells: Optional[int] = pr.min_cut_seed_cells,
     must_complete_cover: bool = False,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
@@ -324,6 +326,9 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
                                        min_split_size_factor=candidates_min_split_size_factor,
                                        max_merge_size_factor=candidates_max_merge_size_factor,
                                        min_metacell_cells=candidates_min_metacell_cells,
+                                       max_split_min_cut_strength=candidates_max_split_min_cut_strength,
+                                       min_cut_seed_cells=candidates_min_cut_seed_cells,
+                                       must_complete_cover=must_complete_cover,
                                        random_seed=random_seed)
 
         ut.set_oo_data(adata, 'obs_similarity',

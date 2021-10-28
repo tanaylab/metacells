@@ -171,6 +171,14 @@ max_merge_size_factor: float = 0.25
 #: :py:func:`metacells.tools.dissolve.dissolve_metacells`.
 min_metacell_cells: int = 12
 
+#: The maximal strength of a min-cut of a metacell that will cause it to be split. See
+#: :py:func:`metacells.tools.candidates.compute_candidate_metacells`.
+max_split_min_cut_strength: float = 0.1
+
+#: The minimal number of cells to keep as a seed when cutting a metacell. See
+#: :py:func:`metacells.tools.candidates.compute_candidate_metacells`.
+min_cut_seed_cells: int = 7
+
 #: The minimal size factor of a pile, above which we can split it. See
 #: :py:const:`min_split_size_factor`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`

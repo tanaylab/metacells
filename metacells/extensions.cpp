@@ -2552,7 +2552,10 @@ struct OptimizePartitions {
                 temperature_of_nodes[node_index] = cold_temperature;
                 frozen_nodes[node_index] = 1;
                 ++frozen_count;
-            } else {
+            } else if (partition_index < -1) {
+                frozen_nodes[node_index] = 1;
+                ++frozen_count;
+            } else if (partition_index >= -1) {
                 temperature_of_nodes[node_index] = 1.0;
                 frozen_nodes[node_index] = 0;
             }
@@ -2618,6 +2621,10 @@ struct OptimizePartitions {
             size_t improved = 0;
             size_t unimproved = 0;
             for (size_t node_index : tmp_indices) {
+                auto partition_index = partition_of_nodes[node_index];
+                if (partition_index < -1) {
+                    continue;
+                }
                 temperature *= cooldown_rate;
                 LOCATED_LOG(false)                                           //
                     << " cooldown_rate: " << cooldown_rate                   //

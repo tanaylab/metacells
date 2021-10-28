@@ -57,6 +57,8 @@ nitpick_ignore = [
     ('py:class', 'utt.ImproperMatrix'),
     ('py:class', 'utt.NumpyMatrix'),
     ('py:class', 'utt.ProperMatrix'),
+    ('py:class', 'igraph.cut.Cut'),
+    ('py:class', 'cvxpy'),
 ]
 
 # Add any paths that contain templates here, relative to this directory.
