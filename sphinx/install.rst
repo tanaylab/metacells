@@ -32,3 +32,11 @@ have a C++ compiler which supports C++14 installed (either ``g++`` or ``clang``)
 compiler depends on your specific system; if you are using ``conda``, ``CONDA_BUILD=1 conda activate
 mc2`` should work.
 
+Releases
+========
+
+0.5 - First published version
+
+0.6 - More robust graph partition, allow forcing feature genes, rename "project" to "convey" to
+prepare for addition of atlas projection functionality
+

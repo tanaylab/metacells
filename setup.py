@@ -50,13 +50,14 @@ SETUP_REQUIRES = [
 
 INSTALL_REQUIRES = [
     'cvxpy',
-    'scanpy',
     'importlib-metadata',
     'numpy',
     'pandas',
-    'scipy',
     'python-igraph',
+    'scanpy',
+    'scipy',
     'threadpoolctl',
+    'umap',
 ]
 
 TESTS_REQUIRE = [
