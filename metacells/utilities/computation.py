@@ -820,7 +820,7 @@ def _downsample_dense_matrix(
             extension(input_array, output_array, samples, random_seed)
     else:
         extension_name = \
-            'downsample_matrix_%s_t_%s_t' % (matrix.dtype, output.dtype)
+            'downsample_dense_%s_t_%s_t' % (matrix.dtype, output.dtype)
         extension = getattr(xt, extension_name)
         with utm.timed_step('extensions.downsample_dense_matrix'):
             utm.timed_parameters(results=results_count,
@@ -1255,11 +1255,13 @@ def top_per(matrix: utt.Matrix, top: int, *, per: Optional[str], ranks: bool = F
 
     else:
         indices = np.empty(top * size, dtype='int32')
-        data = np.empty(top * size, dtype='float32')
+        data = np.empty(top * size, dtype=dense.dtype)
 
         with utm.timed_step('extensions.collect_top'):
-            utm.timed_parameters(size=size, keep=top)
-            xt.collect_top(top, dense, indices, data, ranks)
+            utm.timed_parameters(size=size, keep=top, dtype=str(dense.dtype))
+            extension_name = 'collect_top_%s_t' % dense.dtype
+            extension = getattr(xt, extension_name)
+            extension(top, dense, indices, data, ranks)
 
     top_data = sp.csr_matrix((data, indices, indptr), shape=dense.shape)
     top_data.has_sorted_indices = True
@@ -1284,20 +1286,24 @@ def prune_per(compressed: utt.CompressedMatrix, top: int) -> utt.CompressedMatri
         assert layout == 'column_major'
         size = compressed.shape[1]
 
-    indptr_array = np.empty(1 + size, dtype='int64')
-    indices_array = np.empty(size * top, dtype='int32')
-    data_array = np.empty(size * top, dtype='float32')
-    assert utt.matrix_dtype(compressed) == 'float32'
+    data_array = np.empty(size * top, dtype=compressed.data.dtype)
+    indices_array = np.empty(size * top, dtype=compressed.indices.dtype)
+    indptr_array = np.empty(1 + size, dtype=compressed.indptr.dtype)
 
     with utm.timed_step('extensions.collect_pruned'):
         utm.timed_parameters(size=size, nnz=compressed.nnz, keep=top)
-        xt.collect_pruned(top,
-                          compressed.data,
-                          compressed.indices,
-                          compressed.indptr,
-                          data_array,
-                          indices_array,
-                          indptr_array)
+        extension_name = 'collect_pruned_%s_t_%s_t_%s_t' \
+            % (compressed.data.dtype,
+               compressed.indices.dtype,
+               compressed.indptr.dtype)
+        extension = getattr(xt, extension_name)
+        extension(top,
+                  compressed.data,
+                  compressed.indices,
+                  compressed.indptr,
+                  data_array,
+                  indices_array,
+                  indptr_array)
 
     if layout == 'row_major':
         constructor = sp.csr_matrix
@@ -2083,7 +2089,7 @@ def shuffle_matrix(
         assert dense is not None
         if per == 'column':
             dense = dense.transpose()
-        extension_name = 'shuffle_matrix_%s_t' % dense.dtype
+        extension_name = 'shuffle_dense_%s_t' % dense.dtype
         extension = getattr(xt, extension_name)
         extension(dense, random_seed)
 
