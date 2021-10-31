@@ -1,4 +1,5 @@
-include metacells/extension.cpp
+include metacells/*.cpp
+include metacells/*.h
 include metacells/*/py.typed
 include metacells/py.typed
 include pybind11/include/pybind11/*

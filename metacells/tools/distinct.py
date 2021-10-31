@@ -144,9 +144,12 @@ def find_distinct_genes(
     distinct_gene_folds = \
         np.empty((adata.n_obs, distinct_genes_count), dtype='float32')
 
-    fold_in_cells = ut.get_vo_proper(adata, what, layout='row_major')
-    xt.top_distinct(distinct_gene_indices, distinct_gene_folds,
-                    fold_in_cells, False)
+    fold_in_cells = \
+        ut.mustbe_numpy_matrix(ut.get_vo_proper(adata, what,
+                                                layout='row_major'))
+    extension_name = 'top_distinct_%s_t' % fold_in_cells.dtype
+    extension = getattr(xt, extension_name)
+    extension(distinct_gene_indices, distinct_gene_folds, fold_in_cells, False)
 
     if inplace:
         ut.set_oa_data(adata, 'cell_distinct_gene_indices',

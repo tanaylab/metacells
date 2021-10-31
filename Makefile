@@ -10,8 +10,8 @@ for-commit: README.rst reformat format isort rst unstaged todo mypy pylint test 
 reformat: .clang-formatted
 	autopep8 -i -r metacells tests setup.py
 
-.clang-formatted: .clang-format metacells/extensions.cpp
-	clang-format -i metacells/extensions.cpp
+.clang-formatted: .clang-format metacells/*.cpp
+	clang-format -i metacells/*.cpp
 	@touch .clang-formatted
 
 format:
