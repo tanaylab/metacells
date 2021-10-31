@@ -2,7 +2,6 @@
 
 #include <atomic>
 #include <cmath>
-#include <immintrin.h>
 #include <iostream>
 #include <mutex>
 #include <random>

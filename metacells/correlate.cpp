@@ -1,5 +1,9 @@
 #include "metacells/extensions.h"
 
+#ifdef USE_AVX2
+#    include <immintrin.h>
+#endif
+
 namespace metacells {
 
 struct Sums {
