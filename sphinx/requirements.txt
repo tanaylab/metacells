@@ -1,8 +1,10 @@
 # TODO: Replicated from setup.py
-scanpy
+cvxpy
 importlib-metadata
 numpy
 pandas
-scipy
 python-igraph
+scanpy
+scipy
 threadpoolctl
+umap
