@@ -53,6 +53,7 @@ INSTALL_REQUIRES = [
     'importlib-metadata',
     'numpy',
     'pandas',
+    'psutil',
     'python-igraph',
     'scanpy',
     'scipy',

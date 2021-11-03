@@ -40,10 +40,8 @@ such that the total will be at most 50. This very sub-optimal, but at least it d
 server to its knees trying to deal with a total load of 2500 processes.
 
 A final twist on all this is that hyper-threading is (worse than) useless for heavy compute threads.
-We therefore by default only use one thread per physical cores. Python in its infinite wisdom does
-not provide a standard way to access the number of physical cores, so we rely on
-:py:mod:`metacells.utilities.hardware_info` to guess this amount. This "should" work on Linux,
-FreeBSD, Mac OSX and Windows, but YMMV.
+We therefore by default only use one thread per physical cores. We get the number pf physical cores
+using the ``psutil`` package.
 
 .. todo::
 
@@ -57,10 +55,10 @@ from multiprocessing import Value, get_context
 from threading import current_thread
 from typing import Any, Callable, Iterable, Optional, TypeVar
 
+import psutil  # type: ignore
 from threadpoolctl import threadpool_limits  # type: ignore
 
 import metacells.utilities.documentation as utd
-import metacells.utilities.hardware_info as uth
 import metacells.utilities.logging as utl
 import metacells.utilities.timing as utm
 
@@ -113,7 +111,7 @@ def set_processors_count(processors: int) -> None:
     assert IS_MAIN_PROCESS
 
     if processors == 0:
-        processors = uth.hardware_info().get('cpus', os.cpu_count())
+        processors = psutil.cpu_count(logical=False)
 
     assert processors > 0
 
