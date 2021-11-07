@@ -7,9 +7,9 @@ dist
 .eggs
 flame*.html
 junk*
+metacells/should_check_avx2.py
 metacells/*.so
 metacells/version.py
-metacells/should_check_avx2.py
 .nfs*
 *.npy
 __pycache__
@@ -22,6 +22,7 @@ timing*.csv
 .tox
 vignettes/*_files/*
 vignettes/*.h5*
-vignettes/*.rst
 vignettes/.ipyn*
 vignettes/*.original
+vignettes/*.rst
+*.zip
