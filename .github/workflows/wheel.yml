@@ -23,11 +23,12 @@ jobs:
         run: python -m pip install cibuildwheel~=2.0.1
 
       - name: Build wheels
-        run: export WHEEL=1 && python -m cibuildwheel --output-dir wheelhouse
+        run: python -m cibuildwheel --output-dir wheelhouse
         env:
           CIBW_ARCHS_MACOS: "x86_64 arm64"
           CIBW_ARCHS_LINUX: "x86_64"
           CIBW_BUILD_VERBOSITY: 3
+          CIBW_ENVIRONMENT: WHEEL=1
 
       - uses: actions/upload-artifact@v2
         with:
