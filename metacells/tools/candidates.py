@@ -439,6 +439,8 @@ def _min_cut_community(
     new_community_index: int
 ) -> Tuple[bool, bool]:
     community_mask = community_of_nodes == cut_community_index
+    if np.sum(community_mask) < 2:
+        return (False, False)
     community_edge_weights = outgoing_edge_weights[community_mask,
                                                    :][:, community_mask]
     community_edge_weights += community_edge_weights.T

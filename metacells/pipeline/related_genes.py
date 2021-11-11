@@ -72,14 +72,16 @@ def relate_genes(
     1. If we have more than ``max_sampled_cells`` (default: {max_sampled_cells}), pick this number
        of random cells from the data using the ``random_seed``.
 
-    2. Compute the similarity between the genes using
+    2. Pick candidate genes using :py:func:`metacells.pipeline.feature.extract_feature_data`.
+
+    3. Compute the similarity between the feature genes using
        :py:func:`metacells.tools.similarity.compute_var_var_similarity` using the
        ``genes_similarity_method`` (default: {genes_similarity_method}).
 
-    3. Create a hierarchical clustering of the candidate genes using the ``genes_cluster_method``
+    4. Create a hierarchical clustering of the candidate genes using the ``genes_cluster_method``
        (default: {genes_cluster_method}).
 
-    4. Identify gene modules in the hierarchical clustering which contain at least
+    5. Identify gene modules in the hierarchical clustering which contain at least
        ``min_genes_of_modules`` genes.
     '''
     if max_sampled_cells < adata.n_obs:

@@ -2267,6 +2267,7 @@ def min_cut(  # pylint: disable=too-many-branches,too-many-statements
     '''
     assert weights.shape[0] == weights.shape[1]
     nodes_count = weights.shape[0]
+    assert nodes_count > 1
     edges: List[Tuple[int, int]] = []
     weight_of_edges: List[float] = []
 

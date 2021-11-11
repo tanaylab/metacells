@@ -58,7 +58,7 @@ INSTALL_REQUIRES = [
     'scanpy',
     'scipy',
     'threadpoolctl',
-    'umap',
+    'umap-learn',
 ]
 
 TESTS_REQUIRE = [

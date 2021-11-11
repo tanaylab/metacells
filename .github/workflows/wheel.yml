@@ -27,6 +27,7 @@ jobs:
         env:
           CIBW_ARCHS_MACOS: "x86_64 arm64"
           CIBW_ARCHS_LINUX: "x86_64"
+          CIBW_BUILD_VERBOSITY: 3
 
       - uses: actions/upload-artifact@v2
         with:

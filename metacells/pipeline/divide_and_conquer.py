@@ -485,7 +485,8 @@ def divide_and_conquer_pipeline(
     rare_min_cell_module_total: int = pr.rare_min_cell_module_total,
     rare_max_cells_of_random_pile: int = pr.rare_max_cells_of_random_pile,
     rare_dissolve_min_robust_size_factor: Optional[float] = pr.rare_dissolve_min_robust_size_factor,
-    rare_dissolve_min_convincing_size_factor: Optional[float] = pr.rare_dissolve_min_convincing_size_factor,
+    rare_dissolve_min_convincing_size_factor: Optional[float] = \
+        pr.rare_dissolve_min_convincing_size_factor,
     rare_dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
     feature_downsample_min_samples: int = pr.feature_downsample_min_samples,
     feature_downsample_min_cell_quantile: float = pr.feature_downsample_min_cell_quantile,
