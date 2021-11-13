@@ -28,9 +28,7 @@ worker(std::function<void(size_t)> parallel_body) {
 }
 
 void
-parallel_loop(const size_t size,
-              std::function<void(size_t)> parallel_body,
-              std::function<void(size_t)> serial_body) {
+parallel_loop(const size_t size, std::function<void(size_t)> parallel_body, std::function<void(size_t)> serial_body) {
     size_t used_threads_count = std::min(threads_count, size);
 
     if (used_threads_count < 2) {
@@ -66,9 +64,7 @@ thread_local std::vector<float64_t> g_float64_t_vectors[float64_t_count];
 PYBIND11_MODULE(extensions, module) {
     module.doc() = "C++ extensions to support the metacells package.";
 
-    module.def("set_threads_count",
-               &metacells::set_threads_count,
-               "Specify the number of parallel threads.");
+    module.def("set_threads_count", &metacells::set_threads_count, "Specify the number of parallel threads.");
 
     metacells::register_auroc(module);
     metacells::register_choose_seeds(module);

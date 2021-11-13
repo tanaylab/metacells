@@ -1,19 +1,20 @@
-'''
+"""
 Properly Sampled
 ----------------
-'''
+"""
 
-from typing import Optional, Union
+from typing import Optional
+from typing import Union
 
 import numpy as np
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
-    'find_properly_sampled_cells',
-    'find_properly_sampled_genes',
+    "find_properly_sampled_cells",
+    "find_properly_sampled_genes",
 ]
 
 
@@ -22,7 +23,7 @@ __all__ = [
 @ut.expand_doc()
 def find_properly_sampled_cells(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     min_cell_total: Optional[int],
     max_cell_total: Optional[int],
@@ -30,7 +31,7 @@ def find_properly_sampled_cells(
     max_excluded_genes_fraction: Optional[float],
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
-    '''
+    """
     Detect cells with a "proper" amount of ``what`` (default: {what}) data.
 
     Due to both technical effects and natural variance between cells, the total number of UMIs
@@ -65,12 +66,12 @@ def find_properly_sampled_cells(
        not be ``None`` and should contain just the excluded genes data for each cell. Exclude all
        cells whose sum of the excluded data divided by the total data is more than the specified
        threshold.
-    '''
+    """
     assert (max_excluded_genes_fraction is None) == (excluded_adata is None)
 
     total_of_cells = ut.get_o_numpy(adata, what, sum=True)
 
-    cells_mask = np.full(adata.n_obs, True, dtype='bool')
+    cells_mask = np.full(adata.n_obs, True, dtype="bool")
 
     if min_cell_total is not None:
         cells_mask = cells_mask & (total_of_cells >= min_cell_total)
@@ -80,20 +81,19 @@ def find_properly_sampled_cells(
 
     if excluded_adata is not None:
         assert max_excluded_genes_fraction is not None
-        excluded_data = ut.get_vo_proper(excluded_adata, layout='row_major')
-        excluded_of_cells = ut.sum_per(excluded_data, per='row')
+        excluded_data = ut.get_vo_proper(excluded_adata, layout="row_major")
+        excluded_of_cells = ut.sum_per(excluded_data, per="row")
         if np.min(total_of_cells) == 0:
             total_of_cells = np.copy(total_of_cells)
             total_of_cells[total_of_cells == 0] = 1
         excluded_fraction = excluded_of_cells / total_of_cells
-        cells_mask = \
-            cells_mask & (excluded_fraction <= max_excluded_genes_fraction)
+        cells_mask = cells_mask & (excluded_fraction <= max_excluded_genes_fraction)
 
     if inplace:
-        ut.set_o_data(adata, 'properly_sampled_cell', cells_mask)
+        ut.set_o_data(adata, "properly_sampled_cell", cells_mask)
         return None
 
-    ut.log_return('properly_sampled_cell', cells_mask)
+    ut.log_return("properly_sampled_cell", cells_mask)
     return ut.to_pandas_series(cells_mask, index=adata.obs_names)
 
 
@@ -102,12 +102,12 @@ def find_properly_sampled_cells(
 @ut.expand_doc()
 def find_properly_sampled_genes(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     min_gene_total: int = pr.properly_sampled_min_gene_total,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
-    '''
+    """
     Detect genes with a "proper" amount of ``what`` (default: {what}) data.
 
     Due to both technical effects and natural variance between genes, the expression of genes varies
@@ -138,14 +138,14 @@ def find_properly_sampled_genes(
 
     1. Exclude all genes whose total data is less than the ``min_gene_total`` (default:
        {min_gene_total}).
-    '''
+    """
     total_of_genes = ut.get_v_numpy(adata, what, sum=True)
 
     genes_mask = total_of_genes >= min_gene_total
 
     if inplace:
-        ut.set_v_data(adata, 'properly_sampled_gene', genes_mask)
+        ut.set_v_data(adata, "properly_sampled_gene", genes_mask)
         return None
 
-    ut.log_return('properly_sampled_gene', genes_mask)
+    ut.log_return("properly_sampled_gene", genes_mask)
     return ut.to_pandas_series(genes_mask, index=adata.obs_names)

@@ -59,8 +59,7 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
     FastAssertCompare(x_size, >, 0);
     FastAssertCompare(y_size, >, 0);
 
-    const auto point_diameter =
-        cover_diameter(points_count, float64_t(x_size) * float64_t(y_size), cover_fraction);
+    const auto point_diameter = cover_diameter(points_count, float64_t(x_size) * float64_t(y_size), cover_fraction);
 
     const auto x_step = point_diameter;
     const auto y_step = point_diameter * sqrt(3.0) / 2.0;
@@ -100,8 +99,8 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
 
                     auto other_x_index = x_index + delta_x;
                     auto other_y_index = y_index + delta_y;
-                    if (other_x_index < 0 || x_layout_grid_size <= other_x_index
-                        || other_y_index < 0 || y_layout_grid_size <= other_y_index) {
+                    if (other_x_index < 0 || x_layout_grid_size <= other_x_index || other_y_index < 0
+                        || y_layout_grid_size <= other_y_index) {
                         continue;
                     }
 
@@ -122,8 +121,8 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
 
                     auto other_x_index = x_index + delta_x;
                     auto other_y_index = y_index + delta_y;
-                    if (other_x_index < 0 || x_layout_grid_size <= other_x_index
-                        || other_y_index < 0 || y_layout_grid_size <= other_y_index) {
+                    if (other_x_index < 0 || x_layout_grid_size <= other_x_index || other_y_index < 0
+                        || y_layout_grid_size <= other_y_index) {
                         continue;
                     }
 
@@ -173,8 +172,7 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
         bool did_move = true;
         while (did_move) {
             did_move = false;
-            auto current_distance =
-                distance(x_index, y_index, preferred_x_index, preferred_y_index);
+            auto current_distance = distance(x_index, y_index, preferred_x_index, preferred_y_index);
 
             std::shuffle(delta_indices.begin(), delta_indices.end(), random);
             for (auto delta_index : delta_indices) {
@@ -188,8 +186,7 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
                     continue;
                 }
 
-                auto near_distance =
-                    distance(near_x_index, near_y_index, preferred_x_index, preferred_y_index);
+                auto near_distance = distance(near_x_index, near_y_index, preferred_x_index, preferred_y_index);
                 if (near_distance > current_distance) {
                     continue;
                 }
@@ -204,13 +201,10 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
 
                 auto other_current_distance =
                     distance(x_index, y_index, other_preferred_x_index, other_preferred_y_index);
-                auto other_near_distance = distance(near_x_index,
-                                                    near_y_index,
-                                                    other_preferred_x_index,
-                                                    other_preferred_y_index);
+                auto other_near_distance =
+                    distance(near_x_index, near_y_index, other_preferred_x_index, other_preferred_y_index);
                 if (other_current_distance > other_near_distance
-                    || (near_distance == current_distance
-                        && other_current_distance == other_near_distance)) {
+                    || (near_distance == current_distance && other_current_distance == other_near_distance)) {
                     continue;
                 }
 
@@ -243,14 +237,10 @@ cover_coordinates(const pybind11::array_t<D>& raw_x_coordinates_array,
 
 void
 register_cover(pybind11::module& module) {
-    module.def("cover_diameter",
-               &metacells::cover_diameter,
-               "The diameter for points to achieve plot area coverage.");
+    module.def("cover_diameter", &metacells::cover_diameter, "The diameter for points to achieve plot area coverage.");
 
-#define REGISTER_D(D)                            \
-    module.def("cover_coordinates_" #D,          \
-               &metacells::cover_coordinates<D>, \
-               "Move points to achieve plot area coverage.");
+#define REGISTER_D(D) \
+    module.def("cover_coordinates_" #D, &metacells::cover_coordinates<D>, "Move points to achieve plot area coverage.");
 
     REGISTER_D(int8_t)
     REGISTER_D(int16_t)

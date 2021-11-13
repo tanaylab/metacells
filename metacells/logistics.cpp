@@ -27,13 +27,9 @@ cross_logistics_dense(const pybind11::array_t<F>& first_input_array,
         auto output_row = output.get_row(first_row_index);
         const auto first_input_row = first_input.get_row(first_row_index);
 
-        for (size_t second_row_index = 0; second_row_index < second_rows_count;
-             ++second_row_index) {
+        for (size_t second_row_index = 0; second_row_index < second_rows_count; ++second_row_index) {
             const float64_t logistic =
-                logistics_two_dense_rows(first_input_row,
-                                         second_input.get_row(second_row_index),
-                                         location,
-                                         slope);
+                logistics_two_dense_rows(first_input_row, second_input.get_row(second_row_index), location, slope);
             output_row[second_row_index] = float32_t((logistic - min_dist) * scale);
         }
     });
@@ -61,10 +57,8 @@ pairs_logistics_dense(const pybind11::array_t<F>& first_input_array,
     float64_t min_dist = float32_t(1.0 / (1.0 + exp(slope * location)));
     float64_t scale = 1.0 / (1.0 - min_dist);
     parallel_loop(rows_count, [&](size_t row_index) {
-        const float32_t logistic = logistics_two_dense_rows(first_input.get_row(row_index),
-                                                            second_input.get_row(row_index),
-                                                            location,
-                                                            slope);
+        const float32_t logistic =
+            logistics_two_dense_rows(first_input.get_row(row_index), second_input.get_row(row_index), location, slope);
         output[row_index] = float32_t((logistic - min_dist) * scale);
     });
 }
@@ -123,10 +117,8 @@ logistics_dense(const pybind11::array_t<F>& input_array,
         } else {
             other_index = rows_count - 2 - other_index;
         }
-        float64_t logistic = logistics_two_dense_rows(input.get_row(some_index),
-                                                      input.get_row(other_index),
-                                                      location,
-                                                      slope);
+        float64_t logistic =
+            logistics_two_dense_rows(input.get_row(some_index), input.get_row(other_index), location, slope);
         logistic = (logistic - min_dist) * scale;
         output.get_row(some_index)[other_index] = float32_t(logistic);
         output.get_row(other_index)[some_index] = float32_t(logistic);
@@ -135,15 +127,13 @@ logistics_dense(const pybind11::array_t<F>& input_array,
 
 void
 register_logistics(pybind11::module& module) {
-#define REGISTER_F(F)                                      \
-    module.def("logistics_dense_" #F,                      \
-               &metacells::logistics_dense<F>,             \
-               "Correlate rows of dense matrices.");       \
-    module.def("cross_logistics_dense_" #F,                \
-               &metacells::cross_logistics_dense<F>,       \
-               "Cross-logistics rows of dense matrices."); \
-    module.def("pairs_logistics_dense_" #F,                \
-               &metacells::pairs_logistics_dense<F>,       \
+#define REGISTER_F(F)                                                                                       \
+    module.def("logistics_dense_" #F, &metacells::logistics_dense<F>, "Correlate rows of dense matrices."); \
+    module.def("cross_logistics_dense_" #F,                                                                 \
+               &metacells::cross_logistics_dense<F>,                                                        \
+               "Cross-logistics rows of dense matrices.");                                                  \
+    module.def("pairs_logistics_dense_" #F,                                                                 \
+               &metacells::pairs_logistics_dense<F>,                                                        \
                "Pairs-logistics rows of dense matrices.");
 
     REGISTER_F(float32_t)

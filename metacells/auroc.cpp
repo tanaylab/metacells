@@ -212,8 +212,7 @@ auroc_compressed_matrix(const pybind11::array_t<D>& values_data_array,
                         pybind11::array_t<float64_t>& band_aurocs_array) {
     WithoutGil without_gil{};
     ConstCompressedMatrix<D, I, P> values(ConstArraySlice<D>(values_data_array, "values_data"),
-                                          ConstArraySlice<I>(values_indices_array,
-                                                             "values_indices"),
+                                          ConstArraySlice<I>(values_indices_array, "values_indices"),
                                           ConstArraySlice<P>(values_indptr_array, "values_indptr"),
                                           elements_count,
                                           "values");
@@ -235,10 +234,8 @@ auroc_compressed_matrix(const pybind11::array_t<D>& values_data_array,
 
 void
 register_auroc(pybind11::module& module) {
-#define REGISTER_D(D)                             \
-    module.def("auroc_dense_matrix_" #D,          \
-               &metacells::auroc_dense_matrix<D>, \
-               "AUROC for dense matrix.");
+#define REGISTER_D(D) \
+    module.def("auroc_dense_matrix_" #D, &metacells::auroc_dense_matrix<D>, "AUROC for dense matrix.");
 
     REGISTER_D(int8_t)
     REGISTER_D(int16_t)

@@ -65,8 +65,7 @@ random_sample(ArraySlice<size_t> tree, ssize_t random) {
         index_in_tree = base_of_level + index_in_level;
         ssize_t right_random = random - ssize_t(tree[index_in_tree]);
 
-        SlowAssertCompare(tree[base_of_level + index_in_level]
-                              + tree[base_of_level + index_in_level + 1],
+        SlowAssertCompare(tree[base_of_level + index_in_level] + tree[base_of_level + index_in_level + 1],
                           ==,
                           tree[base_of_level + size_of_level + index_in_level / 2] + 1);
 
@@ -81,10 +80,7 @@ random_sample(ArraySlice<size_t> tree, ssize_t random) {
 
 template<typename D, typename O>
 static void
-downsample_slice(ConstArraySlice<D> input,
-                 ArraySlice<O> output,
-                 const size_t samples,
-                 const size_t random_seed) {
+downsample_slice(ConstArraySlice<D> input, ArraySlice<O> output, const size_t samples, const size_t random_seed) {
     FastAssertCompare(samples, >=, 0);
     FastAssertCompare(output.size(), ==, input.size());
 
@@ -191,9 +187,7 @@ void
 register_downsample(pybind11::module& module) {
 #define REGISTER_D_O(D, O)                                                                        \
     module.def("downsample_array_" #D "_" #O, &downsample_array<D, O>, "Downsample array data."); \
-    module.def("downsample_dense_" #D "_" #O,                                                     \
-               &downsample_dense<D, O>,                                                           \
-               "Downsample dense matrix data.");
+    module.def("downsample_dense_" #D "_" #O, &downsample_dense<D, O>, "Downsample dense matrix data.");
 
 #define REGISTER_DS_O(O)       \
     REGISTER_D_O(int8_t, O)    \

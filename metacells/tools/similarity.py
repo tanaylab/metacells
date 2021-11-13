@@ -1,18 +1,19 @@
-'''
+"""
 Cross-Similarity
 ----------------
-'''
+"""
 
-from typing import Optional, Union
+from typing import Optional
+from typing import Union
 
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
-    'compute_obs_obs_similarity',
-    'compute_var_var_similarity',
+    "compute_obs_obs_similarity",
+    "compute_var_var_similarity",
 ]
 
 
@@ -21,7 +22,7 @@ __all__ = [
 @ut.expand_doc()
 def compute_obs_obs_similarity(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     method: str = pr.similarity_method,
     reproducible: bool = pr.reproducible,
@@ -29,7 +30,7 @@ def compute_obs_obs_similarity(
     logistics_slope: float = pr.logistics_slope,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
-    '''
+    """
     Compute a measure of the similarity between the observations (cells) of ``what`` (default: {what}).
 
     If ``reproducible`` (default: {reproducible}) is ``True``, a slower (still parallel) but
@@ -70,13 +71,18 @@ def compute_obs_obs_similarity(
        cross-correlation of the results of the previous step. That is, two observations (cells) will
        be similar if they are similar to the rest of the observations (cells) in the same way. This
        compensates for the extreme sparsity of the data.
-    '''
-    return _compute_elements_similarity(adata, 'obs', 'row', what,
-                                        method=method,
-                                        reproducible=reproducible,
-                                        logistics_location=logistics_location,
-                                        logistics_slope=logistics_slope,
-                                        inplace=inplace)
+    """
+    return _compute_elements_similarity(
+        adata,
+        "obs",
+        "row",
+        what,
+        method=method,
+        reproducible=reproducible,
+        logistics_location=logistics_location,
+        logistics_slope=logistics_slope,
+        inplace=inplace,
+    )
 
 
 @ut.logged()
@@ -84,7 +90,7 @@ def compute_obs_obs_similarity(
 @ut.expand_doc()
 def compute_var_var_similarity(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     method: str = pr.similarity_method,
     reproducible: bool = pr.reproducible,
@@ -92,7 +98,7 @@ def compute_var_var_similarity(
     logistics_slope: float = pr.logistics_slope,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
-    '''
+    """
     Compute a measure of the similarity between the variables (genes) of ``what`` (default: {what}).
 
     If ``reproducible`` (default: {reproducible}) is ``True``, a slower (still parallel) but
@@ -133,13 +139,18 @@ def compute_var_var_similarity(
        cross-correlation of the results of the previous step. That is, two variables (genes) will
        be similar if they are similar to the rest of the variables (genes) in the same way. This
        compensates for the extreme sparsity of the data.
-    '''
-    return _compute_elements_similarity(adata, 'var', 'column', what,
-                                        method=method,
-                                        reproducible=reproducible,
-                                        logistics_location=logistics_location,
-                                        logistics_slope=logistics_slope,
-                                        inplace=inplace)
+    """
+    return _compute_elements_similarity(
+        adata,
+        "var",
+        "column",
+        what,
+        method=method,
+        reproducible=reproducible,
+        logistics_location=logistics_location,
+        logistics_slope=logistics_slope,
+        inplace=inplace,
+    )
 
 
 def _compute_elements_similarity(
@@ -154,36 +165,32 @@ def _compute_elements_similarity(
     logistics_slope: float,
     inplace: bool,
 ) -> Optional[ut.PandasFrame]:
-    assert elements in ('obs', 'var')
+    assert elements in ("obs", "var")
 
-    assert method in ('pearson', 'repeated_pearson',
-                      'logistics', 'logistics_pearson')
+    assert method in ("pearson", "repeated_pearson", "logistics", "logistics_pearson")
 
-    data = ut.get_vo_proper(adata, what, layout=f'{per}_major')
+    data = ut.get_vo_proper(adata, what, layout=f"{per}_major")
     dense = ut.to_numpy_matrix(data)
 
-    if method.startswith('logistics'):
-        similarity = \
-            ut.logistics(dense, location=logistics_location,
-                         slope=logistics_slope, per=per)
+    if method.startswith("logistics"):
+        similarity = ut.logistics(dense, location=logistics_location, slope=logistics_slope, per=per)
         similarity *= -1
         similarity += 1
     else:
         similarity = ut.corrcoef(dense, per=per, reproducible=reproducible)
 
-    if method.endswith('_pearson'):
-        similarity = ut.corrcoef(similarity, per=None,
-                                 reproducible=reproducible)
+    if method.endswith("_pearson"):
+        similarity = ut.corrcoef(similarity, per=None, reproducible=reproducible)
 
     if inplace:
-        to = elements + '_similarity'
-        if elements == 'obs':
+        to = elements + "_similarity"
+        if elements == "obs":
             ut.set_oo_data(adata, to, similarity)
         else:
             ut.set_vv_data(adata, to, similarity)
         return None
 
-    if elements == 'obs':
+    if elements == "obs":
         names = adata.obs_names
     else:
         names = adata.var_names

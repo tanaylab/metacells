@@ -1,24 +1,23 @@
-'''
+"""
 Distincts
 ---------
-'''
+"""
 
-import sys
-from typing import Optional, Tuple, Union
+from typing import Optional
+from typing import Tuple
+from typing import Union
 
 import numpy as np
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
 
+import metacells.extensions as xt  # type: ignore
 import metacells.parameters as pr
 import metacells.utilities as ut
 
-if not 'sphinx' in sys.argv[0]:
-    import metacells.extensions as xt  # type: ignore
-
 __all__ = [
-    'compute_distinct_folds',
-    'find_distinct_genes',
-    'compute_subset_distinct_genes',
+    "compute_distinct_folds",
+    "find_distinct_genes",
+    "compute_subset_distinct_genes",
 ]
 
 
@@ -27,12 +26,12 @@ __all__ = [
 @ut.expand_doc()
 def compute_distinct_folds(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     normalization: float = 0,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
-    '''
+    """
     Compute for each observation (cell) and each variable (gene) how much is the ``what`` (default:
     {what}) value different from the overall population.
 
@@ -66,17 +65,16 @@ def compute_distinct_folds(
        {normalization}) to both.
 
     4. Compute the log (base 2) of the result and use it as the fold factor.
-    '''
-    columns_data = ut.get_vo_proper(adata, what, layout='column_major')
-    fractions_of_genes_in_data = ut.fraction_per(columns_data, per='column')
+    """
+    columns_data = ut.get_vo_proper(adata, what, layout="column_major")
+    fractions_of_genes_in_data = ut.fraction_per(columns_data, per="column")
     fractions_of_genes_in_data += normalization
 
     total_umis_of_cells = ut.get_o_numpy(adata, what, sum=True)
     total_umis_of_cells[total_umis_of_cells == 0] = 1
 
-    rows_data = ut.get_vo_proper(adata, what, layout='row_major')
-    fraction_of_genes_in_cells = \
-        ut.to_numpy_matrix(rows_data) / total_umis_of_cells[:, np.newaxis]
+    rows_data = ut.get_vo_proper(adata, what, layout="row_major")
+    fraction_of_genes_in_cells = ut.to_numpy_matrix(rows_data) / total_umis_of_cells[:, np.newaxis]
     fraction_of_genes_in_cells += normalization
 
     zeros_mask = fractions_of_genes_in_data <= 0
@@ -87,15 +85,13 @@ def compute_distinct_folds(
     ratio_of_genes_in_cells /= fractions_of_genes_in_data
     assert np.min(np.min(ratio_of_genes_in_cells)) > 0
 
-    fold_of_genes_in_cells = \
-        np.log2(ratio_of_genes_in_cells, out=ratio_of_genes_in_cells)
+    fold_of_genes_in_cells = np.log2(ratio_of_genes_in_cells, out=ratio_of_genes_in_cells)
 
     if inplace:
-        ut.set_vo_data(adata, 'distinct_fold', fold_of_genes_in_cells)
+        ut.set_vo_data(adata, "distinct_fold", fold_of_genes_in_cells)
         return None
 
-    return ut.to_pandas_frame(fold_of_genes_in_cells,
-                              index=adata.obs_names, columns=adata.var_names)
+    return ut.to_pandas_frame(fold_of_genes_in_cells, index=adata.obs_names, columns=adata.var_names)
 
 
 @ut.logged()
@@ -103,12 +99,12 @@ def compute_distinct_folds(
 @ut.expand_doc()
 def find_distinct_genes(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = 'distinct_fold',
+    what: Union[str, ut.Matrix] = "distinct_fold",
     *,
     distinct_genes_count: int = pr.distinct_genes_count,
     inplace: bool = True,
 ) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame]]:
-    '''
+    """
     Find for each observation (cell) the genes in which its ``what`` (default: {what}) value is most
     distinct from the general population. This is typically applied to the metacells data rather
     than to the cells data.
@@ -136,29 +132,26 @@ def find_distinct_genes(
     1. Fetch the previously computed per-observation-per-variable ``what`` data.
 
     2. Keep the ``distinct_genes_count`` (default: {distinct_genes_count}) top fold factors.
-    '''
+    """
     assert 0 < distinct_genes_count < adata.n_vars
 
-    distinct_gene_indices = \
-        np.empty((adata.n_obs, distinct_genes_count), dtype='int32')
-    distinct_gene_folds = \
-        np.empty((adata.n_obs, distinct_genes_count), dtype='float32')
+    distinct_gene_indices = np.empty((adata.n_obs, distinct_genes_count), dtype="int32")
+    distinct_gene_folds = np.empty((adata.n_obs, distinct_genes_count), dtype="float32")
 
-    fold_in_cells = \
-        ut.mustbe_numpy_matrix(ut.get_vo_proper(adata, what,
-                                                layout='row_major'))
-    extension_name = 'top_distinct_%s_t' % fold_in_cells.dtype
+    fold_in_cells = ut.mustbe_numpy_matrix(ut.get_vo_proper(adata, what, layout="row_major"))
+    extension_name = f"top_distinct_{fold_in_cells.dtype}_t"
     extension = getattr(xt, extension_name)
     extension(distinct_gene_indices, distinct_gene_folds, fold_in_cells, False)
 
     if inplace:
-        ut.set_oa_data(adata, 'cell_distinct_gene_indices',
-                       distinct_gene_indices)
-        ut.set_oa_data(adata, 'cell_distinct_gene_folds', distinct_gene_folds)
+        ut.set_oa_data(adata, "cell_distinct_gene_indices", distinct_gene_indices)
+        ut.set_oa_data(adata, "cell_distinct_gene_folds", distinct_gene_folds)
         return None
 
-    return ut.to_pandas_frame(distinct_gene_indices, index=adata.obs_names), \
-        ut.to_pandas_frame(distinct_gene_folds, index=adata.obs_names)
+    return (
+        ut.to_pandas_frame(distinct_gene_indices, index=adata.obs_names),
+        ut.to_pandas_frame(distinct_gene_folds, index=adata.obs_names),
+    )
 
 
 @ut.logged()
@@ -166,14 +159,14 @@ def find_distinct_genes(
 @ut.expand_doc()
 def compute_subset_distinct_genes(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     prefix: Optional[str] = None,
     scale: Optional[Union[bool, str, ut.NumpyVector]],
     subset: Union[str, ut.NumpyVector],
     normalization: float,
 ) -> Optional[Tuple[ut.PandasSeries, ut.PandasSeries]]:
-    '''
+    """
     Given a subset of the observations (cells), compute for each gene how distinct its ``what``
     (default: {what}) value is in the subset compared to the overall population.
 
@@ -213,35 +206,34 @@ def compute_subset_distinct_genes(
 
     3. Compute the fold ratios using the ``normalization`` (no default!) and the AUROC for each gene,
        for the scaled data based on this mask.
-    '''
+    """
     if isinstance(subset, str):
         subset = ut.get_o_numpy(adata, subset)
 
-    if subset.dtype != 'bool':
+    if subset.dtype != "bool":
         mask: ut.NumpyVector = np.full(adata.n_obs, False)
         mask[subset] = True
         subset = mask
 
     scale_of_cells: Optional[ut.NumpyVector] = None
     if not isinstance(scale, bool):
-        scale_of_cells = \
-            ut.maybe_o_numpy(adata, scale, formatter=ut.sizes_description)
+        scale_of_cells = ut.maybe_o_numpy(adata, scale, formatter=ut.sizes_description)
     elif scale:
         scale_of_cells = ut.get_o_numpy(adata, what, sum=True)
     else:
         scale_of_cells = None
 
-    matrix = ut.get_vo_proper(adata, what, layout='column_major').transpose()
-    fold_of_genes, auroc_of_genes = \
-        ut.matrix_rows_folds_and_aurocs(matrix,
-                                        columns_subset=subset,
-                                        columns_scale=scale_of_cells,
-                                        normalization=normalization)
+    matrix = ut.get_vo_proper(adata, what, layout="column_major").transpose()
+    fold_of_genes, auroc_of_genes = ut.matrix_rows_folds_and_aurocs(
+        matrix, columns_subset=subset, columns_scale=scale_of_cells, normalization=normalization
+    )
 
     if prefix is not None:
-        ut.set_v_data(adata, f'{prefix}_auroc', auroc_of_genes)
-        ut.set_v_data(adata, f'{prefix}_fold', fold_of_genes)
+        ut.set_v_data(adata, f"{prefix}_auroc", auroc_of_genes)
+        ut.set_v_data(adata, f"{prefix}_fold", fold_of_genes)
         return None
 
-    return (ut.to_pandas_series(fold_of_genes, index=adata.var_names),
-            ut.to_pandas_series(auroc_of_genes, index=adata.var_names))
+    return (
+        ut.to_pandas_series(fold_of_genes, index=adata.var_names),
+        ut.to_pandas_series(auroc_of_genes, index=adata.var_names),
+    )

@@ -1,23 +1,24 @@
-'''
+"""
 High
 ----
-'''
+"""
 
-from typing import Optional, Union
+from typing import Optional
+from typing import Union
 
 import numpy as np
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
-    'find_top_feature_genes',
-    'find_high_total_genes',
-    'find_high_topN_genes',
-    'find_high_fraction_genes',
-    'find_high_normalized_variance_genes',
-    'find_high_relative_variance_genes',
+    "find_top_feature_genes",
+    "find_high_total_genes",
+    "find_high_topN_genes",
+    "find_high_fraction_genes",
+    "find_high_normalized_variance_genes",
+    "find_high_relative_variance_genes",
 ]
 
 
@@ -30,7 +31,7 @@ def find_top_feature_genes(
     max_genes: int = pr.max_top_feature_genes,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
-    '''
+    """
     Find genes which have high ``feature_gene`` value.
 
     This is applied after computing metacells to pick the "strongest" feature genes. If using the
@@ -61,9 +62,8 @@ def find_top_feature_genes(
        picked as top feature genes. Note we may still pick more than ``max_genes``, for example when
        using the direct algorithm, we always return all feature genes as there's no way to
        distinguish between them using the ``feature_gene`` data.
-    '''
-    feature_of_gene = \
-        ut.get_v_numpy(adata, 'feature_gene', formatter=ut.mask_description)
+    """
+    feature_of_gene = ut.get_v_numpy(adata, "feature_gene", formatter=ut.mask_description)
     max_threshold = np.max(feature_of_gene)
     assert max_threshold > 0
     threshold = 0
@@ -72,13 +72,13 @@ def find_top_feature_genes(
         threshold = threshold + 1
         genes_mask = feature_of_gene >= threshold
         selected_count = np.sum(genes_mask)
-        ut.log_calc(f'threshold: {threshold} selected: {selected_count}')
+        ut.log_calc(f"threshold: {threshold} selected: {selected_count}")
 
     if inplace:
-        ut.set_v_data(adata, 'top_feature_gene', genes_mask)
+        ut.set_v_data(adata, "top_feature_gene", genes_mask)
         return None
 
-    ut.log_return('top_feature_gene', genes_mask)
+    ut.log_return("top_feature_gene", genes_mask)
     return ut.to_pandas_series(genes_mask, index=adata.var_names)
 
 
@@ -87,12 +87,12 @@ def find_top_feature_genes(
 @ut.expand_doc()
 def find_high_total_genes(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     min_gene_total: int,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
-    '''
+    """
     Find genes which have high total number of ``what`` (default: {what}) data.
 
     This should typically only be applied to downsampled data to ensure that variance in sampling
@@ -123,15 +123,15 @@ def find_high_total_genes(
     1. Use :py:func:`metacells.utilities.computation.sum_per` to get the total UMIs of each gene.
 
     2. Select the genes whose fraction is at least ``min_gene_total``.
-    '''
+    """
     total_of_genes = ut.get_v_numpy(adata, what, sum=True)
     genes_mask = total_of_genes >= min_gene_total
 
     if inplace:
-        ut.set_v_data(adata, 'high_total_gene', genes_mask)
+        ut.set_v_data(adata, "high_total_gene", genes_mask)
         return None
 
-    ut.log_return('high_total_genes', genes_mask)
+    ut.log_return("high_total_genes", genes_mask)
     return ut.to_pandas_series(genes_mask, index=adata.var_names)
 
 
@@ -140,13 +140,13 @@ def find_high_total_genes(
 @ut.expand_doc()
 def find_high_topN_genes(  # pylint: disable=invalid-name
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     topN: int,  # pylint: disable=invalid-name
     min_gene_topN: int,  # pylint: disable=invalid-name
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
-    '''
+    """
     Find genes which have high total top-Nth value of ``what`` (default: {what}) data.
 
     This should typically only be applied to downsampled data to ensure that variance in sampling
@@ -176,18 +176,17 @@ def find_high_topN_genes(  # pylint: disable=invalid-name
     1. Use :py:func:`metacells.utilities.computation.top_per` to get the top-Nth UMIs of each gene.
 
     2. Select the genes whose fraction is at least ``min_gene_topN``.
-    '''
-    data_of_genes = ut.get_vo_proper(adata, what, layout='column_major')
+    """
+    data_of_genes = ut.get_vo_proper(adata, what, layout="column_major")
     rank = max(adata.n_obs - topN - 1, 1)
-    topN_of_genes = ut.rank_per(data_of_genes,  # pylint: disable=invalid-name
-                                per='column', rank=rank)
+    topN_of_genes = ut.rank_per(data_of_genes, per="column", rank=rank)  # pylint: disable=invalid-name
     genes_mask = topN_of_genes >= min_gene_topN
 
     if inplace:
-        ut.set_v_data(adata, f'high_top{topN}_gene', genes_mask)
+        ut.set_v_data(adata, f"high_top{topN}_gene", genes_mask)
         return None
 
-    ut.log_return(f'high_top{topN}_genes', genes_mask)
+    ut.log_return(f"high_top{topN}_genes", genes_mask)
     return ut.to_pandas_series(genes_mask, index=adata.var_names)
 
 
@@ -196,12 +195,12 @@ def find_high_topN_genes(  # pylint: disable=invalid-name
 @ut.expand_doc()
 def find_high_fraction_genes(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     min_gene_fraction: float = pr.significant_gene_fraction,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
-    '''
+    """
     Find genes which have high fraction of the total ``what`` (default: {what}) data of the cells.
 
     Genes with too-low expression are typically excluded from computations. In particular,
@@ -230,17 +229,17 @@ def find_high_fraction_genes(
 
     2. Select the genes whose fraction is at least ``min_gene_fraction`` (default:
        {min_gene_fraction}).
-    '''
-    data = ut.get_vo_proper(adata, what, layout='column_major')
-    fraction_of_genes = ut.fraction_per(data, per='column')
+    """
+    data = ut.get_vo_proper(adata, what, layout="column_major")
+    fraction_of_genes = ut.fraction_per(data, per="column")
 
     genes_mask = fraction_of_genes >= min_gene_fraction
 
     if inplace:
-        ut.set_v_data(adata, 'high_fraction_gene', genes_mask)
+        ut.set_v_data(adata, "high_fraction_gene", genes_mask)
         return None
 
-    ut.log_return('high_fraction_genes', genes_mask)
+    ut.log_return("high_fraction_genes", genes_mask)
     return ut.to_pandas_series(genes_mask, index=adata.var_names)
 
 
@@ -249,12 +248,12 @@ def find_high_fraction_genes(
 @ut.expand_doc()
 def find_high_normalized_variance_genes(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     min_gene_normalized_variance: float = pr.significant_gene_normalized_variance,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
-    '''
+    """
     Find genes which have high normalized variance of ``what`` (default: {what}) data.
 
     The normalized variance measures the variance / mean of each gene. See
@@ -286,19 +285,17 @@ def find_high_normalized_variance_genes(
 
     2. Select the genes whose normalized variance is at least
        ``min_gene_normalized_variance`` (default: {min_gene_normalized_variance}).
-    '''
-    data = ut.get_vo_proper(adata, what, layout='column_major')
-    normalized_variance_of_genes = \
-        ut.normalized_variance_per(data, per='column')
+    """
+    data = ut.get_vo_proper(adata, what, layout="column_major")
+    normalized_variance_of_genes = ut.normalized_variance_per(data, per="column")
 
-    genes_mask = \
-        normalized_variance_of_genes >= min_gene_normalized_variance
+    genes_mask = normalized_variance_of_genes >= min_gene_normalized_variance
 
     if inplace:
-        ut.set_v_data(adata, 'high_normalized_variance_gene', genes_mask)
+        ut.set_v_data(adata, "high_normalized_variance_gene", genes_mask)
         return None
 
-    ut.log_return('high_normalized_variance_genes', genes_mask)
+    ut.log_return("high_normalized_variance_genes", genes_mask)
     return ut.to_pandas_series(genes_mask, index=adata.var_names)
 
 
@@ -307,13 +304,13 @@ def find_high_normalized_variance_genes(
 @ut.expand_doc()
 def find_high_relative_variance_genes(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     min_gene_relative_variance: float = pr.significant_gene_relative_variance,
     window_size: int = pr.relative_variance_window_size,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
-    '''
+    """
     Find genes which have high relative variance of ``what`` (default: {what}) data.
 
     The relative variance measures the variance / mean of each gene relative to the other genes with
@@ -348,16 +345,15 @@ def find_high_relative_variance_genes(
 
     2. Select the genes whose relative variance is at least
        ``min_gene_relative_variance`` (default: {min_gene_relative_variance}).
-    '''
-    data = ut.get_vo_proper(adata, what, layout='column_major')
-    relative_variance_of_genes = \
-        ut.relative_variance_per(data, per='column', window_size=window_size)
+    """
+    data = ut.get_vo_proper(adata, what, layout="column_major")
+    relative_variance_of_genes = ut.relative_variance_per(data, per="column", window_size=window_size)
 
     genes_mask = relative_variance_of_genes >= min_gene_relative_variance
 
     if inplace:
-        ut.set_v_data(adata, 'high_relative_variance_gene', genes_mask)
+        ut.set_v_data(adata, "high_relative_variance_gene", genes_mask)
         return None
 
-    ut.log_return('high_relative_variance_genes', genes_mask)
+    ut.log_return("high_relative_variance_genes", genes_mask)
     return ut.to_pandas_series(genes_mask, index=adata.var_names)

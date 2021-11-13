@@ -1,5 +1,8 @@
 /// C++ extensions to support the metacells package.";
 
+#include "pybind11/numpy.h"
+#include "pybind11/pybind11.h"
+
 #include <atomic>
 #include <cmath>
 #include <iostream>
@@ -7,9 +10,6 @@
 #include <random>
 #include <sstream>
 #include <thread>
-
-#include "pybind11/numpy.h"
-#include "pybind11/pybind11.h"
 
 namespace metacells {
 
@@ -23,9 +23,7 @@ class AtomicWriter {
     std::ostream& m_stream;
 
 public:
-    AtomicWriter(std::ostream& s = std::cerr) : m_stream(s) {
-        m_st << std::this_thread::get_id() << ' ';
-    }
+    AtomicWriter(std::ostream& s = std::cerr) : m_stream(s) { m_st << std::this_thread::get_id() << ' '; }
 
     template<typename T>
     AtomicWriter& operator<<(T const& t) {
@@ -58,20 +56,19 @@ extern thread_local AtomicWriter writer;
         writer << __FILE__ << ':' << __LINE__ << ':' << __FUNCTION__ << ":"
 
 #if ASSERT_LEVEL >= 1
-#    define FastAssertCompare(X, OP, Y)                                                            \
-        if (!(double(X) OP double(Y))) {                                                           \
-            std::lock_guard<std::mutex> io_lock(io_mutex);                                         \
-            std::cerr << __FILE__ << ":" << __LINE__ << ": failed assert: " << #X << " -> " << (X) \
-                      << " " << #OP << " " << (Y) << " <- " << #Y << "" << std::endl;              \
-            assert(false);                                                                         \
+#    define FastAssertCompare(X, OP, Y)                                                                          \
+        if (!(double(X) OP double(Y))) {                                                                         \
+            std::lock_guard<std::mutex> io_lock(io_mutex);                                                       \
+            std::cerr << __FILE__ << ":" << __LINE__ << ": failed assert: " << #X << " -> " << (X) << " " << #OP \
+                      << " " << (Y) << " <- " << #Y << "" << std::endl;                                          \
+            assert(false);                                                                                       \
         } else
-#    define FastAssertCompareWhat(X, OP, Y, WHAT)                                                 \
-        if (!(double(X) OP double(Y))) {                                                          \
-            std::lock_guard<std::mutex> io_lock(io_mutex);                                        \
-            std::cerr << __FILE__ << ":" << __LINE__ << ": " << WHAT << ": failed assert: " << #X \
-                      << " -> " << (X) << " " << #OP << " " << (Y) << " <- " << #Y << ""          \
-                      << std::endl;                                                               \
-            assert(false);                                                                        \
+#    define FastAssertCompareWhat(X, OP, Y, WHAT)                                                                  \
+        if (!(double(X) OP double(Y))) {                                                                           \
+            std::lock_guard<std::mutex> io_lock(io_mutex);                                                         \
+            std::cerr << __FILE__ << ":" << __LINE__ << ": " << WHAT << ": failed assert: " << #X << " -> " << (X) \
+                      << " " << #OP << " " << (Y) << " <- " << #Y << "" << std::endl;                              \
+            assert(false);                                                                                         \
         } else
 #else
 #    define FastAssertCompare(...)
@@ -135,8 +132,7 @@ static const float64_t EPSILON = 1e-6;
 static const float64_t LOG2_SCALE = 1.0 / log(2.0);
 static const double NaN = std::numeric_limits<double>::quiet_NaN();
 
-static float64_t inline
-log2(const float64_t x) {
+static float64_t inline log2(const float64_t x) {
     FastAssertCompare(x, >, 0);
     return log(x) * LOG2_SCALE;
 }
@@ -201,8 +197,7 @@ public:
     ArraySlice(std::vector<T>& vector, const char* const name)
       : m_data(&vector[0]), m_size(vector.size()), m_name(name) {}
 
-    ArraySlice(T* const data, const size_t size, const char* const name)
-      : m_data(data), m_size(size), m_name(name) {}
+    ArraySlice(T* const data, const size_t size, const char* const name) : m_data(data), m_size(size), m_name(name) {}
 
     ArraySlice(pybind11::array_t<T>& array, const char* const name)
       : ArraySlice(array.mutable_data(), array.size(), name) {
@@ -269,11 +264,7 @@ public:
       , m_name(name) {}
 
     ConstMatrixSlice(const pybind11::array_t<T>& array, const char* const name)
-      : ConstMatrixSlice(array.data(),
-                         array.shape(0),
-                         array.shape(1),
-                         matrix_step(array, name),
-                         name) {
+      : ConstMatrixSlice(array.data(), array.shape(0), array.shape(1), matrix_step(array, name), name) {
         FastAssertCompareWhat(array.ndim(), ==, 2, name);
         FastAssertCompareWhat(array.data(0, 1) - array.data(0, 0), ==, 1, name);
         FastAssertCompareWhat(m_columns_count, <=, m_rows_offset, name);
@@ -313,11 +304,7 @@ public:
       , m_name(name) {}
 
     MatrixSlice(pybind11::array_t<T>& array, const char* const name)
-      : MatrixSlice(array.mutable_data(),
-                    array.shape(0),
-                    array.shape(1),
-                    matrix_step(array, name),
-                    name) {
+      : MatrixSlice(array.mutable_data(), array.shape(0), array.shape(1), matrix_step(array, name), name) {
         FastAssertCompareWhat(array.ndim(), ==, 2, name);
         FastAssertCompareWhat(array.data(0, 1) - array.data(0, 0), ==, 1, name);
         FastAssertCompareWhat(m_columns_count, <=, m_rows_offset, name);
@@ -515,12 +502,9 @@ public:
 };
 
 extern void
-parallel_loop(const size_t size,
-              std::function<void(size_t)> parallel_body,
-              std::function<void(size_t)> serial_body);
+parallel_loop(const size_t size, std::function<void(size_t)> parallel_body, std::function<void(size_t)> serial_body);
 
-static void inline
-parallel_loop(const size_t size, std::function<void(size_t)> parallel_body) {
+static void inline parallel_loop(const size_t size, std::function<void(size_t)> parallel_body) {
     parallel_loop(size, parallel_body, parallel_body);
 }
 
@@ -533,18 +517,31 @@ serial_loop(const size_t size, std::function<void(size_t)> serial_body) {
 }
 */
 
-extern void register_auroc(pybind11::module& module);
-extern void register_choose_seeds(pybind11::module& module);
-extern void register_correlate(pybind11::module& module);
-extern void register_cover(pybind11::module& module);
-extern void register_downsample(pybind11::module& module);
-extern void register_folds(pybind11::module& module);
-extern void register_logistics(pybind11::module& module);
-extern void register_partitions(pybind11::module& module);
-extern void register_prune_per(pybind11::module& module);
-extern void register_rank(pybind11::module& module);
-extern void register_relayout(pybind11::module& module);
-extern void register_shuffle(pybind11::module& module);
-extern void register_top_per(pybind11::module& module);
+extern void
+register_auroc(pybind11::module& module);
+extern void
+register_choose_seeds(pybind11::module& module);
+extern void
+register_correlate(pybind11::module& module);
+extern void
+register_cover(pybind11::module& module);
+extern void
+register_downsample(pybind11::module& module);
+extern void
+register_folds(pybind11::module& module);
+extern void
+register_logistics(pybind11::module& module);
+extern void
+register_partitions(pybind11::module& module);
+extern void
+register_prune_per(pybind11::module& module);
+extern void
+register_rank(pybind11::module& module);
+extern void
+register_relayout(pybind11::module& module);
+extern void
+register_shuffle(pybind11::module& module);
+extern void
+register_top_per(pybind11::module& module);
 
 }  // namespace metacells

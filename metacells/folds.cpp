@@ -180,13 +180,9 @@ top_distinct(pybind11::array_t<int32_t>& gene_indices_array,
 
 void
 register_folds(pybind11::module& module) {
-#define REGISTER_F(F)                                  \
-    module.def("top_distinct_" #F,                     \
-               &metacells::top_distinct<F>,            \
-               "Collect the topmost distinct genes."); \
-    module.def("fold_factor_dense_" #F,                \
-               &metacells::fold_factor_dense<F>,       \
-               "Fold factors of dense data.");
+#define REGISTER_F(F)                                                                                   \
+    module.def("top_distinct_" #F, &metacells::top_distinct<F>, "Collect the topmost distinct genes."); \
+    module.def("fold_factor_dense_" #F, &metacells::fold_factor_dense<F>, "Fold factors of dense data.");
 
     REGISTER_F(float32_t)
     REGISTER_F(float64_t)

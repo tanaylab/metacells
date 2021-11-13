@@ -1,19 +1,21 @@
-'''
+"""
 Feature
 -------
-'''
+"""
 
 from re import Pattern
-from typing import Collection, Optional, Union
+from typing import Collection
+from typing import Optional
+from typing import Union
 
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
 import metacells.tools as tl
 import metacells.utilities as ut
 
 __all__ = [
-    'extract_feature_data',
+    "extract_feature_data",
 ]
 
 
@@ -22,9 +24,9 @@ __all__ = [
 @ut.expand_doc()
 def extract_feature_data(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
-    name: Optional[str] = '.feature',
+    name: Optional[str] = ".feature",
     downsample_min_samples: float = pr.feature_downsample_min_samples,
     downsample_min_cell_quantile: float = pr.feature_downsample_min_cell_quantile,
     downsample_max_cell_quantile: float = pr.feature_downsample_max_cell_quantile,
@@ -38,7 +40,7 @@ def extract_feature_data(
     random_seed: int = 0,
     top_level: bool = True,
 ) -> Optional[AnnData]:
-    '''
+    """
     Extract a "feature" subset of ``what`` (default: {what} data, to compute metacells by.
 
     When computing metacells (or clustering cells in general), it makes sense to use a subset of the
@@ -103,52 +105,45 @@ def extract_feature_data(
 
     6. Invoke :py:func:`metacells.tools.filter.filter_data` to slice just the selected
        "feature" genes using the ``name`` (default: {name}).
-    '''
-    tl.downsample_cells(adata, what,
-                        downsample_min_samples=downsample_min_samples,
-                        downsample_min_cell_quantile=downsample_min_cell_quantile,
-                        downsample_max_cell_quantile=downsample_max_cell_quantile,
-                        random_seed=random_seed)
+    """
+    tl.downsample_cells(
+        adata,
+        what,
+        downsample_min_samples=downsample_min_samples,
+        downsample_min_cell_quantile=downsample_min_cell_quantile,
+        downsample_max_cell_quantile=downsample_max_cell_quantile,
+        random_seed=random_seed,
+    )
 
     var_masks = []
 
-    if forced_gene_names is not None \
-            or forced_gene_patterns is not None:
-        var_masks.append('|forced_gene')
-        tl.find_named_genes(adata,
-                            to='forced_gene',
-                            names=forced_gene_names,
-                            patterns=forced_gene_patterns)
+    if forced_gene_names is not None or forced_gene_patterns is not None:
+        var_masks.append("|forced_gene")
+        tl.find_named_genes(adata, to="forced_gene", names=forced_gene_names, patterns=forced_gene_patterns)
 
     if min_gene_top3 is not None:
-        var_masks.append('high_top3_gene')
-        tl.find_high_topN_genes(adata, 'downsampled', topN=3,
-                                min_gene_topN=min_gene_top3)
+        var_masks.append("high_top3_gene")
+        tl.find_high_topN_genes(adata, "downsampled", topN=3, min_gene_topN=min_gene_top3)
 
     if min_gene_total is not None:
-        var_masks.append('high_total_gene')
-        tl.find_high_total_genes(adata, 'downsampled',
-                                 min_gene_total=min_gene_total)
+        var_masks.append("high_total_gene")
+        tl.find_high_total_genes(adata, "downsampled", min_gene_total=min_gene_total)
 
     if min_gene_relative_variance is not None:
-        var_masks.append('high_relative_variance_gene')
-        tl.find_high_relative_variance_genes(adata, 'downsampled',
-                                             min_gene_relative_variance=min_gene_relative_variance)
+        var_masks.append("high_relative_variance_gene")
+        tl.find_high_relative_variance_genes(
+            adata, "downsampled", min_gene_relative_variance=min_gene_relative_variance
+        )
 
-    if forbidden_gene_names is not None \
-            or forbidden_gene_patterns is not None:
-        var_masks.append('~forbidden_gene')
-        tl.find_named_genes(adata,
-                            to='forbidden_gene',
-                            names=forbidden_gene_names,
-                            patterns=forbidden_gene_patterns)
+    if forbidden_gene_names is not None or forbidden_gene_patterns is not None:
+        var_masks.append("~forbidden_gene")
+        tl.find_named_genes(adata, to="forbidden_gene", names=forbidden_gene_names, patterns=forbidden_gene_patterns)
 
-    results = tl.filter_data(adata, name=name, top_level=top_level,
-                             track_var='full_gene_index',
-                             mask_var='feature_gene',
-                             var_masks=var_masks)
+    results = tl.filter_data(
+        adata, name=name, top_level=top_level, track_var="full_gene_index", mask_var="feature_gene", var_masks=var_masks
+    )
 
     if results is None:
-        raise ValueError('Empty feature data, giving up')
+        raise ValueError("Empty feature data, giving up")
 
     return results[0]

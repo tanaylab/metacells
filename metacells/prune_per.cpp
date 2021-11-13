@@ -65,12 +65,14 @@ collect_pruned(const size_t pruned_degree,
     WithoutGil without_gil{};
 
     size_t size = input_pruned_values_indptr.size() - 1;
-    ConstCompressedMatrix<D, I, P> input_pruned_values(
-        ConstArraySlice<D>(input_pruned_values_data, "input_pruned_values_data"),
-        ConstArraySlice<I>(input_pruned_values_indices, "input_pruned_values_indices"),
-        ConstArraySlice<P>(input_pruned_values_indptr, "pruned_values_indptr"),
-        I(size),
-        "pruned_values");
+    ConstCompressedMatrix<D, I, P> input_pruned_values(ConstArraySlice<D>(input_pruned_values_data,
+                                                                          "input_pruned_values_data"),
+                                                       ConstArraySlice<I>(input_pruned_values_indices,
+                                                                          "input_pruned_values_indices"),
+                                                       ConstArraySlice<P>(input_pruned_values_indptr,
+                                                                          "pruned_values_indptr"),
+                                                       I(size),
+                                                       "pruned_values");
 
     ArraySlice<D> output_pruned_values(output_pruned_values_array, "output_pruned_values");
     ArraySlice<I> output_pruned_indices(output_pruned_indices_array, "output_pruned_indices");
@@ -104,10 +106,8 @@ collect_pruned(const size_t pruned_degree,
 
 void
 register_prune_per(pybind11::module& module) {
-#define REGISTER_D_I_P(D, I, P)                    \
-    module.def("collect_pruned_" #D "_" #I "_" #P, \
-               &collect_pruned<D, I, P>,           \
-               "Collect the topmost pruned edges.");
+#define REGISTER_D_I_P(D, I, P) \
+    module.def("collect_pruned_" #D "_" #I "_" #P, &collect_pruned<D, I, P>, "Collect the topmost pruned edges.");
 
 #define REGISTER_DS_I_P(I, P)       \
     REGISTER_D_I_P(int8_t, I, P)    \

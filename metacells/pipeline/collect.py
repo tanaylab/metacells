@@ -1,20 +1,22 @@
-'''
+"""
 Collect
 -------
-'''
+"""
 
-from typing import Optional, Tuple, Union
+from typing import Optional
+from typing import Tuple
+from typing import Union
 
 import numpy as np
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
 import metacells.tools as tl
 import metacells.utilities as ut
 
 __all__ = [
-    'collect_metacells',
-    'compute_effective_cell_sizes',
+    "collect_metacells",
+    "compute_effective_cell_sizes",
 ]
 
 
@@ -22,15 +24,15 @@ __all__ = [
 @ut.timed_call()
 def collect_metacells(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     max_cell_size: Optional[float] = pr.max_cell_size,
     max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
-    name: str = 'metacells',
+    name: str = "metacells",
     top_level: bool = True,
 ) -> AnnData:
-    '''
+    """
     Collect computed metacells ``what`` (default: {what}) data.
 
     **Input**
@@ -93,39 +95,31 @@ def collect_metacells(
        metacells.
 
     4. Pass all relevant per-gene and per-cell annotations to the result.
-    '''
-    _cell_sizes, _max_cell_size, cell_scale_factors = \
-        compute_effective_cell_sizes(adata,
-                                     max_cell_size=max_cell_size,
-                                     max_cell_size_factor=max_cell_size_factor,
-                                     cell_sizes=cell_sizes)
+    """
+    _cell_sizes, _max_cell_size, cell_scale_factors = compute_effective_cell_sizes(
+        adata, max_cell_size=max_cell_size, max_cell_size_factor=max_cell_size_factor, cell_sizes=cell_sizes
+    )
 
     if cell_scale_factors is not None:
-        data = ut.get_vo_proper(adata, what, layout='row_major')
-        what = ut.scale_by(data, cell_scale_factors, by='row')
+        data = ut.get_vo_proper(adata, what, layout="row_major")
+        what = ut.scale_by(data, cell_scale_factors, by="row")
 
-    mdata = tl.group_obs_data(adata, what, groups='metacell', name=name)
+    mdata = tl.group_obs_data(adata, what, groups="metacell", name=name)
     assert mdata is not None
     if top_level:
         ut.top_level(mdata)
 
-    for annotation_name in ('excluded_gene',
-                            'clean_gene',
-                            'forbidden_gene',
-                            'pre_feature_gene',
-                            'feature_gene'):
+    for annotation_name in ("excluded_gene", "clean_gene", "forbidden_gene", "pre_feature_gene", "feature_gene"):
         if not ut.has_data(adata, annotation_name):
             continue
-        value_per_gene = ut.get_v_numpy(adata, annotation_name,
-                                        formatter=ut.mask_description)
-        ut.set_v_data(mdata, annotation_name, value_per_gene,
-                      formatter=ut.mask_description)
+        value_per_gene = ut.get_v_numpy(adata, annotation_name, formatter=ut.mask_description)
+        ut.set_v_data(mdata, annotation_name, value_per_gene, formatter=ut.mask_description)
 
-    for annotation_name in ('pile', 'candidate'):
+    for annotation_name in ("pile", "candidate"):
         if ut.has_data(adata, annotation_name):
-            tl.group_obs_annotation(adata, mdata, groups='metacell',
-                                    formatter=ut.groups_description,
-                                    name=annotation_name, method='unique')
+            tl.group_obs_annotation(
+                adata, mdata, groups="metacell", formatter=ut.groups_description, name=annotation_name, method="unique"
+            )
 
     return mdata
 
@@ -139,7 +133,7 @@ def compute_effective_cell_sizes(
     max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
 ) -> Tuple[Optional[ut.NumpyVector], Optional[float], Optional[ut.NumpyVector]]:
-    '''
+    """
     Compute the effective cell sizes for controlling metacell sizes, and the scale factor to apply to
     each cell (if needed).
 
@@ -152,30 +146,24 @@ def compute_effective_cell_sizes(
     scale them by some factor (less than 1.0).
 
     Returns the cell sizes, the maximal cell size, and the optional cell scale factors vector.
-    '''
-    effective_cell_sizes = \
-        ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
+    """
+    effective_cell_sizes = ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
 
     cell_scale_factors: Optional[ut.NumpyVector] = None
 
-    if (max_cell_size is not None
-            or max_cell_size_factor is not None) \
-            and effective_cell_sizes is not None:
+    if (max_cell_size is not None or max_cell_size_factor is not None) and effective_cell_sizes is not None:
         if max_cell_size is None:
             assert max_cell_size_factor is not None
-            ut.log_calc('median cell size', np.median(effective_cell_sizes))
-            max_cell_size = \
-                float(np.median(effective_cell_sizes)
-                      * max_cell_size_factor)
+            ut.log_calc("median cell size", np.median(effective_cell_sizes))
+            max_cell_size = float(np.median(effective_cell_sizes) * max_cell_size_factor)
 
-        ut.log_calc('cap_cell_size', max_cell_size)
+        ut.log_calc("cap_cell_size", max_cell_size)
         cell_scale_factors = max_cell_size / effective_cell_sizes
-        effective_cell_sizes[effective_cell_sizes
-                             > max_cell_size] = max_cell_size
+        effective_cell_sizes[effective_cell_sizes > max_cell_size] = max_cell_size
         assert cell_scale_factors is not None  # Dumb mypy.
         cell_scale_factors[cell_scale_factors > 1.0] = 1.0
         scaled_count = np.sum(cell_scale_factors < 1.0)
-        ut.log_calc('scaled cells count', scaled_count)
+        ut.log_calc("scaled cells count", scaled_count)
         if scaled_count == 0:
             cell_scale_factors = None
 

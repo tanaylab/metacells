@@ -1,17 +1,19 @@
-'''
+"""
 Filter
 ------
-'''
-from typing import List, Optional, Tuple
+"""
+from typing import List
+from typing import Optional
+from typing import Tuple
 
 import numpy as np
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
 
 import metacells.utilities as ut
 from metacells.tools.mask import combine_masks
 
 __all__ = [
-    'filter_data',
+    "filter_data",
 ]
 
 
@@ -31,7 +33,7 @@ def filter_data(  # pylint: disable=dangerous-default-value
     name: Optional[str] = None,
     top_level: bool = True,
 ) -> Optional[Tuple[AnnData, ut.PandasSeries, ut.PandasSeries]]:
-    '''
+    """
     Filter (slice) the data based on previously-computed masks.
 
     For example, it is useful to discard cell-cycle genes, cells which have too few UMIs for
@@ -71,41 +73,40 @@ def filter_data(  # pylint: disable=dangerous-default-value
     2. If the obtained masks for either the observations or variables is empty, return ``None``.
        Otherwise, return a slice of the full data containing just the observations and variables
        specified by the final masks.
-    '''
+    """
     if len(obs_masks) == 0:
-        obs_mask = np.full(adata.n_obs, True, dtype='bool')
+        obs_mask = np.full(adata.n_obs, True, dtype="bool")
         if mask_obs is not None:
             ut.set_o_data(adata, mask_obs, obs_mask)
     else:
-        mask = \
-            combine_masks(adata, obs_masks, invert=invert_obs, to=mask_obs)
+        mask = combine_masks(adata, obs_masks, invert=invert_obs, to=mask_obs)
         if mask is None:
             assert mask_obs is not None
-            obs_mask = ut.get_o_numpy(adata, mask_obs,
-                                      formatter=ut.mask_description) > 0
+            obs_mask = ut.get_o_numpy(adata, mask_obs, formatter=ut.mask_description) > 0
         else:
             obs_mask = ut.to_numpy_vector(mask, only_extract=True) > 0
 
     if len(var_masks) == 0:
-        var_mask = np.full(adata.n_vars, True, dtype='bool')
+        var_mask = np.full(adata.n_vars, True, dtype="bool")
         if mask_var is not None:
             ut.set_o_data(adata, mask_var, var_mask)
     else:
-        mask = \
-            combine_masks(adata, var_masks, invert=invert_var, to=mask_var)
+        mask = combine_masks(adata, var_masks, invert=invert_var, to=mask_var)
         if mask is None:
             assert mask_var is not None
-            var_mask = ut.get_v_numpy(adata, mask_var,
-                                      formatter=ut.mask_description) > 0
+            var_mask = ut.get_v_numpy(adata, mask_var, formatter=ut.mask_description) > 0
         else:
             var_mask = ut.to_numpy_vector(mask, only_extract=True) > 0
 
     if not np.any(obs_mask) or not np.any(var_mask):
         return None
 
-    fdata = ut.slice(adata, name=name, top_level=top_level,
-                     obs=obs_mask, vars=var_mask,
-                     track_obs=track_obs, track_var=track_var)
+    fdata = ut.slice(
+        adata, name=name, top_level=top_level, obs=obs_mask, vars=var_mask, track_obs=track_obs, track_var=track_var
+    )
 
-    return fdata, ut.to_pandas_series(obs_mask, index=adata.obs_names), \
-        ut.to_pandas_series(var_mask, index=adata.var_names)
+    return (
+        fdata,
+        ut.to_pandas_series(obs_mask, index=adata.obs_names),
+        ut.to_pandas_series(var_mask, index=adata.var_names),
+    )

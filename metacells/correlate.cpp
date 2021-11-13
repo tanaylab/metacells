@@ -51,8 +51,7 @@ correlate_two_dense_rows(ConstArraySlice<F> some_values,
 
     float64_t correlation = columns_count * both_sum_values - some_sum_values * other_sum_values;
     float64_t some_factor = columns_count * some_sum_squared - some_sum_values * some_sum_values;
-    float64_t other_factor =
-        columns_count * other_sum_squared - other_sum_values * other_sum_values;
+    float64_t other_factor = columns_count * other_sum_squared - other_sum_values * other_sum_values;
     float64_t both_factors = sqrt(some_factor * other_factor);
     if (both_factors != 0) {
         correlation /= both_factors;
@@ -84,8 +83,8 @@ correlate_two_dense_rows(ConstArraySlice<float64_t> some_values,
         __m256d other_values_avx2 = _mm256_loadu_pd(other_values_data + column_index);
         both_sum_avx2 = _mm256_fmadd_pd(some_values_avx2, other_values_avx2, both_sum_avx2);
     }
-    both_sum_values = *(float64_t*)&both_sum_avx2[0] + *(float64_t*)&both_sum_avx2[1]
-                      + *(float64_t*)&both_sum_avx2[2] + *(float64_t*)&both_sum_avx2[3];
+    both_sum_values = *(float64_t*)&both_sum_avx2[0] + *(float64_t*)&both_sum_avx2[1] + *(float64_t*)&both_sum_avx2[2]
+                      + *(float64_t*)&both_sum_avx2[3];
 #    ifdef __INTEL_COMPILER
 #        pragma simd
 #    endif
@@ -97,8 +96,7 @@ correlate_two_dense_rows(ConstArraySlice<float64_t> some_values,
 
     float64_t correlation = columns_count * both_sum_values - some_sum_values * other_sum_values;
     float64_t some_factor = columns_count * some_sum_squared - some_sum_values * some_sum_values;
-    float64_t other_factor =
-        columns_count * other_sum_squared - other_sum_values * other_sum_values;
+    float64_t other_factor = columns_count * other_sum_squared - other_sum_values * other_sum_values;
     float64_t both_factors = sqrt(some_factor * other_factor);
     if (both_factors != 0) {
         correlation /= both_factors;
@@ -143,8 +141,7 @@ correlate_two_dense_rows(ConstArraySlice<float32_t> some_values,
 
     float64_t correlation = columns_count * both_sum_values - some_sum_values * other_sum_values;
     float64_t some_factor = columns_count * some_sum_squared - some_sum_values * some_sum_values;
-    float64_t other_factor =
-        columns_count * other_sum_squared - other_sum_values * other_sum_values;
+    float64_t other_factor = columns_count * other_sum_squared - other_sum_values * other_sum_values;
     float64_t both_factors = sqrt(some_factor * other_factor);
     if (both_factors != 0) {
         correlation /= both_factors;
@@ -184,8 +181,7 @@ correlate_many_dense_rows(const F* const some_values_data,
     for (size_t column_index = 0; column_index < columns_count; ++column_index) {
         const F some_value = some_values_data[column_index];
         for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
-            both_sum_values[which_other] +=
-                some_value * other_values_data[which_other][column_index];
+            both_sum_values[which_other] += some_value * other_values_data[which_other][column_index];
         }
     }
 
@@ -193,17 +189,14 @@ correlate_many_dense_rows(const F* const some_values_data,
     for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
         const float64_t other_sum_values = row_sum_values[other_begin_index + which_other];
         const float64_t other_sum_squared = row_sum_squared[other_begin_index + which_other];
-        results.correlations[which_other] = columns_count * float64_t(both_sum_values[which_other])
-                                            - some_sum_values * other_sum_values;
-        const float64_t some_factor =
-            columns_count * some_sum_squared - some_sum_values * some_sum_values;
-        const float64_t other_factor =
-            columns_count * other_sum_squared - other_sum_values * other_sum_values;
+        results.correlations[which_other] =
+            columns_count * float64_t(both_sum_values[which_other]) - some_sum_values * other_sum_values;
+        const float64_t some_factor = columns_count * some_sum_squared - some_sum_values * some_sum_values;
+        const float64_t other_factor = columns_count * other_sum_squared - other_sum_values * other_sum_values;
         const float64_t both_factors = sqrt(some_factor * other_factor);
         if (both_factors != 0) {
             results.correlations[which_other] /= both_factors;
-            results.correlations[which_other] =
-                std::max(std::min(results.correlations[which_other], 1.0), -1.0);
+            results.correlations[which_other] = std::max(std::min(results.correlations[which_other], 1.0), -1.0);
         } else {
             results.correlations[which_other] = 0.0;
         }
@@ -236,18 +229,16 @@ correlate_many_dense_rows(const float64_t* const some_values_data,
     for (; column_index < avx2_columns_count; column_index += 4) {
         __m256d some_values_avx2 = _mm256_loadu_pd(some_values_data + column_index);
         for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
-            __m256d other_values_avx2 =
-                _mm256_loadu_pd(other_values_data[which_other] + column_index);
+            __m256d other_values_avx2 = _mm256_loadu_pd(other_values_data[which_other] + column_index);
             both_sum_avx2[which_other] =
                 _mm256_fmadd_pd(some_values_avx2, other_values_avx2, both_sum_avx2[which_other]);
         }
     }
     float64_t both_sum_values[MANY_ROWS];
     for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
-        both_sum_values[which_other] = *(float64_t*)&both_sum_avx2[which_other][0]
-                                       + *(float64_t*)&both_sum_avx2[which_other][1]
-                                       + *(float64_t*)&both_sum_avx2[which_other][2]
-                                       + *(float64_t*)&both_sum_avx2[which_other][3];
+        both_sum_values[which_other] =
+            *(float64_t*)&both_sum_avx2[which_other][0] + *(float64_t*)&both_sum_avx2[which_other][1]
+            + *(float64_t*)&both_sum_avx2[which_other][2] + *(float64_t*)&both_sum_avx2[which_other][3];
     }
 #    ifdef __INTEL_COMPILER
 #        pragma simd
@@ -255,8 +246,7 @@ correlate_many_dense_rows(const float64_t* const some_values_data,
     for (; column_index < columns_count; ++column_index) {
         const float64_t some_value = some_values_data[column_index];
         for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
-            both_sum_values[which_other] +=
-                some_value * other_values_data[which_other][column_index];
+            both_sum_values[which_other] += some_value * other_values_data[which_other][column_index];
         }
     }
 
@@ -264,17 +254,14 @@ correlate_many_dense_rows(const float64_t* const some_values_data,
     for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
         const float64_t other_sum_values = row_sum_values[other_begin_index + which_other];
         const float64_t other_sum_squared = row_sum_squared[other_begin_index + which_other];
-        results.correlations[which_other] = columns_count * float64_t(both_sum_values[which_other])
-                                            - some_sum_values * other_sum_values;
-        const float64_t some_factor =
-            columns_count * some_sum_squared - some_sum_values * some_sum_values;
-        const float64_t other_factor =
-            columns_count * other_sum_squared - other_sum_values * other_sum_values;
+        results.correlations[which_other] =
+            columns_count * float64_t(both_sum_values[which_other]) - some_sum_values * other_sum_values;
+        const float64_t some_factor = columns_count * some_sum_squared - some_sum_values * some_sum_values;
+        const float64_t other_factor = columns_count * other_sum_squared - other_sum_values * other_sum_values;
         const float64_t both_factors = sqrt(some_factor * other_factor);
         if (both_factors != 0) {
             results.correlations[which_other] /= both_factors;
-            results.correlations[which_other] =
-                std::max(std::min(results.correlations[which_other], 1.0), -1.0);
+            results.correlations[which_other] = std::max(std::min(results.correlations[which_other], 1.0), -1.0);
         } else {
             results.correlations[which_other] = 0.0;
         }
@@ -306,22 +293,18 @@ correlate_many_dense_rows(const float32_t* const some_values_data,
     for (; column_index < avx2_columns_count; column_index += 8) {
         __m256 some_values_avx2 = _mm256_loadu_ps(some_values_data + column_index);
         for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
-            __m256 other_values_avx2 =
-                _mm256_loadu_ps(other_values_data[which_other] + column_index);
+            __m256 other_values_avx2 = _mm256_loadu_ps(other_values_data[which_other] + column_index);
             both_sum_avx2[which_other] =
                 _mm256_fmadd_ps(some_values_avx2, other_values_avx2, both_sum_avx2[which_other]);
         }
     }
     float64_t both_sum_values[MANY_ROWS];
     for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
-        both_sum_values[which_other] = *(float32_t*)&both_sum_avx2[which_other][0]
-                                       + *(float32_t*)&both_sum_avx2[which_other][1]
-                                       + *(float32_t*)&both_sum_avx2[which_other][2]
-                                       + *(float32_t*)&both_sum_avx2[which_other][3]
-                                       + *(float32_t*)&both_sum_avx2[which_other][4]
-                                       + *(float32_t*)&both_sum_avx2[which_other][5]
-                                       + *(float32_t*)&both_sum_avx2[which_other][6]
-                                       + *(float32_t*)&both_sum_avx2[which_other][7];
+        both_sum_values[which_other] =
+            *(float32_t*)&both_sum_avx2[which_other][0] + *(float32_t*)&both_sum_avx2[which_other][1]
+            + *(float32_t*)&both_sum_avx2[which_other][2] + *(float32_t*)&both_sum_avx2[which_other][3]
+            + *(float32_t*)&both_sum_avx2[which_other][4] + *(float32_t*)&both_sum_avx2[which_other][5]
+            + *(float32_t*)&both_sum_avx2[which_other][6] + *(float32_t*)&both_sum_avx2[which_other][7];
     }
 #    ifdef __INTEL_COMPILER
 #        pragma simd
@@ -329,8 +312,7 @@ correlate_many_dense_rows(const float32_t* const some_values_data,
     for (; column_index < columns_count; ++column_index) {
         const float32_t some_value = some_values_data[column_index];
         for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
-            both_sum_values[which_other] +=
-                some_value * other_values_data[which_other][column_index];
+            both_sum_values[which_other] += some_value * other_values_data[which_other][column_index];
         }
     }
 
@@ -338,17 +320,14 @@ correlate_many_dense_rows(const float32_t* const some_values_data,
     for (size_t which_other = 0; which_other < MANY_ROWS; ++which_other) {
         const float64_t other_sum_values = row_sum_values[other_begin_index + which_other];
         const float64_t other_sum_squared = row_sum_squared[other_begin_index + which_other];
-        results.correlations[which_other] = columns_count * float64_t(both_sum_values[which_other])
-                                            - some_sum_values * other_sum_values;
-        const float64_t some_factor =
-            columns_count * some_sum_squared - some_sum_values * some_sum_values;
-        const float64_t other_factor =
-            columns_count * other_sum_squared - other_sum_values * other_sum_values;
+        results.correlations[which_other] =
+            columns_count * float64_t(both_sum_values[which_other]) - some_sum_values * other_sum_values;
+        const float64_t some_factor = columns_count * some_sum_squared - some_sum_values * some_sum_values;
+        const float64_t other_factor = columns_count * other_sum_squared - other_sum_values * other_sum_values;
         const float64_t both_factors = sqrt(some_factor * other_factor);
         if (both_factors != 0) {
             results.correlations[which_other] /= both_factors;
-            results.correlations[which_other] =
-                std::max(std::min(results.correlations[which_other], 1.0), -1.0);
+            results.correlations[which_other] = std::max(std::min(results.correlations[which_other], 1.0), -1.0);
         } else {
             results.correlations[which_other] = 0.0;
         }
@@ -364,15 +343,13 @@ unrolled_iterations_count(const size_t rows_count, const size_t unroll_size) {
     const size_t full_rows_groups_sum = (full_rows_groups_count * (full_rows_groups_count + 1)) / 2;
     const size_t last_rows_count = (rows_count - 1) % unroll_size;
     const size_t last_rows_size = size_t(ceil((rows_count - 1.0) / unroll_size));
-    const size_t iterations_count =
-        full_rows_groups_sum * unroll_size + last_rows_count * last_rows_size;
+    const size_t iterations_count = full_rows_groups_sum * unroll_size + last_rows_count * last_rows_size;
     return iterations_count;
 }
 
 template<typename F>
 static void
-correlate_dense(const pybind11::array_t<F>& input_array,
-                pybind11::array_t<float32_t>& output_array) {
+correlate_dense(const pybind11::array_t<F>& input_array, pybind11::array_t<float32_t>& output_array) {
     WithoutGil without_gil{};
     ConstMatrixSlice<F> input(input_array, "input");
     MatrixSlice<float32_t> output(output_array, "output");
@@ -402,8 +379,8 @@ correlate_dense(const pybind11::array_t<F>& input_array,
     const size_t iterations_count = unrolled_iterations_count(rows_count, unroll_size);
 
     parallel_loop(iterations_count, [&](size_t iteration_index) {
-        size_t min_rows_count = size_t(round(
-            (sqrt(unroll_size * (unroll_size + 8.0 * iteration_index)) - unroll_size + 1.0) / 2.0));
+        size_t min_rows_count =
+            size_t(round((sqrt(unroll_size * (unroll_size + 8.0 * iteration_index)) - unroll_size + 1.0) / 2.0));
         size_t min_rows_iterations_count = unrolled_iterations_count(min_rows_count, unroll_size);
 
         while (min_rows_count > 1 and min_rows_iterations_count > iteration_index) {
@@ -412,8 +389,7 @@ correlate_dense(const pybind11::array_t<F>& input_array,
         }
 
         while (true) {
-            const size_t up_min_rows_iterations_count =
-                unrolled_iterations_count(min_rows_count + 1, unroll_size);
+            const size_t up_min_rows_iterations_count = unrolled_iterations_count(min_rows_count + 1, unroll_size);
             if (up_min_rows_iterations_count > iteration_index) {
                 break;
             }
@@ -427,22 +403,20 @@ correlate_dense(const pybind11::array_t<F>& input_array,
         const size_t other_end_index = std::min(other_begin_index + unroll_size, some_index);
 
         if (other_begin_index + MANY_ROWS == other_end_index) {
-            const ManyCorrelations results =
-                correlate_many_dense_rows(input.get_row(some_index).begin(),
-                                          input,
-                                          row_sum_values[some_index],
-                                          row_sum_squared[some_index],
-                                          row_sum_values,
-                                          row_sum_squared,
-                                          other_begin_index);
+            const ManyCorrelations results = correlate_many_dense_rows(input.get_row(some_index).begin(),
+                                                                       input,
+                                                                       row_sum_values[some_index],
+                                                                       row_sum_squared[some_index],
+                                                                       row_sum_values,
+                                                                       row_sum_squared,
+                                                                       other_begin_index);
             for (int which_other = 0; which_other < MANY_ROWS; ++which_other) {
                 const size_t other_index = other_begin_index + which_other;
                 output.get_row(some_index)[other_index] = results.correlations[which_other];
                 output.get_row(other_index)[some_index] = results.correlations[which_other];
             }
         } else {
-            for (size_t other_index = other_begin_index; other_index != other_end_index;
-                 ++other_index) {
+            for (size_t other_index = other_begin_index; other_index != other_end_index; ++other_index) {
                 float32_t correlation = correlate_two_dense_rows(input.get_row(some_index),
                                                                  row_sum_values[some_index],
                                                                  row_sum_squared[some_index],
@@ -507,13 +481,12 @@ cross_correlate_dense(const pybind11::array_t<F>& first_input_array,
                     ++second_row_index;
                 }
             } else {
-                output_row[second_row_index] =
-                    correlate_two_dense_rows(first_input_row,
-                                             first_row_sum_values,
-                                             first_row_sum_squared,
-                                             second_input.get_row(second_row_index),
-                                             second_row_sum_values[second_row_index],
-                                             second_row_sum_squared[second_row_index]);
+                output_row[second_row_index] = correlate_two_dense_rows(first_input_row,
+                                                                        first_row_sum_values,
+                                                                        first_row_sum_squared,
+                                                                        second_input.get_row(second_row_index),
+                                                                        second_row_sum_values[second_row_index],
+                                                                        second_row_sum_squared[second_row_index]);
                 ++second_row_index;
             }
         }
@@ -555,15 +528,13 @@ pairs_correlate_dense(const pybind11::array_t<F>& first_input_array,
 
 void
 register_correlate(pybind11::module& module) {
-#define REGISTER_F(F)                                      \
-    module.def("correlate_dense_" #F,                      \
-               &metacells::correlate_dense<F>,             \
-               "Correlate rows of dense matrices.");       \
-    module.def("cross_correlate_dense_" #F,                \
-               &metacells::cross_correlate_dense<F>,       \
-               "Cross-correlate rows of dense matrices."); \
-    module.def("pairs_correlate_dense_" #F,                \
-               &metacells::pairs_correlate_dense<F>,       \
+#define REGISTER_F(F)                                                                                       \
+    module.def("correlate_dense_" #F, &metacells::correlate_dense<F>, "Correlate rows of dense matrices."); \
+    module.def("cross_correlate_dense_" #F,                                                                 \
+               &metacells::cross_correlate_dense<F>,                                                        \
+               "Cross-correlate rows of dense matrices.");                                                  \
+    module.def("pairs_correlate_dense_" #F,                                                                 \
+               &metacells::pairs_correlate_dense<F>,                                                        \
                "Pairs-correlate rows of dense matrices.");
 
     REGISTER_F(float32_t)

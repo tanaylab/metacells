@@ -1,28 +1,33 @@
-'''
+"""
 Apply
 -----
-'''
+"""
 
-from typing import Any, Callable, Dict, NamedTuple, Optional, Union
+from typing import Any
+from typing import Callable
+from typing import Dict
+from typing import NamedTuple
+from typing import Optional
+from typing import Union
 
 import numpy as np
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
 
 import metacells.utilities as ut
 
 __all__ = [
-    'DefaultValues',
-    'Skip',
-    'Raise',
-    'apply_obs_annotations',
-    'apply_var_annotations',
+    "DefaultValues",
+    "Skip",
+    "Raise",
+    "apply_obs_annotations",
+    "apply_var_annotations",
 ]
 
 
 class DefaultValues(NamedTuple):
-    '''
+    """
     Default values to use in :py:func:`apply_obs_annotations` and :py:func:`apply_var_annotations`.
-    '''
+    """
 
     #: The default value to use for the slice data.
     slice: Any
@@ -31,19 +36,19 @@ class DefaultValues(NamedTuple):
     full: Any
 
     def __str__(self) -> str:
-        return f'slice: {self.slice} full: {self.full}'
+        return f"slice: {self.slice} full: {self.full}"
 
 
 class Skip:
-    '''
+    """
     A special value indicating to skip the annotation if it does not exist.
-    '''
+    """
 
 
 class Raise:
-    '''
+    """
     A special value indicating to raise a ``KeyError`` if an annotation does not exist.
-    '''
+    """
 
 
 @ut.logged(annotations=str)
@@ -55,7 +60,7 @@ def apply_obs_annotations(
     *,
     indices: Union[str, ut.Vector],
 ) -> None:
-    '''
+    """
     Apply per-observation (cell) annotations of a slice ``sdata`` to the full ``adata``.
 
     **Input**
@@ -90,8 +95,8 @@ def apply_obs_annotations(
          :py:attr:`DefaultValues.full` value.
 
     4. Apply the slice data values to the entries of the full data identified by the ``indices``.
-    '''
-    _apply_annotations(adata, sdata, 'o', annotations, indices)
+    """
+    _apply_annotations(adata, sdata, "o", annotations, indices)
 
 
 @ut.logged(annotations=str)
@@ -103,7 +108,7 @@ def apply_var_annotations(
     *,
     indices: Union[str, ut.Vector],
 ) -> None:
-    '''
+    """
     Apply per-variable (gene) annotations of a slice ``sdata`` to the full ``adata``.
 
     **Input**
@@ -138,8 +143,8 @@ def apply_var_annotations(
          :py:attr:`DefaultValues.full` value.
 
     4. Apply the slice data values to the entries of the full data identified by the ``indices``.
-    '''
-    _apply_annotations(adata, sdata, 'v', annotations, indices)
+    """
+    _apply_annotations(adata, sdata, "v", annotations, indices)
 
 
 def _apply_annotations(  # pylint: disable=too-many-branches
@@ -152,9 +157,9 @@ def _apply_annotations(  # pylint: disable=too-many-branches
     full_name = ut.get_name(adata)
     slice_name = ut.get_name(sdata)
 
-    assert per in ('o', 'v')
+    assert per in ("o", "v")
 
-    if per == 'o':
+    if per == "o":
         full_data = adata.obs
         full_size = adata.n_obs
         slice_data = sdata.obs
@@ -177,15 +182,15 @@ def _apply_annotations(  # pylint: disable=too-many-branches
 
             if default_values.slice == Raise or isinstance(default_values.slice, Raise):
                 if slice_name is None:
-                    raise KeyError('unknown slice data name: %s' % name)
-                raise KeyError('unknown slice data: %s name: %s'
-                               % (slice_name, name))
+                    raise KeyError(f"unknown slice data name: {name}")
+                raise KeyError(f"unknown slice data: {slice_name} name: {name}")
 
             slice_value = default_values.slice
 
             def formatter(_: Any) -> str:
                 # pylint: disable=cell-var-from-loop
-                return '%s <- %s' % (slice_size, slice_value)
+                return f"{slice_size} <- {slice_value}"
+
             # pylint: enable=cell-var-from-loop
 
         full_value = full_data.get(name)
@@ -197,17 +202,16 @@ def _apply_annotations(  # pylint: disable=too-many-branches
 
             if default_values.full == Raise or isinstance(default_values.full, Raise):
                 if full_name is None:
-                    raise KeyError('unknown full data name: %s' % name)
-                raise KeyError('unknown full data: %s name: %s'
-                               % (full_name, name))
+                    raise KeyError(f"unknown full data name: {name}")
+                raise KeyError(f"unknown full data: {full_name} name: {name}")
 
             if default_values.full is None:
-                full_value = np.full(full_size, None, dtype='float32')
+                full_value = np.full(full_size, None, dtype="float32")
             else:
                 full_value = np.full(full_size, default_values.full)
 
         full_value[full_indices] = slice_value
-        if per == 'o':
+        if per == "o":
             ut.set_o_data(adata, name, full_value, formatter=formatter)
         else:
             ut.set_v_data(adata, name, full_value, formatter=formatter)

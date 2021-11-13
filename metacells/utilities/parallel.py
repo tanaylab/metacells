@@ -1,4 +1,4 @@
-'''
+"""
 Parallel
 --------
 
@@ -6,12 +6,12 @@ Due to the notorious GIL, using multiple Python threads is essentially useless. 
 two options for using multiple processors, which is mandatory for reasonable performance on the
 large data sets we work on:
 
-* Use multiple threads in the internal C++ implementation of some Python functions;
-  this is done by both numpy and the C++ extension functions provided by this package, and works
-  even for reasonably small sized work, such as sorting each of the rows of a large matrix.
+* Use multiple threads in the internal C++ implementation of some Python functions; this is done by both numpy and the
+  C++ extension functions provided by this package, and works even for reasonably small sized work, such as sorting each
+  of the rows of a large matrix.
 
-* Use Python multi-processing. This is costly and works only for large sized work, such as
-  computing metacells for different piles.
+* Use Python multi-processing. This is costly and works only for large sized work, such as computing metacells for
+  different piles.
 
 Each of these two approaches works tolerably well on its own, even though both are sub-optimal. The
 problem starts when we want to combine them. Consider a server with 50 processors. Invoking
@@ -47,29 +47,31 @@ using the ``psutil`` package.
 
     Re-implement all the package in a single language more suitable for scientific computing. Julia
     is looking like a good combination of convenience and performance...
-'''
+"""
 import ctypes
 import os
-import sys
-from multiprocessing import Value, get_context
+from multiprocessing import Value
+from multiprocessing import get_context
 from threading import current_thread
-from typing import Any, Callable, Iterable, Optional, TypeVar
+from typing import Any
+from typing import Callable
+from typing import Iterable
+from typing import Optional
+from typing import TypeVar
 
 import psutil  # type: ignore
 from threadpoolctl import threadpool_limits  # type: ignore
 
+import metacells.extensions as xt  # type: ignore
 import metacells.utilities.documentation as utd
 import metacells.utilities.logging as utl
 import metacells.utilities.timing as utm
 
-if not 'sphinx' in sys.argv[0]:
-    import metacells.extensions as xt  # type: ignore
-
 __all__ = [
-    'is_main_process',
-    'set_processors_count',
-    'get_processors_count',
-    'parallel_map',
+    "is_main_process",
+    "set_processors_count",
+    "get_processors_count",
+    "parallel_map",
 ]
 
 
@@ -88,15 +90,15 @@ PARALLEL_FUNCTION: Optional[Callable[[int], Any]] = None
 
 
 def is_main_process() -> bool:
-    '''
+    """
     Return whether this is the main process, as opposed to a sub-process spawned by
     :py:func:`parallel_map`.
-    '''
+    """
     return bool(IS_MAIN_PROCESS)
 
 
 def set_processors_count(processors: int) -> None:
-    '''
+    """
     Set the (maximal) number of processors to use in parallel.
 
     The default value of ``0`` means using all the available physical processors. Note that if
@@ -107,7 +109,7 @@ def set_processors_count(processors: int) -> None:
     Otherwise, the value is the actual (positive) number of processors to use. Override this by
     setting the ``METACELLS_PROCESSORS_COUNT`` environment variable or by invoking this function
     from the main thread.
-    '''
+    """
     assert IS_MAIN_PROCESS
 
     if processors == 0:
@@ -122,20 +124,18 @@ def set_processors_count(processors: int) -> None:
     xt.set_threads_count(PROCESSORS_COUNT)
 
 
-if not 'sphinx' in sys.argv[0]:
-    set_processors_count(int(os.environ.get('METACELLS_PROCESSORS_COUNT',
-                                            '0')))
+set_processors_count(int(os.environ.get("METACELLS_PROCESSORS_COUNT", "0")))
 
 
 def get_processors_count() -> int:
-    '''
+    """
     Return the number of PROCESSORs we are allowed to use.
-    '''
+    """
     assert PROCESSORS_COUNT > 0
     return PROCESSORS_COUNT
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @utd.expand_doc()
@@ -145,7 +145,7 @@ def parallel_map(
     *,
     max_processors: int = 0,
 ) -> Iterable[T]:
-    '''
+    """
     Execute ``function``, in parallel, ``invocations`` times. Each invocation is given the
     invocation's index as its single argument.
 
@@ -169,7 +169,7 @@ def parallel_map(
 
         It is currently only possible to invoke :py:func:`parallel_map` from the main application
         thread (that is, it does not nest).
-    '''
+    """
     assert function.__is_timed__  # type: ignore
 
     global IS_MAIN_PROCESS
@@ -184,7 +184,7 @@ def parallel_map(
     if PROCESSES_COUNT == 1:
         return [function(index) for index in range(invocations)]
 
-    NEXT_PROCESS_INDEX.value = 0
+    NEXT_PROCESS_INDEX.value = 0  # type: ignore
 
     global PARALLEL_FUNCTION
     assert PARALLEL_FUNCTION is None
@@ -196,9 +196,9 @@ def parallel_map(
     IS_MAIN_PROCESS = None
     try:
         utm.flush_timing()
-        with utm.timed_step('parallel_map'):
+        with utm.timed_step("parallel_map"):
             utm.timed_parameters(index=MAP_INDEX, processes=PROCESSES_COUNT)
-            with get_context('fork').Pool(PROCESSES_COUNT) as pool:
+            with get_context("fork").Pool(PROCESSES_COUNT) as pool:
                 return pool.map(_invocation, range(invocations))
     finally:
         IS_MAIN_PROCESS = True
@@ -212,22 +212,19 @@ def _invocation(index: int) -> Any:
         assert not IS_MAIN_PROCESS
 
         global PROCESS_INDEX
-        global NEXT_PROCESS_INDEX
-        with NEXT_PROCESS_INDEX:  # type: ignore
-            PROCESS_INDEX = NEXT_PROCESS_INDEX.value
-            NEXT_PROCESS_INDEX.value += 1
+        with NEXT_PROCESS_INDEX:
+            PROCESS_INDEX = NEXT_PROCESS_INDEX.value  # type: ignore
+            NEXT_PROCESS_INDEX.value += 1  # type: ignore
 
-        current_thread().name = '#%s.%s' % (MAP_INDEX, PROCESS_INDEX)
+        current_thread().name = f"#{MAP_INDEX}.{PROCESS_INDEX}"
 
         global PROCESSORS_COUNT
-        start_processor_index = \
-            int(round(PROCESSORS_COUNT * PROCESS_INDEX / PROCESSES_COUNT))
-        stop_processor_index = \
-            int(round(PROCESSORS_COUNT * (PROCESS_INDEX + 1) / PROCESSES_COUNT))
+        start_processor_index = int(round(PROCESSORS_COUNT * PROCESS_INDEX / PROCESSES_COUNT))
+        stop_processor_index = int(round(PROCESSORS_COUNT * (PROCESS_INDEX + 1) / PROCESSES_COUNT))
         PROCESSORS_COUNT = stop_processor_index - start_processor_index
 
         assert PROCESSORS_COUNT > 0
-        utl.logger().debug('PROCESSORS: %s', PROCESSORS_COUNT)
+        utl.logger().debug("PROCESSORS: %s", PROCESSORS_COUNT)
         threadpool_limits(limits=PROCESSORS_COUNT)
         xt.set_threads_count(PROCESSORS_COUNT)
 

@@ -1,26 +1,27 @@
-'''
+"""
 UMAP
 ----
 
 It is useful to project the metacells data to a 2D scatter plot (where each point is a metacell).
 The steps provided here are expected to yield a reasonable such projection, though as always you
 might need to tweak the parameters or even the overall flow for specific data sets.
-'''
+"""
 
-from typing import Tuple, Union
+from typing import Tuple
+from typing import Union
 
 import igraph as ig  # type: ignore
 import numpy as np
-import scipy.sparse as sparse  # type: ignore
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
+from scipy import sparse  # type: ignore
 
 import metacells.parameters as pr
 import metacells.tools as tl
 import metacells.utilities as ut
 
 __all__ = [
-    'compute_knn_by_features',
-    'compute_umap_by_features',
+    "compute_knn_by_features",
+    "compute_umap_by_features",
 ]
 
 
@@ -29,7 +30,7 @@ __all__ = [
 @ut.expand_doc()
 def compute_knn_by_features(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     max_top_feature_genes: int = pr.max_top_feature_genes,
     similarity_value_normalization: float = pr.umap_similarity_value_normalization,
@@ -43,7 +44,7 @@ def compute_knn_by_features(
     outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
     reproducible: bool = pr.reproducible,
 ) -> ut.PandasFrame:
-    '''
+    """
     Compute KNN graph between metacells based on feature genes.
 
     If ``reproducible`` (default: {reproducible}) is ``True``, a slower (still parallel) but
@@ -91,39 +92,42 @@ def compute_knn_by_features(
        ``incoming_degree_factor`` (default: {incoming_degree_factor}), ``outgoing_degree_factor``
        (default: {outgoing_degree_factor}) to compute a "skeleton" graph to overlay on top of the
        UMAP graph.
-    '''
+    """
     tl.find_top_feature_genes(adata, max_genes=max_top_feature_genes)
 
-    all_data = ut.get_vo_proper(adata, what, layout='row_major')
-    all_fractions = ut.fraction_by(all_data, by='row')
+    all_data = ut.get_vo_proper(adata, what, layout="row_major")
+    all_fractions = ut.fraction_by(all_data, by="row")
 
-    top_feature_genes_mask = ut.get_v_numpy(adata, 'top_feature_gene')
+    top_feature_genes_mask = ut.get_v_numpy(adata, "top_feature_gene")
 
     top_feature_genes_fractions = all_fractions[:, top_feature_genes_mask]
-    top_feature_genes_fractions = \
-        ut.to_layout(top_feature_genes_fractions, layout='row_major')
+    top_feature_genes_fractions = ut.to_layout(top_feature_genes_fractions, layout="row_major")
 
     top_feature_genes_fractions += similarity_value_normalization
 
     if similarity_log_data:
-        top_feature_genes_fractions = \
-            ut.log_data(top_feature_genes_fractions, base=2)
+        top_feature_genes_fractions = ut.log_data(top_feature_genes_fractions, base=2)
 
     tdata = ut.slice(adata, vars=top_feature_genes_mask)
-    similarities = tl.compute_obs_obs_similarity(tdata,
-                                                 top_feature_genes_fractions,
-                                                 method=similarity_method,
-                                                 reproducible=reproducible,
-                                                 logistics_location=logistics_location,
-                                                 logistics_slope=logistics_slope,
-                                                 inplace=False)
+    similarities = tl.compute_obs_obs_similarity(
+        tdata,
+        top_feature_genes_fractions,
+        method=similarity_method,
+        reproducible=reproducible,
+        logistics_location=logistics_location,
+        logistics_slope=logistics_slope,
+        inplace=False,
+    )
     assert similarities is not None
 
-    tl.compute_obs_obs_knn_graph(adata, similarities,
-                                 k=k,
-                                 balanced_ranks_factor=balanced_ranks_factor,
-                                 incoming_degree_factor=incoming_degree_factor,
-                                 outgoing_degree_factor=outgoing_degree_factor)
+    tl.compute_obs_obs_knn_graph(
+        adata,
+        similarities,
+        k=k,
+        balanced_ranks_factor=balanced_ranks_factor,
+        incoming_degree_factor=incoming_degree_factor,
+        outgoing_degree_factor=outgoing_degree_factor,
+    )
 
     return similarities
 
@@ -133,7 +137,7 @@ def compute_knn_by_features(
 @ut.expand_doc()
 def compute_umap_by_features(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     max_top_feature_genes: int = pr.max_top_feature_genes,
     similarity_value_normalization: float = pr.umap_similarity_value_normalization,
@@ -151,7 +155,7 @@ def compute_umap_by_features(
     spread: float = pr.umap_spread,
     random_seed: int = pr.random_seed,
 ) -> None:
-    '''
+    """
     Compute a UMAP projection of the (meta)cells.
 
     **Input**
@@ -176,30 +180,33 @@ def compute_umap_by_features(
     **Computation Parameters**
 
     1. Invoke :py:func:`metacells.pipeline.umap.compute_knn_by_features` using
-       ``max_top_feature_genes` (default: {max_top_feature_genes}),
+       ``max_top_feature_genes`` (default: {max_top_feature_genes}),
        ``similarity_value_normalization`` (default: {similarity_value_normalization}),
        ``similarity_log_data`` (default: {similarity_log_data}), ``similarity_method`` (default:
        {similarity_method}), ``logistics_location`` (default: {logistics_location}),
-       ``logistics_slope`` (default: {logistics_slope}), ``skeleton_k``` (default: {skeleton_k}),
+       ``logistics_slope`` (default: {logistics_slope}), ``skeleton_k`` (default: {skeleton_k}),
        ``balanced_ranks_factor`` (default: {balanced_ranks_factor}), ``incoming_degree_factor``
        (default: {incoming_degree_factor}), ``outgoing_degree_factor`` (default:
        {outgoing_degree_factor}) to compute a "skeleton" graph to overlay on top of the UMAP graph.
 
     2. Invoke :py:func:`metacells.tools.layout.umap_by_distances` using the distances, ``umap_k``
        (default: {umap_k}), ``min_dist`` (default: {min_dist}), ``spread`` (default: {spread}),
-       dimensions (default: {dimensions})q    '''
-    similarities = compute_knn_by_features(adata, what,
-                                           max_top_feature_genes=max_top_feature_genes,
-                                           similarity_value_normalization=similarity_value_normalization,
-                                           similarity_log_data=similarity_log_data,
-                                           similarity_method=similarity_method,
-                                           logistics_location=logistics_location,
-                                           logistics_slope=logistics_slope,
-                                           k=skeleton_k,
-                                           balanced_ranks_factor=balanced_ranks_factor,
-                                           incoming_degree_factor=incoming_degree_factor,
-                                           outgoing_degree_factor=outgoing_degree_factor,
-                                           reproducible=(random_seed != 0))
+       dimensions (default: {dimensions})q"""
+    similarities = compute_knn_by_features(
+        adata,
+        what,
+        max_top_feature_genes=max_top_feature_genes,
+        similarity_value_normalization=similarity_value_normalization,
+        similarity_log_data=similarity_log_data,
+        similarity_method=similarity_method,
+        logistics_location=logistics_location,
+        logistics_slope=logistics_slope,
+        k=skeleton_k,
+        balanced_ranks_factor=balanced_ranks_factor,
+        incoming_degree_factor=incoming_degree_factor,
+        outgoing_degree_factor=outgoing_degree_factor,
+        reproducible=(random_seed != 0),
+    )
 
     distances = ut.to_numpy_matrix(similarities)
     distances *= -1
@@ -207,9 +214,9 @@ def compute_umap_by_features(
     np.fill_diagonal(distances, 0.0)
     distances = sparse.csr_matrix(distances)
 
-    tl.umap_by_distances(adata, distances, k=umap_k, dimensions=dimensions,
-                         min_dist=min_dist, spread=spread,
-                         random_seed=random_seed)
+    tl.umap_by_distances(
+        adata, distances, k=umap_k, dimensions=dimensions, min_dist=min_dist, spread=spread, random_seed=random_seed
+    )
 
 
 def _build_igraph(edge_weights: ut.Matrix) -> Tuple[ig.Graph, ut.NumpyVector]:
@@ -218,12 +225,11 @@ def _build_igraph(edge_weights: ut.Matrix) -> Tuple[ig.Graph, ut.NumpyVector]:
     size = edge_weights.shape[0]
 
     sources, targets = edge_weights.nonzero()
-    weights_array = \
-        ut.to_numpy_vector(edge_weights[sources, targets]).astype('float64')
+    weights_array = ut.to_numpy_vector(edge_weights[sources, targets]).astype("float64")
 
     graph = ig.Graph(directed=True)
     graph.add_vertices(size)
     graph.add_edges(list(zip(sources, targets)))
-    graph.es['weight'] = weights_array
+    graph.es["weight"] = weights_array
 
     return graph, weights_array

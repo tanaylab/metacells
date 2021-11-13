@@ -1,18 +1,20 @@
-'''
+"""
 Named
 -----
-'''
+"""
 
 from re import Pattern
-from typing import Collection, Optional, Union
+from typing import Collection
+from typing import Optional
+from typing import Union
 
 import numpy as np
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
 
 import metacells.utilities as ut
 
 __all__ = [
-    'find_named_genes',
+    "find_named_genes",
 ]
 
 
@@ -27,7 +29,7 @@ def find_named_genes(
     to: Optional[str] = None,
     invert: bool = False,
 ) -> Optional[ut.PandasSeries]:
-    '''
+    """
     Find genes by their (case-insensitive) name.
 
     This creates a mask of all the genes whose name appears in ``names`` or matches any of the
@@ -39,17 +41,15 @@ def find_named_genes(
     which must not be chosen as feature genes).
 
     Otherwise, it returns it as a pandas series (indexed by the variable, that is gene, names).
-    '''
+    """
     if names is None:
-        names_mask = np.zeros(adata.n_vars, dtype='bool')
+        names_mask = np.zeros(adata.n_vars, dtype="bool")
     else:
         lower_names_set = {name.lower() for name in names}
-        names_mask = np.array([  #
-            name.lower() in lower_names_set for name in adata.var_names
-        ])
+        names_mask = np.array([name.lower() in lower_names_set for name in adata.var_names])  #
 
     if patterns is None:
-        patterns_mask = np.zeros(adata.n_vars, dtype='bool')
+        patterns_mask = np.zeros(adata.n_vars, dtype="bool")
     else:
         patterns_mask = ut.patterns_matches(patterns, adata.var_names)
 
@@ -62,5 +62,5 @@ def find_named_genes(
         ut.set_v_data(adata, to, genes_mask)
         return None
 
-    ut.log_return('named_genes', genes_mask)
+    ut.log_return("named_genes", genes_mask)
     return ut.to_pandas_series(genes_mask, index=adata.var_names)

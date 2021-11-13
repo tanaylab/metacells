@@ -1,0 +1,10 @@
+black
+flake8
+isort
+mypy
+pylint
+pytest
+pytest-cov
+sphinx
+sphinx_rtd_theme
+tox

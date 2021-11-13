@@ -1,13 +1,15 @@
-'''
+"""
 Direct
 ------
-'''
+"""
 
 from re import Pattern
-from typing import Collection, Optional, Union
+from typing import Collection
+from typing import Optional
+from typing import Union
 
 import numpy as np
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
 import metacells.tools as tl
@@ -17,7 +19,7 @@ from .collect import compute_effective_cell_sizes
 from .feature import extract_feature_data
 
 __all__ = [
-    'compute_direct_metacells',
+    "compute_direct_metacells",
 ]
 
 
@@ -26,7 +28,7 @@ __all__ = [
 @ut.expand_doc()
 def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-branches
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     feature_downsample_min_samples: int = pr.feature_downsample_min_samples,
     feature_downsample_min_cell_quantile: float = pr.feature_downsample_min_cell_quantile,
@@ -71,7 +73,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
     random_seed: int = pr.random_seed,
 ) -> AnnData:
-    '''
+    """
     Directly compute metacells using ``what`` (default: {what}) data.
 
     This directly computes the metacells on the whole data. Like any method that directly looks at
@@ -161,7 +163,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        ``feature_downsample_min_cell_quantile`` (default: {feature_downsample_min_cell_quantile}),
        ``feature_downsample_max_cell_quantile`` (default: {feature_downsample_max_cell_quantile}),
        ``feature_min_gene_total`` (default: {feature_min_gene_total}), ``feature_min_gene_top3``
-       (default: {feature_min_gene_top3}), ``feature_min_gene_relative_variance (default:
+       (default: {feature_min_gene_top3}), ``feature_min_gene_relative_variance`` (default:
        {feature_min_gene_relative_variance}), ``feature_gene_names`` (default:
        {feature_gene_names}), ``feature_gene_patterns`` (default: {feature_gene_patterns}),
        ``forbidden_gene_names`` (default: {forbidden_gene_names}), ``forbidden_gene_patterns``
@@ -231,48 +233,43 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        ``dissolve_min_convincing_gene_fold_factor`` (default: {dissolve_min_convincing_size_factor})
        and
        ``dissolve_min_metacell_cells`` (default: ``dissolve_min_metacell_cells``).
-    '''
-    fdata = \
-        extract_feature_data(adata, what, top_level=False,
-                             downsample_min_samples=feature_downsample_min_samples,
-                             downsample_min_cell_quantile=feature_downsample_min_cell_quantile,
-                             downsample_max_cell_quantile=feature_downsample_max_cell_quantile,
-                             min_gene_relative_variance=feature_min_gene_relative_variance,
-                             min_gene_total=feature_min_gene_total,
-                             min_gene_top3=feature_min_gene_top3,
-                             forced_gene_names=feature_gene_names,
-                             forced_gene_patterns=feature_gene_patterns,
-                             forbidden_gene_names=forbidden_gene_names,
-                             forbidden_gene_patterns=forbidden_gene_patterns,
-                             random_seed=random_seed)
+    """
+    fdata = extract_feature_data(
+        adata,
+        what,
+        top_level=False,
+        downsample_min_samples=feature_downsample_min_samples,
+        downsample_min_cell_quantile=feature_downsample_min_cell_quantile,
+        downsample_max_cell_quantile=feature_downsample_max_cell_quantile,
+        min_gene_relative_variance=feature_min_gene_relative_variance,
+        min_gene_total=feature_min_gene_total,
+        min_gene_top3=feature_min_gene_top3,
+        forced_gene_names=feature_gene_names,
+        forced_gene_patterns=feature_gene_patterns,
+        forbidden_gene_names=forbidden_gene_names,
+        forbidden_gene_patterns=forbidden_gene_patterns,
+        random_seed=random_seed,
+    )
 
     if fdata is None:
-        raise ValueError('Empty feature data, giving up')
+        raise ValueError("Empty feature data, giving up")
 
-    effective_cell_sizes, max_cell_size, _cell_scale_factors = \
-        compute_effective_cell_sizes(adata,
-                                     max_cell_size=max_cell_size,
-                                     max_cell_size_factor=max_cell_size_factor,
-                                     cell_sizes=cell_sizes)
-    ut.log_calc('effective_cell_sizes',
-                effective_cell_sizes, formatter=ut.sizes_description)
+    effective_cell_sizes, max_cell_size, _cell_scale_factors = compute_effective_cell_sizes(
+        adata, max_cell_size=max_cell_size, max_cell_size_factor=max_cell_size_factor, cell_sizes=cell_sizes
+    )
+    ut.log_calc("effective_cell_sizes", effective_cell_sizes, formatter=ut.sizes_description)
 
     if max_cell_size is not None:
         if candidates_min_metacell_cells is not None:
-            target_metacell_size = \
-                max(target_metacell_size,
-                    max_cell_size * candidates_min_metacell_cells)
+            target_metacell_size = max(target_metacell_size, max_cell_size * candidates_min_metacell_cells)
 
         if dissolve_min_metacell_cells is not None:
-            target_metacell_size = \
-                max(target_metacell_size,
-                    max_cell_size * dissolve_min_metacell_cells)
+            target_metacell_size = max(target_metacell_size, max_cell_size * dissolve_min_metacell_cells)
 
-        if candidates_min_metacell_cells is not None \
-                or dissolve_min_metacell_cells is not None:
-            ut.log_calc('target_metacell_size', target_metacell_size)
+        if candidates_min_metacell_cells is not None or dissolve_min_metacell_cells is not None:
+            ut.log_calc("target_metacell_size", target_metacell_size)
 
-    data = ut.get_vo_proper(fdata, 'downsampled', layout='row_major')
+    data = ut.get_vo_proper(fdata, "downsampled", layout="row_major")
     data = ut.to_numpy_matrix(data, copy=True)
 
     if cells_similarity_value_normalization > 0:
@@ -291,104 +288,94 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
             knn_k = max(knn_k, min_knn_k)
 
     if knn_k == 0:
-        ut.log_calc('knn_k: 0 (too small, try single metacell)')
-        ut.set_o_data(fdata, 'candidate',
-                      np.full(fdata.n_obs, 0, dtype='int32'),
-                      formatter=lambda _: '* <- 0')
+        ut.log_calc("knn_k: 0 (too small, try single metacell)")
+        ut.set_o_data(fdata, "candidate", np.full(fdata.n_obs, 0, dtype="int32"), formatter=lambda _: "* <- 0")
     elif knn_k >= fdata.n_obs:
-        ut.log_calc(f'knn_k: {knn_k} (too large, try single metacell)')
-        ut.set_o_data(fdata, 'candidate',
-                      np.full(fdata.n_obs, 0, dtype='int32'),
-                      formatter=lambda _: '* <- 0')
+        ut.log_calc(f"knn_k: {knn_k} (too large, try single metacell)")
+        ut.set_o_data(fdata, "candidate", np.full(fdata.n_obs, 0, dtype="int32"), formatter=lambda _: "* <- 0")
 
     else:
-        ut.log_calc('knn_k', knn_k)
+        ut.log_calc("knn_k", knn_k)
 
-        tl.compute_obs_obs_similarity(fdata, data,
-                                      method=cells_similarity_method,
-                                      reproducible=(random_seed != 0))
+        tl.compute_obs_obs_similarity(fdata, data, method=cells_similarity_method, reproducible=(random_seed != 0))
 
-        tl.compute_obs_obs_knn_graph(fdata,
-                                     k=knn_k,
-                                     balanced_ranks_factor=knn_balanced_ranks_factor,
-                                     incoming_degree_factor=knn_incoming_degree_factor,
-                                     outgoing_degree_factor=knn_outgoing_degree_factor)
+        tl.compute_obs_obs_knn_graph(
+            fdata,
+            k=knn_k,
+            balanced_ranks_factor=knn_balanced_ranks_factor,
+            incoming_degree_factor=knn_incoming_degree_factor,
+            outgoing_degree_factor=knn_outgoing_degree_factor,
+        )
 
-        tl.compute_candidate_metacells(fdata,
-                                       target_metacell_size=target_metacell_size,
-                                       cell_sizes=effective_cell_sizes,
-                                       cell_seeds=candidates_cell_seeds,
-                                       min_seed_size_quantile=min_seed_size_quantile,
-                                       max_seed_size_quantile=max_seed_size_quantile,
-                                       cooldown_pass=candidates_cooldown_pass,
-                                       cooldown_node=candidates_cooldown_node,
-                                       cooldown_phase=candidates_cooldown_phase,
-                                       min_split_size_factor=candidates_min_split_size_factor,
-                                       max_merge_size_factor=candidates_max_merge_size_factor,
-                                       min_metacell_cells=candidates_min_metacell_cells,
-                                       max_split_min_cut_strength=candidates_max_split_min_cut_strength,
-                                       min_cut_seed_cells=candidates_min_cut_seed_cells,
-                                       must_complete_cover=must_complete_cover,
-                                       random_seed=random_seed)
+        tl.compute_candidate_metacells(
+            fdata,
+            target_metacell_size=target_metacell_size,
+            cell_sizes=effective_cell_sizes,
+            cell_seeds=candidates_cell_seeds,
+            min_seed_size_quantile=min_seed_size_quantile,
+            max_seed_size_quantile=max_seed_size_quantile,
+            cooldown_pass=candidates_cooldown_pass,
+            cooldown_node=candidates_cooldown_node,
+            cooldown_phase=candidates_cooldown_phase,
+            min_split_size_factor=candidates_min_split_size_factor,
+            max_merge_size_factor=candidates_max_merge_size_factor,
+            min_metacell_cells=candidates_min_metacell_cells,
+            max_split_min_cut_strength=candidates_max_split_min_cut_strength,
+            min_cut_seed_cells=candidates_min_cut_seed_cells,
+            must_complete_cover=must_complete_cover,
+            random_seed=random_seed,
+        )
 
-        ut.set_oo_data(adata, 'obs_similarity',
-                       ut.get_oo_proper(fdata, 'obs_similarity'))
+        ut.set_oo_data(adata, "obs_similarity", ut.get_oo_proper(fdata, "obs_similarity"))
 
-        ut.set_oo_data(adata, 'obs_outgoing_weights',
-                       ut.get_oo_proper(fdata, 'obs_outgoing_weights'))
+        ut.set_oo_data(adata, "obs_outgoing_weights", ut.get_oo_proper(fdata, "obs_outgoing_weights"))
 
-        seed_of_cells = \
-            ut.get_o_numpy(fdata, 'seed', formatter=ut.groups_description)
+        seed_of_cells = ut.get_o_numpy(fdata, "seed", formatter=ut.groups_description)
 
-        ut.set_o_data(adata, 'seed', seed_of_cells,
-                      formatter=ut.groups_description)
+        ut.set_o_data(adata, "seed", seed_of_cells, formatter=ut.groups_description)
 
-    candidate_of_cells = \
-        ut.get_o_numpy(fdata, 'candidate', formatter=ut.groups_description)
+    candidate_of_cells = ut.get_o_numpy(fdata, "candidate", formatter=ut.groups_description)
 
-    ut.set_o_data(adata, 'candidate', candidate_of_cells,
-                  formatter=ut.groups_description)
+    ut.set_o_data(adata, "candidate", candidate_of_cells, formatter=ut.groups_description)
 
     if must_complete_cover:
         assert np.min(candidate_of_cells) == 0
 
-        deviant_votes_of_genes = np.zeros(adata.n_vars, dtype='float32')
-        deviant_votes_of_cells = np.zeros(adata.n_obs, dtype='float32')
-        dissolved_of_cells = np.zeros(adata.n_obs, dtype='bool')
+        deviant_votes_of_genes = np.zeros(adata.n_vars, dtype="float32")
+        deviant_votes_of_cells = np.zeros(adata.n_obs, dtype="float32")
+        dissolved_of_cells = np.zeros(adata.n_obs, dtype="bool")
 
-        ut.set_v_data(adata, 'gene_deviant_votes', deviant_votes_of_genes,
-                      formatter=ut.mask_description)
+        ut.set_v_data(adata, "gene_deviant_votes", deviant_votes_of_genes, formatter=ut.mask_description)
 
-        ut.set_o_data(adata, 'cell_deviant_votes', deviant_votes_of_cells,
-                      formatter=ut.mask_description)
+        ut.set_o_data(adata, "cell_deviant_votes", deviant_votes_of_cells, formatter=ut.mask_description)
 
-        ut.set_o_data(adata, 'dissolved', dissolved_of_cells,
-                      formatter=ut.mask_description)
+        ut.set_o_data(adata, "dissolved", dissolved_of_cells, formatter=ut.mask_description)
 
-        ut.set_o_data(adata, 'metacell', candidate_of_cells,
-                      formatter=ut.groups_description)
+        ut.set_o_data(adata, "metacell", candidate_of_cells, formatter=ut.groups_description)
 
     else:
-        tl.find_deviant_cells(adata,
-                              candidates=candidate_of_cells,
-                              min_gene_fold_factor=deviants_min_gene_fold_factor,
-                              max_gene_fraction=deviants_max_gene_fraction,
-                              max_cell_fraction=deviants_max_cell_fraction)
+        tl.find_deviant_cells(
+            adata,
+            candidates=candidate_of_cells,
+            min_gene_fold_factor=deviants_min_gene_fold_factor,
+            max_gene_fraction=deviants_max_gene_fraction,
+            max_cell_fraction=deviants_max_cell_fraction,
+        )
 
-        tl.dissolve_metacells(adata,
-                              candidates=candidate_of_cells,
-                              target_metacell_size=target_metacell_size,
-                              cell_sizes=effective_cell_sizes,
-                              min_robust_size_factor=dissolve_min_robust_size_factor,
-                              min_convincing_size_factor=dissolve_min_convincing_size_factor,
-                              min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
-                              min_metacell_cells=dissolve_min_metacell_cells)
+        tl.dissolve_metacells(
+            adata,
+            candidates=candidate_of_cells,
+            target_metacell_size=target_metacell_size,
+            cell_sizes=effective_cell_sizes,
+            min_robust_size_factor=dissolve_min_robust_size_factor,
+            min_convincing_size_factor=dissolve_min_convincing_size_factor,
+            min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
+            min_metacell_cells=dissolve_min_metacell_cells,
+        )
 
-        metacell_of_cells = \
-            ut.get_o_numpy(adata, 'metacell', formatter=ut.groups_description)
+        metacell_of_cells = ut.get_o_numpy(adata, "metacell", formatter=ut.groups_description)
 
         outlier_of_cells = metacell_of_cells < 0
-        ut.set_o_data(adata, 'outlier', outlier_of_cells,
-                      formatter=ut.mask_description)
+        ut.set_o_data(adata, "outlier", outlier_of_cells, formatter=ut.mask_description)
 
     return fdata

@@ -1,4 +1,4 @@
-'''
+"""
 Timing
 ------
 
@@ -7,39 +7,46 @@ spent. The functions in this module allow to easily collect timing information a
 functions or steps within functions in a controlled way, with low overhead, as opposed to collecting
 information about all functions which has higher overheads and produces mountains of mostly
 irrelevant data.
-'''
+"""
 
 import os
-import sys
 from contextlib import contextmanager
 from functools import wraps
 from threading import current_thread
 from threading import local as thread_local
-from time import perf_counter_ns, process_time_ns
-from typing import (IO, Any, Callable, Dict, Iterator, List, NamedTuple,
-                    Optional, TypeVar)
+from time import perf_counter_ns
+from time import process_time_ns
+from typing import IO
+from typing import Any
+from typing import Callable
+from typing import Dict
+from typing import Iterator
+from typing import List
+from typing import NamedTuple
+from typing import Optional
+from typing import TypeVar
 
 import metacells.utilities.documentation as utd
 import metacells.utilities.logging as utl
 
 __all__ = [
-    'collect_timing',
-    'flush_timing',
-    'in_parallel_map',
-    'log_steps',
-    'timed_step',
-    'timed_call',
-    'timed_parameters',
-    'context',
-    'current_step',
-    'StepTiming',
-    'Counters',
+    "collect_timing",
+    "flush_timing",
+    "in_parallel_map",
+    "log_steps",
+    "timed_step",
+    "timed_call",
+    "timed_parameters",
+    "context",
+    "current_step",
+    "StepTiming",
+    "Counters",
 ]
 
 COLLECT_TIMING = False
 
-TIMING_PATH = 'timing.csv'
-TIMING_MODE = 'a'
+TIMING_PATH = "timing.csv"
+TIMING_MODE = "a"
 TIMING_BUFFERING = 1
 TIMING_FILE: Optional[IO] = None
 
@@ -55,9 +62,9 @@ def collect_timing(
     path: str = TIMING_PATH,  # pylint: disable=used-prior-global-declaration
     mode: str = TIMING_MODE,  # pylint: disable=used-prior-global-declaration
     *,
-    buffering: int = TIMING_BUFFERING  # pylint: disable=used-prior-global-declaration
+    buffering: int = TIMING_BUFFERING,  # pylint: disable=used-prior-global-declaration
 ) -> None:
-    '''
+    """
     Specify whether, where and how to collect timing information.
 
     By default, we do not. Override this by setting the ``METACELLS_COLLECT_TIMING`` environment
@@ -80,8 +87,8 @@ def collect_timing(
 
     This may be followed by a series of ``name,value`` pairs describing parameters of interest for
     this context, such as data sizes and layouts, to help understand the performance of the code.
-    '''
-    assert current_thread().name in ('#0', 'MainThread')
+    """
+    assert current_thread().name in ("#0", "MainThread")
 
     global TIMING_PATH
     global TIMING_MODE
@@ -89,9 +96,8 @@ def collect_timing(
     global TIMING_FILE
     global COLLECT_TIMING
 
-    if not path.endswith('.csv'):
-        raise ValueError('The METACELL_TIMING_PATH: %s does not end with: .csv'
-                         % path)
+    if not path.endswith(".csv"):
+        raise ValueError(f"The METACELL_TIMING_PATH: {path} does not end with: .csv")
 
     TIMING_PATH = path
     TIMING_MODE = mode
@@ -103,22 +109,23 @@ def collect_timing(
         TIMING_FILE = None
 
     if collect:
-        TIMING_FILE = open(TIMING_PATH, TIMING_MODE,
-                           buffering=TIMING_BUFFERING)
+        TIMING_FILE = open(  # pylint: disable=consider-using-with
+            TIMING_PATH, TIMING_MODE, buffering=TIMING_BUFFERING, encoding="utf8"
+        )
 
     COLLECT_TIMING = collect
 
 
 def flush_timing() -> None:
-    '''
+    """
     Flush the timing information, if we are collecting it.
-    '''
+    """
     if TIMING_FILE is not None:
         TIMING_FILE.flush()
 
 
 def in_parallel_map(map_index: int, process_index: int) -> None:
-    '''
+    """
     Reconfigure timing collection when running in a parallel sub-process via
     :py:func:`metacells.utilities.parallel.parallel_map`.
 
@@ -133,15 +140,14 @@ def in_parallel_map(map_index: int, process_index: int) -> None:
 
     You can just concatenate the files when the run is complete, or use a tool which automatically
     collects the data from all the files, such as :py:mod:`metacells.scripts.timing`.
-    '''
+    """
     if COLLECT_TIMING:
-        assert TIMING_PATH.endswith('.csv')
-        collect_timing(True, '%s.%s.%s.csv'
-                       % (TIMING_PATH[:-4], map_index, process_index))
+        assert TIMING_PATH.endswith(".csv")
+        collect_timing(True, f"{TIMING_PATH[:-4]}.{map_index}.{process_index}.csv")
 
 
 def log_steps(log: bool) -> None:
-    '''
+    """
     Whether to log every step invocation.
 
     By default, we do not. Override this by setting the ``METACELLS_LOG_ALL_STEPS`` environment
@@ -153,76 +159,68 @@ def log_steps(log: bool) -> None:
         deadlocks, very-long-running numpy functions, and the like. Basically, if the program is
         taking 100% CPU and you have no idea what it is doing, turning this on and looking at the
         last logged step name would give you some idea of where it is stuck.
-    '''
+    """
     global LOG_ALL_STEPS
     LOG_ALL_STEPS = log
 
 
-if not 'sphinx' in sys.argv[0]:
-    TIMING_PATH = os.environ.get('METACELL_TIMING_CSV', TIMING_PATH)
-    TIMING_MODE = os.environ.get('METACELL_TIMING_MODE', TIMING_MODE)
-    TIMING_BUFFERING = \
-        int(os.environ.get('METACELL_TIMING_BUFFERING', str(TIMING_BUFFERING)))
-    collect_timing({'true': True,
-                    'false': False}[os.environ.get('METACELLS_COLLECT_TIMING',
-                                                   str(COLLECT_TIMING)).lower()])
-    log_steps({'true': True,
-               'false': False}[os.environ.get('METACELLS_LOG_ALL_STEPS',
-                                              str(LOG_ALL_STEPS)).lower()])
+TIMING_PATH = os.environ.get("METACELL_TIMING_CSV", TIMING_PATH)
+TIMING_MODE = os.environ.get("METACELL_TIMING_MODE", TIMING_MODE)
+TIMING_BUFFERING = int(os.environ.get("METACELL_TIMING_BUFFERING", str(TIMING_BUFFERING)))
+collect_timing({"true": True, "false": False}[os.environ.get("METACELLS_COLLECT_TIMING", str(COLLECT_TIMING)).lower()])
+log_steps({"true": True, "false": False}[os.environ.get("METACELLS_LOG_ALL_STEPS", str(LOG_ALL_STEPS)).lower()])
 
 
 class Counters:
-    '''
+    """
     The counters for the execution times.
-    '''
+    """
 
     def __init__(self, *, elapsed_ns: int = 0, cpu_ns: int = 0) -> None:
         self.elapsed_ns = elapsed_ns  #: Elapsed time counter.
         self.cpu_ns = cpu_ns  #: CPU time counter.
 
     @staticmethod
-    def now() -> 'Counters':
-        '''
+    def now() -> "Counters":
+        """
         Return the current value of the counters.
-        '''
+        """
         return Counters(elapsed_ns=perf_counter_ns(), cpu_ns=process_time_ns())
 
-    def __add__(self, other: 'Counters') -> 'Counters':
-        return Counters(elapsed_ns=self.elapsed_ns + other.elapsed_ns,
-                        cpu_ns=self.cpu_ns + other.cpu_ns)
+    def __add__(self, other: "Counters") -> "Counters":
+        return Counters(elapsed_ns=self.elapsed_ns + other.elapsed_ns, cpu_ns=self.cpu_ns + other.cpu_ns)
 
-    def __iadd__(self, other: 'Counters') -> 'Counters':
+    def __iadd__(self, other: "Counters") -> "Counters":
         self.elapsed_ns += other.elapsed_ns
         self.cpu_ns += other.cpu_ns
         return self
 
-    def __sub__(self, other: 'Counters') -> 'Counters':
-        return Counters(elapsed_ns=self.elapsed_ns - other.elapsed_ns,
-                        cpu_ns=self.cpu_ns - other.cpu_ns)
+    def __sub__(self, other: "Counters") -> "Counters":
+        return Counters(elapsed_ns=self.elapsed_ns - other.elapsed_ns, cpu_ns=self.cpu_ns - other.cpu_ns)
 
-    def __isub__(self, other: 'Counters') -> 'Counters':
+    def __isub__(self, other: "Counters") -> "Counters":
         self.elapsed_ns -= other.elapsed_ns
         self.cpu_ns -= other.cpu_ns
         return self
 
 
 class StepTiming:
-    '''
+    """
     Timing information for some named processing step.
-    '''
+    """
 
-    def __init__(self, name: str, parent: Optional['StepTiming']) -> None:
-        '''
+    def __init__(self, name: str, parent: Optional["StepTiming"]) -> None:
+        """
         Start collecting time for a named processing step.
-        '''
+        """
         #: The parent step, if any.
         self.parent = parent
 
-        if name[0] != '.':
-            name = ';' + name
+        if name[0] != ".":
+            name = ";" + name
 
         if parent is None:
-            assert not name[0] == '.'
+            assert not name[0] == "."
             name = name[1:]
 
         #: The full context of the processing step.
@@ -239,9 +237,9 @@ class StepTiming:
 
 
 class GcStep(NamedTuple):
-    '''
+    """
     Data about a GC collection step.
-    '''
+    """
 
     #: The counters when we started the GC step.
     start: Counters
@@ -258,17 +256,17 @@ if COLLECT_TIMING:
     GC_START_POINT: Optional[Counters] = None
 
     def _time_gc(phase: str, info: Dict[str, Any]) -> None:
-        steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
+        steps_stack = getattr(THREAD_LOCAL, "steps_stack", None)
         if not steps_stack:
             return
 
         global GC_START_POINT
-        if phase == 'start':
+        if phase == "start":
             assert GC_START_POINT is None
             GC_START_POINT = Counters.now()
             return
 
-        assert phase == 'stop'
+        assert phase == "stop"
         assert GC_START_POINT is not None
 
         gc_step = GcStep(start=GC_START_POINT, stop=Counters.now())
@@ -280,14 +278,14 @@ if COLLECT_TIMING:
             gc_parameters.append(name)
             gc_parameters.append(str(value))
 
-        _print_timing('__gc__', gc_step.stop - gc_step.start, gc_parameters)
+        _print_timing("__gc__", gc_step.stop - gc_step.start, gc_parameters)
 
     gc.callbacks.append(_time_gc)
 
 
 @contextmanager
 def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
-    '''
+    """
     Collect timing information for a computation step.
 
     Expected usage is:
@@ -310,21 +308,21 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
     If the ``name`` starts with a ``.`` of a ``_``, then it is prefixed with the names of the
     innermost surrounding step name (which must exist). This is commonly used to time sub-steps of a
     function.
-    '''
+    """
     if not COLLECT_TIMING:
         yield None
         return
 
-    steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
+    steps_stack = getattr(THREAD_LOCAL, "steps_stack", None)
     if steps_stack is None:
         steps_stack = THREAD_LOCAL.steps_stack = []
 
     parent_timing: Optional[StepTiming] = None
     if len(steps_stack) > 0:
         parent_timing = steps_stack[-1]
-    if name[0] == '_':
-        name = f'.{name[1:]}'
-    if name[0] == '.':
+    if name[0] == "_":
+        name = f".{name[1:]}"
+    if name[0] == ".":
         assert parent_timing is not None
 
     step_timing = StepTiming(name, parent_timing)
@@ -332,7 +330,7 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
 
     try:
         if LOG_ALL_STEPS:
-            utl.logger().debug('{[( %s', step_timing.context)
+            utl.logger().debug(f"{{[( {step_timing.context}")  # pylint: disable=logging-fstring-interpolation
 
         yield_point = Counters.now()
         yield None
@@ -344,8 +342,7 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
         global GC_STEPS
         gc_steps: List[GcStep] = []
         for gc_step in GC_STEPS:
-            if yield_point.elapsed_ns <= gc_step.start.elapsed_ns \
-                    and gc_step.stop.elapsed_ns <= back_point.elapsed_ns:
+            if yield_point.elapsed_ns <= gc_step.start.elapsed_ns and gc_step.stop.elapsed_ns <= back_point.elapsed_ns:
                 total_times -= gc_step.stop - gc_step.start
             else:
                 gc_steps.append(gc_step)
@@ -354,7 +351,7 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
         assert total_times.elapsed_ns >= 0
         assert total_times.cpu_ns >= 0
         if LOG_ALL_STEPS:
-            utl.logger().debug('}]) %s', step_timing.context)
+            utl.logger().debug("}]) %s", step_timing.context)
 
         steps_stack.pop()
 
@@ -380,14 +377,13 @@ def _print_timing(
     try:
         global TIMING_FILE
         if TIMING_FILE is None:
-            TIMING_FILE = \
-                open(TIMING_PATH, 'a', buffering=TIMING_BUFFERING)
-        text = [invocation_context,
-                'elapsed_ns', str(total_times.elapsed_ns),
-                'cpu_ns', str(total_times.cpu_ns)]
+            TIMING_FILE = open(  # pylint: disable=consider-using-with
+                TIMING_PATH, "a", buffering=TIMING_BUFFERING, encoding="utf8"
+            )
+        text = [invocation_context, "elapsed_ns", str(total_times.elapsed_ns), "cpu_ns", str(total_times.cpu_ns)]
         if step_parameters:
             text.extend(step_parameters)
-        TIMING_FILE.write(','.join(text) + '\n')
+        TIMING_FILE.write(",".join(text) + "\n")
 
     finally:
         if gc_enabled:
@@ -395,7 +391,7 @@ def _print_timing(
 
 
 def timed_parameters(**kwargs: Any) -> None:
-    '''
+    """
     Associate relevant timing parameters to the innermost
     :py:func:`metacells.utilities.timing.timed_step`.
 
@@ -405,7 +401,7 @@ def timed_parameters(**kwargs: Any) -> None:
 
     This allows tracking parameters which affect invocation time (such as array sizes), to help
     identify the causes for the long-running operations.
-    '''
+    """
     step_timing = current_step()
     if step_timing is not None:
         for name, value in kwargs.items():
@@ -413,11 +409,11 @@ def timed_parameters(**kwargs: Any) -> None:
             step_timing.parameters.append(str(value))
 
 
-CALLABLE = TypeVar('CALLABLE')
+CALLABLE = TypeVar("CALLABLE")
 
 
 def timed_call(name: Optional[str] = None) -> Callable[[CALLABLE], CALLABLE]:
-    '''
+    """
     Automatically wrap each invocation of the decorated function with
     :py:func:`metacells.utilities.timing.timed_step` using the ``name`` (by default, the function's
     ``__qualname__``).
@@ -429,16 +425,20 @@ def timed_call(name: Optional[str] = None) -> Callable[[CALLABLE], CALLABLE]:
         @ut.timed_call()
         def some_function(...):
             ...
-    '''
+    """
     if COLLECT_TIMING:
+
         def wrap(function: Callable) -> Callable:
             @wraps(function)
             def timed(*args: Any, **kwargs: Any) -> Any:
                 with timed_step(name or function.__qualname__):
                     return function(*args, **kwargs)
+
             timed.__is_timed__ = True  # type: ignore
             return timed
+
     else:
+
         def wrap(function: Callable) -> Callable:
             function.__is_timed__ = True  # type: ignore
             return function
@@ -447,28 +447,28 @@ def timed_call(name: Optional[str] = None) -> Callable[[CALLABLE], CALLABLE]:
 
 
 def context() -> str:
-    '''
+    """
     Return the full current context (path of :py:func:`metacells.utilities.timing.timed_step`-s
     leading to the current point).
 
     .. note::
 
         The context will be the empty string unless we are actually collecting timing.
-    '''
-    steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
+    """
+    steps_stack = getattr(THREAD_LOCAL, "steps_stack", None)
     if not steps_stack:
-        return ''
+        return ""
     return steps_stack[-1].context
 
 
 def current_step() -> Optional[StepTiming]:
-    '''
+    """
     The timing collector for the innermost (current)
     :py:func:`metacells.utilities.timing.timed_step`, if any.
-    '''
+    """
     if not COLLECT_TIMING:
         return None
-    steps_stack = getattr(THREAD_LOCAL, 'steps_stack', None)
+    steps_stack = getattr(THREAD_LOCAL, "steps_stack", None)
     if steps_stack is None or len(steps_stack) == 0:
         return None
     return steps_stack[-1]

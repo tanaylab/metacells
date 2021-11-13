@@ -1,4 +1,4 @@
-'''
+"""
 Clean
 -----
 
@@ -6,23 +6,26 @@ Raw single-cell RNA sequencing data is notoriously noisy and "dirty". The pipeli
 performs initial analysis of the data and extract just the "clean" data for actually computing the
 metacells. The steps provided here are expected to be generically useful, but as always specific
 data sets may require custom cleaning steps on a case-by-case basis.
-'''
+"""
 
 from re import Pattern
-from typing import Collection, List, Optional, Union
+from typing import Collection
+from typing import List
+from typing import Optional
+from typing import Union
 
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
 import metacells.tools as tl
 import metacells.utilities as ut
 
 __all__ = [
-    'analyze_clean_genes',
-    'pick_clean_genes',
-    'analyze_clean_cells',
-    'pick_clean_cells',
-    'extract_clean_data',
+    "analyze_clean_genes",
+    "pick_clean_genes",
+    "analyze_clean_cells",
+    "pick_clean_cells",
+    "extract_clean_data",
 ]
 
 
@@ -31,7 +34,7 @@ __all__ = [
 @ut.expand_doc()
 def analyze_clean_genes(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     properly_sampled_min_gene_total: int = pr.properly_sampled_min_gene_total,
     noisy_lonely_max_sampled_cells: int = pr.noisy_lonely_max_sampled_cells,
@@ -45,7 +48,7 @@ def analyze_clean_genes(
     excluded_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     random_seed: int = pr.random_seed,
 ) -> None:
-    '''
+    """
     Analyze genes in preparation for picking the "clean" subset of the ``adata``.
 
     **Input**
@@ -85,45 +88,40 @@ def analyze_clean_genes(
        name, using the ``excluded_gene_names`` (default: {excluded_gene_names}) and
        ``excluded_gene_patterns`` (default: {excluded_gene_patterns}). This is stored in a
        per-variable (gene) ``excluded_genes`` boolean mask.
-    '''
-    tl.find_properly_sampled_genes(adata, what,
-                                   min_gene_total=properly_sampled_min_gene_total)
+    """
+    tl.find_properly_sampled_genes(adata, what, min_gene_total=properly_sampled_min_gene_total)
 
     excluded_genes_mask: Optional[str]
     if excluded_gene_names is not None or excluded_gene_patterns is not None:
-        excluded_genes_mask = 'excluded_gene'
-        tl.find_named_genes(adata,
-                            to='excluded_gene',
-                            names=excluded_gene_names,
-                            patterns=excluded_gene_patterns)
+        excluded_genes_mask = "excluded_gene"
+        tl.find_named_genes(adata, to="excluded_gene", names=excluded_gene_names, patterns=excluded_gene_patterns)
     else:
         excluded_genes_mask = None
 
-    tl.find_noisy_lonely_genes(adata, what,
-                               excluded_genes_mask=excluded_genes_mask,
-                               max_sampled_cells=noisy_lonely_max_sampled_cells,
-                               downsample_min_samples=noisy_lonely_downsample_min_samples,
-                               downsample_min_cell_quantile=noisy_lonely_downsample_min_cell_quantile,
-                               downsample_max_cell_quantile=noisy_lonely_downsample_max_cell_quantile,
-                               min_gene_total=noisy_lonely_min_gene_total,
-                               min_gene_normalized_variance=noisy_lonely_min_gene_normalized_variance,
-                               max_gene_similarity=noisy_lonely_max_gene_similarity,
-                               random_seed=random_seed)
+    tl.find_noisy_lonely_genes(
+        adata,
+        what,
+        excluded_genes_mask=excluded_genes_mask,
+        max_sampled_cells=noisy_lonely_max_sampled_cells,
+        downsample_min_samples=noisy_lonely_downsample_min_samples,
+        downsample_min_cell_quantile=noisy_lonely_downsample_min_cell_quantile,
+        downsample_max_cell_quantile=noisy_lonely_downsample_max_cell_quantile,
+        min_gene_total=noisy_lonely_min_gene_total,
+        min_gene_normalized_variance=noisy_lonely_min_gene_normalized_variance,
+        max_gene_similarity=noisy_lonely_max_gene_similarity,
+        random_seed=random_seed,
+    )
 
 
-CLEAN_GENES_MASKS = ['properly_sampled_gene',
-                     '~noisy_lonely_gene', '~excluded_gene']
+CLEAN_GENES_MASKS = ["properly_sampled_gene", "~noisy_lonely_gene", "~excluded_gene"]
 
 
 @ut.timed_call()
-@ut.expand_doc(masks=', '.join(CLEAN_GENES_MASKS))
+@ut.expand_doc(masks=", ".join(CLEAN_GENES_MASKS))
 def pick_clean_genes(  # pylint: disable=dangerous-default-value
-    adata: AnnData,
-    *,
-    masks: List[str] = CLEAN_GENES_MASKS,
-    to: str = 'clean_gene'
+    adata: AnnData, *, masks: List[str] = CLEAN_GENES_MASKS, to: str = "clean_gene"
 ) -> None:
-    '''
+    """
     Create a mask of the "clean" genes that will be used to actually compute the metacells.
 
     **Input**
@@ -142,7 +140,7 @@ def pick_clean_genes(  # pylint: disable=dangerous-default-value
 
     1. This simply AND-s the specified ``masks`` (default: {masks}) using
        :py:func:`metacells.tools.mask.combine_masks`.
-    '''
+    """
     tl.combine_masks(adata, masks, to=to)
 
 
@@ -150,13 +148,13 @@ def pick_clean_genes(  # pylint: disable=dangerous-default-value
 @ut.timed_call()
 def analyze_clean_cells(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     properly_sampled_min_cell_total: Optional[int],
     properly_sampled_max_cell_total: Optional[int],
     properly_sampled_max_excluded_genes_fraction: Optional[float],
 ) -> None:
-    '''
+    """
     Analyze cells in preparation for extracting the "clean" subset of the ``adata``.
 
     Raw single-cell RNA sequencing data is notoriously noisy and "dirty". This pipeline step
@@ -185,12 +183,10 @@ def analyze_clean_cells(
     2. Invoke :py:func:`metacells.tools.properly_sampled.find_properly_sampled_cells` using
        ``properly_sampled_min_cell_total`` (no default), ``properly_sampled_max_cell_total`` (no
        default) and ``properly_sampled_max_excluded_genes_fraction`` (no default).
-    '''
+    """
     excluded_adata: Optional[AnnData] = None
     if properly_sampled_max_excluded_genes_fraction is not None:
-        excluded_genes = \
-            tl.filter_data(adata, name='dirty_genes', top_level=False,
-                           var_masks=['~clean_gene'])
+        excluded_genes = tl.filter_data(adata, name="dirty_genes", top_level=False, var_masks=["~clean_gene"])
         if excluded_genes is not None:
             excluded_adata = excluded_genes[0]
 
@@ -199,25 +195,25 @@ def analyze_clean_cells(
     else:
         max_excluded_genes_fraction = properly_sampled_max_excluded_genes_fraction
 
-    tl.find_properly_sampled_cells(adata, what,
-                                   min_cell_total=properly_sampled_min_cell_total,
-                                   max_cell_total=properly_sampled_max_cell_total,
-                                   excluded_adata=excluded_adata,
-                                   max_excluded_genes_fraction=max_excluded_genes_fraction)
+    tl.find_properly_sampled_cells(
+        adata,
+        what,
+        min_cell_total=properly_sampled_min_cell_total,
+        max_cell_total=properly_sampled_max_cell_total,
+        excluded_adata=excluded_adata,
+        max_excluded_genes_fraction=max_excluded_genes_fraction,
+    )
 
 
-CLEAN_CELLS_MASKS = ['properly_sampled_cell']
+CLEAN_CELLS_MASKS = ["properly_sampled_cell"]
 
 
 @ut.timed_call()
-@ut.expand_doc(masks=', '.join(CLEAN_CELLS_MASKS))
+@ut.expand_doc(masks=", ".join(CLEAN_CELLS_MASKS))
 def pick_clean_cells(  # pylint: disable=dangerous-default-value
-    adata: AnnData,
-    *,
-    masks: List[str] = CLEAN_CELLS_MASKS,
-    to: str = 'clean_cell'
+    adata: AnnData, *, masks: List[str] = CLEAN_CELLS_MASKS, to: str = "clean_cell"
 ) -> None:
-    '''
+    """
     Create a mask of the "clean" cells that will be used to actually compute the metacells.
 
     **Input**
@@ -236,7 +232,7 @@ def pick_clean_cells(  # pylint: disable=dangerous-default-value
 
     1. This simply AND-s the specified ``masks`` (default: {masks}) using
        :py:func:`metacells.tools.mask.combine_masks`.
-    '''
+    """
     tl.combine_masks(adata, masks, to=to)
 
 
@@ -245,13 +241,13 @@ def pick_clean_cells(  # pylint: disable=dangerous-default-value
 @ut.expand_doc()
 def extract_clean_data(
     adata: AnnData,
-    obs_mask: str = 'clean_cell',
-    var_mask: str = 'clean_gene',
+    obs_mask: str = "clean_cell",
+    var_mask: str = "clean_gene",
     *,
-    name: Optional[str] = '.clean',
+    name: Optional[str] = ".clean",
     top_level: bool = True,
 ) -> Optional[AnnData]:
-    '''
+    """
     Extract a "clean" subset of the ``adata`` to compute metacells for.
 
     **Input**
@@ -273,12 +269,16 @@ def extract_clean_data(
        ``obs_mask`` (default: {obs_mask}) and ``var_mask`` (default: {var_mask}) data using the
        ``name`` (default: {name}), and tracking the original ``full_cell_index`` and
        ``full_gene_index``.
-    '''
-    results = tl.filter_data(adata, name=name, top_level=top_level,
-                             track_obs='full_cell_index',
-                             track_var='full_gene_index',
-                             obs_masks=[obs_mask],
-                             var_masks=[var_mask])
+    """
+    results = tl.filter_data(
+        adata,
+        name=name,
+        top_level=top_level,
+        track_obs="full_cell_index",
+        track_var="full_gene_index",
+        obs_masks=[obs_mask],
+        var_masks=[var_mask],
+    )
     if results is None:
         return None
 

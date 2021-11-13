@@ -1,7 +1,0 @@
-name: build-doc
-channels:
-  - conda-forge
-dependencies:
-  - python=3.7
-  - sphinx
-  - sphinx_rtd_theme

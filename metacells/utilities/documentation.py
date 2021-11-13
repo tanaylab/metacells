@@ -1,20 +1,23 @@
-'''
+"""
 Documentation
 -------------
 
 Utilities for documenting Python functions.
-'''
+"""
 
-from inspect import Parameter, signature
-from typing import Any, Callable, TypeVar
+from inspect import Parameter
+from inspect import signature
+from typing import Any
+from typing import Callable
+from typing import TypeVar
 from warnings import warn
 
 __all__ = [
-    'expand_doc',
+    "expand_doc",
 ]
 
 
-CALLABLE = TypeVar('CALLABLE')
+CALLABLE = TypeVar("CALLABLE")
 
 
 def expand_doc(**kwargs: Any) -> Callable[[CALLABLE], CALLABLE]:
@@ -48,14 +51,17 @@ def expand_doc(**kwargs: Any) -> Callable[[CALLABLE], CALLABLE]:
         try:
             expanded_doc = function.__doc__.format_map(kwargs)
         except BaseException as exception:
-            raise RuntimeError(f'key {exception} '  # pylint: disable=raise-missing-from
-                               f'in expand_doc documentation for the function '
-                               f'{function.__module__}.{function.__qualname__}')
+            raise RuntimeError(  # pylint: disable=raise-missing-from
+                f"key {exception} "
+                f"in expand_doc documentation for the function "
+                f"{function.__module__}.{function.__qualname__}"
+            )
 
         if expanded_doc == function.__doc__:
-            expand_doc_had_no_effect = \
-                '@expand_doc had no effect on the documentation of the function %s.%s' \
-                % (function.__module__, function.__qualname__)
+            expand_doc_had_no_effect = (
+                "@expand_doc had no effect on the documentation of the function "
+                f"{function.__module__}.{function.__qualname__}"
+            )
             warn(expand_doc_had_no_effect)
 
         function.__doc__ = expanded_doc

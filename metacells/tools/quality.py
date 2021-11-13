@@ -1,23 +1,28 @@
-'''
+"""
 Quality
 -------
-'''
+"""
 
-from typing import Any, List, Optional, Set, TypeVar, Union
+from typing import Any
+from typing import List
+from typing import Optional
+from typing import Set
+from typing import TypeVar
+from typing import Union
 
 import numpy as np
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
-    'compute_type_compatible_sizes',
-    'compute_inner_normalized_variance',
+    "compute_type_compatible_sizes",
+    "compute_inner_normalized_variance",
 ]
 
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 @ut.logged()
@@ -26,10 +31,10 @@ T = TypeVar('T')
 def compute_type_compatible_sizes(
     adatas: List[AnnData],
     *,
-    size: str = 'grouped',
-    kind: str = 'type',
+    size: str = "grouped",
+    kind: str = "type",
 ) -> None:
-    '''
+    """
     Given multiple annotated data of groups, compute a "compatible" size for each one to allow for
     consistent inner normalized variance comparison.
 
@@ -75,17 +80,13 @@ def compute_type_compatible_sizes(
     4. Use this as the "compatible" size for all these groups, and remove them from consideration.
 
     5. Loop until all groups are assigned a "compatible" size.
-    '''
+    """
     assert len(adatas) > 0
     if len(adatas) == 1:
-        ut.set_o_data(adatas[0], 'compatible_size',
-                      ut.get_o_numpy(adatas[0], size,
-                                     formatter=ut.sizes_description))
+        ut.set_o_data(adatas[0], "compatible_size", ut.get_o_numpy(adatas[0], size, formatter=ut.sizes_description))
         return
 
-    group_sizes_of_data = \
-        [ut.get_o_numpy(adata, size, formatter=ut.sizes_description)
-         for adata in adatas]
+    group_sizes_of_data = [ut.get_o_numpy(adata, size, formatter=ut.sizes_description) for adata in adatas]
     group_types_of_data = [ut.get_o_numpy(adata, kind) for adata in adatas]
 
     unique_types: Set[Any] = set()
@@ -94,85 +95,78 @@ def compute_type_compatible_sizes(
 
     compatible_size_of_data = [np.full(adata.n_obs, -1) for adata in adatas]
 
+    groups_count_of_data: List[int] = []
     for type_index, group_type in enumerate(sorted(unique_types)):
-        with ut.log_step(f'- {group_type}',
-                         ut.progress_description(len(unique_types),
-                                                 type_index, 'type')):
-            sorted_group_indices_of_data = \
-                [np.argsort(group_sizes)[group_types == group_type]
-                 for group_sizes, group_types
-                 in zip(group_sizes_of_data, group_types_of_data)]
+        with ut.log_step(f"- {group_type}", ut.progress_description(len(unique_types), type_index, "type")):
+            sorted_group_indices_of_data = [
+                np.argsort(group_sizes)[group_types == group_type]
+                for group_sizes, group_types in zip(group_sizes_of_data, group_types_of_data)
+            ]
 
-            groups_count_of_data = \
-                [len(sorted_group_indices)
-                 for sorted_group_indices
-                 in sorted_group_indices_of_data]
+            groups_count_of_data = [len(sorted_group_indices) for sorted_group_indices in sorted_group_indices_of_data]
 
-            ut.log_calc('group_counts', groups_count_of_data)
+            ut.log_calc("group_counts", groups_count_of_data)
 
             def _for_each(value_of_data: List[T]) -> List[T]:
-                return [value
-                        for groups_count, value
-                        in zip(groups_count_of_data, value_of_data)
-                        if groups_count > 0]
+                return [value for groups_count, value in zip(groups_count_of_data, value_of_data) if groups_count > 0]
 
             groups_count_of_each = _for_each(groups_count_of_data)
 
             if len(groups_count_of_each) == 0:
                 continue
 
-            sorted_group_indices_of_each = \
-                _for_each(sorted_group_indices_of_data)
+            sorted_group_indices_of_each = _for_each(sorted_group_indices_of_data)
             group_sizes_of_each = _for_each(group_sizes_of_data)
             compatible_size_of_each = _for_each(compatible_size_of_data)
 
             if len(groups_count_of_each) == 1:
-                compatible_size_of_each[0][sorted_group_indices_of_each[0]] = \
-                    group_sizes_of_each[0][sorted_group_indices_of_each[0]]
+                compatible_size_of_each[0][sorted_group_indices_of_each[0]] = group_sizes_of_each[0][
+                    sorted_group_indices_of_each[0]
+                ]
 
-            group_quantile_of_each = \
-                [(np.arange(len(sorted_group_indices)) + 1) / len(sorted_group_indices)
-                 for sorted_group_indices
-                 in sorted_group_indices_of_each]
+            group_quantile_of_each = [
+                (np.arange(len(sorted_group_indices)) + 1) / len(sorted_group_indices)
+                for sorted_group_indices in sorted_group_indices_of_each
+            ]
 
             next_position_of_each = np.full(len(group_quantile_of_each), 0)
 
             while True:
-                next_quantile_of_each = \
-                    [group_quantile[next_position]
-                     for group_quantile, next_position
-                     in zip(group_quantile_of_each, next_position_of_each)]
+                next_quantile_of_each = [
+                    group_quantile[next_position]
+                    for group_quantile, next_position in zip(group_quantile_of_each, next_position_of_each)
+                ]
                 next_quantile = max(next_quantile_of_each)
 
                 last_position_of_each = next_position_of_each.copy()
-                next_position_of_each[:] = \
-                    [np.sum(group_quantile <= next_quantile)
-                     for group_quantile
-                     in group_quantile_of_each]
+                next_position_of_each[:] = [
+                    np.sum(group_quantile <= next_quantile) for group_quantile in group_quantile_of_each
+                ]
 
-                positions_of_each = \
-                    [range(last_position, next_position)
-                     for last_position, next_position
-                     in zip(last_position_of_each, next_position_of_each)]
+                positions_of_each = [
+                    range(last_position, next_position)
+                    for last_position, next_position in zip(last_position_of_each, next_position_of_each)
+                ]
 
-                sizes_of_each = \
-                    [group_sizes[sorted_group_indices[positions]]
-                     for group_sizes, sorted_group_indices, positions
-                     in zip(group_sizes_of_each, sorted_group_indices_of_each, positions_of_each)]
+                sizes_of_each = [
+                    group_sizes[sorted_group_indices[positions]]
+                    for group_sizes, sorted_group_indices, positions in zip(
+                        group_sizes_of_each, sorted_group_indices_of_each, positions_of_each
+                    )
+                ]
 
-                min_size_of_each = \
-                    [np.min(sizes)
-                     for sizes, positions
-                     in zip(sizes_of_each, positions_of_each)]
+                min_size_of_each = [np.min(sizes) for sizes, positions in zip(sizes_of_each, positions_of_each)]
                 min_size = min(min_size_of_each)
 
-                for sorted_group_indices, positions, compatible_size \
-                        in zip(sorted_group_indices_of_each, positions_of_each, compatible_size_of_each):
+                for sorted_group_indices, positions, compatible_size in zip(
+                    sorted_group_indices_of_each, positions_of_each, compatible_size_of_each
+                ):
                     compatible_size[sorted_group_indices[positions]] = min_size
 
-                is_done_of_each = [next_position == groups_count
-                                   for next_position, groups_count
-                                   in zip(next_position_of_each, groups_count_of_each)]
+                is_done_of_each = [
+                    next_position == groups_count
+                    for next_position, groups_count in zip(next_position_of_each, groups_count_of_each)
+                ]
                 if all(is_done_of_each):
                     break
 
@@ -180,14 +174,14 @@ def compute_type_compatible_sizes(
 
     for adata, compatible_size in zip(adatas, compatible_size_of_data):
         assert np.min(compatible_size) > 0
-        ut.set_o_data(adata, 'compatible_size', compatible_size)
+        ut.set_o_data(adata, "compatible_size", compatible_size)
 
 
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def compute_inner_normalized_variance(
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     compatible_size: Optional[str] = None,
     downsample_min_samples: int = pr.downsample_min_samples,
@@ -196,10 +190,10 @@ def compute_inner_normalized_variance(
     min_gene_total: int = pr.quality_min_gene_total,
     adata: AnnData,
     gdata: AnnData,
-    group: Union[str, ut.Vector] = 'metacell',
+    group: Union[str, ut.Vector] = "metacell",
     random_seed: int = pr.random_seed,
 ) -> None:
-    '''
+    """
     Compute the inner normalized variance (variance / mean) for each gene in each group.
 
     This is also known as the "index of dispersion" and can serve as a quality measure for
@@ -245,54 +239,52 @@ def compute_inner_normalized_variance(
 
     3. Compute the normalized variance of each gene based on the downsampled data. Set the
        result to ``nan`` for genes with less than ``min_gene_total`` (default: {min_gene_total}).
-    '''
-    cells_data = ut.get_vo_proper(adata, what, layout='row_major')
+    """
+    cells_data = ut.get_vo_proper(adata, what, layout="row_major")
 
     if compatible_size is not None:
-        compatible_size_of_groups: Optional[ut.NumpyVector] = \
-            ut.get_o_numpy(gdata, compatible_size,
-                           formatter=ut.sizes_description)
+        compatible_size_of_groups: Optional[ut.NumpyVector] = ut.get_o_numpy(
+            gdata, compatible_size, formatter=ut.sizes_description
+        )
     else:
         compatible_size_of_groups = None
 
-    group_of_cells = \
-        ut.get_o_numpy(adata, group, formatter=ut.groups_description)
+    group_of_cells = ut.get_o_numpy(adata, group, formatter=ut.groups_description)
 
     groups_count = np.max(group_of_cells) + 1
     assert groups_count > 0
 
     assert gdata.n_obs == groups_count
-    variance_per_gene_per_group = np.full(gdata.shape, None, dtype='float32')
-    normalized_variance_per_gene_per_group = \
-        np.full(gdata.shape, None, dtype='float32')
+    variance_per_gene_per_group = np.full(gdata.shape, None, dtype="float32")
+    normalized_variance_per_gene_per_group = np.full(gdata.shape, None, dtype="float32")
 
     for group_index in range(groups_count):
-        with ut.log_step('- group', group_index,
-                         formatter=lambda group_index:
-                         ut.progress_description(groups_count,
-                                                 group_index, 'group')):
+        with ut.log_step(
+            "- group",
+            group_index,
+            formatter=lambda group_index: ut.progress_description(groups_count, group_index, "group"),
+        ):
             if compatible_size_of_groups is not None:
-                compatible_size_of_group = \
-                    compatible_size_of_groups[group_index]
+                compatible_size_of_group = compatible_size_of_groups[group_index]
             else:
                 compatible_size_of_group = None
 
-            _collect_group_data(group_index,
-                                group_of_cells=group_of_cells,
-                                cells_data=cells_data,
-                                compatible_size=compatible_size_of_group,
-                                downsample_min_samples=downsample_min_samples,
-                                downsample_min_cell_quantile=downsample_min_cell_quantile,
-                                downsample_max_cell_quantile=downsample_max_cell_quantile,
-                                min_gene_total=min_gene_total,
-                                random_seed=random_seed,
-                                variance_per_gene_per_group=variance_per_gene_per_group,
-                                normalized_variance_per_gene_per_group=normalized_variance_per_gene_per_group)
+            _collect_group_data(
+                group_index,
+                group_of_cells=group_of_cells,
+                cells_data=cells_data,
+                compatible_size=compatible_size_of_group,
+                downsample_min_samples=downsample_min_samples,
+                downsample_min_cell_quantile=downsample_min_cell_quantile,
+                downsample_max_cell_quantile=downsample_max_cell_quantile,
+                min_gene_total=min_gene_total,
+                random_seed=random_seed,
+                variance_per_gene_per_group=variance_per_gene_per_group,
+                normalized_variance_per_gene_per_group=normalized_variance_per_gene_per_group,
+            )
 
-    ut.set_vo_data(gdata, 'inner_variance',
-                   variance_per_gene_per_group)
-    ut.set_vo_data(gdata, 'inner_normalized_variance',
-                   normalized_variance_per_gene_per_group)
+    ut.set_vo_data(gdata, "inner_variance", variance_per_gene_per_group)
+    ut.set_vo_data(gdata, "inner_normalized_variance", normalized_variance_per_gene_per_group)
 
 
 def _collect_group_data(
@@ -315,47 +307,46 @@ def _collect_group_data(
         return
 
     if compatible_size is None:
-        ut.log_calc('  cells', cells_count)
+        ut.log_calc("  cells", cells_count)
     else:
         assert 0 < compatible_size <= cells_count
         if compatible_size < cells_count:
             np.random.seed(random_seed)
             if ut.logging_calc():
-                ut.log_calc('  cells: '
-                            + ut.ratio_description(len(cell_indices), 'cell',
-                                                   compatible_size, 'compatible'))
-            cell_indices = np.random.choice(cell_indices,
-                                            size=compatible_size,
-                                            replace=False)
+                ut.log_calc(
+                    "  cells: " + ut.ratio_description(len(cell_indices), "cell", compatible_size, "compatible")
+                )
+            cell_indices = np.random.choice(cell_indices, size=compatible_size, replace=False)
             assert len(cell_indices) == compatible_size
 
-    assert ut.matrix_layout(cells_data) == 'row_major'
+    assert ut.matrix_layout(cells_data) == "row_major"
     group_data = cells_data[cell_indices, :]
 
-    total_per_cell = ut.sum_per(group_data, per='row')
-    samples = int(round(min(max(downsample_min_samples,
-                                np.quantile(total_per_cell, downsample_min_cell_quantile)),
-                            np.quantile(total_per_cell, downsample_max_cell_quantile))))
+    total_per_cell = ut.sum_per(group_data, per="row")
+    samples = int(
+        round(
+            min(
+                max(downsample_min_samples, np.quantile(total_per_cell, downsample_min_cell_quantile)),
+                np.quantile(total_per_cell, downsample_max_cell_quantile),
+            )
+        )
+    )
     if ut.logging_calc():
-        ut.log_calc(f'  samples: {samples}')
-    downsampled_data = \
-        ut.downsample_matrix(group_data, per='row',
-                             samples=samples, random_seed=random_seed)
+        ut.log_calc(f"  samples: {samples}")
+    downsampled_data = ut.downsample_matrix(group_data, per="row", samples=samples, random_seed=random_seed)
 
-    downsampled_data = ut.to_layout(downsampled_data, layout='column_major')
-    total_per_gene = ut.sum_per(downsampled_data, per='column')
+    downsampled_data = ut.to_layout(downsampled_data, layout="column_major")
+    total_per_gene = ut.sum_per(downsampled_data, per="column")
     too_small_genes = total_per_gene < min_gene_total
     if ut.logging_calc():
         included_genes_count = len(too_small_genes) - np.sum(too_small_genes)
-        ut.log_calc(f'  included genes: {included_genes_count}')
+        ut.log_calc(f"  included genes: {included_genes_count}")
 
-    variance_per_gene = ut.variance_per(downsampled_data, per='column')
-    normalized_variance_per_gene = \
-        ut.normalized_variance_per(downsampled_data, per='column')
+    variance_per_gene = ut.variance_per(downsampled_data, per="column")
+    normalized_variance_per_gene = ut.normalized_variance_per(downsampled_data, per="column")
 
     variance_per_gene[too_small_genes] = None
     normalized_variance_per_gene[too_small_genes] = None
 
     variance_per_gene_per_group[group_index, :] = variance_per_gene
-    normalized_variance_per_gene_per_group[group_index, :] = \
-        normalized_variance_per_gene
+    normalized_variance_per_gene_per_group[group_index, :] = normalized_variance_per_gene

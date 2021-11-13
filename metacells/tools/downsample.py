@@ -1,18 +1,19 @@
-'''
+"""
 Downsample
 ----------
-'''
+"""
 
-from typing import Optional, Union
+from typing import Optional
+from typing import Union
 
 import numpy as np
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
-    'downsample_cells',
+    "downsample_cells",
 ]
 
 
@@ -21,7 +22,7 @@ __all__ = [
 @ut.expand_doc()
 def downsample_cells(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = '__x__',
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     downsample_min_cell_quantile: float = pr.downsample_min_cell_quantile,
     downsample_min_samples: float = pr.downsample_min_samples,
@@ -29,7 +30,7 @@ def downsample_cells(
     random_seed: int = pr.random_seed,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
-    '''
+    """
     Downsample the values of ``what`` (default: {what}) data.
 
     Downsampling is an effective way to get the same number of samples in multiple cells
@@ -74,22 +75,25 @@ def downsample_cells(
 
     3. Downsample each cell so that it has at most the selected number of samples. Use the
        ``random_seed`` to allow making this replicable.
-    '''
+    """
     total_per_cell = ut.get_o_numpy(adata, what, sum=True)
 
-    samples = int(round(min(max(downsample_min_samples,
-                                np.quantile(total_per_cell, downsample_min_cell_quantile)),
-                            np.quantile(total_per_cell, downsample_max_cell_quantile))))
+    samples = int(
+        round(
+            min(
+                max(downsample_min_samples, np.quantile(total_per_cell, downsample_min_cell_quantile)),
+                np.quantile(total_per_cell, downsample_max_cell_quantile),
+            )
+        )
+    )
 
-    ut.log_calc('samples', samples)
+    ut.log_calc("samples", samples)
 
-    data = ut.get_vo_proper(adata, what, layout='row_major')
-    assert ut.matrix_dtype(data) == 'float32'
-    downsampled = ut.downsample_matrix(data, per='row', samples=samples,
-                                       random_seed=random_seed)
+    data = ut.get_vo_proper(adata, what, layout="row_major")
+    assert ut.matrix_dtype(data) == "float32"
+    downsampled = ut.downsample_matrix(data, per="row", samples=samples, random_seed=random_seed)
     if inplace:
-        ut.set_vo_data(adata, 'downsampled', downsampled)
+        ut.set_vo_data(adata, "downsampled", downsampled)
         return None
 
-    return ut.to_pandas_frame(downsampled,
-                              index=adata.obs_names, columns=adata.var_names)
+    return ut.to_pandas_frame(downsampled, index=adata.obs_names, columns=adata.var_names)

@@ -1,10 +1,12 @@
-'''
+"""
 Defaults
 --------
-'''
+"""
 
 from math import sqrt
-from typing import Optional, Union
+from typing import Optional
+from typing import Union
+
 import metacells.utilities.typing as utt
 
 #: The generic random seed. The default of ``0`` makes for a different result each time the code is
@@ -23,7 +25,7 @@ significant_gene_fraction: float = 1e-5
 
 #: The generic minimal "significant" gene normalized variance. See
 #: :py:func:`metacells.tools.high.find_high_normalized_variance_genes`.
-significant_gene_normalized_variance: float = 2**2.5
+significant_gene_normalized_variance: float = 2 ** 2.5
 
 #: The generic minimal "significant" gene relative variance. See
 #: :py:func:`metacells.tools.high.find_high_relative_variance_genes`.
@@ -83,7 +85,7 @@ relative_variance_window_size: int = 100
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
 #: and
 #: :py:func:`metacells.tools.similarity.compute_var_var_similarity`.
-similarity_method: str = 'pearson'
+similarity_method: str = "pearson"
 
 #: The default location for the logistics function. See
 #: :py:func:`metacells.pipeline.umap.compute_umap_by_features`,
@@ -140,7 +142,7 @@ max_cell_size_factor: Optional[float] = 2.0
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
 #: and
 #: :py:func:`metacells.pipeline.collect.collect_metacells`.
-cell_sizes: Union[str, utt.Vector] = '__x__|sum'
+cell_sizes: Union[str, utt.Vector] = "__x__|sum"
 
 #: The generic maximal group size factor, above which we should split it. See
 #: :py:const:`pile_min_split_size_factor`
@@ -245,11 +247,11 @@ related_max_sampled_cells: int = 10000
 
 #: How to compute gene-gene similarity for computing the related genes. See
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
-related_genes_similarity_method: str = 'repeated_pearson'
+related_genes_similarity_method: str = "repeated_pearson"
 
 #: The hierarchical clustering method to use for computing the related genes. See
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
-related_genes_cluster_method: str = 'ward'
+related_genes_cluster_method: str = "ward"
 
 #: The minimal number of genes in a related gene module. See
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
@@ -369,13 +371,13 @@ rare_min_gene_maximum: int = significant_value
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-rare_genes_similarity_method: str = 'repeated_pearson'
+rare_genes_similarity_method: str = "repeated_pearson"
 
 #: The hierarchical clustering method to use for computing the rare gene modules. See
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-rare_genes_cluster_method: str = 'ward'
+rare_genes_cluster_method: str = "ward"
 
 #: The minimal number of genes in a rare gene module. See
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
@@ -507,7 +509,7 @@ cells_similarity_log_data: bool = True
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-cells_similarity_value_normalization: float = 1/significant_value
+cells_similarity_value_normalization: float = 1 / significant_value
 
 #: The method to use to compute cell-cell similarity. See
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
@@ -541,7 +543,7 @@ self_similarity_value_normalization: float = 1e-5
 #: The method to use to compute group self-consistency. See
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
 #: :py:func:`metacells.pipeline.consistency.compute_groups_self_consistency`.
-self_similarity_method: str = 'logistics'
+self_similarity_method: str = "logistics"
 
 #: The target K for building the K-Nearest-Neighbors graph. See
 #: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
@@ -782,7 +784,7 @@ distinct_genes_count: int = 20
 #: :py:const:`metacells.parameters.target_metacell_size`
 #: and
 #: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
-umap_similarity_value_normalization: float = 1/target_metacell_size
+umap_similarity_value_normalization: float = 1 / target_metacell_size
 
 #: Whether to compute metacell-metacell similarity using the log (base 2) of the data for UMAP. See
 #: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
@@ -793,7 +795,7 @@ umap_similarity_log_data: bool = True
 #: :py:func:`metacells.tools.similarity.compute_var_var_similarity`,
 #: and
 #: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
-umap_similarity_method: str = 'logistics_pearson'
+umap_similarity_method: str = "logistics_pearson"
 
 #: The minimal UMAP point distance. See :py:const:`umap_spread` and
 #: :py:func:`metacells.tools.layout.umap_by_distances`
@@ -835,7 +837,7 @@ umap_fraction_normalization: float = 1e-5
 #: :py:func:`metacells.utilities.computation.cover_coordinates`
 #: and
 #: :py:func:`metacells.tools.layout.umap_by_distances`,
-cover_fraction: float = 1/3.0
+cover_fraction: float = 1 / 3.0
 
 #: The noise to add to the UMAP plot area. See
 #: :py:func:`metacells.utilities.computation.cover_coordinates`

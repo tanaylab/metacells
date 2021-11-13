@@ -1,21 +1,22 @@
-'''
+"""
 Layout
 ------
-'''
+"""
 
-from typing import Optional, Union
+from typing import Optional
+from typing import Union
 
 import numpy as np
 import scipy.sparse as sp  # type: ignore
 import umap  # type: ignore
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
-    'umap_by_distances',
-    'spread_coordinates',
+    "umap_by_distances",
+    "spread_coordinates",
 ]
 
 
@@ -24,16 +25,16 @@ __all__ = [
 @ut.expand_doc()
 def umap_by_distances(
     adata: AnnData,
-    distances: Union[str, ut.ProperMatrix] = 'umap_distances',
+    distances: Union[str, ut.ProperMatrix] = "umap_distances",
     *,
-    prefix: str = 'umap',
+    prefix: str = "umap",
     k: int = pr.umap_k,
     dimensions: int = 2,
     min_dist: float = pr.umap_min_dist,
     spread: float = pr.umap_spread,
     random_seed: int = pr.random_seed,
 ) -> None:
-    '''
+    """
     Compute layout for the observations using UMAP, based on a distances matrix.
 
     **Input**
@@ -61,7 +62,7 @@ def umap_by_distances(
        {random_seed}) is not zero, then it is passed to UMAP to force the computation to be
        reproducible. However, this means UMAP will use a single-threaded implementation that will be
        slower.
-    '''
+    """
     assert dimensions in (2, 3)
     if isinstance(distances, str):
         distances_matrix = ut.get_oo_proper(adata, distances)
@@ -80,12 +81,14 @@ def umap_by_distances(
         random_state = random_seed
 
     try:
-        coordinates = umap.UMAP(metric='precomputed',
-                                n_neighbors=n_neighbors,
-                                spread=spread,
-                                min_dist=min_dist,
-                                n_components=dimensions,
-                                random_state=random_state).fit_transform(distances_csr)
+        coordinates = umap.UMAP(
+            metric="precomputed",
+            n_neighbors=n_neighbors,
+            spread=spread,
+            min_dist=min_dist,
+            n_components=dimensions,
+            random_state=random_state,
+        ).fit_transform(distances_csr)
     except ValueError:
         # UMAP implementation doesn't know how to handle too few edges.
         # However, it considers structural zeros as real edges.
@@ -93,11 +96,9 @@ def umap_by_distances(
         np.fill_diagonal(distances_matrix, 0.0)
         distances_csr = sp.csr_matrix(distances_matrix)
         distances_csr.data -= 1.0
-        coordinates = umap.UMAP(metric='precomputed',
-                                n_neighbors=n_neighbors,
-                                spread=spread,
-                                min_dist=min_dist,
-                                random_state=random_state).fit_transform(distances_csr)
+        coordinates = umap.UMAP(
+            metric="precomputed", n_neighbors=n_neighbors, spread=spread, min_dist=min_dist, random_state=random_state
+        ).fit_transform(distances_csr)
 
     all_sizes = []
     all_coordinates = []
@@ -111,15 +112,15 @@ def umap_by_distances(
         all_coordinates.append(axis_coordinates)
 
     if dimensions == 2:
-        all_names = ['x', 'y']
+        all_names = ["x", "y"]
     elif dimensions == 3:
-        all_names = ['u', 'v', 'w']
+        all_names = ["u", "v", "w"]
     else:
         assert False
 
     order = np.argsort(all_sizes)
     for axis, name in zip(order, all_names):
-        ut.set_o_data(adata, f'{prefix}_{name}', all_coordinates[axis])
+        ut.set_o_data(adata, f"{prefix}_{name}", all_coordinates[axis])
 
 
 @ut.logged()
@@ -128,13 +129,13 @@ def umap_by_distances(
 def spread_coordinates(
     adata: AnnData,
     *,
-    prefix: str = 'umap',
-    suffix: str = 'spread',
+    prefix: str = "umap",
+    suffix: str = "spread",
     cover_fraction: float = pr.cover_fraction,
     noise_fraction: float = pr.noise_fraction,
     random_seed: int = pr.random_seed,
 ) -> None:
-    '''
+    """
     Move UMAP points so they cover some fraction of the plot area without overlapping.
 
     **Input**
@@ -157,17 +158,20 @@ def spread_coordinates(
        plot area. Also add a noise of the ``noise_fraction`` (default: {noise_fraction}) of the
        minimal distance between the
        points, using the ``random_seed`` (default: {random_seed}).
-    '''
+    """
     assert 0 < cover_fraction < 1
     assert noise_fraction >= 0
 
-    x_coordinates = ut.get_o_numpy(adata, f'{prefix}_x')
-    y_coordinates = ut.get_o_numpy(adata, f'{prefix}_y')
+    x_coordinates = ut.get_o_numpy(adata, f"{prefix}_x")
+    y_coordinates = ut.get_o_numpy(adata, f"{prefix}_y")
 
-    x_coordinates, y_coordinates = ut.cover_coordinates(x_coordinates, y_coordinates,
-                                                        cover_fraction=cover_fraction,
-                                                        noise_fraction=noise_fraction,
-                                                        random_seed=random_seed)
+    x_coordinates, y_coordinates = ut.cover_coordinates(
+        x_coordinates,
+        y_coordinates,
+        cover_fraction=cover_fraction,
+        noise_fraction=noise_fraction,
+        random_seed=random_seed,
+    )
 
-    ut.set_o_data(adata, f'{prefix}_x_{suffix}', x_coordinates)
-    ut.set_o_data(adata, f'{prefix}_y_{suffix}', y_coordinates)
+    ut.set_o_data(adata, f"{prefix}_x_{suffix}", x_coordinates)
+    ut.set_o_data(adata, f"{prefix}_y_{suffix}", y_coordinates)

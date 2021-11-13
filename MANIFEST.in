@@ -1,10 +1,17 @@
+include HISTORY.rst
+include LICENSE.rst
+include README.rst
+include requirements.txt
+include requirements_test.txt
+include requirements_dev.txt
+
+recursive-include tests *
+recursive-include metacells *.py
+recursive-include metacells py.typed
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+
 include metacells/*.cpp
 include metacells/*.h
-include metacells/*/py.typed
-include metacells/py.typed
 include pybind11/include/pybind11/*
 include pybind11/include/pybind11/*/*
-include tests/*.py
-include tox.ini
-exclude sphinx/*
-exclude vignettes/*

@@ -20,8 +20,7 @@ serial_collect_compressed_band(const size_t input_band_index,
 
     size_t output_element_index = input_band_index;
 
-    for (size_t input_element_offset = start_input_element_offset;
-         input_element_offset < stop_input_element_offset;
+    for (size_t input_element_offset = start_input_element_offset; input_element_offset < stop_input_element_offset;
          ++input_element_offset) {
         auto input_element_index = input_indices[input_element_offset];
         auto input_element_data = input_data[input_element_offset];
@@ -54,8 +53,7 @@ parallel_collect_compressed_band(const size_t input_band_index,
 
     size_t output_element_index = input_band_index;
 
-    for (size_t input_element_offset = start_input_element_offset;
-         input_element_offset < stop_input_element_offset;
+    for (size_t input_element_offset = start_input_element_offset; input_element_offset < stop_input_element_offset;
          ++input_element_offset) {
         auto input_element_index = input_indices[input_element_offset];
         auto input_element_data = input_data[input_element_offset];
@@ -63,10 +61,8 @@ parallel_collect_compressed_band(const size_t input_band_index,
         auto output_band_index = input_element_index;
         auto output_element_data = input_element_data;
 
-        auto atomic_output_element_offset =
-            reinterpret_cast<std::atomic<P>*>(&output_indptr[output_band_index]);
-        auto output_element_offset =
-            atomic_output_element_offset->fetch_add(1, std::memory_order_relaxed);
+        auto atomic_output_element_offset = reinterpret_cast<std::atomic<P>*>(&output_indptr[output_band_index]);
+        auto output_element_offset = atomic_output_element_offset->fetch_add(1, std::memory_order_relaxed);
 
         output_indices[output_element_offset] = I(output_element_index);
         output_data[output_element_offset] = output_element_data;
@@ -99,25 +95,16 @@ collect_compressed(const pybind11::array_t<D>& input_data_array,
     FastAssertCompare(output_indices.size(), ==, input_indices.size());
     FastAssertCompare(output_indptr[output_indptr.size() - 1], <=, output_data.size());
 
-    parallel_loop(input_indptr.size() - 1,
-                  [&](size_t input_band_index) {
-                      parallel_collect_compressed_band(input_band_index,
-                                                       input_data,
-                                                       input_indices,
-                                                       input_indptr,
-                                                       output_data,
-                                                       output_indices,
-                                                       output_indptr);
-                  },
-                  [&](size_t input_band_index) {
-                      serial_collect_compressed_band(input_band_index,
-                                                     input_data,
-                                                     input_indices,
-                                                     input_indptr,
-                                                     output_data,
-                                                     output_indices,
-                                                     output_indptr);
-                  });
+    parallel_loop(
+        input_indptr.size() - 1,
+        [&](size_t input_band_index) {
+            parallel_collect_compressed_band(
+                input_band_index, input_data, input_indices, input_indptr, output_data, output_indices, output_indptr);
+        },
+        [&](size_t input_band_index) {
+            serial_collect_compressed_band(
+                input_band_index, input_data, input_indices, input_indptr, output_data, output_indices, output_indptr);
+        });
 }
 
 // TODO: Duplicated from shuffle.
@@ -141,13 +128,11 @@ sort_band(const size_t band_index, CompressedMatrix<D, I, P>& matrix) {
     auto tmp_values = raii_values.array_slice("tmp_values", band_indices.size());
 
     std::iota(tmp_positions.begin(), tmp_positions.end(), 0);
-    std::sort(tmp_positions.begin(),
-              tmp_positions.end(),
-              [&](const size_t left_position, const size_t right_position) {
-                  auto left_index = band_indices[left_position];
-                  auto right_index = band_indices[right_position];
-                  return left_index < right_index;
-              });
+    std::sort(tmp_positions.begin(), tmp_positions.end(), [&](const size_t left_position, const size_t right_position) {
+        auto left_index = band_indices[left_position];
+        auto right_index = band_indices[right_position];
+        return left_index < right_index;
+    });
 
 #ifdef __INTEL_COMPILER
 #    pragma simd

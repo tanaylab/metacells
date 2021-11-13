@@ -23,9 +23,7 @@ rank_row_element(const size_t row_index, ConstMatrixSlice<D>& input, const size_
 /// See the Python `metacell.utilities.computation.rank_per` function.
 template<typename D>
 static void
-rank_rows(const pybind11::array_t<D>& input_matrix,
-          pybind11::array_t<D>& output_array,
-          const size_t rank) {
+rank_rows(const pybind11::array_t<D>& input_matrix, pybind11::array_t<D>& output_array, const size_t rank) {
     WithoutGil without_gil{};
     ConstMatrixSlice<D> input(input_matrix, "input");
     ArraySlice<D> output(output_array, "array");
@@ -34,9 +32,7 @@ rank_rows(const pybind11::array_t<D>& input_matrix,
     FastAssertCompare(rows_count, ==, output_array.size());
     FastAssertCompare(rank, <, input.columns_count());
 
-    parallel_loop(rows_count, [&](size_t row_index) {
-        output[row_index] = rank_row_element(row_index, input, rank);
-    });
+    parallel_loop(rows_count, [&](size_t row_index) { output[row_index] = rank_row_element(row_index, input, rank); });
 }
 
 template<typename D>
@@ -87,16 +83,13 @@ rank_matrix(pybind11::array_t<D>& array, const bool ascending) {
 
     const size_t rows_count = matrix.rows_count();
 
-    parallel_loop(rows_count,
-                  [&](size_t row_index) { rank_matrix_row(row_index, matrix, ascending); });
+    parallel_loop(rows_count, [&](size_t row_index) { rank_matrix_row(row_index, matrix, ascending); });
 }
 
 void
 register_rank(pybind11::module& module) {
-#define REGISTER_D(D)                                    \
-    module.def("rank_rows_" #D,                          \
-               &metacells::rank_rows<D>,                 \
-               "Collect the rank element in each row."); \
+#define REGISTER_D(D)                                                                               \
+    module.def("rank_rows_" #D, &metacells::rank_rows<D>, "Collect the rank element in each row."); \
     module.def("rank_matrix_" #D, &metacells::rank_matrix<D>, "Replace matrix data with ranks.");
 
     REGISTER_D(int8_t)

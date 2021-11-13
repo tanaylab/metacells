@@ -23,13 +23,11 @@ sort_band(const size_t band_index, CompressedMatrix<D, I, P>& matrix) {
     auto tmp_values = raii_values.array_slice("tmp_values", band_indices.size());
 
     std::iota(tmp_positions.begin(), tmp_positions.end(), 0);
-    std::sort(tmp_positions.begin(),
-              tmp_positions.end(),
-              [&](const size_t left_position, const size_t right_position) {
-                  auto left_index = band_indices[left_position];
-                  auto right_index = band_indices[right_position];
-                  return left_index < right_index;
-              });
+    std::sort(tmp_positions.begin(), tmp_positions.end(), [&](const size_t left_position, const size_t right_position) {
+        auto left_index = band_indices[left_position];
+        auto right_index = band_indices[right_position];
+        return left_index < right_index;
+    });
 
 #ifdef __INTEL_COMPILER
 #    pragma simd
@@ -105,8 +103,7 @@ shuffle_dense(pybind11::array_t<D>& matrix_array, const size_t random_seed) {
 
 void
 register_shuffle(pybind11::module& module) {
-#define REGISTER_D(D) \
-    module.def("shuffle_dense_" #D, &metacells::shuffle_dense<D>, "Shuffle dense matrix data.");
+#define REGISTER_D(D) module.def("shuffle_dense_" #D, &metacells::shuffle_dense<D>, "Shuffle dense matrix data.");
 
     REGISTER_D(int8_t)
     REGISTER_D(int16_t)

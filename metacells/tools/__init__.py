@@ -1,4 +1,4 @@
-'''
+"""
 Functions for analysis tools.
 
 Tools take as input some annotated data and either return some computed results, or write the
@@ -10,7 +10,7 @@ static typing or analysis to ensure that the input of the next tool was actually
 tool(s).
 
 All the functions included here are exported under ``metacells.tl``.
-'''
+"""
 
 from .apply import *
 from .candidates import *

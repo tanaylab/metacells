@@ -48,13 +48,11 @@ collect_top_row(const size_t row_index,
 
     tmp_positions = tmp_positions.slice(0, degree);
     std::iota(tmp_positions.begin(), tmp_positions.end(), 0);
-    std::sort(tmp_positions.begin(),
-              tmp_positions.end(),
-              [&](const size_t left_position, const size_t right_position) {
-                  D left_similarity = row_similarities[row_indices[left_position]];
-                  D right_similarity = row_similarities[row_indices[right_position]];
-                  return left_similarity < right_similarity;
-              });
+    std::sort(tmp_positions.begin(), tmp_positions.end(), [&](const size_t left_position, const size_t right_position) {
+        D left_similarity = row_similarities[row_indices[left_position]];
+        D right_similarity = row_similarities[row_indices[right_position]];
+        return left_similarity < right_similarity;
+    });
 
 #ifdef __INTEL_COMPILER
 #    pragma simd
@@ -95,8 +93,7 @@ collect_top(const size_t degree,
 
 void
 register_top_per(pybind11::module& module) {
-#define REGISTER_D(D) \
-    module.def("collect_top_" #D, &collect_top<D>, "Collect the topmost elements.");
+#define REGISTER_D(D) module.def("collect_top_" #D, &collect_top<D>, "Collect the topmost elements.");
 
     REGISTER_D(int8_t)
     REGISTER_D(int16_t)

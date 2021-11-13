@@ -18,9 +18,7 @@ collect_connected_nodes(ConstCompressedMatrix<float32_t, int32_t, int32_t>& inco
         auto copied = std::copy_if(node_incoming.begin(),
                                    node_incoming.end(),
                                    node_connected.begin(),
-                                   [&](int32_t other_node_index) {
-                                       return seed_of_nodes[other_node_index] < 0;
-                                   });
+                                   [&](int32_t other_node_index) { return seed_of_nodes[other_node_index] < 0; });
         node_connected.resize(copied - node_connected.begin());
     }
 
@@ -119,8 +117,7 @@ store_seed_node(ConstCompressedMatrix<float32_t, int32_t, int32_t>& outgoing_wei
                          tmp_positions.begin() + seed_size,
                          tmp_positions.end(),
                          [&](const size_t left_position, const size_t right_position) {
-                             return seed_incoming_weights[left_position]
-                                    > seed_incoming_weights[right_position];
+                             return seed_incoming_weights[left_position] > seed_incoming_weights[right_position];
                          });
         tmp_positions.resize(seed_size);
     }
@@ -154,13 +151,11 @@ store_seed_node(ConstCompressedMatrix<float32_t, int32_t, int32_t>& outgoing_wei
 }
 
 static bool
-keep_large_candidates(std::vector<size_t>& tmp_candidates,
-                      const std::vector<std::vector<int32_t>>& connected_nodes) {
+keep_large_candidates(std::vector<size_t>& tmp_candidates, const std::vector<std::vector<int32_t>>& connected_nodes) {
     tmp_candidates.erase(std::remove_if(tmp_candidates.begin(),
                                         tmp_candidates.end(),
                                         [&](size_t candidate_node_index) {
-                                            return connected_nodes[candidate_node_index].size()
-                                                   == 0;
+                                            return connected_nodes[candidate_node_index].size() == 0;
                                         }),
                          tmp_candidates.end());
     return tmp_candidates.size() > 0;
@@ -184,28 +179,27 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
     size_t nodes_count = seed_of_nodes.size();
     FastAssertCompare(nodes_count, >, 0);
 
-    ConstCompressedMatrix<float32_t, int32_t, int32_t> outgoing_weights(
-        ConstArraySlice<float32_t>(outgoing_weights_data_array, "outgoing_weights_data"),
-        ConstArraySlice<int32_t>(outgoing_weights_indices_array, "outgoing_weights_indices"),
-        ConstArraySlice<int32_t>(outgoing_weights_indptr_array, "outgoing_weights_indptr"),
-        int32_t(nodes_count),
-        "outgoing_weights");
+    ConstCompressedMatrix<float32_t, int32_t, int32_t>
+        outgoing_weights(ConstArraySlice<float32_t>(outgoing_weights_data_array, "outgoing_weights_data"),
+                         ConstArraySlice<int32_t>(outgoing_weights_indices_array, "outgoing_weights_indices"),
+                         ConstArraySlice<int32_t>(outgoing_weights_indptr_array, "outgoing_weights_indptr"),
+                         int32_t(nodes_count),
+                         "outgoing_weights");
     FastAssertCompare(outgoing_weights.bands_count(), ==, nodes_count);
 
-    ConstCompressedMatrix<float32_t, int32_t, int32_t> incoming_weights(
-        ConstArraySlice<float32_t>(incoming_weights_data_array, "incoming_weights_data"),
-        ConstArraySlice<int32_t>(incoming_weights_indices_array, "incoming_weights_indices"),
-        ConstArraySlice<int32_t>(incoming_weights_indptr_array, "incoming_weights_indptr"),
-        int32_t(nodes_count),
-        "incoming_weights");
+    ConstCompressedMatrix<float32_t, int32_t, int32_t>
+        incoming_weights(ConstArraySlice<float32_t>(incoming_weights_data_array, "incoming_weights_data"),
+                         ConstArraySlice<int32_t>(incoming_weights_indices_array, "incoming_weights_indices"),
+                         ConstArraySlice<int32_t>(incoming_weights_indptr_array, "incoming_weights_indptr"),
+                         int32_t(nodes_count),
+                         "incoming_weights");
     FastAssertCompare(incoming_weights.bands_count(), ==, nodes_count);
 
     FastAssertCompare(0, <=, min_seed_size_quantile);
     FastAssertCompare(min_seed_size_quantile, <=, max_seed_size_quantile);
     FastAssertCompare(max_seed_size_quantile, <=, 1.0);
 
-    std::vector<std::vector<int32_t>> connected_nodes =
-        collect_connected_nodes(incoming_weights, seed_of_nodes);
+    std::vector<std::vector<int32_t>> connected_nodes = collect_connected_nodes(incoming_weights, seed_of_nodes);
 
     TmpVectorSizeT tmp_candidates_raii;
     auto tmp_candidates = tmp_candidates_raii.vector(nodes_count);
@@ -217,22 +211,16 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
     }
 
     std::minstd_rand random(random_seed);
-    size_t given_seeds_count =
-        size_t(*std::max_element(seed_of_nodes.begin(), seed_of_nodes.end()) + 1);
+    size_t given_seeds_count = size_t(*std::max_element(seed_of_nodes.begin(), seed_of_nodes.end()) + 1);
     size_t seeds_count = given_seeds_count;
 
     FastAssertCompare(tmp_candidates.size(), >=, max_seeds_count - given_seeds_count);
-    size_t mean_seed_size =
-        size_t(ceil(tmp_candidates.size() / (max_seeds_count - given_seeds_count)));
+    size_t mean_seed_size = size_t(ceil(tmp_candidates.size() / (max_seeds_count - given_seeds_count)));
     FastAssertCompare(mean_seed_size, >=, 1);
 
-    while (seeds_count < max_seeds_count
-           && keep_large_candidates(tmp_candidates, connected_nodes)) {
-        size_t seed_node_index = choose_seed_node(tmp_candidates,
-                                                  connected_nodes,
-                                                  min_seed_size_quantile,
-                                                  max_seed_size_quantile,
-                                                  random);
+    while (seeds_count < max_seeds_count && keep_large_candidates(tmp_candidates, connected_nodes)) {
+        size_t seed_node_index =
+            choose_seed_node(tmp_candidates, connected_nodes, min_seed_size_quantile, max_seed_size_quantile, random);
 
         store_seed_node(outgoing_weights,
                         incoming_weights,
@@ -258,14 +246,10 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
         std::sort(tmp_candidates.begin(),
                   tmp_candidates.end(),
                   [&](const size_t left_node_index, const size_t right_node_index) {
-                      const auto left_node_incoming =
-                          incoming_weights.get_band_indices(left_node_index);
-                      const auto right_node_incoming =
-                          incoming_weights.get_band_indices(right_node_index);
-                      const auto left_node_outgoing =
-                          outgoing_weights.get_band_indices(left_node_index);
-                      const auto right_node_outgoing =
-                          outgoing_weights.get_band_indices(right_node_index);
+                      const auto left_node_incoming = incoming_weights.get_band_indices(left_node_index);
+                      const auto right_node_incoming = incoming_weights.get_band_indices(right_node_index);
+                      const auto left_node_outgoing = outgoing_weights.get_band_indices(left_node_index);
+                      const auto right_node_outgoing = outgoing_weights.get_band_indices(right_node_index);
                       return (left_node_incoming.size() + 1) * (left_node_outgoing.size() + 1)
                              > (right_node_incoming.size() + 1) * (right_node_outgoing.size() + 1);
                   });
@@ -283,9 +267,7 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
 
 void
 register_choose_seeds(pybind11::module& module) {
-    module.def("choose_seeds",
-               &metacells::choose_seeds,
-               "Choose seed partitions for computing metacells.");
+    module.def("choose_seeds", &metacells::choose_seeds, "Choose seed partitions for computing metacells.");
 }
 
 }
