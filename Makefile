@@ -95,7 +95,7 @@ format: trailingspaces linebreaks backticks fstrings isort black flake8 clang-fo
 trailingspaces: .make.trailingspaces  ## check for trailing spaces
 
 # TODO: Remove setup.cfg exception when bumpversion is fixed.
-SP_SOURCE_FILES = $(filter-out %.svg, $(filter-out setup.cfg, $(ALL_SOURCE_FILES)))
+SP_SOURCE_FILES = $(filter-out %.png, $(filter-out %.svg, $(filter-out setup.cfg, $(ALL_SOURCE_FILES))))
 
 .make.trailingspaces: $(SP_SOURCE_FILES)
 	@echo "trailingspaces"
