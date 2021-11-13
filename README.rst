@@ -1,10 +1,6 @@
 Metacells 0.7.0-dev.1 - Single-cell RNA Sequencing Analysis
 ===============================================
 
-.. image:: https://travis-ci.org/tanaylab/metacells.svg?branch=master
-    :target: https://travis-ci.org/tanaylab/metacells
-    :alt: Build Status
-
 .. image:: https://readthedocs.org/projects/metacells/badge/?version=latest
     :target: https://metacells.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
