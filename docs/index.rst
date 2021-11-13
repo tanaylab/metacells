@@ -7,7 +7,6 @@ Metacells 0.7.0-dev.1 Documentation
 
   README <readme>
   history
-  todo
 
 Vignettes
 =========
