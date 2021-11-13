@@ -4,9 +4,11 @@ MAX_LINE_LENGTH = 120
 
 ALL_SOURCE_FILES = $(shell git ls-files)
 
+ALL_PACKAGE_FILES = $(filter-out vignettes/%, $(filter-out docs/%, $(ALL_SOURCE_FILES)))
+
 PY_SOURCE_FILES = $(filter %.py, $(ALL_SOURCE_FILES))
 
-PY_PACKAGE_FILES = $(filter-out docs/%, $(PY_SOURCE_FILES))
+PY_PACKAGE_FILES = $(filter-out vignettes/%, $(filter-out docs/%, $(PY_SOURCE_FILES)))
 
 RST_SOURCE_FILES = $(filter %.rst, $(ALL_SOURCE_FILES))
 
@@ -61,16 +63,16 @@ clean-test:
 clean-vignettes:
 	rm -f vignettes/*.rst
 	rm -fr vignettes/*_files
-	rm vignettes/Manual_Analysis.rst vignettes/Seurat_Analysis.ipynb
+	rm -f vignettes/Manual_Analysis.rst vignettes/Seurat_Analysis.ipynb
 
 clean-docs:
 	rm -fr docs/_build
 
 TODO = todo$()x
 
-pc: is_dev $(TODO) history format smells docs staged pytest tox  ## check everything before commit
+pc: is_dev $(TODO) history format smells dist docs staged pytest tox  ## check everything before commit
 
-ci: history format smells docs tox  ## check everything in a CI server
+ci: history format smells dist docs tox  ## check everything in a CI server
 
 history:  ## check to-be-done version is described in HISTORY.rst
 	@version=`grep 'current_version =' setup.cfg | sed 's/.* //;s/.dev.*//;'`; \
@@ -319,7 +321,7 @@ vignettes/Seurat_Analysis.rst: .make.build vignettes/Seurat_Analysis.png.ipynb v
 vignettes/pbmc163k.h5ad:
 	curl https://www.wisdom.weizmann.ac.il/~atanay/metac_data/pbmc163k.h5ad.gz | gunzip -c > vignettes/pbmc163k.h5ad
 
-committed:  ## check everything is committed in git
+committed:  staged ## check everything is committed in git
 	@if [ -z "$$(git status --short)" ]; \
 	then true; \
 	else \
@@ -333,10 +335,10 @@ install: committed clean  ## install the package into the active Python
 
 dist: .make.dist  ## builds the release distribution package
 
-.make.dist: committed $(ALL_SOURCE_FILES)
-	make clean
+.make.dist: staged $(ALL_PACKAGE_FILES)
+	rm -fr dist/
 	python setup.py sdist
-	ls -l dist
+	twine check dist/*
 	touch $@
 
 upload: committed is_not_dev .make.dist  ## upload the release distribution package
@@ -397,7 +399,7 @@ bump_dev: committed is_dev  ## bump the development version indicator
 	bumpversion dev
 	@grep 'current_version =' setup.cfg
 
-done_dev: committed done_history is_dev  ## remove the development version indicator
+done_dev: committed done_history is_dev dist  ## remove the development version indicator
 	bumpversion rel
 	@grep 'current_version =' setup.cfg
 
