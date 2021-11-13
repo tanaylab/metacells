@@ -8,10 +8,6 @@ _build
 coverage.xml
 develop-eggs
 dist
-docs/Manual_Analysis.rst
-docs/Metacells_Vignette.rst
-docs/Seurat_Analysis.rst
-docs/timing_script.rst
 downloads
 *.egg
 *.egg-info
@@ -42,7 +38,6 @@ _pycache__
 .python-version
 sdist
 *.spec
-*.svg
 .*.sw*
 tags
 target

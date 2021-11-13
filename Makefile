@@ -94,7 +94,8 @@ format: trailingspaces linebreaks backticks fstrings isort black flake8 clang-fo
 
 trailingspaces: .make.trailingspaces  ## check for trailing spaces
 
-SP_SOURCE_FILES = $(filter-out setup.cfg, $(ALL_SOURCE_FILES))  # TODO: Remove exception when bumpversion is fixed.
+# TODO: Remove setup.cfg exception when bumpversion is fixed.
+SP_SOURCE_FILES = $(filter-out %.svg, $(filter-out setup.cfg, $(ALL_SOURCE_FILES)))
 
 .make.trailingspaces: $(SP_SOURCE_FILES)
 	@echo "trailingspaces"
@@ -119,10 +120,16 @@ linebreaks: .make.linebreaks  ## check line breaks in Python code
 
 backticks: .make.backticks  ## check usage of backticks in documentation
 
-.make.backticks: $(PY_SOURCE_FILES) $(RST_SOURCE_FILES)
+BT_SOURCE_FILES = \
+    $(filter-out docs/Metacells_Vignette.rst, \
+    $(filter-out docs/Manual_Analysis.rst, \
+    $(filter-out docs/Seurat_Analysis.rst, \
+    $(RST_SOURCE_FILES))))
+
+.make.backticks: $(PY_SOURCE_FILES) $(BT_SOURCE_FILES)
 	@echo "backticks"
 	@OK=true; \
-	for FILE in $(PY_SOURCE_FILES) $(RST_SOURCE_FILES); \
+	for FILE in $(PY_SOURCE_FILES) $(BT_SOURCE_FILES); \
 	do \
 	    if sed 's/``\([^`]*\)``/\1/g;s/:`\([^`]*\)`/:\1/g;s/`\([^`]*\)`_/\1_/g' "$$FILE" \
 	    | grep --label "$$FILE" -n -H '`' \
