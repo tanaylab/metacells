@@ -84,9 +84,6 @@ The `generated documentation <https://metacells.readthedocs.io/en/latest>`_ cont
 `Manual Analysis Vignette <https://metacells.readthedocs.io/en/latest/Manual_Analysis.html>`_,
 and `Seurat Analysis Vignette <https://metacells.readthedocs.io/en/latest/Seurat_Analysis.html>`_.
 
-You can also access their very latest version in the
-`Github repository <https://github.com/tanaylab/metacells/tree/master/docs>`_.
-
 References
 ----------
 
