@@ -77,3 +77,9 @@ Visualizing the Metacells
 
 .. automodule:: metacells.tools.layout
     :members:
+
+Projecting onto Metacells
++++++++++++++++++++++++++
+
+.. automodule:: metacells.tools.project
+    :members:
