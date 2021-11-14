@@ -1,4 +1,4 @@
-Metacells 0.7.0 Documentation
+Metacells 0.8.0-dev.1 Documentation
 =============================
 
 .. toctree::
