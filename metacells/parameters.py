@@ -853,3 +853,27 @@ quality_min_gene_total: int = 40
 #: negative, is the fraction of the machine's total RAM to use as a safety buffer. See
 #: :py:func:`metacells.pipeline.divide_and_conquer.guess_max_parallel_piles`.
 max_gbs: float = -0.1
+
+#: The normalization factor to use when computing fold factors for projecting a query onto an atlas. See
+#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+project_fold_normalization: float = 2e-5
+
+#: The number of atlas candidates to consider when projecting a query onto an atlas. See
+#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+project_candidates_count: int = 50
+
+#: The minimal weight of an atlas metacell used for the projection of a query metacell. See
+#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+project_min_usage_weight: float = 1e-5
+
+#: The maximal fold factor of genes between the projection and the query metacell. See
+#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+project_max_projection_fold: float = 3.0
+
+#: The minimal weight of an atlas metacell used for the projection of a query metacell. See
+#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+project_min_consistency_weight: float = 0.05
+
+#: The maximal fold factor of genes between the atlas metacells used for the projection of a query metacell. See
+#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+project_max_consistency_fold: float = 3.0
