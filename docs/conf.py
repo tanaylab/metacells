@@ -93,7 +93,7 @@ author = "Oren Ben-Kiki"
 # the built documents.
 #
 # The short X.Y version.
-version = "0.7.0"
+version = "0.8.0-dev.1"
 # The full version, including alpha/beta/rc tags.
 release = version
 
