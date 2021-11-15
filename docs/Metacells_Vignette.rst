@@ -15,7 +15,7 @@ have these installed, run ``pip install metacells``, and also
 purpose of this vignette; the metacells package itself has no dependency
 on any visualization packages.
 
-.. code:: ipython3
+.. code:: python
 
     import anndata as ad
     import matplotlib.pyplot as plt
@@ -76,7 +76,7 @@ The metacells package uses a convention where the ``__name__``
 unstructured property of the data contains its name for logging
 purposes; we initialize this name to ``PBMC`` below.
 
-.. code:: ipython3
+.. code:: python
 
     raw = ad.read_h5ad('pbmc163k.h5ad')
     mc.ut.set_name(raw, 'PBMC')
@@ -116,7 +116,7 @@ excluded from the clean data based on their name. The poster child for
 such genes are mitochondrial genes which we exclude using a pattern (all
 genes whose name starts with ``MT-``).
 
-.. code:: ipython3
+.. code:: python
 
     excluded_gene_names = ['IGHMBP2', 'IGLL1', 'IGLL5', 'IGLON5', 'NEAT1', 'TMSB10', 'TMSB4X']
     excluded_gene_patterns = ['MT-.*']
@@ -143,7 +143,7 @@ invoking the lower-level functions (e.g.,
 ``mc.tl.find_noisy_lonely_genes``). Or, you could create additional
 masks of your own based on your own criteria.
 
-.. code:: ipython3
+.. code:: python
 
     mc.pl.analyze_clean_genes(raw,
                               excluded_gene_names=excluded_gene_names,
@@ -162,7 +162,7 @@ We then combine all these mask into a final ``clean_gene`` mask. By
 default this is based on the three masks listed above, but you can
 customize it to use any list of per-gene masks instead.
 
-.. code:: ipython3
+.. code:: python
 
     mc.pl.pick_clean_genes(raw)
 
@@ -176,7 +176,7 @@ This is a good time to save the data so we can load it later without
 recomputing it. We’ll do this under a different name to avoid modifying
 the raw file, and we’ll rename our variable refering to it for clarity.
 
-.. code:: ipython3
+.. code:: python
 
     raw.write('full.h5ad')
     full = raw
@@ -197,7 +197,7 @@ Thresholds on the total number of UMIs
 We’ll start with looking at the total UMIs per cell. We set a threshold
 for the minimal and maximal number of UMIs of cells we wish to analyze.
 
-.. code:: ipython3
+.. code:: python
 
     properly_sampled_min_cell_total = 800
     properly_sampled_max_cell_total = 8000
@@ -249,7 +249,7 @@ We also set a threshold on the fraction of excluded gene UMIs in each
 cell we wish to analyze. This ensures that there will be a sufficient
 number of clean gene UMIs left to analyze.
 
-.. code:: ipython3
+.. code:: python
 
     properly_sampled_max_excluded_genes_fraction = 0.1
 
@@ -296,7 +296,7 @@ invoking the lower-level functions (e.g.,
 ``mc.tl.find_properly_sampled_cells``). Or, you could create additional
 masks of your own based on your own criteria.
 
-.. code:: ipython3
+.. code:: python
 
     mc.pl.analyze_clean_cells(
         full,
@@ -315,7 +315,7 @@ mask. By default this is based just on the ``properly_sampled_cell``
 mask, but you can customize it to use any list of per-cell masks
 instead.
 
-.. code:: ipython3
+.. code:: python
 
     mc.pl.pick_clean_cells(full)
 
@@ -332,7 +332,7 @@ We now extract just the clean genes and cells data out of the data set,
 using the ``clean_gene`` and ``clean_cell`` masks, to obtain the clean
 data we’ll be analyzing.
 
-.. code:: ipython3
+.. code:: python
 
     clean = mc.pl.extract_clean_data(full)
 
@@ -372,7 +372,7 @@ these correlations, split the genes into modules with some maximal
 number of genes in each, and finally look at each cluster containing any
 of the suspect genes to decide which genes to add to the list.
 
-.. code:: ipython3
+.. code:: python
 
     suspect_gene_names = ['PCNA', 'MKI67', 'TOP2A', 'HIST1H1D',
                           'FOS', 'JUN', 'HSP90AB1', 'HSPA1A',
@@ -389,7 +389,7 @@ lateral genes which are strongly correlated with our suspects, so the
 code samples a subset of the cells and ignores genes which are too weak
 to matter.
 
-.. code:: ipython3
+.. code:: python
 
     mc.pl.relate_genes(clean, random_seed=123456)
 
@@ -408,7 +408,7 @@ suggest additional lateral gene modules unrelated to our original
 suspect genes. However, to keep this vignette simple, let us just look
 at the modules containing already suspect genes:
 
-.. code:: ipython3
+.. code:: python
 
     module_of_genes = clean.var['related_genes_module']
     suspect_gene_modules = np.unique(module_of_genes[suspect_genes_mask])
@@ -424,7 +424,7 @@ at the modules containing already suspect genes:
 For each such module, let us look at the genes it contains and the
 similarity between them:
 
-.. code:: ipython3
+.. code:: python
 
     similarity_of_genes = mc.ut.get_vv_frame(clean, 'related_genes_similarity')
     for gene_module in suspect_gene_modules:
@@ -500,7 +500,7 @@ For simplicity, we’ll simply forbid all the original suspect genes as
 well as all the genes in the strong modules 4, 5, 47, 52 and 68. This
 gives us a total of 106 initially forbidden genes:
 
-.. code:: ipython3
+.. code:: python
 
     forbidden_genes_mask = suspect_genes_mask
     for gene_module in [4, 5, 47, 52]:
@@ -595,7 +595,7 @@ compute on such a strong server, using only a few tens of gigabytes.
 This makes it possible to analyze such data sets on a strong modern
 laptop with 16GB (or better yet, 32GB) of RAM.
 
-.. code:: ipython3
+.. code:: python
 
     max_parallel_piles = mc.pl.guess_max_parallel_piles(clean)
     print(max_parallel_piles)
@@ -616,7 +616,7 @@ cells, still this may take a few minutes, depending on the number of
 cores on your server. For ~2 million cells this takes ~10 minutes on a
 28-core server.
 
-.. code:: ipython3
+.. code:: python
 
     mc.pl.divide_and_conquer_pipeline(clean,
                                       forbidden_gene_names=forbidden_gene_names,
@@ -664,7 +664,7 @@ metacell each cell belongs to (or -1 if the cell is an “outlier”).
 However, for further analysis, what we want is data where each
 observation is a metacell:
 
-.. code:: ipython3
+.. code:: python
 
     metacells = mc.pl.collect_metacells(clean, name='PBMC.metacells')
 
@@ -691,7 +691,7 @@ tightly the points are packed together. A non-zero ``random_seed`` will
 make this computation reproducible, at the cost of switching to a
 single-threaded implementation.
 
-.. code:: ipython3
+.. code:: python
 
     mc.pl.compute_umap_by_features(metacells, max_top_feature_genes=1000,
                                    min_dist=2.0, random_seed=123456)
@@ -718,7 +718,7 @@ used). Typically such diagrams use additional metadata (such as type
 annotations) to color the points, but here we just show the raw
 projection:
 
-.. code:: ipython3
+.. code:: python
 
     umap_x = mc.ut.get_o_numpy(metacells, 'umap_x')
     umap_y = mc.ut.get_o_numpy(metacells, 'umap_y')
@@ -737,7 +737,7 @@ some as features some “lateral” genes which are not relevant to the
 structure we are investigating. To make this clearer we can just filter
 out the short edges:
 
-.. code:: ipython3
+.. code:: python
 
     umap_edges = sp.coo_matrix(mc.ut.get_oo_proper(metacells, 'obs_outgoing_weights'))
     min_long_edge_size = 4
@@ -806,7 +806,7 @@ analysis vignette <Seurat_Analysis.html>`__ demonstrates importing the
 metacells into `Seurat <https://satijalab.org/seurat/index.html>`__ for
 further analysis there.
 
-.. code:: ipython3
+.. code:: python
 
     clean.write('cells.h5ad')
     metacells.write('metacells.h5ad')

@@ -290,17 +290,17 @@ docs/timing_script.rst: \
 
 
 docs/Metacells_Vignette.rst: vignettes/Metacells_Vignette.rst
-	sed 's/ [ ]*$$//;s/parsed-literal::/code::/;s:Metacells_Vignette_files/::;' \
+	sed 's/ [ ]*$$//;s/parsed-literal::/code::/;s:Metacells_Vignette_files/::;s/:: ipython3/:: python/;' \
 	    vignettes/Metacells_Vignette.rst > docs/Metacells_Vignette.rst
 	cp vignettes/Metacells_Vignette_files/*.svg docs
 
 docs/Manual_Analysis.rst: vignettes/Manual_Analysis.rst
-	sed 's/ [ ]*$$//;s/parsed-literal::/code::/;s:Manual_Analysis_files/::;' \
+	sed 's/ [ ]*$$//;s/parsed-literal::/code::/;s:Manual_Analysis_files/::;s/:: ipython3/:: python/;' \
 	    vignettes/Manual_Analysis.rst > docs/Manual_Analysis.rst
 	cp vignettes/Manual_Analysis_files/*.svg docs
 
 docs/Seurat_Analysis.rst: vignettes/Seurat_Analysis.rst
-	sed 's/ [ ]*$$//;s/parsed-literal::/code::/;s:Seurat_Analysis_files/::;' \
+	sed 's/ [ ]*$$//;s/parsed-literal::/code::/;s:Seurat_Analysis_files/::;s/:: ipython3/:: python/;' \
 	    vignettes/Seurat_Analysis.rst > docs/Seurat_Analysis.rst
 	cp vignettes/Seurat_Analysis_files/*.svg docs
 
