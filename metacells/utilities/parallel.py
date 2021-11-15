@@ -50,6 +50,7 @@ using the ``psutil`` package.
 """
 import ctypes
 import os
+import sys
 from multiprocessing import Value
 from multiprocessing import get_context
 from threading import current_thread
@@ -62,10 +63,12 @@ from typing import TypeVar
 import psutil  # type: ignore
 from threadpoolctl import threadpool_limits  # type: ignore
 
-import metacells.extensions as xt  # type: ignore
 import metacells.utilities.documentation as utd
 import metacells.utilities.logging as utl
 import metacells.utilities.timing as utm
+
+if "sphinx" not in sys.argv[0]:
+    import metacells.extensions as xt  # type: ignore
 
 __all__ = [
     "is_main_process",
@@ -124,7 +127,8 @@ def set_processors_count(processors: int) -> None:
     xt.set_threads_count(PROCESSORS_COUNT)
 
 
-set_processors_count(int(os.environ.get("METACELLS_PROCESSORS_COUNT", "0")))
+if "sphinx" not in sys.argv[0]:
+    set_processors_count(int(os.environ.get("METACELLS_PROCESSORS_COUNT", "0")))
 
 
 def get_processors_count() -> int:

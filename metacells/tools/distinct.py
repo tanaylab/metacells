@@ -3,6 +3,7 @@ Distincts
 ---------
 """
 
+import sys
 from typing import Optional
 from typing import Tuple
 from typing import Union
@@ -10,9 +11,11 @@ from typing import Union
 import numpy as np
 from anndata import AnnData  # type: ignore
 
-import metacells.extensions as xt  # type: ignore
 import metacells.parameters as pr
 import metacells.utilities as ut
+
+if "sphinx" not in sys.argv[0]:
+    import metacells.extensions as xt  # type: ignore
 
 __all__ = [
     "compute_distinct_folds",
