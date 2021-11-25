@@ -12,6 +12,7 @@ from typing import Union
 
 import numpy as np
 from anndata import AnnData  # type: ignore
+from scipy import sparse  # type: ignore
 
 import metacells.parameters as pr
 import metacells.utilities as ut
@@ -19,6 +20,7 @@ import metacells.utilities as ut
 __all__ = [
     "compute_type_compatible_sizes",
     "compute_inner_normalized_variance",
+    "compute_inner_fold_factors",
 ]
 
 
@@ -350,3 +352,116 @@ def _collect_group_data(
 
     variance_per_gene_per_group[group_index, :] = variance_per_gene
     normalized_variance_per_gene_per_group[group_index, :] = normalized_variance_per_gene
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def compute_inner_fold_factors(
+    what: Union[str, ut.Matrix] = "__x__",
+    *,
+    adata: AnnData,
+    gdata: AnnData,
+    group: Union[str, ut.Vector] = "metacell",
+    min_gene_inner_fold_factor: float = pr.min_gene_inner_fold_factor,
+    min_entry_inner_fold_factor: float = pr.min_entry_inner_fold_factor,
+) -> None:
+    """
+    Compute the inner fold factors of genes within in each metacell.
+
+    This computes, for each cell of the metacell, the same fold factors that are used to detect deviant cells (see
+    :py:func:`metacells.tools.deviants.find_deviant_cells`), and keeps the maximal fold for each gene in the metacell.
+    The result per-metacell-per-gene matrix is then made sparse by discarding too-low values (setting them to zero).
+    Ideally, this matrix should be "very" sparse. If it contains "too many" non-zero values, this indicates the
+    metacells contains "too much" variability. This may be due to actual biology (e.g. immune cells or olfactory nerves
+    which are all similar except for each one expressing one different gene), due to batch effects (similar cells in
+    distinct batches differing in some genes due to technical issues), due to low data quality (the overall noise level
+    is so high that this is simply the best the algorithm can do), or worse - a combination of the above.
+
+    **Input**
+
+    Annotated ``adata``, where the observations are cells and the variables are genes, where ``what`` is a
+    per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
+    matrix.
+
+    In addition, ``gdata`` is assumed to have one observation for each group, and use the same
+    genes as ``adata``.
+
+    **Returns**
+
+    Sets the following in ``gdata``:
+
+    Per-Variable Per-Observation (Gene-Cell) Annotations
+
+        ``inner_fold``
+            For each gene and group, the maximal fold factor of this gene in any cell contained in the group (unless the
+            value is too low to be of interest, in which case it will be zero).
+
+    **Computation Parameters**
+
+    1. For each group (metacell), for each gene, compute the gene's maximal (in all the cells of the group) fold factor
+       log2((actual UMIs + 1) / (expected UMIs + 1)), similarly to
+       :py:func:`metacells.tools.deviants.find_deviant_cells`.
+
+    2. If the maximal fold factor for a gene (across all metacells) is below ``min_gene_inner_fold_factor`` (default:
+       {min_gene_inner_fold_factor}), then set all the gene's fold factors to zero (too low to be of interest).
+
+    3. Otherwise, for any metacell whose fold factor for the gene is less than ``min_entry_inner_fold_factor`` (default:
+       {min_entry_inner_fold_factor}), set the fold factor to zero (too low to be of interest).
+    """
+    assert 0 <= min_entry_inner_fold_factor <= min_gene_inner_fold_factor
+
+    cells_data = ut.get_vo_proper(adata, what, layout="row_major")
+    metacells_data = ut.get_vo_proper(gdata, what, layout="row_major")
+    group_of_cells = ut.get_o_numpy(adata, group, formatter=ut.groups_description)
+    total_umis_per_cell = ut.sum_per(cells_data, per="row")
+    total_umis_per_metacell = ut.sum_per(metacells_data, per="row")
+
+    @ut.timed_call("compute_metacell_inner_folds")
+    def _compute_single_metacell_inner_folds(metacell_index: int) -> ut.NumpyVector:
+        return _compute_metacell_inner_folds(
+            metacell_index=metacell_index,
+            cells_data=cells_data,
+            metacells_data=metacells_data,
+            group_of_cells=group_of_cells,
+            total_umis_per_cell=total_umis_per_cell,
+            total_umis_per_metacell=total_umis_per_metacell,
+        )
+
+    results = list(ut.parallel_map(_compute_single_metacell_inner_folds, gdata.n_obs))
+    dense_inner_folds_by_row = np.array(results)
+    dense_inner_folds_by_column = ut.to_layout(dense_inner_folds_by_row, "column_major")
+    max_fold_per_gene = ut.max_per(dense_inner_folds_by_column, per="column")
+    significant_genes_mask = max_fold_per_gene >= min_gene_inner_fold_factor
+    ut.log_calc("significant_genes_mask", significant_genes_mask)
+    dense_inner_folds_by_column[:, ~significant_genes_mask] = 0
+    dense_inner_folds_by_column[dense_inner_folds_by_column < min_entry_inner_fold_factor] = 0
+    dense_inner_folds_by_row = ut.to_layout(dense_inner_folds_by_column, layout="row_major")
+    sparse_inner_folds = sparse.csr_matrix(dense_inner_folds_by_row)
+    ut.set_vo_data(gdata, "inner_fold", sparse_inner_folds)
+
+
+@ut.logged()
+def _compute_metacell_inner_folds(
+    *,
+    metacell_index: int,
+    cells_data: ut.Matrix,
+    metacells_data: ut.Matrix,
+    group_of_cells: ut.NumpyVector,
+    total_umis_per_cell: ut.NumpyVector,
+    total_umis_per_metacell: ut.NumpyVector,
+) -> ut.NumpyVector:
+    grouped_cells_mask = group_of_cells == metacell_index
+    assert np.sum(grouped_cells_mask) > 0
+    grouped_cells_data = ut.to_numpy_matrix(cells_data[grouped_cells_mask, :])
+    total_umis_per_grouped_cell = total_umis_per_cell[grouped_cells_mask]
+    metacell_data = metacells_data[metacell_index, :]
+    total_umis_of_metacell = total_umis_per_metacell[metacell_index]
+    expected_scale_per_grouped_cell = total_umis_per_grouped_cell / total_umis_of_metacell
+    expected_cells_data = expected_scale_per_grouped_cell[:, np.newaxis] * metacell_data[np.newaxis, :]
+    assert expected_cells_data.shape == grouped_cells_data.shape
+    fold_factors_per_grouped_cell = np.log2((expected_cells_data + 1) / (grouped_cells_data + 1))
+    fold_factors = ut.max_per(ut.to_layout(fold_factors_per_grouped_cell, "column_major"), per="column")
+    max_fold_factor = np.max(fold_factors)
+    ut.log_calc("max_fold_factor", max_fold_factor)
+    return fold_factors

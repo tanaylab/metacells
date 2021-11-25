@@ -605,7 +605,7 @@ laptop with 16GB (or better yet, 32GB) of RAM.
 
 .. code::
 
-    565
+    563
 
 
 Grouping into Metacells

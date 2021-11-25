@@ -63,14 +63,14 @@ clean-test:
 clean-vignettes:
 	rm -f vignettes/*.rst
 	rm -fr vignettes/*_files
-	rm -f vignettes/Manual_Analysis.rst vignettes/Seurat_Analysis.ipynb
+	rm -f vignettes/Manual_Analysis.ipynb vignettes/Seurat_Analysis.ipynb
 
 clean-docs:
 	rm -fr docs/_build
 
 TODO = todo$()x
 
-pc: is_dev $(TODO) history format smells dist docs staged pytest tox  ## check everything before commit
+pc: is_dev $(TODO) history format smells dist pytest docs staged tox  ## check everything before commit
 
 ci: history format smells dist docs tox  ## check everything in a CI server
 
@@ -96,8 +96,17 @@ format: trailingspaces linebreaks backticks fstrings isort black flake8 clang-fo
 
 trailingspaces: .make.trailingspaces  ## check for trailing spaces
 
+REAL_SOURCE_FILES = \
+    $(filter-out %.png, \
+    $(filter-out %.svg, \
+    $(filter-out vignettes/%.rst, \
+    $(filter-out docs/Manual_Analysis.rst, \
+    $(filter-out docs/Metacells_Vignette.rst, \
+    $(filter-out docs/Seurat_Analysis.rst, \
+    $(ALL_SOURCE_FILES)))))))
+
 # TODO: Remove setup.cfg exception when bumpversion is fixed.
-SP_SOURCE_FILES = $(filter-out %.png, $(filter-out %.svg, $(filter-out setup.cfg, $(ALL_SOURCE_FILES))))
+SP_SOURCE_FILES = $(filter-out setup.cfg, $(REAL_SOURCE_FILES))
 
 .make.trailingspaces: $(SP_SOURCE_FILES)
 	@echo "trailingspaces"
@@ -167,7 +176,7 @@ isort: .make.isort  ## check imports with isort
 
 $(TODO): .make.$(TODO)  ## check there are no leftover TODO-X
 
-.make.$(TODO): $(ALL_SOURCE_FILES)
+.make.$(TODO): $(REAL_SOURCE_FILES)
 	@echo 'grep -n -i $(TODO) `git ls-files | grep -v pybind11`'
 	@if grep -n -i $(TODO) `git ls-files | grep -v pybind11`; \
 	then \

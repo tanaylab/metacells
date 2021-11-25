@@ -459,7 +459,7 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
     if hasattr(value, "__qualname__"):
         return getattr(value, "__qualname__") + checksum
 
-    if isinstance(value, (pd.Series, np.ndarray)) and value.ndim == 1 and value.dtype == "bool":
+    if isinstance(value, (pd.DataFrame, pd.Series, np.ndarray)) and value.ndim in (1, 2) and value.dtype == "bool":
         return mask_description(value) + checksum
 
     if hasattr(value, "ndim"):
@@ -718,17 +718,24 @@ def groups_description(groups: Union[utt.Vector, str]) -> str:
     )
 
 
-def mask_description(mask: Union[str, utt.Vector]) -> str:
+def mask_description(mask: Union[str, utt.Vector, utt.Matrix]) -> str:
     """
     Return a string for logging a boolean mask.
     """
     if isinstance(mask, str):
         return mask
 
-    mask = utt.to_numpy_vector(mask)
     if mask.dtype == "bool":
-        return ratio_description(mask.size, "bool", np.sum(mask > 0), "true")
-    return ratio_description(mask.size, str(mask.dtype), np.sum(mask > 0), "positive")
+        value = "true"
+    else:
+        value = "positive"
+
+    if mask.ndim == 2:
+        return f"{mask.shape[0]} X {mask.shape[1]} " + ratio_description(
+            mask.size, str(mask.dtype), np.sum(mask > 0), value
+        )
+
+    return ratio_description(mask.size, str(mask.dtype), np.sum(mask > 0), value)
 
 
 def ratio_description(denominator: float, element: str, numerator: float, condition: str) -> str:

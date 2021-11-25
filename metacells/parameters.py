@@ -858,6 +858,10 @@ max_gbs: float = -0.1
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
 project_fold_normalization: float = 2e-5
 
+#: The minimal number of UMIs for a gene to be a potential cause to mark a metacell as uncharted. See
+#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+project_min_significant_gene_value: float = 40
+
 #: The number of atlas candidates to consider when projecting a query onto an atlas. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
 project_candidates_count: int = 50
@@ -876,4 +880,16 @@ project_min_consistency_weight: float = 0.05
 
 #: The maximal fold factor of genes between the atlas metacells used for the projection of a query metacell. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
-project_max_consistency_fold: float = 3.0
+project_max_consistency_fold: float = 4.0
+
+#: The maximal number of inconsistent genes in the atlas mestacells used for the projection of a query metacell. See
+#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+project_max_inconsistent_genes: int = 7
+
+#: The minimal fold factor for a gene to be significant for metacell quality. See
+#: :py:func:`metacell.tools.compute_inner_fold_factors`.
+min_gene_inner_fold_factor: float = 3.0
+
+#: The minimal fold factor for a gene entry in a metacell to be significant for metacell quality. See
+#: :py:func:`metacell.tools.compute_inner_fold_factors`.
+min_entry_inner_fold_factor: float = 2.0

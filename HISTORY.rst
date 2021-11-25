@@ -21,3 +21,9 @@ History
 * Switch to using ``psutil`` for detecting system resources.
 * Fix binary wheel issues.
 * Give up on using travis-ci.
+
+0.8.0
+-----
+
+* Add inner fold factor computation for metacells quality control.
+* Add projection of query data onto an atlas.
