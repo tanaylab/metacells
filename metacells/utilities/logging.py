@@ -459,12 +459,16 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
     if hasattr(value, "__qualname__"):
         return getattr(value, "__qualname__") + checksum
 
-    if isinstance(value, (pd.DataFrame, pd.Series, np.ndarray)) and value.ndim in (1, 2) and value.dtype == "bool":
+    if (
+        isinstance(value, (pd.DataFrame, pd.Series, np.ndarray))
+        and value.ndim in (1, 2)
+        and utt.shaped_dtype(value) == "bool"
+    ):
         return mask_description(value) + checksum
 
     if hasattr(value, "ndim"):
         if value.ndim == 2:
-            text = f"{value.__class__.__name__} {value.shape[0]} X {value.shape[1]} {utt.matrix_dtype(value)}s"
+            text = f"{value.__class__.__name__} {value.shape[0]} X {value.shape[1]} {utt.shaped_dtype(value)}s"
             return text + checksum
 
         if value.ndim == 1:

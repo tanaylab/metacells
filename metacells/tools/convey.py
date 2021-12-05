@@ -154,7 +154,7 @@ def convey_obs_obs_to_group_group(
     group_of_obs = ut.get_o_numpy(adata, group, formatter=ut.groups_description)
     property_of_obs_obs = ut.get_oo_proper(adata, property_name, formatter=formatter)
     assert gdata.n_obs == (np.max(group_of_obs) + 1)
-    property_of_group_group = np.empty((gdata.n_obs, gdata.n_obs), dtype=ut.matrix_dtype(property_of_obs_obs))
+    property_of_group_group = np.empty((gdata.n_obs, gdata.n_obs), dtype=ut.shaped_dtype(property_of_obs_obs))
 
     # TODO: This is a slow implementation.
     for row_group in range(gdata.n_obs):

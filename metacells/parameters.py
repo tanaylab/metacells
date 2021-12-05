@@ -103,12 +103,25 @@ logistics_location: float = 0.8
 #: :py:func:`metacells.utilities.computation.logistics`.
 logistics_slope: float = 0.5
 
-#: The generic target number of observations (cells) in a pile, allowing us to
+#: The minimal target number of observations (cells) in a pile, allowing us to
 #: directly compute groups (metacells) for it. See
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-target_pile_size: int = 10000
+min_target_pile_size: int = 10000
+
+#: The maximal target number of observations (cells) in a pile, allowing us to
+#: directly compute groups (metacells) for it. See
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+max_target_pile_size: int = 30000
+
+#: The target number of metacells computed in each pile. See
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+target_metacells_in_pile: int = 100
 
 #: The generic target total metacell size. See
 #: :py:const:`candidates_target_metacell_size`,
@@ -856,7 +869,7 @@ max_gbs: float = -0.1
 
 #: The normalization factor to use when computing fold factors for projecting a query onto an atlas. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
-project_fold_normalization: float = 2e-5
+project_fold_normalization: float = 1e-5
 
 #: The minimal number of UMIs for a gene to be a potential cause to mark a metacell as uncharted. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
@@ -872,7 +885,7 @@ project_min_usage_weight: float = 1e-5
 
 #: The maximal fold factor of genes between the projection and the query metacell. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
-project_max_projection_fold: float = 3.0
+project_max_projection_fold: float = significant_gene_fold_factor
 
 #: The minimal weight of an atlas metacell used for the projection of a query metacell. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
@@ -888,8 +901,12 @@ project_max_inconsistent_genes: int = 7
 
 #: The minimal fold factor for a gene to be significant for metacell quality. See
 #: :py:func:`metacell.tools.compute_inner_fold_factors`.
-min_gene_inner_fold_factor: float = 3.0
+min_gene_inner_fold_factor: float = significant_gene_fold_factor
 
 #: The minimal fold factor for a gene entry in a metacell to be significant for metacell quality. See
 #: :py:func:`metacell.tools.compute_inner_fold_factors`.
-min_entry_inner_fold_factor: float = 2.0
+min_entry_inner_fold_factor: float = significant_gene_fold_factor - 1.0
+
+#: The normalization factor to use when computing log of fractions for finding the most similar group for outliers. See
+#: :py:func:`metacells.tools.quality.compute_outliers_matches`.
+outliers_value_normalization: float = 1e-5

@@ -42,7 +42,7 @@ def find_rare_gene_modules(
     forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     min_genes_of_modules: int = pr.rare_min_genes_of_modules,
     min_cells_of_modules: int = pr.rare_min_cells_of_modules,
-    target_pile_size: int = pr.target_pile_size,
+    target_pile_size: int = pr.min_target_pile_size,
     max_cells_of_random_pile: int = pr.rare_max_cells_of_random_pile,
     target_metacell_size: float = pr.target_metacell_size,
     min_modules_size_factor: float = pr.rare_min_modules_size_factor,

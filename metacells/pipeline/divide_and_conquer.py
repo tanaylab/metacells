@@ -29,6 +29,7 @@ __all__ = [
     "set_max_parallel_piles",
     "get_max_parallel_piles",
     "guess_max_parallel_piles",
+    "compute_target_pile_size",
     "divide_and_conquer_pipeline",
     "compute_divide_and_conquer_metacells",
 ]
@@ -72,13 +73,21 @@ def guess_max_parallel_piles(
     what: str = "__x__",
     *,
     max_gbs: float = pr.max_gbs,
-    target_pile_size: int = pr.target_pile_size,
+    cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
+    target_metacell_size: float = pr.target_metacell_size,
+    min_target_pile_size: int = pr.min_target_pile_size,
+    max_target_pile_size: int = pr.max_target_pile_size,
+    target_metacells_in_pile: int = pr.target_metacells_in_pile,
 ) -> int:
     """
     Try and guess a reasonable maximal number of piles to use for computing metacells for the
     specified ``cells`` using at most ``max_gbs`` of memory (default: {max_gbs}, that is
-    {percent}% of all the machine has - if zero or negative, is relative to the machines memory) and
-    assuming some ``target_pile_size`` (default: {target_pile_size}).
+    {percent}% of all the machine has - if zero or negative, is relative to the machines memory).
+
+    The amount of memory used depends on the target pile size, so give this function the same parameters as for
+    :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline` or
+    :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer` so it will use the same automatically adjusted
+    target pile size.
 
     .. note::
 
@@ -92,7 +101,24 @@ def guess_max_parallel_piles(
         Ideally the system would self tune (avoid spawning more parallel processes for computing
         piles when getting close to the memory limit). This is "not easy" to achieve using Python's
         parallel programming APIs.
+
+    **Computation Parameters**
+
+    1. Figure out the target pile size by invoking
+       :py:func:`metacells.pipeline.divide_and_conquer.compute_target_pile_size` using the
+       ``cell_sizes`` (default: {cell_sizes}), ``target_metacell_size`` (default: {target_metacell_size}),
+       ``min_target_pile_size`` (default: {min_target_pile_size}), ``max_target_pile_size`` (default:
+       {max_target_pile_size}) and ``target_metacells_in_pile`` (default: {target_metacells_in_pile}).
     """
+    target_pile_size = compute_target_pile_size(
+        cells,
+        cell_sizes=cell_sizes,
+        target_metacell_size=target_metacell_size,
+        min_target_pile_size=min_target_pile_size,
+        max_target_pile_size=max_target_pile_size,
+        target_metacells_in_pile=target_metacells_in_pile,
+    )
+
     cells_nnz = ut.nnz_matrix(ut.get_vo_proper(cells, what))
     pile_nnz = cells_nnz * target_pile_size / cells.n_obs
     parallel_processes = ut.get_processors_count()
@@ -446,6 +472,66 @@ def _patch_direct_results(
 
 
 @ut.logged()
+@ut.expand_doc()
+def compute_target_pile_size(
+    adata: AnnData,
+    *,
+    cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
+    target_metacell_size: float = pr.target_metacell_size,
+    min_target_pile_size: int = pr.min_target_pile_size,
+    max_target_pile_size: int = pr.max_target_pile_size,
+    target_metacells_in_pile: int = pr.target_metacells_in_pile,
+) -> int:
+    """
+    Compute how many cells should be in each divide-and-conquer pile.
+
+    Larger piles are slower to process (O(N^2)) than smaller piles, but (up to a point) they allow the algorithm to
+    produce better results. The ideal pile size is just big enough to allow for a sufficient number of metacells to be
+    created.
+
+    For normal 10X data with a mean (clean genes, clean cells) UMIs count of ~1600 UMIs, and aiming at 100 metacells per
+    pile with a mean of 160K UMIs in each metacell, this works out to a target pile size of 10K cells, which by default
+    we make the minimal pile size. If the cells are more sparse (e.g., ~800 UMIs) then the pile size will increase to
+    ~20K cells which will slow down the algorithm but will improve quality. By default we will not allow the pile size
+    to go above 30K as the computation cost starts to be excessive and it isn't clear that one can meaningfully evaluate
+    quality for cells with such low number of UMIs.
+
+    Note that the target pile size is just a target. It is directly used in the 1st phase of the divide-and-conquer
+    algorithm, but the pile sizes of the 2nd phase are determined by clustering metacells together which inevitably
+    cause the actual pile sizes to vary around this number.
+
+    **Computation Parameters**
+
+    0. If no ``cell_sizes`` are specified, return the minimal target pile size.
+
+    1. Pick an ideal pile size such that on average, each pile will give rise to ``target_metacells_in_pile`` (default:
+       {target_metacells_in_pile}) such that the size of each one is ``target_metacell_size`` (default:
+       {target_metacell_size}) using the specified ``cell_sizes`` (by default, the sum of the data).
+
+    2. Clamp this value to be no lower than ``min_target_pile_size`` (default: {min_target_pile_size}) and no higher
+       than ``max_target_pile_size`` (default: {max_target_pile_size}). That is, if you set both to the same value, this
+       will force the target pile size value.
+    """
+    assert 0 < min_target_pile_size <= max_target_pile_size
+
+    if cell_sizes is None or min_target_pile_size == max_target_pile_size:
+        ut.log_return("target_pile_size", min_target_pile_size)
+        return min_target_pile_size
+
+    cell_sizes = ut.get_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
+    mean_cell_size = np.mean(cell_sizes)
+    ut.log_calc("mean_cell_size", mean_cell_size)
+    mean_cells_per_metacell = target_metacell_size / mean_cell_size
+    ut.log_calc("mean_cells_per_metacell", mean_cells_per_metacell)
+    target_pile_size = int(round(mean_cells_per_metacell * target_metacells_in_pile))
+    ut.log_calc("raw target_pile_size", target_pile_size)
+    target_pile_size = max(target_pile_size, min_target_pile_size)
+    target_pile_size = min(target_pile_size, max_target_pile_size)
+    ut.log_return("target_pile_size", target_pile_size)
+    return target_pile_size
+
+
+@ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
 def divide_and_conquer_pipeline(
@@ -482,7 +568,9 @@ def divide_and_conquer_pipeline(
     cells_similarity_method: str = pr.cells_similarity_method,
     groups_similarity_log_data: bool = pr.groups_similarity_log_data,
     groups_similarity_method: str = pr.groups_similarity_method,
-    target_pile_size: int = pr.target_pile_size,
+    min_target_pile_size: int = pr.min_target_pile_size,
+    max_target_pile_size: int = pr.max_target_pile_size,
+    target_metacells_in_pile: int = pr.target_metacells_in_pile,
     max_cell_size: Optional[float] = pr.max_cell_size,
     max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
@@ -627,6 +715,11 @@ def divide_and_conquer_pipeline(
 
     **Computation Parameters**
 
+    0. Invoke :py:func:`metacells.pipeline.divide_and_conquer.compute_target_pile_size` using ``target_metacell_size``
+       (default: {target_metacell_size}), ``min_target_pile_size`` (default: {min_target_pile_size}),
+       ``max_target_pile_size`` (default: {max_target_pile_size}) and ``target_metacells_in_pile`` (default:
+       {target_metacells_in_pile}).
+
     1. Invoke :py:func:`metacells.tools.rare.find_rare_gene_modules` to isolate cells expressing
        rare gene modules, using the
        ``forbidden_gene_names``, ``forbidden_gene_patterns``,
@@ -669,6 +762,15 @@ def divide_and_conquer_pipeline(
 
     4. Combine the results from the previous two steps.
     """
+    target_pile_size = compute_target_pile_size(
+        adata,
+        cell_sizes=cell_sizes,
+        target_metacell_size=target_metacell_size,
+        min_target_pile_size=min_target_pile_size,
+        max_target_pile_size=max_target_pile_size,
+        target_metacells_in_pile=target_metacells_in_pile,
+    )
+
     counts = dict(pre_pile=0, pile=0, pre_candidate=0, candidate=0, pre_metacell=0, metacell=0)
 
     did_apply_subset = False
@@ -799,7 +901,9 @@ def divide_and_conquer_pipeline(
             cells_similarity_method=cells_similarity_method,
             groups_similarity_log_data=groups_similarity_log_data,
             groups_similarity_method=groups_similarity_method,
-            target_pile_size=target_pile_size,
+            min_target_pile_size=min_target_pile_size,
+            max_target_pile_size=max_target_pile_size,
+            target_metacells_in_pile=target_metacells_in_pile,
             pile_min_split_size_factor=pile_min_split_size_factor,
             pile_min_robust_size_factor=pile_min_robust_size_factor,
             pile_max_merge_size_factor=pile_max_merge_size_factor,
@@ -871,7 +975,9 @@ def compute_divide_and_conquer_metacells(
     cells_similarity_method: str = pr.cells_similarity_method,
     groups_similarity_log_data: bool = pr.groups_similarity_log_data,
     groups_similarity_method: str = pr.groups_similarity_method,
-    target_pile_size: int = pr.target_pile_size,
+    min_target_pile_size: int = pr.min_target_pile_size,
+    max_target_pile_size: int = pr.max_target_pile_size,
+    target_metacells_in_pile: int = pr.target_metacells_in_pile,
     max_cell_size: Optional[float] = pr.max_cell_size,
     max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
@@ -1007,11 +1113,15 @@ def compute_divide_and_conquer_metacells(
 
     **Computation Parameters**
 
-    1. If the data is smaller than ``target_pile_size`` (default: {target_pile_size}) times the
-       ``pile_min_split_size_factor`` (default: {pile_min_split_size_factor}), then just invoke
-       :py:func:`metacells.pipeline.direct.compute_direct_metacells` using the parameters, patch the
-       results to contain the expected annotations from a divide-and-conquer call, and return.
-       Otherwise, perform the following steps.
+    0. Invoke :py:func:`metacells.pipeline.divide_and_conquer.compute_target_pile_size` using ``target_metacell_size``
+       (default: {target_metacell_size}), ``min_target_pile_size`` (default: {min_target_pile_size}),
+       ``max_target_pile_size`` (default: {max_target_pile_size}) and ``target_metacells_in_pile`` (default:
+       {target_metacells_in_pile}).
+
+    1. If the data is smaller than the target_pile_size times the ``pile_min_split_size_factor`` (default:
+       {pile_min_split_size_factor}), then just invoke :py:func:`metacells.pipeline.direct.compute_direct_metacells`
+       using the parameters, patch the results to contain the expected annotations from a divide-and-conquer call, and
+       return. Otherwise, perform the following steps.
 
     2. Group the cells randomly into equal-sized piles of roughly the ``target_pile_size`` using
        the ``random_seed`` (default: {random_seed}) to allow making this replicable.
@@ -1034,6 +1144,15 @@ def compute_divide_and_conquer_metacells(
        ``final_max_outliers_levels`` to prevent forcing outlier cells to be placed in low-quality
        metacells.
     """
+    target_pile_size = compute_target_pile_size(
+        adata,
+        cell_sizes=cell_sizes,
+        target_metacell_size=target_metacell_size,
+        min_target_pile_size=min_target_pile_size,
+        max_target_pile_size=max_target_pile_size,
+        target_metacells_in_pile=target_metacells_in_pile,
+    )
+
     random_pile_of_cells = ut.random_piles(adata.n_obs, target_pile_size=target_pile_size, random_seed=random_seed)
     piles_count = np.max(random_pile_of_cells) + 1
     ut.log_calc("piles", piles_count)
@@ -1113,7 +1232,9 @@ def compute_divide_and_conquer_metacells(
                 cells_similarity_method=cells_similarity_method,
                 groups_similarity_log_data=groups_similarity_log_data,
                 groups_similarity_method=groups_similarity_method,
-                target_pile_size=target_pile_size,
+                min_target_pile_size=min_target_pile_size,
+                max_target_pile_size=max_target_pile_size,
+                target_metacells_in_pile=target_metacells_in_pile,
                 pile_min_split_size_factor=pile_min_split_size_factor,
                 pile_min_robust_size_factor=pile_min_robust_size_factor,
                 pile_max_merge_size_factor=pile_max_merge_size_factor,
@@ -1170,7 +1291,9 @@ def compute_divide_and_conquer_metacells(
                 cells_similarity_method=groups_similarity_method,
                 groups_similarity_log_data=groups_similarity_log_data,
                 groups_similarity_method=groups_similarity_method,
-                target_pile_size=target_pile_size,
+                min_target_pile_size=min_target_pile_size,
+                max_target_pile_size=max_target_pile_size,
+                target_metacells_in_pile=target_metacells_in_pile,
                 pile_min_split_size_factor=pile_min_split_size_factor,
                 pile_min_robust_size_factor=pile_min_robust_size_factor,
                 pile_max_merge_size_factor=pile_max_merge_size_factor,
@@ -1231,7 +1354,9 @@ def compute_divide_and_conquer_metacells(
                 cells_similarity_method=cells_similarity_method,
                 groups_similarity_log_data=groups_similarity_log_data,
                 groups_similarity_method=groups_similarity_method,
-                target_pile_size=target_pile_size,
+                min_target_pile_size=min_target_pile_size,
+                max_target_pile_size=max_target_pile_size,
+                target_metacells_in_pile=target_metacells_in_pile,
                 pile_min_split_size_factor=pile_min_split_size_factor,
                 pile_min_robust_size_factor=pile_min_robust_size_factor,
                 pile_max_merge_size_factor=pile_max_merge_size_factor,
@@ -1294,7 +1419,9 @@ def compute_piled_metacells(
     cells_similarity_method: str,
     groups_similarity_log_data: bool,
     groups_similarity_method: str,
-    target_pile_size: int,
+    min_target_pile_size: int = pr.min_target_pile_size,
+    max_target_pile_size: int = pr.max_target_pile_size,
+    target_metacells_in_pile: int = pr.target_metacells_in_pile,
     pile_min_split_size_factor: float,
     pile_min_robust_size_factor: float,
     pile_max_merge_size_factor: float,
@@ -1438,7 +1565,9 @@ def compute_piled_metacells(
             cells_similarity_method=cells_similarity_method,
             groups_similarity_log_data=groups_similarity_log_data,
             groups_similarity_method=groups_similarity_method,
-            target_pile_size=target_pile_size,
+            min_target_pile_size=min_target_pile_size,
+            max_target_pile_size=max_target_pile_size,
+            target_metacells_in_pile=target_metacells_in_pile,
             pile_min_split_size_factor=pile_min_split_size_factor,
             pile_min_robust_size_factor=pile_min_robust_size_factor,
             pile_max_merge_size_factor=pile_max_merge_size_factor,

@@ -1950,7 +1950,7 @@ def sum_groups(
 
     with utm.timed_step(timed_step):
         utm.timed_parameters(groups=groups_count, entities=matrix.shape[0], elements=matrix.shape[1])
-        results = np.empty((groups_count, matrix.shape[1]), dtype=utt.matrix_dtype(matrix))
+        results = np.empty((groups_count, matrix.shape[1]), dtype=utt.shaped_dtype(matrix))
 
         for group_index in range(groups_count):
             group_mask = groups == group_index

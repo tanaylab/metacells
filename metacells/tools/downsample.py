@@ -90,7 +90,7 @@ def downsample_cells(
     ut.log_calc("samples", samples)
 
     data = ut.get_vo_proper(adata, what, layout="row_major")
-    assert ut.matrix_dtype(data) == "float32"
+    assert ut.shaped_dtype(data) == "float32"
     downsampled = ut.downsample_matrix(data, per="row", samples=samples, random_seed=random_seed)
     if inplace:
         ut.set_vo_data(adata, "downsampled", downsampled)

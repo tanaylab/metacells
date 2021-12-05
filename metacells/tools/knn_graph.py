@@ -391,7 +391,7 @@ def _weigh_edges(pruned_ranks: ut.CompressedMatrix) -> ut.CompressedMatrix:
 
 def _assert_proper_compressed(matrix: ut.CompressedMatrix, layout: str) -> None:
     assert sp.issparse(matrix)
-    assert ut.matrix_dtype(matrix) == "float32"
+    assert ut.shaped_dtype(matrix) == "float32"
     assert matrix.getformat() == layout
     assert matrix.has_sorted_indices
     assert matrix.has_canonical_format

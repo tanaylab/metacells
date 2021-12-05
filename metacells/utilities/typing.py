@@ -125,7 +125,7 @@ __all__ = [
     "SPARSE_SLOW_FORMAT",
     "LAYOUT_OF_AXIS",
     "PER_OF_AXIS",
-    "matrix_dtype",
+    "shaped_dtype",
     "matrix_layout",
     "is_layout",
     "is_contiguous",
@@ -810,24 +810,29 @@ def is_layout(matrix: Matrix, layout: Optional[str]) -> bool:
     return dense.flags[DENSE_FAST_FLAG[layout]]
 
 
-def matrix_dtype(proper: ProperMatrix) -> str:
+def shaped_dtype(shaped: Shaped) -> str:
     """
-    Return the data type of the element of a proper matrix.
+    Return the data type of the element of shaped data.
     """
-    frame = maybe_pandas_frame(proper)
+    frame = maybe_pandas_frame(shaped)
     if frame is not None:
-        proper = frame.values
-        if isinstance(proper, pd.core.arrays.categorical.Categorical):
-            proper = np.array(proper)
+        shaped = frame.values
 
-    dense = maybe_numpy_matrix(proper)
-    if dense is not None:
-        return str(dense.dtype)
+    compressed = maybe_compressed_matrix(shaped)
+    if compressed is not None:
+        shaped = compressed.data
 
-    compressed = maybe_compressed_matrix(proper)
-    assert compressed is not None
+    series = maybe_pandas_series(shaped)
+    if series is not None:
+        shaped = series.values
 
-    return str(compressed.data.dtype)
+    if isinstance(shaped, pd.core.arrays.categorical.Categorical):
+        shaped = np.array(shaped)
+
+    if isinstance(shaped, np.ndarray):
+        return str(shaped.dtype)
+
+    raise AssertionError(f"unexpected shaped type: {shaped.__class__.__qualname__}")
 
 
 def matrix_layout(matrix: Matrix) -> Optional[str]:

@@ -7,6 +7,7 @@ from typing import Any
 from typing import List
 from typing import Optional
 from typing import Set
+from typing import Tuple
 from typing import TypeVar
 from typing import Union
 
@@ -21,6 +22,8 @@ __all__ = [
     "compute_type_compatible_sizes",
     "compute_inner_normalized_variance",
     "compute_inner_fold_factors",
+    "compute_outliers_matches",
+    "compute_deviant_fold_factors",
 ]
 
 
@@ -465,3 +468,194 @@ def _compute_metacell_inner_folds(
     max_fold_factor = np.max(fold_factors)
     ut.log_calc("max_fold_factor", max_fold_factor)
     return fold_factors
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def compute_outliers_matches(
+    what: Union[str, ut.Matrix] = "__x__",
+    *,
+    adata: AnnData,
+    gdata: AnnData,
+    group: Union[str, ut.Vector] = "metacell",
+    similar: str = "similar",
+    value_normalization: float = pr.outliers_value_normalization,
+    reproducible: bool,
+) -> None:
+    """
+    Given an assignment of observations (cells) to groups (metacells), compute for each outlier the "most similar"
+    group.
+
+    **Input**
+
+    Annotated ``adata``, where the observations are cells and the variables are genes, where ``what`` is a
+    per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
+    matrix.
+
+    In addition, ``gdata`` is assumed to have one observation for each group, and use the same genes as ``adata``.
+
+    **Returns**
+
+    Sets the following in ``adata``:
+
+    Per-Observation (Cell) Annotations
+
+        ``similar`` (default: {similar})
+            For each observation (cell), the index of the "most similar" group.
+
+    **Computation Parameters**
+
+    1. Compute the log2 of the fraction of each gene in each of the outlier cells and the group metacells using
+       the ``value_normalization`` (default: {value_normalization}).
+
+    2. Cross-correlate each of the outlier cells with each of the group metacells, in a ``reproducible`` manner.
+    """
+    group_of_cells = ut.get_o_numpy(adata, group)
+    outliers_mask = group_of_cells < 0
+    odata = ut.slice(adata, obs=outliers_mask)
+
+    outliers_data = ut.get_vo_proper(odata, what, layout="row_major")
+    groups_data = ut.get_vo_proper(gdata, what, layout="row_major")
+
+    outliers_fractions = ut.fraction_by(outliers_data, by="row")
+    groups_fractions = ut.fraction_by(groups_data, by="row")
+
+    outliers_fractions = ut.to_numpy_matrix(outliers_fractions)
+    groups_fractions = ut.to_numpy_matrix(groups_fractions)
+
+    outliers_fractions += value_normalization
+    groups_fractions += value_normalization
+
+    outliers_log_fractions = np.log2(outliers_fractions, out=outliers_fractions)
+    groups_log_fractions = np.log2(groups_fractions, out=groups_fractions)
+
+    outliers_groups_correlation = ut.cross_corrcoef_rows(
+        outliers_log_fractions, groups_log_fractions, reproducible=reproducible
+    )
+    outliers_similar_group_indices = np.argmax(outliers_groups_correlation, axis=1)
+    assert len(outliers_similar_group_indices) == odata.n_obs
+
+    cells_similar_group_indices = np.full(adata.n_obs, -1, dtype="int32")
+    cells_similar_group_indices[outliers_mask] = outliers_similar_group_indices
+    ut.set_o_data(adata, similar, cells_similar_group_indices)
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def compute_deviant_fold_factors(
+    what: Union[str, ut.Matrix] = "__x__",
+    *,
+    adata: AnnData,
+    gdata: AnnData,
+    group: Union[str, ut.Vector] = "metacell",
+    similar: Union[str, ut.Vector] = "similar",
+    significant_gene_fold_factor: float = pr.significant_gene_fold_factor,
+) -> None:
+    """
+    Given an assignment of observations (cells) to groups (metacells) or, if an outlier, to the most
+    similar groups, compute for each observation and gene the fold factor relative to its group
+    for the purpose of detecting deviant cells.
+
+    Ideally, all grouped cells would have no genes with high enough fold factors to be considered deviants, and all
+    outlier cells would. In practice grouped cells might have a (few) such genes to the restriction on the fraction
+    of deviants.
+
+    It is important not to read too much into the results for a single cell, but looking at which genes appear for cell
+    populations (e.g., cells with specific metadata such as batch identification) might be instructive.
+
+    **Input**
+
+    Annotated ``adata``, where the observations are cells and the variables are genes, where ``what`` is a
+    per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
+    matrix.
+
+    In addition, ``gdata`` is assumed to have one observation for each group, and use the same genes as ``adata``.
+
+    **Returns**
+
+    Sets the following in ``adata``:
+
+    Per-Variable Per-Observation (Gene-Cell) Annotations
+
+        ``deviant_fold``
+            The fold factor between the cell's UMIs and the expected number of UMIs for the purpose of computing
+            deviant cells.
+
+    **Computation Parameters**
+
+    1. For each cell, compute the expected UMIs for each gene given the fraction of the gene in the metacells associated
+       with the cell (the one it is belongs to, or the most similar one for outliers). If this is less than
+       ``significant_gene_fold_factor`` (default: {significant_gene_fold_factor}), set it to zero so the result will be
+       sparse.
+    """
+    cells_data = ut.get_vo_proper(adata, what, layout="row_major")
+    metacells_data = ut.get_vo_proper(gdata, what, layout="row_major")
+    total_umis_per_cell = ut.sum_per(cells_data, per="row")
+    total_umis_per_metacell = ut.sum_per(metacells_data, per="row")
+
+    group_of_cells = ut.get_o_numpy(adata, group, formatter=ut.groups_description)
+    similar_of_cells = ut.get_o_numpy(adata, similar, formatter=ut.groups_description)
+
+    @ut.timed_call("compute_cell_deviant_certificates")
+    def _compute_cell_deviant_certificates(cell_index: int) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
+        return _compute_cell_certificates(
+            cell_index=cell_index,
+            cells_data=cells_data,
+            metacells_data=metacells_data,
+            group_of_cells=group_of_cells,
+            similar_of_cells=similar_of_cells,
+            total_umis_per_cell=total_umis_per_cell,
+            total_umis_per_metacell=total_umis_per_metacell,
+            significant_gene_fold_factor=significant_gene_fold_factor,
+        )
+
+    results = list(ut.parallel_map(_compute_cell_deviant_certificates, adata.n_obs))
+
+    cell_indices = np.concatenate(
+        [np.full(len(result[0]), cell_index, dtype="int32") for cell_index, result in enumerate(results)]
+    )
+    gene_indices = np.concatenate([result[0] for result in results])
+    fold_factors = np.concatenate([result[1] for result in results])
+
+    deviant_folds = sparse.csr_matrix((fold_factors, (cell_indices, gene_indices)), shape=adata.shape)
+    ut.set_vo_data(adata, "deviant_folds", deviant_folds)
+
+
+@ut.logged()
+def _compute_cell_certificates(
+    *,
+    cell_index: int,
+    cells_data: ut.Matrix,
+    metacells_data: ut.Matrix,
+    group_of_cells: ut.NumpyVector,
+    similar_of_cells: ut.NumpyVector,
+    total_umis_per_cell: ut.NumpyVector,
+    total_umis_per_metacell: ut.NumpyVector,
+    significant_gene_fold_factor: float,
+) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
+    group_index = group_of_cells[cell_index]
+    similar_index = similar_of_cells[cell_index]
+    assert (group_index < 0) != (similar_index < 0)
+    metacell_index = max(group_index, similar_index)
+
+    expected_scale = total_umis_per_cell[cell_index] / total_umis_per_metacell[metacell_index]
+    expected_data = ut.to_numpy_vector(metacells_data[metacell_index, :], copy=True)
+    expected_data *= expected_scale
+
+    actual_data = ut.to_numpy_vector(cells_data[cell_index, :], copy=True)
+
+    expected_data += 1.0
+    actual_data += 1.0
+
+    fold_factors = actual_data
+    fold_factors /= expected_data
+    fold_factors = np.log2(fold_factors, out=fold_factors)
+
+    significant_folds_mask = fold_factors >= significant_gene_fold_factor
+    ut.log_calc("significant_folds_mask", significant_folds_mask)
+
+    significant_gene_indices = np.where(significant_folds_mask)[0].astype("int32")
+    significant_gene_folds = fold_factors[significant_folds_mask].astype("float32")
+    return (significant_gene_indices, significant_gene_folds)
