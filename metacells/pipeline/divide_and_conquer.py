@@ -549,7 +549,7 @@ def divide_and_conquer_pipeline(
     rare_min_related_gene_fold_factor: float = pr.rare_min_related_gene_fold_factor,
     rare_max_related_gene_increase_factor: float = pr.rare_max_related_gene_increase_factor,
     rare_min_cell_module_total: int = pr.rare_min_cell_module_total,
-    rare_max_cells_of_random_pile: int = pr.rare_max_cells_of_random_pile,
+    rare_max_cells_factor_of_random_pile: float = pr.rare_max_cells_factor_of_random_pile,
     rare_dissolve_min_robust_size_factor: Optional[float] = pr.rare_dissolve_min_robust_size_factor,
     rare_dissolve_min_convincing_size_factor: Optional[float] = pr.rare_dissolve_min_convincing_size_factor,
     rare_dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
@@ -733,7 +733,7 @@ def divide_and_conquer_pipeline(
        ``rare_min_module_correlation`` (default: {rare_min_module_correlation}),
        ``rare_min_related_gene_fold_factor`` (default: {rare_min_related_gene_fold_factor})
        ``rare_max_related_gene_increase_factor`` (default: {rare_max_related_gene_increase_factor})
-       ``rare_max_cells_of_random_pile`` (default: {rare_max_cells_of_random_pile})
+       ``rare_max_cells_factor_of_random_pile`` (default: {rare_max_cells_factor_of_random_pile})
        and
        ``rare_min_cell_module_total`` (default: {rare_min_cell_module_total}).
 
@@ -795,7 +795,7 @@ def divide_and_conquer_pipeline(
                 min_related_gene_fold_factor=rare_min_related_gene_fold_factor,
                 max_related_gene_increase_factor=rare_max_related_gene_increase_factor,
                 target_pile_size=target_pile_size,
-                max_cells_of_random_pile=rare_max_cells_of_random_pile,
+                max_cells_factor_of_random_pile=rare_max_cells_factor_of_random_pile,
                 min_cell_module_total=rare_min_cell_module_total,
                 reproducible=(random_seed != 0),
             )

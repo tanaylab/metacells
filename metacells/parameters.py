@@ -405,13 +405,13 @@ rare_min_genes_of_modules: int = 4
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 rare_min_cells_of_modules: int = min_metacell_cells
 
-#: The maximal mean number of cells in a random pile for a rare gene module to be considered rare.
-#: See
+#: The maximal mean number of cells (as a fraction of the mean metacell size) in a random pile for a rare gene module to
+#: be considered rare. See
 #: :py:const:`min_metacell_cells`,
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-rare_max_cells_of_random_pile: int = min_metacell_cells * 4
+rare_max_cells_factor_of_random_pile: float = 0.5
 
 #: The minimal total UMIs of all the cells in a rare gene module (as a fraction
 #: of the :py:const:`target_metacell_size`). See

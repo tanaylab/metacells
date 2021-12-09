@@ -26,4 +26,6 @@ History
 -----
 
 * Add inner fold factor computation for metacells quality control.
+* Add deviant fold factor computation for metacells quality control.
 * Add projection of query data onto an atlas.
+* Self-adjusting pile sizes.

@@ -43,7 +43,7 @@ def find_rare_gene_modules(
     min_genes_of_modules: int = pr.rare_min_genes_of_modules,
     min_cells_of_modules: int = pr.rare_min_cells_of_modules,
     target_pile_size: int = pr.min_target_pile_size,
-    max_cells_of_random_pile: int = pr.rare_max_cells_of_random_pile,
+    max_cells_factor_of_random_pile: float = pr.rare_max_cells_factor_of_random_pile,
     target_metacell_size: float = pr.target_metacell_size,
     min_modules_size_factor: float = pr.rare_min_modules_size_factor,
     min_module_correlation: float = pr.rare_min_module_correlation,
@@ -113,10 +113,10 @@ def find_rare_gene_modules(
        {min_module_correlation}).
 
     5. Consider cells expressing of any of the genes in the gene module. If the expected number of
-       such cells in each random pile of size ``target_pile_size`` (default: {target_pile_size}),
-       whose total number of UMIs of the rare gene module is at least ``min_cell_module_total``
-       (default: {min_cell_module_total}), is more than the ``max_cells_of_random_pile`` (default:
-       {max_cells_of_random_pile}), then discard the rare gene module as not that rare after all.
+       such cells in each random pile of size ``target_pile_size`` (default: {target_pile_size}), whose total number of
+       UMIs of the rare gene module is at least ``min_cell_module_total`` (default: {min_cell_module_total}), is more
+       than the ``max_cells_factor_of_random_pile`` (default: {max_cells_factor_of_random_pile}) as a fraction of the
+       mean metacells size, then discard the rare gene module as not that rare after all.
 
     6. Add to the gene module all genes whose fraction in cells expressing any of the genes in the
        rare gene module is at least 2^``min_related_gene_fold_factor`` (default:
@@ -140,6 +140,14 @@ def find_rare_gene_modules(
     """
     assert min_cells_of_modules > 0
     assert min_genes_of_modules > 0
+
+    umis_per_gene = ut.get_v_numpy(adata, what, sum=True)
+    total_umis = np.sum(umis_per_gene)
+    mean_umis_per_cell = total_umis / adata.n_obs
+    mean_metacells_size = target_metacell_size / mean_umis_per_cell
+    ut.log_calc("mean_metacells_size", mean_metacells_size)
+    max_cells_of_random_pile = mean_metacells_size * max_cells_factor_of_random_pile
+    ut.log_calc("max_cells_of_random_pile", max_cells_of_random_pile)
 
     forbidden_genes_mask = find_named_genes(adata, names=forbidden_gene_names, patterns=forbidden_gene_patterns)
     assert forbidden_genes_mask is not None
