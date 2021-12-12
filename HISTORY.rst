@@ -29,3 +29,4 @@ History
 * Add deviant fold factor computation for metacells quality control.
 * Add projection of query data onto an atlas.
 * Self-adjusting pile sizes.
+* Add convenience function for computing data for MCView.

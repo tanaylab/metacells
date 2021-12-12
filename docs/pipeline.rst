@@ -27,3 +27,6 @@ Pipeline
 .. automodule:: metacells.pipeline.consistency
     :members:
 
+.. automodule:: metacells.pipeline.mcview
+    :members:
+
