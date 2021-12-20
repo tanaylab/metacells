@@ -113,7 +113,7 @@ def analyze_clean_genes(
     )
 
 
-CLEAN_GENES_MASKS = ["properly_sampled_gene", "~noisy_lonely_gene", "~excluded_gene"]
+CLEAN_GENES_MASKS = ["properly_sampled_gene?", "~noisy_lonely_gene?", "~excluded_gene?"]
 
 
 @ut.timed_call()

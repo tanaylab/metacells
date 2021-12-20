@@ -335,7 +335,7 @@ def _optimize_split_communities(
             return cold_temperature, score
 
 
-def _split_communities(  # pylint: disable=too-many-statements
+def _split_communities(
     *,
     outgoing_edge_weights: ut.CompressedMatrix,
     community_of_nodes: ut.NumpyVector,
@@ -373,36 +373,39 @@ def _split_communities(  # pylint: disable=too-many-statements
             cancelled_communities.add(community_index)
             continue
 
-        if max_split_min_cut_strength is None:
-            continue
 
-        community_indices = tuple(np.where(community_mask)[0])
-        if community_indices in atomic_candidates:
-            continue
+    if len(cancelled_communities) == 0 and max_split_min_cut_strength is not None:
+        for community_index in range(communities_count):
+            community_mask = community_of_nodes == community_index
 
-        did_cut, did_split = _min_cut_community(
-            outgoing_edge_weights=outgoing_edge_weights,
-            community_of_nodes=community_of_nodes,
-            cut_community_index=community_index,
-            max_split_min_cut_strength=max_split_min_cut_strength,
-            min_cut_seed_cells=min_cut_seed_cells,
-            must_complete_cover=must_complete_cover,
-            new_community_index=next_new_community_index,
-        )
-        if did_cut:
+            community_indices = tuple(np.where(community_mask)[0])
+            if community_indices in atomic_candidates:
+                continue
+
+            did_cut, did_split = _min_cut_community(
+                outgoing_edge_weights=outgoing_edge_weights,
+                community_of_nodes=community_of_nodes,
+                cut_community_index=community_index,
+                max_split_min_cut_strength=max_split_min_cut_strength,
+                min_cut_seed_cells=min_cut_seed_cells,
+                must_complete_cover=must_complete_cover,
+                new_community_index=next_new_community_index,
+            )
+
+            if not did_cut:
+                atomic_candidates.add(community_indices)
+                continue
+
             cut_communities_count += 1
             ut.logger().debug(
                 "community: %s nodes: %s size: %s is too divided",
                 community_index,
                 np.sum(community_mask),
-                community_size,
+                np.sum(node_sizes[community_mask]),
             )
             if did_split:
                 split_communities_count += 1
                 next_new_community_index += 1
-        else:
-            assert community_indices is not None
-            atomic_candidates.add(community_indices)
 
     cancelled_communities_count = len(cancelled_communities)
     modified_communities_count = cut_communities_count + cancelled_communities_count

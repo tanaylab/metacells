@@ -152,7 +152,7 @@ correlate_two_dense_rows(ConstArraySlice<float32_t> some_values,
 }
 #endif
 
-#define MANY_ROWS 8
+#define MANY_ROWS 2
 
 struct ManyCorrelations {
     float64_t correlations[MANY_ROWS];
