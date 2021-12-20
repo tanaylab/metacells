@@ -487,6 +487,9 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
         ]
         return f'[ {", ".join(texts)} ]' + checksum
 
+    if isinstance(value, dict):
+        return str(value) + checksum
+
     raise RuntimeError(f"unknown parameter type: {value.__class__} value: {value}")  #
 
 

@@ -28,6 +28,7 @@ def compute_obs_obs_similarity(
     reproducible: bool = pr.reproducible,
     logistics_location: float = pr.logistics_location,
     logistics_slope: float = pr.logistics_slope,
+    top: Optional[int] = None,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     """
@@ -71,6 +72,9 @@ def compute_obs_obs_similarity(
        cross-correlation of the results of the previous step. That is, two observations (cells) will
        be similar if they are similar to the rest of the observations (cells) in the same way. This
        compensates for the extreme sparsity of the data.
+
+    3. If ``top`` is specified, keep just this number of most-similar values in each row (turning the result into a
+       compressed matrix format).
     """
     return _compute_elements_similarity(
         adata,
@@ -81,6 +85,7 @@ def compute_obs_obs_similarity(
         reproducible=reproducible,
         logistics_location=logistics_location,
         logistics_slope=logistics_slope,
+        top=top,
         inplace=inplace,
     )
 
@@ -96,6 +101,7 @@ def compute_var_var_similarity(
     reproducible: bool = pr.reproducible,
     logistics_location: float = pr.logistics_location,
     logistics_slope: float = pr.logistics_slope,
+    top: Optional[int] = None,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     """
@@ -139,6 +145,9 @@ def compute_var_var_similarity(
        cross-correlation of the results of the previous step. That is, two variables (genes) will
        be similar if they are similar to the rest of the variables (genes) in the same way. This
        compensates for the extreme sparsity of the data.
+
+    3. If ``top`` is specified, keep just this number of most-similar values in each row (turning the result into a
+       compressed matrix format).
     """
     return _compute_elements_similarity(
         adata,
@@ -149,6 +158,7 @@ def compute_var_var_similarity(
         reproducible=reproducible,
         logistics_location=logistics_location,
         logistics_slope=logistics_slope,
+        top=top,
         inplace=inplace,
     )
 
@@ -163,6 +173,7 @@ def _compute_elements_similarity(
     reproducible: bool,
     logistics_location: float,
     logistics_slope: float,
+    top: Optional[int],
     inplace: bool,
 ) -> Optional[ut.PandasFrame]:
     assert elements in ("obs", "var")
@@ -172,6 +183,7 @@ def _compute_elements_similarity(
     data = ut.get_vo_proper(adata, what, layout=f"{per}_major")
     dense = ut.to_numpy_matrix(data)
 
+    similarity: ut.ProperMatrix
     if method.startswith("logistics"):
         similarity = ut.logistics(dense, location=logistics_location, slope=logistics_slope, per=per)
         similarity *= -1
@@ -181,6 +193,9 @@ def _compute_elements_similarity(
 
     if method.endswith("_pearson"):
         similarity = ut.corrcoef(similarity, per=None, reproducible=reproducible)
+
+    if top is not None:
+        similarity = ut.top_per(similarity, top, per="row")
 
     if inplace:
         to = elements + "_similarity"

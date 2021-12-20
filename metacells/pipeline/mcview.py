@@ -37,6 +37,7 @@ def compute_for_mcview(
     compute_inner_fold_factors: Dict[str, Any] = {},
     compute_outliers_matches: Dict[str, Any] = {},
     compute_deviant_fold_factors: Dict[str, Any] = {},
+    compute_var_var_similarity: Dict[str, Any] = {},
 ) -> None:
     """
     Compute metacell analysis in preparation for exporting the data to MCView.
@@ -67,9 +68,9 @@ def compute_for_mcview(
        passed to all relevant tools.
 
     1. Computes UMAP projections by invoking :py:func:`metacells.pipeline.compute_umap_by_features`. This is done twice,
-       once with `dimensions=2` for visualization and once with `dimensions=3` to capture more of the manifold structure
-       (used to automatically generate cluster colors). Therefore in this case there are two dictionary parameters
-       ``compute_umap_by_features_2`` and ``compute_umap_by_features_3``.
+       once with ``dimensions=2`` for visualization and once with ``dimensions=3`` to capture more of the manifold
+       structure (used to automatically generate cluster colors). Therefore in this case there are two dictionary
+       parameters ``compute_umap_by_features_2`` and ``compute_umap_by_features_3``.
 
     2. Compute for each gene and for each metacell the fold factor between the metacell cells using
        :py:func:`metacells.tools.compute_inner_fold_factors`.
@@ -79,12 +80,19 @@ def compute_for_mcview(
 
     4. Compute for each metacell the fold factor between the metacell and the outliers most similar to it using
        :py:func:`metacells.tools.compute_deviant_fold_factors`.
+
+    5. Compute the gene-gene (variable-variable) similarity matrix. This is an example where you probably want to
+       override the default parameters; specifically, you very probably want to specify
+       ``compute_var_var_similarity=dict(top=N)`` for some reasonable ``N`` (say, up to 100), to keep just the top
+       correlated genes for each gene. Otherwise you will get a dense matrix of 20K by 20K entries, which typically
+       isn't what you want.
     """
     reproducible = random_seed != 0
-    compute_umap_by_features(adata, what, dimensions=2, random_seed=random_seed, **compute_umap_by_features_2)
-    compute_umap_by_features(adata, what, dimensions=3, random_seed=random_seed, **compute_umap_by_features_3)
+    compute_umap_by_features(gdata, what, dimensions=2, random_seed=random_seed, **compute_umap_by_features_2)
+    compute_umap_by_features(gdata, what, dimensions=3, random_seed=random_seed, **compute_umap_by_features_3)
     tl.compute_outliers_matches(
         what, adata=adata, gdata=gdata, group=group, reproducible=reproducible, **compute_outliers_matches
     )
     tl.compute_inner_fold_factors(what, adata=adata, gdata=gdata, group=group, **compute_inner_fold_factors)
     tl.compute_deviant_fold_factors(what, adata=adata, gdata=gdata, group=group, **compute_deviant_fold_factors)
+    tl.compute_var_var_similarity(gdata, what, **compute_var_var_similarity)

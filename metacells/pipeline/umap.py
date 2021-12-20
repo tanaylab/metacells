@@ -102,6 +102,7 @@ def compute_knn_by_features(
 
     top_feature_genes_fractions = all_fractions[:, top_feature_genes_mask]
     top_feature_genes_fractions = ut.to_layout(top_feature_genes_fractions, layout="row_major")
+    top_feature_genes_fractions = ut.to_numpy_matrix(top_feature_genes_fractions)
 
     top_feature_genes_fractions += similarity_value_normalization
 

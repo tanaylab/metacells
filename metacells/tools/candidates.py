@@ -373,7 +373,6 @@ def _split_communities(
             cancelled_communities.add(community_index)
             continue
 
-
     if len(cancelled_communities) == 0 and max_split_min_cut_strength is not None:
         for community_index in range(communities_count):
             community_mask = community_of_nodes == community_index
