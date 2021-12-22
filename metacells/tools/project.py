@@ -3,6 +3,7 @@ Project
 -------
 """
 
+from typing import Optional
 from typing import Tuple
 from typing import Union
 
@@ -15,6 +16,7 @@ import metacells.utilities as ut
 
 __all__ = [
     "project_query_onto_atlas",
+    "find_systematic_genes",
 ]
 
 
@@ -22,10 +24,10 @@ __all__ = [
 @ut.timed_call()
 @ut.expand_doc()
 def project_query_onto_atlas(
+    what: Union[str, ut.Matrix] = "__x__",
     *,
     adata: AnnData,
     qdata: AnnData,
-    what: Union[str, ut.Matrix] = "__x__",
     project_fold_normalization: float = pr.project_fold_normalization,
     project_candidates_count: int = pr.project_candidates_count,
     project_min_significant_gene_value: float = pr.project_min_significant_gene_value,
@@ -43,6 +45,9 @@ def project_query_onto_atlas(
     Annotated query ``qdata`` and atlas ``adata``, where the observations are cells and the variables are genes, where
     ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation
     containing such a matrix.
+
+    Typically this data excludes any genes having a systematic difference between the query and the atlas, e.g. genes
+    detected by by :py:func:`metacells.tools.project.find_systematic_genes`.
 
     **Returns**
 
@@ -267,3 +272,69 @@ def _project_single_metacell(  # pylint: disable=too-many-statements
     ut.log_return("atlas_used_weights", atlas_used_weights)
     ut.log_return("projected_total_umis", projected_total_umis)
     return (charted, atlas_used_indices, atlas_used_weights, projected_total_umis)
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def find_systematic_genes(
+    what: Union[str, ut.Matrix] = "__x__",
+    *,
+    adata: AnnData,
+    qdata: AnnData,
+    low_gene_quantile: float = pr.systematic_low_gene_quantile,
+    high_gene_quantile: float = pr.systematic_high_gene_quantile,
+    min_low_gene_fraction: float = pr.systematic_min_low_gene_fraction,
+) -> None:
+    """
+    Find genes that
+
+    **Input**
+
+    Annotated query ``qdata`` and atlas ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation
+    containing such a matrix.
+
+    **Returns**
+
+    A matrix whose rows are query metacells and columns are atlas metacells, where each entry is the weight of the atlas
+    metacell in the projection of the query metacells. The sum of weights in each row (that is, for a single query
+    metacell) is 1. The weighted sum of the atlas metacells using these weights is the "projected" image of the query
+    metacell onto the atlas.
+
+    In addition, sets the following annotations in ``qdata``:
+
+    Variable (Gene) Annotations
+        ``systematic``
+            A boolean mask indicating whether the gene is systematically higher in the query compared to the atlas.
+
+    **Computation Parameters**
+
+    1. Compute the fraction of each gene out of the total UMIs in both the atlas and the query.
+
+    2. Compute for each gene its ``low_gene_quantile`` (default: {low_gene_quantile}) fraction in the query, and its
+       ``high_gene_quantile`` (default: {high_gene_quantile}) fraction in the atlas.
+
+    3. Compute for each gene its standard deviation in the atlas.
+
+    4. Mark as systematic the genes for which the low quantile value in the query is at least the atlas high quantile
+       value, and is also at least the ``min_low_gene_fraction`` (default: {min_low_gene_fraction}).
+    """
+    assert 0 <= low_gene_quantile <= 1
+    assert 0 <= high_gene_quantile <= 1
+    assert min_low_gene_fraction >= 0
+    assert np.all(adata.var_names == qdata.var_names)
+
+    query_umis = ut.get_vo_proper(qdata, what, layout="column_major")
+    atlas_umis = ut.get_vo_proper(adata, what, layout="column_major")
+
+    query_fractions = ut.to_numpy_matrix(ut.fraction_by(query_umis, by="row"))
+    atlas_fractions = ut.to_numpy_matrix(ut.fraction_by(atlas_umis, by="row"))
+
+    query_fractions = ut.to_layout(query_fractions, layout="column_major")
+    atlas_fractions = ut.to_layout(atlas_fractions, layout="column_major")
+
+    query_low_gene_values = ut.quantile_per(query_fractions, low_gene_quantile, per="column")
+    atlas_high_gene_values = ut.quantile_per(atlas_fractions, high_gene_quantile, per="column")
+    systematic = query_low_gene_values >= min_low_gene_fraction & query_low_gene_values > atlas_high_gene_values
+    ut.set_vo_data(qdata, "systematic", systematic)

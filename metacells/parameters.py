@@ -910,3 +910,15 @@ min_entry_inner_fold_factor: float = significant_gene_fold_factor - 1.0
 #: The normalization factor to use when computing log of fractions for finding the most similar group for outliers. See
 #: :py:func:`metacells.tools.quality.compute_outliers_matches`.
 outliers_value_normalization: float = 1e-5
+
+#: The quantile of the gene value to use for the query gene expressions when looking for systematic genes. See
+#: :py:func:`metacells.tools.project.find_systematic_genes`.
+systematic_low_gene_quantile: float = 0.0
+
+#: The quantile of the gene value to use for the atlas gene expressions when looking for systematic genes. See
+#: :py:func:`metacells.tools.project.find_systematic_genes`.
+systematic_high_gene_quantile: float = 1.0
+
+#: The minimal the low gene quantile expression in the query for a gene to be considered to have a systematic
+#: difference. See :py:func:`metacells.tools.project.find_systematic_genes`.
+systematic_min_low_gene_fraction: float = 4e-5
