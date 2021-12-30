@@ -91,6 +91,7 @@ __all__ = [
     "rank_matrix_by_layout",
     "bincount_vector",
     "most_frequent",
+    "highest_weight",
     "fraction_of_grouped",
     "downsample_matrix",
     "downsample_vector",
@@ -1609,6 +1610,17 @@ def most_frequent(vector: utt.Vector) -> Any:
     """
     unique, positions = np.unique(utt.to_numpy_vector(vector), return_inverse=True)
     counts = np.bincount(positions)
+    maxpos = np.argmax(counts)
+    return unique[maxpos]
+
+
+@utm.timed_call()
+def highest_weight(weights: utt.Vector, vector: utt.Vector) -> Any:
+    """
+    Return the value with the highest total ``weight`` in a ``vector``.
+    """
+    unique, positions = np.unique(utt.to_numpy_vector(vector), return_inverse=True)
+    counts = np.bincount(positions, weights=weights)
     maxpos = np.argmax(counts)
     return unique[maxpos]
 

@@ -157,57 +157,60 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
         htv_mask = ut.to_numpy_vector(htv_mask_series)
 
         htv_genes_count = np.sum(htv_mask)
-        assert 0 < htv_genes_count <= ht_genes_count
+        assert htv_genes_count <= ht_genes_count
 
-        htv_gene_ht_gene_similarity_matrix = ht_gene_ht_gene_similarity_matrix[htv_mask, :]
-        assert ut.matrix_layout(htv_gene_ht_gene_similarity_matrix) == "row_major"
-        assert htv_gene_ht_gene_similarity_matrix.shape == (htv_genes_count, ht_genes_count)
+        if htv_genes_count > 0:
+            htv_gene_ht_gene_similarity_matrix = ht_gene_ht_gene_similarity_matrix[htv_mask, :]
+            assert ut.matrix_layout(htv_gene_ht_gene_similarity_matrix) == "row_major"
+            assert htv_gene_ht_gene_similarity_matrix.shape == (htv_genes_count, ht_genes_count)
 
-        max_similarity_of_htv_genes = ut.max_per(htv_gene_ht_gene_similarity_matrix, per="row")
-        htvl_mask = max_similarity_of_htv_genes <= max_gene_similarity
-        htvl_genes_count = np.sum(htvl_mask)
-        ut.log_calc("noisy_lonely_genes_count", htvl_genes_count)
+            max_similarity_of_htv_genes = ut.max_per(htv_gene_ht_gene_similarity_matrix, per="row")
+            htvl_mask = max_similarity_of_htv_genes <= max_gene_similarity
+            htvl_genes_count = np.sum(htvl_mask)
+            ut.log_calc("noisy_lonely_genes_count", htvl_genes_count)
 
-        if htvl_genes_count > 0:
-            base_index_of_ht_genes = ut.get_v_numpy(ht_data, "sampled_gene_index")
-            base_index_of_htv_genes = base_index_of_ht_genes[htv_mask]
-            base_index_of_htvl_genes = base_index_of_htv_genes[htvl_mask]
+            if htvl_genes_count > 0:
+                base_index_of_ht_genes = ut.get_v_numpy(ht_data, "sampled_gene_index")
+                base_index_of_htv_genes = base_index_of_ht_genes[htv_mask]
+                base_index_of_htvl_genes = base_index_of_htv_genes[htvl_mask]
 
-            noisy_lonely_genes_mask[base_index_of_htvl_genes] = True
+                noisy_lonely_genes_mask[base_index_of_htvl_genes] = True
 
-            htvl_gene_ht_gene_similarity_matrix = htv_gene_ht_gene_similarity_matrix[htvl_mask, :]
-            htvl_gene_ht_gene_similarity_matrix = ut.to_layout(htvl_gene_ht_gene_similarity_matrix, layout="row_major")
-            assert htvl_gene_ht_gene_similarity_matrix.shape == (htvl_genes_count, ht_genes_count)
+                htvl_gene_ht_gene_similarity_matrix = htv_gene_ht_gene_similarity_matrix[htvl_mask, :]
+                htvl_gene_ht_gene_similarity_matrix = ut.to_layout(
+                    htvl_gene_ht_gene_similarity_matrix, layout="row_major"
+                )
+                assert htvl_gene_ht_gene_similarity_matrix.shape == (htvl_genes_count, ht_genes_count)
 
-            if ut.logging_calc():
-                i_gene_totals = ut.get_v_numpy(i_data, "downsampled", sum=True)
-                ht_mask = ut.get_v_numpy(i_data, "high_total_gene")
-                i_total = np.sum(i_gene_totals)
-                htvl_gene_totals = i_gene_totals[ht_mask][htv_mask][htvl_mask]
-                top_similarity_of_htvl_genes = ut.top_per(htvl_gene_ht_gene_similarity_matrix, 10, per="row")
-                for htvl_index, gene_index in enumerate(base_index_of_htvl_genes):
-                    gene_name = adata.var_names[gene_index]
-                    gene_total = htvl_gene_totals[htvl_index]
-                    gene_percent = 100 * gene_total / i_total
-                    similar_ht_values = ut.to_numpy_vector(top_similarity_of_htvl_genes[htvl_index, :])  #
-                    assert len(similar_ht_values) == ht_genes_count
-                    top_similar_ht_mask = similar_ht_values > 0
-                    top_similar_ht_values = similar_ht_values[top_similar_ht_mask]
-                    top_similar_ht_indices = base_index_of_ht_genes[top_similar_ht_mask]
-                    top_similar_ht_names = adata.var_names[top_similar_ht_indices]
-                    ut.log_calc(
-                        f"- {gene_name}",
-                        f"total downsampled UMIs: {gene_total} "
-                        + f"({gene_percent:.4g}%), correlated with: "
-                        + ", ".join(
-                            [
-                                f"{similar_gene_name}: {similar_gene_value:.4g}"
-                                for similar_gene_value, similar_gene_name in reversed(
-                                    sorted(zip(top_similar_ht_values, top_similar_ht_names))
-                                )
-                            ]
-                        ),
-                    )
+                if ut.logging_calc():
+                    i_gene_totals = ut.get_v_numpy(i_data, "downsampled", sum=True)
+                    ht_mask = ut.get_v_numpy(i_data, "high_total_gene")
+                    i_total = np.sum(i_gene_totals)
+                    htvl_gene_totals = i_gene_totals[ht_mask][htv_mask][htvl_mask]
+                    top_similarity_of_htvl_genes = ut.top_per(htvl_gene_ht_gene_similarity_matrix, 10, per="row")
+                    for htvl_index, gene_index in enumerate(base_index_of_htvl_genes):
+                        gene_name = adata.var_names[gene_index]
+                        gene_total = htvl_gene_totals[htvl_index]
+                        gene_percent = 100 * gene_total / i_total
+                        similar_ht_values = ut.to_numpy_vector(top_similarity_of_htvl_genes[htvl_index, :])  #
+                        assert len(similar_ht_values) == ht_genes_count
+                        top_similar_ht_mask = similar_ht_values > 0
+                        top_similar_ht_values = similar_ht_values[top_similar_ht_mask]
+                        top_similar_ht_indices = base_index_of_ht_genes[top_similar_ht_mask]
+                        top_similar_ht_names = adata.var_names[top_similar_ht_indices]
+                        ut.log_calc(
+                            f"- {gene_name}",
+                            f"total downsampled UMIs: {gene_total} "
+                            + f"({gene_percent:.4g}%), correlated with: "
+                            + ", ".join(
+                                [
+                                    f"{similar_gene_name}: {similar_gene_value:.4g}"
+                                    for similar_gene_value, similar_gene_name in reversed(
+                                        sorted(zip(top_similar_ht_values, top_similar_ht_names))
+                                    )
+                                ]
+                            ),
+                        )
 
     if ut.logging_calc():
         ut.log_calc("noisy_lonely_gene_names", sorted(list(adata.var_names[noisy_lonely_genes_mask])))

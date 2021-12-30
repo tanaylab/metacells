@@ -22,6 +22,7 @@ __all__ = [
     "compute_type_compatible_sizes",
     "compute_inner_normalized_variance",
     "compute_inner_fold_factors",
+    "compute_projected_fold_factors",
     "compute_outliers_matches",
     "compute_deviant_fold_factors",
 ]
@@ -368,6 +369,7 @@ def compute_inner_fold_factors(
     group: Union[str, ut.Vector] = "metacell",
     min_gene_inner_fold_factor: float = pr.min_gene_inner_fold_factor,
     min_entry_inner_fold_factor: float = pr.min_entry_inner_fold_factor,
+    inner_abs_folds: float = pr.inner_abs_folds,
 ) -> None:
     """
     Compute the inner fold factors of genes within in each metacell.
@@ -407,7 +409,8 @@ def compute_inner_fold_factors(
        :py:func:`metacells.tools.deviants.find_deviant_cells`.
 
     2. If the maximal fold factor for a gene (across all metacells) is below ``min_gene_inner_fold_factor`` (default:
-       {min_gene_inner_fold_factor}), then set all the gene's fold factors to zero (too low to be of interest).
+       {min_gene_inner_fold_factor}), then set all the gene's fold factors to zero (too low to be of interest). If
+       ``inner_abs_folds`` (default: {inner_abs_folds}), consider the absolute fold factors.
 
     3. Otherwise, for any metacell whose fold factor for the gene is less than ``min_entry_inner_fold_factor`` (default:
        {min_entry_inner_fold_factor}), set the fold factor to zero (too low to be of interest).
@@ -434,11 +437,15 @@ def compute_inner_fold_factors(
     results = list(ut.parallel_map(_compute_single_metacell_inner_folds, gdata.n_obs))
     dense_inner_folds_by_row = np.array(results)
     dense_inner_folds_by_column = ut.to_layout(dense_inner_folds_by_row, "column_major")
-    max_fold_per_gene = ut.max_per(dense_inner_folds_by_column, per="column")
+    if inner_abs_folds:
+        comparable_dense_inner_folds_by_column = np.abs(dense_inner_folds_by_column)
+    else:
+        comparable_dense_inner_folds_by_column = dense_inner_folds_by_column
+    max_fold_per_gene = ut.max_per(comparable_dense_inner_folds_by_column, per="column")
     significant_genes_mask = max_fold_per_gene >= min_gene_inner_fold_factor
     ut.log_calc("significant_genes_mask", significant_genes_mask)
     dense_inner_folds_by_column[:, ~significant_genes_mask] = 0
-    dense_inner_folds_by_column[dense_inner_folds_by_column < min_entry_inner_fold_factor] = 0
+    dense_inner_folds_by_column[comparable_dense_inner_folds_by_column < min_entry_inner_fold_factor] = 0
     dense_inner_folds_by_row = ut.to_layout(dense_inner_folds_by_column, layout="row_major")
     sparse_inner_folds = sparse.csr_matrix(dense_inner_folds_by_row)
     ut.set_vo_data(gdata, "inner_fold", sparse_inner_folds)
@@ -468,6 +475,94 @@ def _compute_metacell_inner_folds(
     max_fold_factor = np.max(fold_factors)
     ut.log_calc("max_fold_factor", max_fold_factor)
     return fold_factors
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def compute_projected_fold_factors(
+    adata: AnnData,
+    what: Union[str, ut.Matrix] = "__x__",
+    *,
+    projected: Union[str, ut.Matrix] = "projected",
+    fold_normalization: float = pr.project_fold_normalization,
+    min_gene_fold_factor: float = pr.min_gene_project_fold_factor,
+    min_entry_fold_factor: float = pr.min_entry_project_fold_factor,
+    abs_folds: bool = pr.project_abs_folds,
+) -> None:
+    """
+    Compute the projected fold factors of genes for each query metacell.
+
+    This computes, for each metacell of the query, the fold factors between the actual query UMIs and the UMIs of the
+    projection of the metacell onto the atlas (see :py:func:`metacells.tools.project.project_query_onto_atlas`). The
+    result per-metacell-per-gene matrix is then made sparse by discarding too-low values (setting them to zero).
+    Ideally, this matrix should be "very" sparse. If it contains "too many" non-zero values, this might indicate the
+    query contains genes with a systematic noise, which might be detected by using
+    :py:func:`metacells.tools.project.find_systematic_genes`; such genes should typically be excluded from the
+    projection.
+
+    **Input**
+
+    Annotated ``adata``, where the observations are query metacells and the variables are genes, where ``what`` is a
+    per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
+    matrix.
+
+    In addition, the ``projected`` UMIs of each query metacells onto the atlas.
+
+    **Returns**
+
+    Sets the following in ``gdata``:
+
+    Per-Variable Per-Observation (Gene-Cell) Annotations
+
+        ``projected_fold``
+            For each gene and query metacell, the fold factor of this gene between the query and its projection (unless
+            the value is too low to be of interest, in which case it will be zero).
+
+    **Computation Parameters**
+
+    1. For each group (metacell), for each gene, compute the gene's fold factor
+       log2((actual UMIs + ``fold_normalization``) / (expected UMIs + ``fold_normalization``)), similarly to
+       :py:func:`metacells.tools.project.project_query_onto_atlas` (the default ``fold_normalization`` is
+       {fold_normalization}).
+
+    2. If the maximal fold factor for a gene (across all metacells) is below ``min_gene_fold_factor`` (default:
+       {min_gene_fold_factor}), then set all the gene's fold factors to zero (too low to be of interest).
+
+    3. Otherwise, for any metacell whose fold factor for the gene is less than ``min_entry_fold_factor`` (default:
+       {min_entry_fold_factor}), set the fold factor to zero (too low to be of interest). If ``abs_folds`` (default:
+       {abs_folds}), consider the absolute fold factors.
+    """
+    assert 0 <= min_entry_fold_factor <= min_gene_fold_factor
+    assert fold_normalization >= 0
+
+    metacells_data = ut.get_vo_proper(adata, what, layout="row_major")
+    projected_data = ut.get_vo_proper(adata, projected, layout="row_major")
+
+    metacells_fractions = ut.fraction_by(metacells_data, by="row")
+    projected_fractions = ut.fraction_by(projected_data, by="row")
+
+    metacells_fractions += fold_normalization  # type: ignore
+    projected_fractions += fold_normalization  # type: ignore
+
+    dense_folds = metacells_fractions / projected_fractions  # type: ignore
+    dense_folds = np.log2(dense_folds, out=dense_folds)
+    dense_folds_by_column = ut.to_layout(dense_folds, layout="column_major")
+    if abs_folds:
+        comparable_dense_folds_by_column = np.abs(dense_folds_by_column)
+    else:
+        comparable_dense_folds_by_column = dense_folds_by_column
+
+    max_fold_per_gene = ut.max_per(comparable_dense_folds_by_column, per="column")
+    significant_genes_mask = max_fold_per_gene >= min_gene_fold_factor
+    ut.log_calc("significant_genes_mask", significant_genes_mask)
+    dense_folds_by_column[:, ~significant_genes_mask] = 0
+    dense_folds_by_column[comparable_dense_folds_by_column < min_entry_fold_factor] = 0
+
+    dense_folds_by_row = ut.to_layout(dense_folds_by_column, layout="row_major")
+    sparse_folds = sparse.csr_matrix(dense_folds_by_row)
+
+    ut.set_vo_data(adata, "projected_fold", sparse_folds)
 
 
 @ut.logged()
@@ -652,6 +747,7 @@ def _compute_cell_certificates(
     fold_factors = actual_data
     fold_factors /= expected_data
     fold_factors = np.log2(fold_factors, out=fold_factors)
+    fold_factors = np.abs(fold_factors, out=fold_factors)
 
     significant_folds_mask = fold_factors >= significant_gene_fold_factor
     ut.log_calc("significant_folds_mask", significant_folds_mask)

@@ -21,7 +21,7 @@ sum_row_values(ConstArraySlice<F> input_row) {
     for (size_t column_index = 0; column_index < columns_count; ++column_index) {
         const float64_t value = input_data[column_index];
         sum_values += value;
-        sum_squared += value * value;
+        sum_squared = fma(value, value, sum_squared);
     }
     return Sums{ sum_values, sum_squared };
 }
@@ -46,7 +46,7 @@ correlate_two_dense_rows(ConstArraySlice<F> some_values,
     for (; column_index < columns_count; ++column_index) {
         const float64_t some_values = float64_t(some_values_data[column_index]);
         const float64_t other_values = float64_t(other_values_data[column_index]);
-        both_sum_values += some_values * other_values;
+        both_sum_values = fma(some_values, other_values, both_sum_values);
     }
 
     float64_t correlation = columns_count * both_sum_values - some_sum_values * other_sum_values;
@@ -91,7 +91,7 @@ correlate_two_dense_rows(ConstArraySlice<float64_t> some_values,
     for (; column_index < columns_count; ++column_index) {
         const float64_t some_values = float64_t(some_values_data[column_index]);
         const float64_t other_values = float64_t(other_values_data[column_index]);
-        both_sum_values += some_values * other_values;
+        both_sum_values = fma(some_values, other_values, both_sum_values);
     }
 
     float64_t correlation = columns_count * both_sum_values - some_sum_values * other_sum_values;
@@ -136,7 +136,7 @@ correlate_two_dense_rows(ConstArraySlice<float32_t> some_values,
     for (; column_index < columns_count; ++column_index) {
         const float32_t some_values = some_values_data[column_index];
         const float32_t other_values = other_values_data[column_index];
-        both_sum_values += some_values * other_values;
+        both_sum_values = fma(some_values, other_values, both_sum_values);
     }
 
     float64_t correlation = columns_count * both_sum_values - some_sum_values * other_sum_values;

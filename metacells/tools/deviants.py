@@ -34,6 +34,7 @@ def find_deviant_cells(
     *,
     candidates: Union[str, ut.Vector] = "candidate",
     min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
+    abs_folds: bool = pr.deviants_abs_folds,
     max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
     inplace: bool = True,
@@ -76,11 +77,11 @@ def find_deviant_cells(
        Compute the fold factor log2((actual UMIs + 1) / (expected UMIs + 1)) for each gene for each
        cell.
 
-    2. Ignore all fold factors less than the ``min_gene_fold_factor`` (default:
-       {min_gene_fold_factor}). Count the number of genes which have a fold factor above this
-       minimum in at least one cell. If the fraction of such genes is above ``max_gene_fraction``
-       (default: {max_gene_fraction}), then raise the minimal gene fold factor such that at most
-       this fraction of genes remain.
+    2. Ignore all fold factors less than the ``min_gene_fold_factor`` (default: {min_gene_fold_factor}). If
+       ``abs_folds`` (default: {abs_folds}), consider the absolute fold factors. Count the number of genes which have a
+       fold factor above this minimum in at least one cell. If the fraction of such genes is above ``max_gene_fraction``
+       (default: {max_gene_fraction}), then raise the minimal gene fold factor such that at most this fraction of genes
+       remain.
 
     3. For each remaining gene, rank all the cells where it is expressed above the min fold
        factor. Give an artificial maximum rank to all cells with fold factor 0, that is, below the
@@ -120,6 +121,7 @@ def find_deviant_cells(
         candidate_of_cells=candidate_of_cells,
         totals_of_cells=totals_of_cells,
         min_gene_fold_factor=min_gene_fold_factor,
+        abs_folds=abs_folds,
     )
 
     fold_factors = _construct_fold_factors(cells_count, list_of_fold_factors, list_of_cell_index_of_rows)
@@ -170,6 +172,7 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
     candidate_of_cells: ut.NumpyVector,
     totals_of_cells: ut.NumpyVector,
     min_gene_fold_factor: float,
+    abs_folds: bool,
 ) -> Tuple[List[ut.CompressedMatrix], List[ut.NumpyVector]]:
     list_of_fold_factors: List[ut.CompressedMatrix] = []
     list_of_cell_index_of_rows: List[ut.NumpyVector] = []
@@ -229,6 +232,7 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
                     compressed.indices,
                     compressed.indptr,
                     min_gene_fold_factor,
+                    abs_folds,
                     totals_of_candidate_cells,
                     fractions_of_candidate_genes,
                 )
@@ -242,7 +246,13 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
             extension = getattr(xt, extension_name)
 
             with ut.timed_step("extensions.fold_factor_dense"):
-                extension(dense, min_gene_fold_factor, totals_of_candidate_cells, fractions_of_candidate_genes)
+                extension(
+                    dense,
+                    min_gene_fold_factor,
+                    abs_folds,
+                    totals_of_candidate_cells,
+                    fractions_of_candidate_genes,
+                )
 
             compressed = sparse.csr_matrix(dense)
             assert compressed.has_sorted_indices

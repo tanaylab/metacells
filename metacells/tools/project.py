@@ -3,6 +3,8 @@ Project
 -------
 """
 
+from typing import Any
+from typing import Callable
 from typing import Optional
 from typing import Tuple
 from typing import Union
@@ -17,6 +19,7 @@ import metacells.utilities as ut
 __all__ = [
     "project_query_onto_atlas",
     "find_systematic_genes",
+    "project_atlas_to_query",
 ]
 
 
@@ -36,6 +39,7 @@ def project_query_onto_atlas(
     project_max_consistency_fold: float = pr.project_max_consistency_fold,
     project_max_inconsistent_genes: int = pr.project_max_inconsistent_genes,
     project_max_projection_fold: float = pr.project_max_projection_fold,
+    project_abs_folds: bool = pr.project_abs_folds,
 ) -> ut.CompressedMatrix:
     """
     Project query metacells onto atlas metacells.
@@ -69,7 +73,6 @@ def project_query_onto_atlas(
             A matrix of UMIs where the sum of UMIs for each query metacell is the same as the sum of ``what`` UMIs,
             describing the "projected" image of the query metacell onto the atlas.
 
-
     **Computation Parameters**
 
     0. All fold computations (log2 of the ratio between gene expressions as a fraction of the total UMIs) use the
@@ -88,9 +91,9 @@ def project_query_onto_atlas(
     3. Consider genes whose total UMIs in the query metacell and the projected image (scaled to the same total number of
        UMIs) is at least ``project_min_significant_gene_value`` (default: {project_min_significant_gene_value}).
 
-    4. For each such gene,. consider the fold factor between the query metacell and its projection. If this is above
+    4. For each such gene, consider the fold factor between the query metacell and its projection. If this is above
        ``project_max_projection_fold`` (default: {project_max_projection_fold}), declare the query metacell as
-       uncharted.
+       uncharted. If ``project_abs_folds`` (default: {project_abs_folds}), consider the absolute fold factors.
 
     5. For each such gene consider the fold factor between its maximal and minimal expression in the atlas candidates
        whose weight is at least ``project_min_consistency_weight`` (default: {project_min_consistency_weight}). If there
@@ -141,6 +144,7 @@ def project_query_onto_atlas(
             project_max_consistency_fold=project_max_consistency_fold,
             project_max_inconsistent_genes=project_max_inconsistent_genes,
             project_max_projection_fold=project_max_projection_fold,
+            project_abs_folds=project_abs_folds,
             query_metacell_index=query_metacell_index,
         )
 
@@ -186,6 +190,7 @@ def _project_single_metacell(  # pylint: disable=too-many-statements
     project_max_consistency_fold: float,
     project_max_inconsistent_genes: int,
     project_max_projection_fold: float,
+    project_abs_folds: bool,
     query_metacell_index: int,
 ) -> Tuple[bool, ut.NumpyVector, ut.NumpyVector, float]:
     query_metacell_umis = query_umis[query_metacell_index, :]
@@ -235,7 +240,8 @@ def _project_single_metacell(  # pylint: disable=too-many-statements
     query_projected_fold_factors = (
         projected_log_fractions[significant_genes_mask] - query_metacell_log_fractions[significant_genes_mask]
     )
-    query_projected_fold_factors = np.abs(query_projected_fold_factors, out=query_projected_fold_factors)
+    if project_abs_folds:
+        query_projected_fold_factors = np.abs(query_projected_fold_factors, out=query_projected_fold_factors)
     query_max_projected_fold_factor = np.max(query_projected_fold_factors)
     ut.log_calc("query_max_projected_fold_factor", query_max_projected_fold_factor)
     charted = query_max_projected_fold_factor <= project_max_projection_fold
@@ -325,8 +331,8 @@ def find_systematic_genes(
     assert min_low_gene_fraction >= 0
     assert np.all(adata.var_names == qdata.var_names)
 
-    query_umis = ut.get_vo_proper(qdata, what, layout="column_major")
-    atlas_umis = ut.get_vo_proper(adata, what, layout="column_major")
+    query_umis = ut.get_vo_proper(qdata, what, layout="row_major")
+    atlas_umis = ut.get_vo_proper(adata, what, layout="row_major")
 
     query_fractions = ut.to_numpy_matrix(ut.fraction_by(query_umis, by="row"))
     atlas_fractions = ut.to_numpy_matrix(ut.fraction_by(atlas_umis, by="row"))
@@ -336,5 +342,44 @@ def find_systematic_genes(
 
     query_low_gene_values = ut.quantile_per(query_fractions, low_gene_quantile, per="column")
     atlas_high_gene_values = ut.quantile_per(atlas_fractions, high_gene_quantile, per="column")
-    systematic = query_low_gene_values >= min_low_gene_fraction & query_low_gene_values > atlas_high_gene_values
-    ut.set_vo_data(qdata, "systematic", systematic)
+    systematic = (query_low_gene_values >= min_low_gene_fraction) & (query_low_gene_values > atlas_high_gene_values)
+    ut.set_v_data(qdata, "systematic", systematic)
+
+
+@ut.logged()
+@ut.timed_call()
+def project_atlas_to_query(
+    *,
+    adata: AnnData,
+    qdata: AnnData,
+    weights: ut.ProperMatrix,
+    property_name: str,
+    formatter: Optional[Callable[[Any], Any]] = None,
+    to_property_name: Optional[str] = None,
+    method: Callable[[ut.Vector, ut.Vector], Any] = ut.highest_weight,
+) -> None:
+    """
+    Project the value of a property from per-observation atlas data to per-observation query data.
+
+    The input annotated ``adata`` is expected to contain a per-observation (cell) annotation named ``property_name``.
+    Given the ``weights`` matrix, where each row specifies the weights of the atlas metacells used to project a single
+    query metacell, this will generate a new per-observation (group) annotation in ``qdata``, named ``to_property_name``
+    (by default, the same as ``property_name``), containing the aggregated value of the property of all the observations
+    (cells) that belong to the group.
+
+    The aggregation method (by default, :py:func:`metacells.utilities.computation.highest_weight`) is any function
+    taking two array, weights and values, and returning a single value.
+    """
+    if to_property_name is None:
+        to_property_name = property_name
+
+    property_of_atlas_metacells = ut.get_o_numpy(adata, property_name, formatter=formatter)
+    property_of_query_metacells = []
+    for query_metacell_index in range(qdata.n_obs):
+        metacell_weights = ut.to_numpy_vector(weights[query_metacell_index, :])
+        metacell_mask = metacell_weights > 0
+        metacell_weights = ut.to_numpy_vector(metacell_weights[metacell_mask])
+        metacell_values = property_of_atlas_metacells[metacell_mask]
+        property_of_query_metacells.append(method(metacell_weights, metacell_values))
+
+    ut.set_o_data(qdata, to_property_name, np.array(property_of_query_metacells))

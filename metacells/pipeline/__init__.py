@@ -18,5 +18,6 @@ from .direct import *
 from .divide_and_conquer import *
 from .feature import *
 from .mcview import *
+from .projection import *
 from .related_genes import *
 from .umap import *

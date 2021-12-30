@@ -7,6 +7,7 @@ template<typename D>
 static void
 fold_factor_dense(pybind11::array_t<D>& data_array,
                   const float64_t min_gene_fold_factor,
+                  const bool abs_folds,
                   const pybind11::array_t<D>& total_of_rows_array,
                   const pybind11::array_t<D>& fraction_of_columns_array) {
     WithoutGil without_gil{};
@@ -19,19 +20,35 @@ fold_factor_dense(pybind11::array_t<D>& data_array,
 
     const size_t rows_count = data.rows_count();
     const size_t columns_count = data.columns_count();
-    parallel_loop(rows_count, [&](size_t row_index) {
-        const auto row_total = total_of_rows[row_index];
-        auto row_data = data.get_row(row_index);
-        for (size_t column_index = 0; column_index < columns_count; ++column_index) {
-            const auto column_fraction = fraction_of_columns[column_index];
-            const auto expected = row_total * column_fraction;
-            auto& value = row_data[column_index];
-            value = D(log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE);
-            if (value < min_gene_fold_factor) {
-                value = 0;
+    if (abs_folds) {
+        parallel_loop(rows_count, [&](size_t row_index) {
+            const auto row_total = total_of_rows[row_index];
+            auto row_data = data.get_row(row_index);
+            for (size_t column_index = 0; column_index < columns_count; ++column_index) {
+                const auto column_fraction = fraction_of_columns[column_index];
+                const auto expected = row_total * column_fraction;
+                auto& value = row_data[column_index];
+                value = D(log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE);
+                if (abs(value) < min_gene_fold_factor) {
+                    value = 0;
+                }
             }
-        }
-    });
+        });
+    } else {
+        parallel_loop(rows_count, [&](size_t row_index) {
+            const auto row_total = total_of_rows[row_index];
+            auto row_data = data.get_row(row_index);
+            for (size_t column_index = 0; column_index < columns_count; ++column_index) {
+                const auto column_fraction = fraction_of_columns[column_index];
+                const auto expected = row_total * column_fraction;
+                auto& value = row_data[column_index];
+                value = D(log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE);
+                if (value < min_gene_fold_factor) {
+                    value = 0;
+                }
+            }
+        });
+    }
 }
 
 /// See the Python `metacell.tools.outlier_cells._collect_fold_factors` function.
@@ -41,6 +58,7 @@ fold_factor_compressed(pybind11::array_t<D>& data_array,
                        pybind11::array_t<I>& indices_array,
                        pybind11::array_t<P>& indptr_array,
                        const float64_t min_gene_fold_factor,
+                       const bool abs_folds,
                        const pybind11::array_t<D>& total_of_bands_array,
                        const pybind11::array_t<D>& fraction_of_elements_array) {
     WithoutGil without_gil{};
@@ -64,14 +82,27 @@ fold_factor_compressed(pybind11::array_t<D>& data_array,
         auto band_data = data.get_band_data(band_index);
 
         const size_t band_elements_count = band_indices.size();
-        for (size_t position = 0; position < band_elements_count; ++position) {
-            const auto element_index = band_indices[position];
-            const auto element_fraction = fraction_of_elements[element_index];
-            const auto expected = band_total * element_fraction;
-            auto& value = band_data[position];
-            value = D(log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE);
-            if (value < min_gene_fold_factor) {
-                value = 0;
+        if (abs_folds) {
+            for (size_t position = 0; position < band_elements_count; ++position) {
+                const auto element_index = band_indices[position];
+                const auto element_fraction = fraction_of_elements[element_index];
+                const auto expected = band_total * element_fraction;
+                auto& value = band_data[position];
+                value = D(log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE);
+                if (abs(value) < min_gene_fold_factor) {
+                    value = 0;
+                }
+            }
+        } else {
+            for (size_t position = 0; position < band_elements_count; ++position) {
+                const auto element_index = band_indices[position];
+                const auto element_fraction = fraction_of_elements[element_index];
+                const auto expected = band_total * element_fraction;
+                auto& value = band_data[position];
+                value = D(log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE);
+                if (value < min_gene_fold_factor) {
+                    value = 0;
+                }
             }
         }
     });
@@ -79,62 +110,49 @@ fold_factor_compressed(pybind11::array_t<D>& data_array,
 
 template<typename D>
 static void
-collect_distinct_abs_folds(ArraySlice<int32_t> gene_indices,
-                           ArraySlice<float32_t> gene_folds,
-                           ConstArraySlice<D> fold_in_cell) {
+collect_distinct_folds(ArraySlice<int32_t> gene_indices,
+                       ArraySlice<float32_t> gene_folds,
+                       ConstArraySlice<D> fold_in_cell,
+                       bool abs_folds) {
     TmpVectorSizeT raii_indices;
     auto tmp_indices = raii_indices.array_slice("tmp_indices", fold_in_cell.size());
     std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
 
-    std::nth_element(tmp_indices.begin(),
-                     tmp_indices.begin() + gene_indices.size(),
-                     tmp_indices.end(),
-                     [&](const size_t left_gene_index, const size_t right_gene_index) {
-                         const auto left_value = fold_in_cell[left_gene_index];
-                         const auto right_value = fold_in_cell[right_gene_index];
-                         return abs(left_value) > abs(right_value);
-                     });
+    if (abs_folds) {
+        std::nth_element(tmp_indices.begin(),
+                         tmp_indices.begin() + gene_indices.size(),
+                         tmp_indices.end(),
+                         [&](const size_t left_gene_index, const size_t right_gene_index) {
+                             const auto left_value = fold_in_cell[left_gene_index];
+                             const auto right_value = fold_in_cell[right_gene_index];
+                             return abs(left_value) > abs(right_value);
+                         });
 
-    std::sort(tmp_indices.begin(),
-              tmp_indices.begin() + gene_indices.size(),
-              [&](const size_t left_gene_index, const size_t right_gene_index) {
-                  const auto left_value = fold_in_cell[left_gene_index];
-                  const auto right_value = fold_in_cell[right_gene_index];
-                  return abs(left_value) > abs(right_value);
-              });
+        std::sort(tmp_indices.begin(),
+                  tmp_indices.begin() + gene_indices.size(),
+                  [&](const size_t left_gene_index, const size_t right_gene_index) {
+                      const auto left_value = fold_in_cell[left_gene_index];
+                      const auto right_value = fold_in_cell[right_gene_index];
+                      return abs(left_value) > abs(right_value);
+                  });
+    } else {
+        std::nth_element(tmp_indices.begin(),
+                         tmp_indices.begin() + gene_indices.size(),
+                         tmp_indices.end(),
+                         [&](const size_t left_gene_index, const size_t right_gene_index) {
+                             const auto left_value = fold_in_cell[left_gene_index];
+                             const auto right_value = fold_in_cell[right_gene_index];
+                             return left_value > right_value;
+                         });
 
-    for (size_t position = 0; position < gene_indices.size(); ++position) {
-        size_t gene_index = tmp_indices[position];
-        gene_indices[position] = int32_t(gene_index);
-        gene_folds[position] = float32_t(fold_in_cell[gene_index]);
+        std::sort(tmp_indices.begin(),
+                  tmp_indices.begin() + gene_indices.size(),
+                  [&](const size_t left_gene_index, const size_t right_gene_index) {
+                      const auto left_value = fold_in_cell[left_gene_index];
+                      const auto right_value = fold_in_cell[right_gene_index];
+                      return left_value > right_value;
+                  });
     }
-}
-
-template<typename D>
-static void
-collect_distinct_high_folds(ArraySlice<int32_t> gene_indices,
-                            ArraySlice<float32_t> gene_folds,
-                            ConstArraySlice<D> fold_in_cell) {
-    TmpVectorSizeT raii_indices;
-    auto tmp_indices = raii_indices.array_slice("tmp_indices", fold_in_cell.size());
-    std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
-
-    std::nth_element(tmp_indices.begin(),
-                     tmp_indices.begin() + gene_indices.size(),
-                     tmp_indices.end(),
-                     [&](const size_t left_gene_index, const size_t right_gene_index) {
-                         const auto left_value = fold_in_cell[left_gene_index];
-                         const auto right_value = fold_in_cell[right_gene_index];
-                         return left_value > right_value;
-                     });
-
-    std::sort(tmp_indices.begin(),
-              tmp_indices.begin() + gene_indices.size(),
-              [&](const size_t left_gene_index, const size_t right_gene_index) {
-                  const auto left_value = fold_in_cell[left_gene_index];
-                  const auto right_value = fold_in_cell[right_gene_index];
-                  return left_value > right_value;
-              });
 
     for (size_t position = 0; position < gene_indices.size(); ++position) {
         size_t gene_index = tmp_indices[position];
@@ -148,7 +166,7 @@ static void
 top_distinct(pybind11::array_t<int32_t>& gene_indices_array,
              pybind11::array_t<float32_t>& gene_folds_array,
              const pybind11::array_t<D>& fold_in_cells_array,
-             bool consider_low_folds) {
+             bool abs_folds) {
     WithoutGil without_gil{};
     MatrixSlice<float32_t> gene_folds(gene_folds_array, "gene_folds");
     MatrixSlice<int32_t> gene_indices(gene_indices_array, "gene_indices");
@@ -163,19 +181,12 @@ top_distinct(pybind11::array_t<int32_t>& gene_indices_array,
     FastAssertCompare(gene_folds.rows_count(), ==, cells_count);
     FastAssertCompare(gene_folds.columns_count(), ==, distinct_count);
 
-    if (consider_low_folds) {
-        parallel_loop(cells_count, [&](size_t cell_index) {
-            collect_distinct_abs_folds(gene_indices.get_row(cell_index),
-                                       gene_folds.get_row(cell_index),
-                                       fold_in_cells.get_row(cell_index));
-        });
-    } else {
-        parallel_loop(cells_count, [&](size_t cell_index) {
-            collect_distinct_high_folds(gene_indices.get_row(cell_index),
-                                        gene_folds.get_row(cell_index),
-                                        fold_in_cells.get_row(cell_index));
-        });
-    }
+    parallel_loop(cells_count, [&](size_t cell_index) {
+        collect_distinct_folds(gene_indices.get_row(cell_index),
+                               gene_folds.get_row(cell_index),
+                               fold_in_cells.get_row(cell_index),
+                               abs_folds);
+    });
 }
 
 void
@@ -187,37 +198,29 @@ register_folds(pybind11::module& module) {
     REGISTER_F(float32_t)
     REGISTER_F(float64_t)
 
-#define REGISTER_D_I_P(D, I, P)                             \
-    module.def("fold_factor_compressed_" #D "_" #I "_" #P,  \
-               &metacells::fold_factor_compressed<D, I, P>, \
+#define REGISTER_F_I_P(F, I, P)                             \
+    module.def("fold_factor_compressed_" #F "_" #I "_" #P,  \
+               &metacells::fold_factor_compressed<F, I, P>, \
                "Fold factors of compressed data.");
 
-#define REGISTER_DS_I_P(I, P)       \
-    REGISTER_D_I_P(int8_t, I, P)    \
-    REGISTER_D_I_P(int16_t, I, P)   \
-    REGISTER_D_I_P(int32_t, I, P)   \
-    REGISTER_D_I_P(int64_t, I, P)   \
-    REGISTER_D_I_P(uint8_t, I, P)   \
-    REGISTER_D_I_P(uint16_t, I, P)  \
-    REGISTER_D_I_P(uint32_t, I, P)  \
-    REGISTER_D_I_P(uint64_t, I, P)  \
-    REGISTER_D_I_P(float32_t, I, P) \
-    REGISTER_D_I_P(float64_t, I, P)
+#define REGISTER_FS_I_P(I, P)       \
+    REGISTER_F_I_P(float32_t, I, P) \
+    REGISTER_F_I_P(float64_t, I, P)
 
-#define REGISTER_DS_IS_P(P)      \
-    REGISTER_DS_I_P(int8_t, P)   \
-    REGISTER_DS_I_P(int16_t, P)  \
-    REGISTER_DS_I_P(int32_t, P)  \
-    REGISTER_DS_I_P(int64_t, P)  \
-    REGISTER_DS_I_P(uint8_t, P)  \
-    REGISTER_DS_I_P(uint16_t, P) \
-    REGISTER_DS_I_P(uint32_t, P) \
-    REGISTER_DS_I_P(uint64_t, P)
+#define REGISTER_FS_IS_P(P)      \
+    REGISTER_FS_I_P(int8_t, P)   \
+    REGISTER_FS_I_P(int16_t, P)  \
+    REGISTER_FS_I_P(int32_t, P)  \
+    REGISTER_FS_I_P(int64_t, P)  \
+    REGISTER_FS_I_P(uint8_t, P)  \
+    REGISTER_FS_I_P(uint16_t, P) \
+    REGISTER_FS_I_P(uint32_t, P) \
+    REGISTER_FS_I_P(uint64_t, P)
 
-    REGISTER_DS_IS_P(int32_t)
-    REGISTER_DS_IS_P(int64_t)
-    REGISTER_DS_IS_P(uint32_t)
-    REGISTER_DS_IS_P(uint64_t)
+    REGISTER_FS_IS_P(int32_t)
+    REGISTER_FS_IS_P(int64_t)
+    REGISTER_FS_IS_P(uint32_t)
+    REGISTER_FS_IS_P(uint64_t)
 }
 
 }

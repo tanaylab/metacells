@@ -1,4 +1,5 @@
-"""
+""",
+abs_folds
 Distincts
 ---------
 """
@@ -105,6 +106,7 @@ def find_distinct_genes(
     what: Union[str, ut.Matrix] = "distinct_fold",
     *,
     distinct_genes_count: int = pr.distinct_genes_count,
+    distinct_abs_folds: bool = pr.distinct_abs_folds,
     inplace: bool = True,
 ) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame]]:
     """
@@ -134,7 +136,8 @@ def find_distinct_genes(
 
     1. Fetch the previously computed per-observation-per-variable ``what`` data.
 
-    2. Keep the ``distinct_genes_count`` (default: {distinct_genes_count}) top fold factors.
+    2. Keep the ``distinct_genes_count`` (default: {distinct_genes_count}) top fold factors. If ``distinct_abs_folds``
+       (default: ``distinct_abs_folds``), keep the top absolute fold factors.
     """
     assert 0 < distinct_genes_count < adata.n_vars
 
@@ -144,7 +147,7 @@ def find_distinct_genes(
     fold_in_cells = ut.mustbe_numpy_matrix(ut.get_vo_proper(adata, what, layout="row_major"))
     extension_name = f"top_distinct_{fold_in_cells.dtype}_t"
     extension = getattr(xt, extension_name)
-    extension(distinct_gene_indices, distinct_gene_folds, fold_in_cells, False)
+    extension(distinct_gene_indices, distinct_gene_folds, fold_in_cells, distinct_abs_folds)
 
     if inplace:
         ut.set_oa_data(adata, "cell_distinct_gene_indices", distinct_gene_indices)

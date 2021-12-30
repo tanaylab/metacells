@@ -65,6 +65,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     candidates_min_cut_seed_cells: Optional[int] = pr.min_cut_seed_cells,
     must_complete_cover: bool = False,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
+    deviants_abs_folds: bool = pr.deviants_abs_folds,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     deviants_max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
@@ -218,6 +219,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        :py:func:`metacells.tools.deviants.find_deviant_cells` to remove deviants from the candidate
        metacells, using the
        ``deviants_min_gene_fold_factor`` (default: {deviants_min_gene_fold_factor}),
+       ``deviants_abs_folds`` (default: {deviants_abs_folds}),
        ``deviants_max_gene_fraction`` (default: {deviants_max_gene_fraction})
        and
        ``deviants_max_cell_fraction`` (default: {deviants_max_cell_fraction}).
@@ -358,6 +360,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
             adata,
             candidates=candidate_of_cells,
             min_gene_fold_factor=deviants_min_gene_fold_factor,
+            abs_folds=deviants_abs_folds,
             max_gene_fraction=deviants_max_gene_fraction,
             max_cell_fraction=deviants_max_cell_fraction,
         )

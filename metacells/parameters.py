@@ -43,16 +43,22 @@ significant_gene_similarity: float = 0.1
 #: :py:const:`dissolve_min_convincing_gene_fold_factor`.
 significant_gene_fold_factor: float = 3.0
 
-#: The generic minimal value (number of UMIs) we can say is "significant" given the technical noise.
-#: See
+#: Whether to use the absolute folds when considering fold factors. See
+#: :py:const:`deviants_abs_folds`,
+#: :py:const:`distinct_abs_folds`,
+#: :py:const:`project_abs_folds`,
+#: and
+#: :py:func:`inner_abs_folds`.
+abs_folds: bool = True
+
+#: The generic minimal value (number of UMIs) we can say is "significant" given the technical noise. See
 #: py:const:`rare_min_gene_maximum`,
 #: py:const:`rare_min_cell_module_total`,
 #: and
 #: py:const:`cells_similarity_value_normalization`.
 significant_value: int = 7
 
-#: The generic minimal samples to use for downsampling the cells for some
-#: purpose. See
+#: The generic minimal samples to use for downsampling the cells for some purpose. See
 #: :py:const:`noisy_lonely_downsample_min_samples`,
 #: :py:const:`feature_downsample_min_samples`,
 #: and
@@ -709,6 +715,10 @@ final_max_outliers_levels: Optional[int] = 1
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 deviants_min_gene_fold_factor: float = significant_gene_fold_factor
 
+#: Whether to consider the absolute fold factor when computing deviant cells. See
+#: :py:func:`metacells.tools.distinct.find_deviant_cells`.
+deviants_abs_folds: bool = False
+
 #: The maximal fraction of genes to use to indicate cell are "deviants". See
 #: :py:func:`metacells.tools.deviants.find_deviant_cells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
@@ -788,9 +798,17 @@ rare_dissolve_min_convincing_size_factor: Optional[float] = None
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 dissolve_min_convincing_gene_fold_factor: float = significant_gene_fold_factor
 
+#: Whether to consider the absolute fold factor when dissolving metacells. See
+#: :py:func:`metacells.tools.distinct.dissolve_metacells`.
+dissolve_abs_folds: bool = False
+
 #: The number of most-distinct genes to collect for each cell. See
 #: :py:func:`metacells.tools.distinct.find_distinct_genes`.
 distinct_genes_count: int = 20
+
+#: Whether to consider the absolute fold factor when collecting most-distinct genes for each cell. See
+#: :py:func:`metacells.tools.distinct.find_distinct_genes`.
+distinct_abs_folds: bool = abs_folds
 
 #: The normalization factor to use if/when computing the fractions of the data for UMAP.
 #: See
@@ -887,6 +905,10 @@ project_min_usage_weight: float = 1e-5
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
 project_max_projection_fold: float = significant_gene_fold_factor
 
+#: Whether to consider the absolute fold factor when evaluating the projection of the query metacells . See
+#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+project_abs_folds: bool = abs_folds
+
 #: The minimal weight of an atlas metacell used for the projection of a query metacell. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
 project_min_consistency_weight: float = 0.05
@@ -906,6 +928,18 @@ min_gene_inner_fold_factor: float = significant_gene_fold_factor
 #: The minimal fold factor for a gene entry in a metacell to be significant for metacell quality. See
 #: :py:func:`metacell.tools.compute_inner_fold_factors`.
 min_entry_inner_fold_factor: float = significant_gene_fold_factor - 1.0
+
+#: Whether to consider the absolute fold factor when evaluating the inner folds. See
+#: :py:func:`metacells.tools.distinct.compute_inner_fold_factors`.
+inner_abs_folds: bool = abs_folds
+
+#: The minimal fold factor for a gene to be significant for metacell projection quality. See
+#: :py:func:`metacell.tools.compute_project_fold_factors`.
+min_gene_project_fold_factor: float = significant_gene_fold_factor
+
+#: The minimal fold factor for a gene entry in a metacell to be significant for metacell projection quality. See
+#: :py:func:`metacell.tools.compute_project_fold_factors`.
+min_entry_project_fold_factor: float = significant_gene_fold_factor - 1.0
 
 #: The normalization factor to use when computing log of fractions for finding the most similar group for outliers. See
 #: :py:func:`metacells.tools.quality.compute_outliers_matches`.

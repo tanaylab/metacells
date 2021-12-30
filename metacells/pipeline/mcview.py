@@ -7,6 +7,7 @@ Compute metacell analysis in preparation for exporting the data to MCView.
 
 from typing import Any
 from typing import Dict
+from typing import Optional
 from typing import Union
 
 from anndata import AnnData  # type: ignore
@@ -32,12 +33,12 @@ def compute_for_mcview(
     gdata: AnnData,
     group: Union[str, ut.Vector] = "metacell",
     random_seed: int = pr.random_seed,
-    compute_umap_by_features_2: Dict[str, Any] = {},
-    compute_umap_by_features_3: Dict[str, Any] = {},
-    compute_inner_fold_factors: Dict[str, Any] = {},
-    compute_outliers_matches: Dict[str, Any] = {},
-    compute_deviant_fold_factors: Dict[str, Any] = {},
-    compute_var_var_similarity: Dict[str, Any] = {},
+    compute_umap_by_features_2: Optional[Dict[str, Any]] = {},
+    compute_umap_by_features_3: Optional[Dict[str, Any]] = {},
+    compute_inner_fold_factors: Optional[Dict[str, Any]] = {},
+    compute_outliers_matches: Optional[Dict[str, Any]] = {},
+    compute_deviant_fold_factors: Optional[Dict[str, Any]] = {},
+    compute_var_var_similarity: Optional[Dict[str, Any]] = {},
 ) -> None:
     """
     Compute metacell analysis in preparation for exporting the data to MCView.
@@ -47,7 +48,8 @@ def compute_for_mcview(
     the ``random_seed`` (default: {random_seed}) needed for reproducibility.
 
     If specific tool parameters need to be specified, you can pass them as a dictionary using the specific tool name
-    (e.g., ``compute_umap_by_features_2 = dict(spread = 0.5)``.
+    (e.g., ``compute_umap_by_features_2 = dict(spread = 0.5)``. If this parameter is set to ``None``, running the tool
+    is skipped.
 
     **Input**
 
@@ -83,16 +85,22 @@ def compute_for_mcview(
 
     5. Compute the gene-gene (variable-variable) similarity matrix. This is an example where you probably want to
        override the default parameters; specifically, you very probably want to specify
-       ``compute_var_var_similarity=dict(top=N)`` for some reasonable ``N`` (say, up to 100), to keep just the top
-       correlated genes for each gene. Otherwise you will get a dense matrix of 20K by 20K entries, which typically
-       isn't what you want.
+       ``compute_var_var_similarity=dict(top=N, bottom=N)`` for some reasonable ``N`` (say, up to 100), to keep just the
+       top correlated genes and bottom (anti-)correlated genes for each gene. Otherwise you will get a dense matrix of
+       20K by 20K entries, which typically isn't what you want.
     """
     reproducible = random_seed != 0
-    compute_umap_by_features(gdata, what, dimensions=2, random_seed=random_seed, **compute_umap_by_features_2)
-    compute_umap_by_features(gdata, what, dimensions=3, random_seed=random_seed, **compute_umap_by_features_3)
-    tl.compute_outliers_matches(
-        what, adata=adata, gdata=gdata, group=group, reproducible=reproducible, **compute_outliers_matches
-    )
-    tl.compute_inner_fold_factors(what, adata=adata, gdata=gdata, group=group, **compute_inner_fold_factors)
-    tl.compute_deviant_fold_factors(what, adata=adata, gdata=gdata, group=group, **compute_deviant_fold_factors)
-    tl.compute_var_var_similarity(gdata, what, **compute_var_var_similarity)
+    if compute_umap_by_features_2 is not None:
+        compute_umap_by_features(gdata, what, dimensions=2, random_seed=random_seed, **compute_umap_by_features_2)
+    if compute_umap_by_features_3 is not None:
+        compute_umap_by_features(gdata, what, dimensions=3, random_seed=random_seed, **compute_umap_by_features_3)
+    if compute_outliers_matches is not None:
+        tl.compute_outliers_matches(
+            what, adata=adata, gdata=gdata, group=group, reproducible=reproducible, **compute_outliers_matches
+        )
+    if compute_inner_fold_factors is not None:
+        tl.compute_inner_fold_factors(what, adata=adata, gdata=gdata, group=group, **compute_inner_fold_factors)
+    if compute_deviant_fold_factors is not None:
+        tl.compute_deviant_fold_factors(what, adata=adata, gdata=gdata, group=group, **compute_deviant_fold_factors)
+    if compute_var_var_similarity is not None:
+        tl.compute_var_var_similarity(gdata, what, **compute_var_var_similarity)
