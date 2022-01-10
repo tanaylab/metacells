@@ -632,29 +632,29 @@ cores on your server. For ~2 million cells this takes ~10 minutes on a
     set PBMC.clean.obs[cells_rare_gene_module]: 149102 outliers (99.52%) out of 149825 int32 elements with 2 groups with mean size 361.5
     set PBMC.clean.obs[rare_cell]: 723 true (0.4826%) out of 149825 bools
     set PBMC.clean.uns[pre_directs]: 16
-    set PBMC.clean.uns[directs]: 25
+    set PBMC.clean.uns[directs]: 23
     set PBMC.clean.var[pre_high_total_gene]: 8307 positive (36.73%) out of 22617 int32s
-    set PBMC.clean.var[high_total_gene]: 10232 positive (45.24%) out of 22617 int32s
-    set PBMC.clean.var[pre_high_relative_variance_gene]: 11632 positive (51.43%) out of 22617 int32s
-    set PBMC.clean.var[high_relative_variance_gene]: 13321 positive (58.9%) out of 22617 int32s
+    set PBMC.clean.var[high_total_gene]: 10507 positive (46.46%) out of 22617 int32s
+    set PBMC.clean.var[pre_high_relative_variance_gene]: 11636 positive (51.45%) out of 22617 int32s
+    set PBMC.clean.var[high_relative_variance_gene]: 13244 positive (58.56%) out of 22617 int32s
     set PBMC.clean.var[forbidden_gene]: 106 true (0.4687%) out of 22617 bools
-    set PBMC.clean.var[pre_feature_gene]: 436 positive (1.928%) out of 22617 int32s
-    set PBMC.clean.var[feature_gene]: 681 positive (3.011%) out of 22617 int32s
-    set PBMC.clean.var[pre_gene_deviant_votes]: 2380 positive (10.52%) out of 22617 int32s
-    set PBMC.clean.var[gene_deviant_votes]: 2320 positive (10.26%) out of 22617 int32s
-    set PBMC.clean.obs[pre_cell_directs]: 149825 int32s with mean 1.042
-    set PBMC.clean.obs[cell_directs]: 149825 int32s with mean 1.026
+    set PBMC.clean.var[pre_feature_gene]: 440 positive (1.945%) out of 22617 int32s
+    set PBMC.clean.var[feature_gene]: 702 positive (3.104%) out of 22617 int32s
+    set PBMC.clean.var[pre_gene_deviant_votes]: 2394 positive (10.58%) out of 22617 int32s
+    set PBMC.clean.var[gene_deviant_votes]: 2341 positive (10.35%) out of 22617 int32s
+    set PBMC.clean.obs[pre_cell_directs]: 149825 int32s with mean 1.039
+    set PBMC.clean.obs[cell_directs]: 149825 int32s with mean 1.033
     set PBMC.clean.obs[pre_pile]: 0 outliers (0%) out of 149825 int32 elements with 18 groups with mean size 8324
-    set PBMC.clean.obs[pile]: 0 outliers (0%) out of 149825 int32 elements with 25 groups with mean size 5993
-    set PBMC.clean.obs[pre_candidate]: 0 outliers (0%) out of 149825 int32 elements with 1649 groups with mean size 90.86
-    set PBMC.clean.obs[candidate]: 2 outliers (0.001335%) out of 149825 int32 elements with 1580 groups with mean size 94.82
+    set PBMC.clean.obs[pile]: 0 outliers (0%) out of 149825 int32 elements with 23 groups with mean size 6514
+    set PBMC.clean.obs[pre_candidate]: 0 outliers (0%) out of 149825 int32 elements with 1631 groups with mean size 91.86
+    set PBMC.clean.obs[candidate]: 0 outliers (0%) out of 149825 int32 elements with 1587 groups with mean size 94.41
     set PBMC.clean.obs[pre_cell_deviant_votes]: 0 positive (0%) out of 149825 int32s
-    set PBMC.clean.obs[cell_deviant_votes]: 757 positive (0.5053%) out of 149825 int32s
+    set PBMC.clean.obs[cell_deviant_votes]: 765 positive (0.5106%) out of 149825 int32s
     set PBMC.clean.obs[pre_dissolved]: 0 true (0%) out of 149825 bools
-    set PBMC.clean.obs[dissolved]: 98 true (0.06541%) out of 149825 bools
-    set PBMC.clean.obs[pre_metacell]: 0 outliers (0%) out of 149825 int32 elements with 1613 groups with mean size 92.89
-    set PBMC.clean.obs[metacell]: 857 outliers (0.572%) out of 149825 int32 elements with 1567 groups with mean size 95.07
-    set PBMC.clean.obs[outlier]: 857 true (0.572%) out of 149825 bools
+    set PBMC.clean.obs[dissolved]: 177 true (0.1181%) out of 149825 bools
+    set PBMC.clean.obs[pre_metacell]: 0 outliers (0%) out of 149825 int32 elements with 1600 groups with mean size 93.64
+    set PBMC.clean.obs[metacell]: 942 outliers (0.6287%) out of 149825 int32 elements with 1549 groups with mean size 96.12
+    set PBMC.clean.obs[outlier]: 942 true (0.6287%) out of 149825 bools
 
 
 This has written many annotations for each cell (observation), the most
@@ -674,10 +674,10 @@ observation is a metacell:
     set PBMC.metacells.var[excluded_gene]: 0 true (0%) out of 22617 bools
     set PBMC.metacells.var[clean_gene]: 22617 true (100%) out of 22617 bools
     set PBMC.metacells.var[forbidden_gene]: 106 true (0.4687%) out of 22617 bools
-    set PBMC.metacells.var[pre_feature_gene]: 436 positive (1.928%) out of 22617 int32s
-    set PBMC.metacells.var[feature_gene]: 681 positive (3.011%) out of 22617 int32s
-    set PBMC.metacells.obs[pile]: 1567 int32s
-    set PBMC.metacells.obs[candidate]: 1567 int32s
+    set PBMC.metacells.var[pre_feature_gene]: 440 positive (1.945%) out of 22617 int32s
+    set PBMC.metacells.var[feature_gene]: 702 positive (3.104%) out of 22617 int32s
+    set PBMC.metacells.obs[pile]: 1549 int32s
+    set PBMC.metacells.obs[candidate]: 1549 int32s
 
 
 Visualizing the Metacells
@@ -699,16 +699,16 @@ single-threaded implementation.
 
 .. code::
 
-    set PBMC.metacells.var[top_feature_gene]: 681 true (3.011%) out of 22617 bools
-    set PBMC.metacells.obsp[obs_balanced_ranks]: 18880 nonzero (0.7689%) out of 2455489 elements
-    set PBMC.metacells.obsp[obs_pruned_ranks]: 6295 nonzero (0.2564%) out of 2455489 elements
-    set PBMC.metacells.obsp[obs_outgoing_weights]: 6295 nonzero (0.2564%) out of 2455489 elements
+    set PBMC.metacells.var[top_feature_gene]: 702 true (3.104%) out of 22617 bools
+    set PBMC.metacells.obsp[obs_balanced_ranks]: 18831 nonzero (0.7848%) out of 2399401 elements
+    set PBMC.metacells.obsp[obs_pruned_ranks]: 6235 nonzero (0.2599%) out of 2399401 elements
+    set PBMC.metacells.obsp[obs_outgoing_weights]: 6235 nonzero (0.2599%) out of 2399401 elements
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1356: RuntimeWarning: divide by zero encountered in power
       return 1.0 / (1.0 + a * x ** (2 * b))
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1780: UserWarning: using precomputed metric; inverse_transform will be unavailable
       warn("using precomputed metric; inverse_transform will be unavailable")
-    set PBMC.metacells.obs[umap_x]: 1567 float32s
-    set PBMC.metacells.obs[umap_y]: 1567 float32s
+    set PBMC.metacells.obs[umap_x]: 1549 float32s
+    set PBMC.metacells.obs[umap_y]: 1549 float32s
 
 
 This filled in ``umap_x`` and ``umap_y`` per-metacell (observation)

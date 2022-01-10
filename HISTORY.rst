@@ -30,3 +30,5 @@ History
 * Add projection of query data onto an atlas.
 * Self-adjusting pile sizes.
 * Add convenience function for computing data for MCView.
+* Better control over filtering using absolute fold factors.
+* Fix edge case in computing noisy lonely genes.

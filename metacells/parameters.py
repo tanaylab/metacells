@@ -933,10 +933,6 @@ min_entry_inner_fold_factor: float = significant_gene_fold_factor - 1.0
 #: :py:func:`metacells.tools.distinct.compute_inner_fold_factors`.
 inner_abs_folds: bool = abs_folds
 
-#: The minimal fold factor for a gene to be significant for metacell projection quality. See
-#: :py:func:`metacell.tools.compute_project_fold_factors`.
-min_gene_project_fold_factor: float = significant_gene_fold_factor
-
 #: The minimal fold factor for a gene entry in a metacell to be significant for metacell projection quality. See
 #: :py:func:`metacell.tools.compute_project_fold_factors`.
 min_entry_project_fold_factor: float = significant_gene_fold_factor - 1.0
@@ -945,14 +941,30 @@ min_entry_project_fold_factor: float = significant_gene_fold_factor - 1.0
 #: :py:func:`metacells.tools.quality.compute_outliers_matches`.
 outliers_value_normalization: float = 1e-5
 
+#: Whether to ignore the forbidden genes of the atlas when computing projections. See
+#: :py:func:`metacells.pipeline.projection.projection_pipeline`.
+ignore_atlas_forbidden_genes: bool = True
+
+#: Whether to ignore the forbidden genes of the query when computing projections. See
+#: :py:func:`metacells.pipeline.projection.projection_pipeline`
+ignore_query_forbidden_genes: bool = False
+
 #: The quantile of the gene value to use for the query gene expressions when looking for systematic genes. See
-#: :py:func:`metacells.tools.project.find_systematic_genes`.
+#: :py:func:`metacells.tools.project.find_systematic_genes`
+#: and #: py:func:`metacells.pipeline.projection.projection_pipeline`.
 systematic_low_gene_quantile: float = 0.0
 
 #: The quantile of the gene value to use for the atlas gene expressions when looking for systematic genes. See
-#: :py:func:`metacells.tools.project.find_systematic_genes`.
+#: :py:func:`metacells.tools.project.find_systematic_genes`
+#: and #: py:func:`metacells.pipeline.projection.projection_pipeline`.
 systematic_high_gene_quantile: float = 1.0
 
 #: The minimal the low gene quantile expression in the query for a gene to be considered to have a systematic
-#: difference. See :py:func:`metacells.tools.project.find_systematic_genes`.
+#: difference. See :py:func:`metacells.tools.project.find_systematic_genes`
+#: and #: py:func:`metacells.pipeline.projection.projection_pipeline`.
 systematic_min_low_gene_fraction: float = 4e-5
+
+#: The minimal fraction of metacells where a gene has a high projection fold factor to mark the gene as biased.
+#: See :py:func:`metacells.tools.project.find_biased_genes`
+#: and #: py:func:`metacells.pipeline.projection.projection_pipeline`.
+biased_min_metacells_fraction: float = 0.5

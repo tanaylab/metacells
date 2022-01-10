@@ -20,6 +20,7 @@ __all__ = [
     "project_query_onto_atlas",
     "find_systematic_genes",
     "project_atlas_to_query",
+    "find_biased_genes",
 ]
 
 
@@ -311,8 +312,9 @@ def find_systematic_genes(
     In addition, sets the following annotations in ``qdata``:
 
     Variable (Gene) Annotations
-        ``systematic``
-            A boolean mask indicating whether the gene is systematically higher in the query compared to the atlas.
+        ``systematic_gene``
+            A boolean mask indicating whether the gene is systematically higher or lower in the query compared to the
+            atlas.
 
     **Computation Parameters**
 
@@ -324,6 +326,9 @@ def find_systematic_genes(
     3. Compute for each gene its standard deviation in the atlas.
 
     4. Mark as systematic the genes for which the low quantile value in the query is at least the atlas high quantile
+       value, and is also at least the ``min_low_gene_fraction`` (default: {min_low_gene_fraction}).
+
+    5. Mark as systematic the genes for which the low quantile value in the atlas is at least the query high quantile
        value, and is also at least the ``min_low_gene_fraction`` (default: {min_low_gene_fraction}).
     """
     assert 0 <= low_gene_quantile <= 1
@@ -341,9 +346,17 @@ def find_systematic_genes(
     atlas_fractions = ut.to_layout(atlas_fractions, layout="column_major")
 
     query_low_gene_values = ut.quantile_per(query_fractions, low_gene_quantile, per="column")
+    atlas_low_gene_values = ut.quantile_per(atlas_fractions, low_gene_quantile, per="column")
+    query_high_gene_values = ut.quantile_per(query_fractions, high_gene_quantile, per="column")
     atlas_high_gene_values = ut.quantile_per(atlas_fractions, high_gene_quantile, per="column")
-    systematic = (query_low_gene_values >= min_low_gene_fraction) & (query_low_gene_values > atlas_high_gene_values)
-    ut.set_v_data(qdata, "systematic", systematic)
+    query_above_atlas = (query_low_gene_values >= min_low_gene_fraction) & (
+        query_low_gene_values > atlas_high_gene_values
+    )
+    atlas_above_query = (atlas_low_gene_values >= min_low_gene_fraction) & (
+        atlas_low_gene_values > query_high_gene_values
+    )
+    systematic = query_above_atlas | atlas_above_query
+    ut.set_v_data(qdata, "systematic_gene", systematic)
 
 
 @ut.logged()
@@ -383,3 +396,82 @@ def project_atlas_to_query(
         property_of_query_metacells.append(method(metacell_weights, metacell_values))
 
     ut.set_o_data(qdata, to_property_name, np.array(property_of_query_metacells))
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def find_biased_genes(
+    adata: AnnData,
+    what: Union[str, ut.Matrix] = "__x__",
+    *,
+    project_max_projection_fold: float = pr.project_max_projection_fold,
+    project_min_significant_gene_value: float = pr.project_min_significant_gene_value,
+    min_metacells_fraction: float = pr.biased_min_metacells_fraction,
+) -> None:
+    """
+    Find genes that have a strong bias in the query compared to the atlas.
+
+    **Input**
+
+    Annotated query ``adata`` where the observations are cells and the variables are genes, where ``what`` is a
+    per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
+    matrix.
+
+    This should contain a ``projected_fold`` per-variable-per-observation matrix with the fold factor between each query
+    metacell and its projected image on the atlas, and a ``projected`` matrix which holds the UMIs of the projected
+    image on the atlas.
+
+    **Returns**
+
+    Sets the following annotations in ``adata``:
+
+    Observation-Variable (Metacell-Gene) Annotations
+        ``significant_projected_fold``
+            A boolean mask indicating that there are enough UMIs in either the query or the projection for this entry to
+            make the computed fold factor significant.
+
+    Variable (Gene) Annotations
+        ``biased_gene``
+            A boolean mask indicating whether the gene has a strong bias in the query compared to the atlas.
+
+    **Computation Parameters**
+
+    1. Consider genes whose total UMIs in the query metacell and the projected image (scaled to the same total number of
+       UMIs) is at least ``project_min_significant_gene_value`` (default: {project_min_significant_gene_value}).
+
+    2. Count for each such gene the number of query metacells for which the ``projected_fold`` is above
+       ``project_max_projection_fold``. Also count the number of metacells for which the value is below the negated
+       threshold.
+
+    3. Mark the gene as biased if either count is at least a ``min_metacells_fraction`` (default:
+       {min_metacells_fraction}) of the metacells.
+    """
+
+    assert project_max_projection_fold >= 0
+    assert 0 <= min_metacells_fraction <= 1
+
+    projected_umis = ut.get_vo_proper(adata, "projected")
+    query_umis = ut.get_vo_proper(adata, what)
+    total_umis = projected_umis + query_umis
+    significant_folds_mask = total_umis >= project_min_significant_gene_value
+    ut.set_vo_data(
+        adata,
+        "significant_projected_fold",
+        sparse.csc_matrix(total_umis >= project_min_significant_gene_value)
+    )
+
+    projected_fold = ut.get_vo_proper(adata, "projected_fold", layout="column_major")
+    high_projection_folds = ut.to_numpy_matrix(projected_fold > project_max_projection_fold)
+    ut.log_calc("high_projection_folds", high_projection_folds)
+    low_projection_folds = ut.to_numpy_matrix(projected_fold < -project_max_projection_fold)
+    ut.log_calc("low_projection_folds", low_projection_folds)
+    high_count_of_genes = ut.sum_per(high_projection_folds & significant_folds_mask, per="column")
+    low_count_of_genes = ut.sum_per(low_projection_folds & significant_folds_mask, per="column")
+    min_count = adata.n_obs * min_metacells_fraction
+    high_mask_of_genes = high_count_of_genes >= min_count
+    ut.log_calc("high biased genes", high_mask_of_genes)
+    low_mask_of_genes = low_count_of_genes >= min_count
+    ut.log_calc("low biased genes", low_mask_of_genes)
+    mask_of_genes = high_mask_of_genes | low_mask_of_genes
+    ut.set_v_data(adata, "biased_gene", mask_of_genes)

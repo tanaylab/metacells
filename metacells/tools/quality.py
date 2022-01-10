@@ -486,7 +486,7 @@ def compute_projected_fold_factors(
     *,
     projected: Union[str, ut.Matrix] = "projected",
     fold_normalization: float = pr.project_fold_normalization,
-    min_gene_fold_factor: float = pr.min_gene_project_fold_factor,
+    min_gene_fold_factor: float = pr.project_max_projection_fold,
     min_entry_fold_factor: float = pr.min_entry_project_fold_factor,
     abs_folds: bool = pr.project_abs_folds,
 ) -> None:
