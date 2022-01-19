@@ -41,10 +41,10 @@ def combine_masks(  # pylint: disable=too-many-branches,too-many-statements
 
     1. For each of the mask in ``masks``, fetch it. Silently ignore missing masks if the name has a
        ``?`` suffix. Invert the mask if the name has a ``~`` prefix. If the name has a ``|`` prefix
-       (before the ``~`` prefix, if any), then bitwise-OR the mask into the OR mask, otherwise
-       bitwise-AND the mask into the AND mask.
+       (before the ``~`` prefix, if any), then bitwise-OR the mask into the OR mask, otherwise (or if
+       it has a ``&`` prefix), bitwise-AND the mask into the AND mask.
 
-    2. Combine (bitwise-OR) the AND mask and the OR mask into a single mask.
+    2. Combine (bitwise-AND) the AND mask and the OR mask into a single mask.
 
     3. If ``invert`` (default: {invert}), invert the result combined mask.
     """
@@ -63,6 +63,8 @@ def combine_masks(  # pylint: disable=too-many-branches,too-many-statements
             mask_name = mask_name[1:]
         else:
             is_or = False
+            if mask_name[0] == "&":
+                mask_name = mask_name[1:]
 
         if mask_name[0] == "~":
             invert_mask = True
@@ -115,7 +117,7 @@ def combine_masks(  # pylint: disable=too-many-branches,too-many-statements
 
     if and_mask is not None:
         if or_mask is not None:
-            combined_mask = and_mask | or_mask
+            combined_mask = and_mask & or_mask
         else:
             combined_mask = and_mask
     else:

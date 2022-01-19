@@ -36,6 +36,8 @@ on any visualization packages.
 
 .. code::
 
+    /home/obk/metacells/metacells/utilities/documentation.py:65: UserWarning: @expand_doc had no effect on the documentation of the function metacells.tools.quality.compute_similar_query_metacells
+      warn(expand_doc_had_no_effect)
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/ipykernel_launcher.py:14: DeprecationWarning: `set_matplotlib_formats` is deprecated since IPython 7.23, directly use `matplotlib_inline.backend_inline.set_matplotlib_formats()`
 
 

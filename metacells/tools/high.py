@@ -19,6 +19,7 @@ __all__ = [
     "find_high_fraction_genes",
     "find_high_normalized_variance_genes",
     "find_high_relative_variance_genes",
+    "find_metacells_significant_genes",
 ]
 
 
@@ -111,7 +112,7 @@ def find_high_total_genes(
     **Returns**
 
     Variable (Gene) Annotations
-        ``high_total_genes``
+        ``high_total_gene``
             A boolean mask indicating whether each gene was found to have a high normalized
             variance.
 
@@ -165,7 +166,7 @@ def find_high_topN_genes(  # pylint: disable=invalid-name
     **Returns**
 
     Variable (Gene) Annotations
-        ``high_top<topN>_genes``
+        ``high_top<topN>_gene``
             A boolean mask indicating whether each gene was found to have a high top-Nth value.
 
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
@@ -216,7 +217,7 @@ def find_high_fraction_genes(
     **Returns**
 
     Variable (Gene) Annotations
-        ``high_fraction_genes``
+        ``high_fraction_gene``
             A boolean mask indicating whether each gene was found to have a high normalized
             variance.
 
@@ -271,7 +272,7 @@ def find_high_normalized_variance_genes(
     **Returns**
 
     Variable (Gene) Annotations
-        ``high_normalized_variance_genes``
+        ``high_normalized_variance_gene``
             A boolean mask indicating whether each gene was found to have a high normalized
             variance.
 
@@ -331,7 +332,7 @@ def find_high_relative_variance_genes(
     **Returns**
 
     Variable (Gene) Annotations
-        ``high_relative_variance_genes``
+        ``high_relative_variance_gene``
             A boolean mask indicating whether each gene was found to have a high relative
             variance.
 
@@ -357,3 +358,77 @@ def find_high_relative_variance_genes(
 
     ut.log_return("high_relative_variance_genes", genes_mask)
     return ut.to_pandas_series(genes_mask, index=adata.var_names)
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def find_metacells_significant_genes(
+    adata: AnnData,
+    what: Union[str, ut.Matrix] = "__x__",
+    *,
+    min_gene_range_fold: float = pr.min_significant_metacells_gene_range_fold_factor,
+    normalization: float = pr.metacells_gene_range_normalization,
+    min_gene_fraction: float = pr.min_significant_metacells_gene_fraction,
+    inplace: bool = True,
+) -> Optional[ut.PandasSeries]:
+    """
+    Find genes which have a significant signal in metacells data. This computation is too unreliable to be used on
+    cells.
+
+    Find genes which have a high maximal expression in at least one metacell, and a wide range of expression across the
+    metacells. Such genes are good candidates for being used as marker genes and/or to compute distances between
+    metacells.
+
+    **Input**
+
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
+
+    **Returns**
+
+    Variable (Gene) Annotations
+        ``significant_gene``
+            A boolean mask indicating whether each gene was found to be significant.
+
+    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
+    ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
+
+    **Computation Parameters**
+
+    1. Compute the minimal and maximal expression level of each gene.
+
+    2. Select the genes whose fold factor (log2 of maximal over minimal value, using the ``normalization``
+       (default: {normalization}) is at least ``min_gene_range_fold`` (default: {min_gene_range_fold}).
+
+    3. Select the genes whose maximal expression is at least ``min_gene_fraction`` (default: {min_gene_fraction}).
+    """
+    assert normalization >= 0
+
+    data = ut.get_vo_proper(adata, what, layout="row_major")
+    fractions_of_genes = ut.to_layout(ut.fraction_by(data, by="row"), layout="column_major")
+
+    min_fraction_of_genes = ut.min_per(fractions_of_genes, per="column")
+    max_fraction_of_genes = ut.max_per(fractions_of_genes, per="column")
+
+    high_max_fraction_genes_mask = max_fraction_of_genes >= min_gene_fraction
+    ut.log_calc("high max fraction genes", high_max_fraction_genes_mask)
+
+    min_fraction_of_genes += normalization
+    max_fraction_of_genes += normalization
+
+    max_fraction_of_genes /= min_fraction_of_genes
+    range_fold_of_genes = np.log2(max_fraction_of_genes, out=max_fraction_of_genes)
+
+    high_range_genes_mask = range_fold_of_genes >= min_gene_range_fold
+    ut.log_calc("high range genes", high_range_genes_mask)
+
+    significant_genes_mask = high_max_fraction_genes_mask & high_range_genes_mask
+
+    if inplace:
+        ut.set_v_data(adata, "significant_gene", significant_genes_mask)
+        return None
+
+    ut.log_return("significant_genes", significant_genes_mask)
+    return ut.to_pandas_series(significant_genes_mask, index=adata.var_names)

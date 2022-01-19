@@ -885,11 +885,15 @@ quality_min_gene_total: int = 40
 #: :py:func:`metacells.pipeline.divide_and_conquer.guess_max_parallel_piles`.
 max_gbs: float = -0.1
 
+#: Whether to compute projections based on the log of the data instead of the data itself. See
+#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+project_log_data: bool = True
+
 #: The normalization factor to use when computing fold factors for projecting a query onto an atlas. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
 project_fold_normalization: float = 1e-5
 
-#: The minimal number of UMIs for a gene to be a potential cause to mark a metacell as uncharted. See
+#: The minimal number of UMIs for a gene to be a potential cause to mark a metacell as dissimilar. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
 project_min_significant_gene_value: float = 40
 
@@ -903,7 +907,7 @@ project_min_usage_weight: float = 1e-5
 
 #: The maximal fold factor of genes between the projection and the query metacell. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
-project_max_projection_fold: float = significant_gene_fold_factor
+project_max_projection_fold_factor: float = significant_gene_fold_factor
 
 #: Whether to consider the absolute fold factor when evaluating the projection of the query metacells . See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
@@ -915,7 +919,11 @@ project_min_consistency_weight: float = 0.05
 
 #: The maximal fold factor of genes between the atlas metacells used for the projection of a query metacell. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
-project_max_consistency_fold: float = 4.0
+project_max_consistency_fold_factor: float = 4.0
+
+#: The minimal fold factor for a gene between its low and high expression in the atlas projection to be visible. See
+#: :py:func:`metacell.tools.compute_significant_projected_consistency_factors`.
+min_entry_project_consistency_fold_factor: float = project_max_consistency_fold_factor - 1.0
 
 #: The maximal number of inconsistent genes in the atlas mestacells used for the projection of a query metacell. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
@@ -945,6 +953,10 @@ outliers_value_normalization: float = 1e-5
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
 ignore_atlas_forbidden_genes: bool = True
 
+#: Whether to ignore the insignificant genes of the atlas when computing projections. See
+#: :py:func:`metacells.pipeline.projection.projection_pipeline`.
+ignore_atlas_insignificant_genes: bool = True
+
 #: Whether to ignore the forbidden genes of the query when computing projections. See
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`
 ignore_query_forbidden_genes: bool = False
@@ -952,19 +964,27 @@ ignore_query_forbidden_genes: bool = False
 #: The quantile of the gene value to use for the query gene expressions when looking for systematic genes. See
 #: :py:func:`metacells.tools.project.find_systematic_genes`
 #: and #: py:func:`metacells.pipeline.projection.projection_pipeline`.
-systematic_low_gene_quantile: float = 0.0
+systematic_low_gene_quantile: float = 0.05
 
 #: The quantile of the gene value to use for the atlas gene expressions when looking for systematic genes. See
 #: :py:func:`metacells.tools.project.find_systematic_genes`
 #: and #: py:func:`metacells.pipeline.projection.projection_pipeline`.
-systematic_high_gene_quantile: float = 1.0
-
-#: The minimal the low gene quantile expression in the query for a gene to be considered to have a systematic
-#: difference. See :py:func:`metacells.tools.project.find_systematic_genes`
-#: and #: py:func:`metacells.pipeline.projection.projection_pipeline`.
-systematic_min_low_gene_fraction: float = 4e-5
+systematic_high_gene_quantile: float = 0.95
 
 #: The minimal fraction of metacells where a gene has a high projection fold factor to mark the gene as biased.
 #: See :py:func:`metacells.tools.project.find_biased_genes`
 #: and #: py:func:`metacells.pipeline.projection.projection_pipeline`.
 biased_min_metacells_fraction: float = 0.5
+
+#: The minimal fold between the maximal and minimal gene expression in metacells to be significant.
+#: See :py:func:`metacells.tools.high.find_significant_metacells_genes`.
+min_significant_metacells_gene_range_fold_factor: float = 2.0
+
+#: The normalization factor to use after computing the fractions of the data for
+#: computing metacell gene range folds. See
+#: :py:func:`metacells.tools.high.find_significant_metacells_genes`.
+metacells_gene_range_normalization: float = 1e-5
+
+#: The minimal maximal gene expression in metacells to be significant.
+#: See :py:func:`metacells.tools.high.find_significant_metacells_genes`.
+min_significant_metacells_gene_fraction: float = 1e-4

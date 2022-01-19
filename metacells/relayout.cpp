@@ -166,6 +166,8 @@ sort_compressed_indices(pybind11::array_t<D>& data_array,
     parallel_loop(matrix.bands_count(), [&](size_t band_index) { sort_band(band_index, matrix); });
 }
 
+typedef bool bool_t;
+
 void
 register_relayout(pybind11::module& module) {
 #define REGISTER_D_I_P(D, I, P)                             \
@@ -177,6 +179,7 @@ register_relayout(pybind11::module& module) {
                "Sort indices in a compressed matrix.");
 
 #define REGISTER_DS_I_P(I, P)       \
+    REGISTER_D_I_P(bool_t, I, P)    \
     REGISTER_D_I_P(int8_t, I, P)    \
     REGISTER_D_I_P(int16_t, I, P)   \
     REGISTER_D_I_P(int32_t, I, P)   \

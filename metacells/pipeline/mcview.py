@@ -39,6 +39,7 @@ def compute_for_mcview(
     compute_outliers_matches: Optional[Dict[str, Any]] = {},
     compute_deviant_fold_factors: Optional[Dict[str, Any]] = {},
     compute_var_var_similarity: Optional[Dict[str, Any]] = {},
+    find_metacells_significant_genes: Optional[Dict[str, Any]] = {},
 ) -> None:
     """
     Compute metacell analysis in preparation for exporting the data to MCView.
@@ -88,6 +89,8 @@ def compute_for_mcview(
        ``compute_var_var_similarity=dict(top=N, bottom=N)`` for some reasonable ``N`` (say, up to 100), to keep just the
        top correlated genes and bottom (anti-)correlated genes for each gene. Otherwise you will get a dense matrix of
        20K by 20K entries, which typically isn't what you want.
+
+    6. Compute the significant metacell genes using :py:func:`metacells.tools.find_metacells_significant_genes`.
     """
     reproducible = random_seed != 0
     if compute_umap_by_features_2 is not None:
@@ -104,3 +107,5 @@ def compute_for_mcview(
         tl.compute_deviant_fold_factors(what, adata=adata, gdata=gdata, group=group, **compute_deviant_fold_factors)
     if compute_var_var_similarity is not None:
         tl.compute_var_var_similarity(gdata, what, **compute_var_var_similarity)
+    if find_metacells_significant_genes is not None:
+        tl.find_metacells_significant_genes(gdata, what, **find_metacells_significant_genes)

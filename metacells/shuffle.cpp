@@ -122,6 +122,7 @@ register_shuffle(pybind11::module& module) {
                "Shuffle compressed matrix data.");
 
 #define REGISTER_DS_I_P(I, P)       \
+    REGISTER_D_I_P(bool, I, P)      \
     REGISTER_D_I_P(int8_t, I, P)    \
     REGISTER_D_I_P(int16_t, I, P)   \
     REGISTER_D_I_P(int32_t, I, P)   \
