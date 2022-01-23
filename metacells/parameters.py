@@ -913,9 +913,14 @@ project_max_projection_fold_factor: float = significant_gene_fold_factor
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
 project_abs_folds: bool = abs_folds
 
-#: The minimal weight of an atlas metacell used for the projection of a query metacell. See
-#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+#: The minimal weight of an atlas metacell used for evaluating the consistency of the projection of a query metacell.
+#: See :py:func:`metacells.tools.project.project_query_onto_atlas`.
 project_min_consistency_weight: float = 0.05
+
+#: The minimal total weight of an atlas metacell used for evaluating the consistency of the projection of a query
+#: metacell. See
+#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+project_min_total_consistency_weight: float = 0.75
 
 #: The maximal fold factor of genes between the atlas metacells used for the projection of a query metacell. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.

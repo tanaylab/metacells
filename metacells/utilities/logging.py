@@ -469,6 +469,8 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
     if hasattr(value, "ndim"):
         if value.ndim == 2:
             text = f"{value.__class__.__name__} {value.shape[0]} X {value.shape[1]} {utt.shaped_dtype(value)}s"
+            if hasattr(value, "nnz"):
+                text += f" ({value.nnz} > 0)"
             return text + checksum
 
         if value.ndim == 1:

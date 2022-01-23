@@ -598,6 +598,7 @@ def compute_significant_projected_consistency_factors(
     weights: ut.CompressedMatrix,
     atlas_total_umis: Optional[ut.Vector] = None,
     min_consistency_weight: float = pr.project_min_consistency_weight,
+    min_total_consistency_weight: float = pr.project_min_total_consistency_weight,
     fold_normalization: float = pr.project_fold_normalization,
     min_significant_gene_value: float = pr.project_min_significant_gene_value,
     min_gene_fold_factor: float = pr.project_max_projection_fold_factor,
@@ -631,8 +632,9 @@ def compute_significant_projected_consistency_factors(
 
     **Computation Parameters**
 
-    1. For each query metacells, consider the atlas metacells whose weight in computing the query metacell's projection
-       is at least ``min_consistency_weight`` (default: {min_consistency_weight}).
+    1. For each query metacells, consider the highest-weight atlas metacells whose sum of weights is at least
+       ``min_total_consistency_weight`` (default: {min_total_consistency_weight}) or whose weight in computing the query
+       metacell's projection is at least ``min_consistency_weight`` (default: {min_consistency_weight}).
 
     2. Compute the consistency fold factor (log2(max/min)) of the expression of each gene in these atlas metacells,
        using the ``fold_normalization`` (default: {fold_normalization}).
@@ -648,6 +650,7 @@ def compute_significant_projected_consistency_factors(
     """
     assert fold_normalization >= 0
     assert 0 <= min_consistency_weight <= 1
+    assert 0 <= min_total_consistency_weight <= 1
     assert min_significant_gene_value >= 0
     assert 0 <= min_entry_fold_factor <= min_gene_fold_factor
 
@@ -662,18 +665,26 @@ def compute_significant_projected_consistency_factors(
         ut.log_calc("query_metacell_index", query_metacell_index)
 
         atlas_used_weights = ut.to_numpy_vector(weights[query_metacell_index, :])
-        atlas_used_mask = atlas_used_weights >= min_consistency_weight
+        atlas_sorted_indices = np.argsort(-atlas_used_weights)
+        atlas_sorted_weights = atlas_used_weights[atlas_sorted_indices]
+
+        total_weight = 0
+        atlas_metacell_indices = []
+        for (atlas_metacell_index, weight) in zip(atlas_sorted_indices, atlas_sorted_weights):
+            if total_weight >= min_total_consistency_weight and weight < min_consistency_weight:
+                break
+            total_weight += weight
+            atlas_metacell_indices.append(atlas_metacell_index)
+
+        ut.log_calc("atlas_metacell_indices", atlas_metacell_indices)
+        ut.log_calc("atlas_metacell_weights", atlas_used_weights[atlas_metacell_indices])
+        assert len(atlas_metacell_indices) > 0
 
         atlas_min_fractions = np.full(qdata.n_vars, 1e9, dtype="float32")
         atlas_max_fractions = np.full(qdata.n_vars, -1e9, dtype="float32")
 
         atlas_min_umis = np.zeros(qdata.n_vars, dtype="int32")
         atlas_max_umis = np.zeros(qdata.n_vars, dtype="int32")
-
-        atlas_metacell_indices = np.where(atlas_used_mask)[0]
-        ut.log_calc("atlas_metacell_indices", atlas_metacell_indices)
-        assert len(atlas_metacell_indices) > 0
-
         for atlas_metacell_index in atlas_metacell_indices:
             atlas_metacell_umis = atlas_umis[atlas_metacell_index, :]
 
@@ -711,7 +722,6 @@ def compute_significant_projected_consistency_factors(
 
 @ut.logged()
 @ut.timed_call()
-@ut.expand_doc()
 def compute_similar_query_metacells(
     adata: AnnData,
     max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
