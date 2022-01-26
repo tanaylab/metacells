@@ -307,13 +307,13 @@ def _ensure_per(matrix: utt.Matrix, per: Optional[str]) -> str:
 
 
 def _ensure_layout_for(operation: str, matrix: utt.Matrix, per: Optional[str], allow_inefficient: bool = True) -> None:
-    layout = utt.matrix_layout(matrix)
-    if layout == f"{per}_major":
+    if utt.is_layout(matrix, f"{per}_major"):
         return
 
     if not ALLOW_INEFFICIENT_LAYOUT:
         allow_inefficient = False
 
+    layout = utt.matrix_layout(matrix)
     if layout is not None:
         operating_on_matrix_of_wrong_layout = f"{operation} of {per}s of a matrix with {layout} layout"
         if not allow_inefficient:
@@ -463,15 +463,23 @@ def cross_corrcoef_rows(
     """
     first_matrix = utt.mustbe_numpy_matrix(first_matrix)
     second_matrix = utt.mustbe_numpy_matrix(second_matrix)
-    assert utt.matrix_layout(first_matrix) == "row_major"
-    assert utt.matrix_layout(second_matrix) == "row_major"
+    assert utt.is_layout(first_matrix, "row_major")
+    assert utt.is_layout(second_matrix, "row_major")
     assert first_matrix.shape[1] == second_matrix.shape[1]
     assert first_matrix.dtype == second_matrix.dtype
+
+    workaround = first_matrix.shape[0] == 1
+    if workaround:
+        first_matrix = np.concatenate([first_matrix, first_matrix])
 
     extension_name = f"cross_correlate_dense_{first_matrix.dtype}_t"
     result = np.empty((first_matrix.shape[0], second_matrix.shape[0]), dtype="float32")
     extension = getattr(xt, extension_name)
     extension(first_matrix, second_matrix, result)
+
+    if workaround:
+        result = result[0:1, :]
+
     return result
 
 
@@ -504,8 +512,8 @@ def pairs_corrcoef_rows(
     """
     first_matrix = utt.mustbe_numpy_matrix(first_matrix)
     second_matrix = utt.mustbe_numpy_matrix(second_matrix)
-    assert utt.matrix_layout(first_matrix) == "row_major"
-    assert utt.matrix_layout(second_matrix) == "row_major"
+    assert utt.is_layout(first_matrix, "row_major")
+    assert utt.is_layout(second_matrix, "row_major")
     assert first_matrix.shape == second_matrix.shape
     assert first_matrix.dtype == second_matrix.dtype
 
@@ -573,8 +581,8 @@ def cross_logistics_rows(
     """
     first_matrix = utt.mustbe_numpy_matrix(first_matrix)
     second_matrix = utt.mustbe_numpy_matrix(second_matrix)
-    assert utt.matrix_layout(first_matrix) == "row_major"
-    assert utt.matrix_layout(second_matrix) == "row_major"
+    assert utt.is_layout(first_matrix, "row_major")
+    assert utt.is_layout(second_matrix, "row_major")
     assert first_matrix.shape[1] == second_matrix.shape[1]
     assert first_matrix.dtype == second_matrix.dtype
 
@@ -600,8 +608,8 @@ def pairs_logistics_rows(
     """
     first_matrix = utt.mustbe_numpy_matrix(first_matrix)
     second_matrix = utt.mustbe_numpy_matrix(second_matrix)
-    assert utt.matrix_layout(first_matrix) == "row_major"
-    assert utt.matrix_layout(second_matrix) == "row_major"
+    assert utt.is_layout(first_matrix, "row_major")
+    assert utt.is_layout(second_matrix, "row_major")
     assert first_matrix.shape == second_matrix.shape
     assert first_matrix.dtype == second_matrix.dtype
 
@@ -1944,13 +1952,13 @@ def sum_groups(
 
     sparse = utt.maybe_sparse_matrix(matrix)
     if sparse is not None:
-        if utt.matrix_layout(matrix) == efficient_layout:
+        if utt.is_layout(matrix, efficient_layout):
             timed_step = ".compressed-efficient"
         else:
             timed_step = ".compressed-inefficient"
     else:
         matrix = utt.to_numpy_matrix(matrix, only_extract=True)
-        if utt.matrix_layout(matrix) == efficient_layout:
+        if utt.is_layout(matrix, efficient_layout):
             timed_step = ".dense-efficient"
         else:
             timed_step = ".dense-inefficient"

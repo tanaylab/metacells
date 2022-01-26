@@ -238,7 +238,11 @@ matrix_step(const pybind11::array_t<T>& array, const char* const name) {
     FastAssertCompareWhat(array.ndim(), ==, 2, name);
     FastAssertCompareWhat(array.shape(0), >, 0, name);
     FastAssertCompareWhat(array.shape(1), >, 0, name);
-    return array.data(1, 0) - array.data(0, 0);
+    if (array.shape(0) == 0) {
+        return 0;
+    } else {
+        return array.data(1, 0) - array.data(0, 0);
+    }
 }
 
 /// An immutable row-major slice of a matrix of type ``T``.

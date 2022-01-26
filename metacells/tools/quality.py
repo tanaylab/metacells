@@ -23,7 +23,6 @@ __all__ = [
     "compute_inner_normalized_variance",
     "compute_inner_fold_factors",
     "compute_significant_projected_fold_factors",
-    "compute_significant_projected_consistency_factors",
     "compute_similar_query_metacells",
     "compute_outliers_matches",
     "compute_deviant_fold_factors",
@@ -327,7 +326,7 @@ def _collect_group_data(
             cell_indices = np.random.choice(cell_indices, size=compatible_size, replace=False)
             assert len(cell_indices) == compatible_size
 
-    assert ut.matrix_layout(cells_data) == "row_major"
+    assert ut.is_layout(cells_data, "row_major")
     group_data = cells_data[cell_indices, :]
 
     total_per_cell = ut.sum_per(group_data, per="row")
@@ -589,144 +588,9 @@ def significant_folds_matrix(
 
 @ut.logged()
 @ut.timed_call()
-@ut.expand_doc()
-def compute_significant_projected_consistency_factors(
-    what: Union[str, ut.Matrix] = "__x__",
-    *,
-    adata: AnnData,
-    qdata: AnnData,
-    weights: ut.CompressedMatrix,
-    atlas_total_umis: Optional[ut.Vector] = None,
-    min_consistency_weight: float = pr.project_min_consistency_weight,
-    min_total_consistency_weight: float = pr.project_min_total_consistency_weight,
-    fold_normalization: float = pr.project_fold_normalization,
-    min_significant_gene_value: float = pr.project_min_significant_gene_value,
-    min_gene_fold_factor: float = pr.project_max_projection_fold_factor,
-    min_entry_fold_factor: float = pr.min_entry_project_fold_factor,
-) -> None:
-    """
-    Compute significant fold factors between atlas metacells used in the projection of the same query metacell.
-
-    **Input**
-
-    Annotated query ``qdata`` and atlas ``adata``, where the observations are cells and the variables are genes, where
-    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation
-    containing such a matrix.
-
-    In addition, a ``weights`` matrix (computed by :py:func:`metacells.tools.project_query_onto_atlas` whose rows are
-    query metacells and columns are atlas metacells, where each entry is the weight of the atlas metacell in the
-    projection of the query metacells. The sum of weights in each row (that is, for a single query metacell) is 1. The
-    weighted sum of the atlas metacells using these weights is the "projected" image of the query metacell onto the
-    atlas.
-
-    **Returns**
-
-    In addition, sets the following annotations in ``qdata``:
-
-    Sets the following in ``qdata``:
-
-    Per-Variable Per-Observation (Gene-Cell) Annotations
-        ``consistency_fold``
-            For each gene and query metacell, the fold factor between the maximal and minimal expression levels of
-            the gene in the atlas metacells used for the query metacell's projection.
-
-    **Computation Parameters**
-
-    1. For each query metacells, consider the highest-weight atlas metacells whose sum of weights is at least
-       ``min_total_consistency_weight`` (default: {min_total_consistency_weight}) or whose weight in computing the query
-       metacell's projection is at least ``min_consistency_weight`` (default: {min_consistency_weight}).
-
-    2. Compute the consistency fold factor (log2(max/min)) of the expression of each gene in these atlas metacells,
-       using the ``fold_normalization`` (default: {fold_normalization}).
-
-    3. Set the fold factor to zero for every case where the total UMIs in the query metacell and the projected image is
-       not at least ``min_significant_gene_value`` (default: {min_significant_gene_value}).
-
-    4. If the maximal fold factor for a gene (across all metacells) is below ``min_gene_fold_factor`` (default:
-       {min_gene_fold_factor}), then set all the gene's fold factors to zero (too low to be of interest).
-
-    5. Otherwise, for any metacell whose fold factor for the gene is less than ``min_entry_fold_factor`` (default:
-       {min_entry_fold_factor}), set the fold factor to zero (too low to be of interest).
-    """
-    assert fold_normalization >= 0
-    assert 0 <= min_consistency_weight <= 1
-    assert 0 <= min_total_consistency_weight <= 1
-    assert min_significant_gene_value >= 0
-    assert 0 <= min_entry_fold_factor <= min_gene_fold_factor
-
-    assert weights.shape[0] == qdata.n_obs
-    assert weights.shape[1] == adata.n_obs
-
-    atlas_umis = ut.get_vo_proper(adata, what)
-
-    consistency_folds = np.empty(qdata.shape, dtype="float32")
-
-    for query_metacell_index in range(qdata.n_obs):
-        ut.log_calc("query_metacell_index", query_metacell_index)
-
-        atlas_used_weights = ut.to_numpy_vector(weights[query_metacell_index, :])
-        atlas_sorted_indices = np.argsort(-atlas_used_weights)
-        atlas_sorted_weights = atlas_used_weights[atlas_sorted_indices]
-
-        total_weight = 0
-        atlas_metacell_indices = []
-        for (atlas_metacell_index, weight) in zip(atlas_sorted_indices, atlas_sorted_weights):
-            if total_weight >= min_total_consistency_weight and weight < min_consistency_weight:
-                break
-            total_weight += weight
-            atlas_metacell_indices.append(atlas_metacell_index)
-
-        ut.log_calc("atlas_metacell_indices", atlas_metacell_indices)
-        ut.log_calc("atlas_metacell_weights", atlas_used_weights[atlas_metacell_indices])
-        assert len(atlas_metacell_indices) > 0
-
-        atlas_min_fractions = np.full(qdata.n_vars, 1e9, dtype="float32")
-        atlas_max_fractions = np.full(qdata.n_vars, -1e9, dtype="float32")
-
-        atlas_min_umis = np.zeros(qdata.n_vars, dtype="int32")
-        atlas_max_umis = np.zeros(qdata.n_vars, dtype="int32")
-        for atlas_metacell_index in atlas_metacell_indices:
-            atlas_metacell_umis = atlas_umis[atlas_metacell_index, :]
-
-            if atlas_total_umis is None:
-                atlas_metacell_total_umis = np.sum(atlas_metacell_umis)
-            else:
-                atlas_metacell_total_umis = atlas_total_umis[atlas_metacell_index]  # type: ignore
-
-            atlas_metacell_fractions = atlas_metacell_umis / atlas_metacell_total_umis
-
-            low_mask = atlas_metacell_fractions < atlas_min_fractions
-            atlas_min_fractions[low_mask] = atlas_metacell_fractions[low_mask]
-            atlas_min_umis[low_mask] = atlas_metacell_umis[low_mask]
-
-            high_mask = atlas_metacell_fractions > atlas_max_fractions
-            atlas_max_fractions[high_mask] = atlas_metacell_fractions[high_mask]
-            atlas_max_umis[high_mask] = atlas_metacell_umis[high_mask]
-
-        insignificant_genes_mask = (atlas_min_umis + atlas_max_umis) < min_significant_gene_value
-
-        atlas_max_fractions += fold_normalization
-        atlas_min_fractions += fold_normalization
-
-        atlas_consistency_folds = np.log2(atlas_max_fractions / atlas_min_fractions)
-
-        insignificant_genes_mask = (atlas_min_umis + atlas_max_umis) < min_significant_gene_value
-        ut.log_calc("significant_genes_mask", ~insignificant_genes_mask)
-        atlas_consistency_folds[insignificant_genes_mask] = 0
-
-        consistency_folds[query_metacell_index, :] = atlas_consistency_folds
-
-    significant_folds = significant_folds_matrix(consistency_folds, min_gene_fold_factor, min_entry_fold_factor, False)
-    ut.set_vo_data(qdata, "consistency_fold", significant_folds)
-
-
-@ut.logged()
-@ut.timed_call()
 def compute_similar_query_metacells(
     adata: AnnData,
     max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
-    max_consistency_fold_factor: float = pr.project_max_consistency_fold_factor,
-    max_inconsistent_genes: int = pr.project_max_inconsistent_genes,
     abs_folds: bool = pr.project_abs_folds,
 ) -> None:
     """
@@ -742,10 +606,8 @@ def compute_similar_query_metacells(
     per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
     matrix.
 
-    The data should contain per-observation-per-variable annotations ``projected_fold`` and ``consistency_fold``
-    with the significant projection and consistency folds factors, as computed by
-    :py:func:`compute_significant_projected_fold_factors` and
-    :py:func:`compute_significant_projected_consistency_factors`.
+    The data should contain per-observation-per-variable annotations ``projected_fold`` with the significant projection
+    folds factors, as computed by :py:func:`compute_significant_projected_fold_factors`.
 
     **Returns**
 
@@ -760,29 +622,15 @@ def compute_similar_query_metacells(
 
     1. Mark as dissimilar any query metacells which have even one gene whose projection fold is above
        ``max_projection_fold_factor``.
-
-    2. Mark as dissimilar any query metacells which have more than ``max_inconsistent_genes`` whose
-       consistency fold is above ``max_consistency_fold_factor``.
     """
     assert max_projection_fold_factor >= 0
-    assert max_consistency_fold_factor >= 0
-    assert max_inconsistent_genes >= 0
 
     projected_folds = ut.get_vo_proper(adata, "projected_fold", layout="row_major")
     if abs_folds:
         projected_folds = np.abs(projected_folds)  # type: ignore
     high_folds = projected_folds > max_projection_fold_factor  # type: ignore
     high_folds_per_metacell = ut.sum_per(high_folds, per="row")  # type: ignore
-    high_folds_mask = high_folds_per_metacell > 0
-    ut.log_calc("high_folds_mask", high_folds_mask)
-
-    consistency_folds = ut.get_vo_proper(adata, "consistency_fold", layout="row_major")
-    range_folds = consistency_folds > max_consistency_fold_factor  # type: ignore
-    range_folds_per_metacell = ut.sum_per(range_folds, per="row")  # type: ignore
-    range_folds_mask = range_folds_per_metacell > max_inconsistent_genes
-    ut.log_calc("range_folds_mask", range_folds_mask)
-
-    similar_mask = ~high_folds_mask & ~range_folds_mask
+    similar_mask = high_folds_per_metacell == 0
     ut.set_o_data(adata, "similar", similar_mask)
 
 

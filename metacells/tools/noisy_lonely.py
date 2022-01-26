@@ -161,7 +161,7 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
 
         if htv_genes_count > 0:
             htv_gene_ht_gene_similarity_matrix = ht_gene_ht_gene_similarity_matrix[htv_mask, :]
-            assert ut.matrix_layout(htv_gene_ht_gene_similarity_matrix) == "row_major"
+            assert ut.is_layout(htv_gene_ht_gene_similarity_matrix, "row_major")
             assert htv_gene_ht_gene_similarity_matrix.shape == (htv_genes_count, ht_genes_count)
 
             max_similarity_of_htv_genes = ut.max_per(htv_gene_ht_gene_similarity_matrix, per="row")

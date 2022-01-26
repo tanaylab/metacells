@@ -802,6 +802,9 @@ def is_layout(matrix: Matrix, layout: Optional[str]) -> bool:
     if layout is None:
         return True
 
+    if matrix.shape[0] == 1 or matrix.shape[1] == 1:
+        return True
+
     sparse = maybe_sparse_matrix(matrix)
     if sparse is not None:
         return sparse.getformat() == SPARSE_FAST_FORMAT[layout]

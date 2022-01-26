@@ -38,9 +38,10 @@ def project_query_onto_atlas(
     project_log_data: bool = pr.project_log_data,
     fold_normalization: float = pr.project_fold_normalization,
     min_significant_gene_value: float = pr.project_min_significant_gene_value,
+    max_consistency_fold_factor: float = pr.project_max_consistency_fold_factor,
     candidates_count: int = pr.project_candidates_count,
     min_usage_weight: float = pr.project_min_usage_weight,
-    abs_folds: bool = pr.project_abs_folds,
+    reproducible: bool,
 ) -> ut.CompressedMatrix:
     """
     Project query metacells onto atlas metacells.
@@ -77,19 +78,27 @@ def project_query_onto_atlas(
 
     For each query metacell:
 
-    1. Find the ``candidates_count`` (default: {candidates_count}) atlas metacells with the lowest maximal gene fold
-       factor relative to the query metacell. Ignore the fold factors of genes whose sum of UMIs in the query and
-       the atlas metacells is less than ``min_significant_gene_value`` (default: {min_significant_gene_value}).
+    1. Correlate the metacell with all the atlas metacells, and pick the highest-correlated one as the "anchor".
+       If ``reproducible``, a slower (still parallel) but reproducible algorithm will be used.
 
-    2. Compute the non-negative weights (with a sum of 1) of the atlas candidates that give the best projection of the
-       query metacells onto the atlas. Since the algorithm for computing these weights rarely produces an exact 0
-       weight, reduce all weights less than the ``min_usage_weight`` (default: {min_usage_weight}) to
-       zero. If ``project_log_data`` (default: {project_log_data}), compute the match on the log of the data instead
-       of the actual data.
+    2. Consider as candidates only atlas metacells whose maximal gene fold factor compared to the anchor is at most
+       ``max_consistency_fold_factor`` (default: {max_consistency_fold_factor}). Ignore the fold factors of genes whose
+       sum of UMIs in the anchor and the candidate metacells is less than ``min_significant_gene_value`` (default:
+       {min_significant_gene_value}).
+
+    3. Select the ``candidates_count`` (default: {candidates_count}) candidate metacells with the highest correlation
+       with the query metacell.
+
+    4. Compute the non-negative weights (with a sum of 1) of the selected candidates that give the best projection of
+       the query metacells onto the atlas. Since the algorithm for computing these weights rarely produces an exact 0
+       weight, reduce all weights less than the ``min_usage_weight`` (default: {min_usage_weight}) to zero. If
+       ``project_log_data`` (default: {project_log_data}), compute the match on the log of the data instead of the
+       actual data.
     """
     assert fold_normalization > 0
     assert candidates_count > 0
     assert min_usage_weight >= 0
+    assert max_consistency_fold_factor >= 0
     assert np.all(adata.var_names == qdata.var_names)
 
     atlas_umis = ut.get_vo_proper(adata, what, layout="row_major")
@@ -122,19 +131,20 @@ def project_query_onto_atlas(
         atlas_project_data = atlas_fractions
         query_project_data = query_fractions
 
+    query_atlas_corr = ut.cross_corrcoef_rows(query_project_data, atlas_project_data, reproducible=reproducible)
+
     @ut.timed_call("project_single_metacell")
     def _project_single(query_metacell_index: int) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
         return _project_single_metacell(
             atlas_umis=atlas_umis,
-            query_umis=query_umis,
+            query_atlas_corr=query_atlas_corr,
             atlas_project_data=atlas_project_data,
             query_project_data=query_project_data,
             atlas_log_fractions=atlas_log_fractions,
-            query_log_fractions=query_log_fractions,
             candidates_count=candidates_count,
             min_significant_gene_value=min_significant_gene_value,
             min_usage_weight=min_usage_weight,
-            abs_folds=abs_folds,
+            max_consistency_fold_factor=max_consistency_fold_factor,
             query_metacell_index=query_metacell_index,
         )
 
@@ -153,53 +163,56 @@ def project_query_onto_atlas(
 @ut.logged()
 def _project_single_metacell(
     *,
+    query_metacell_index: int,
     atlas_umis: ut.Matrix,
-    query_umis: ut.Matrix,
+    query_atlas_corr: ut.NumpyMatrix,
     atlas_project_data: ut.NumpyMatrix,
     query_project_data: ut.NumpyMatrix,
     atlas_log_fractions: ut.NumpyMatrix,
-    query_log_fractions: ut.NumpyMatrix,
     candidates_count: int,
     min_significant_gene_value: float,
     min_usage_weight: float,
-    abs_folds: bool,
-    query_metacell_index: int,
+    max_consistency_fold_factor: float,
 ) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
-    query_metacell_umis = ut.to_numpy_vector(query_umis[query_metacell_index, :])
-    ut.log_calc("query_total_umis", np.sum(query_metacell_umis))
     query_metacell_project_data = query_project_data[query_metacell_index, :]
-    query_metacell_log_fractions = query_log_fractions[query_metacell_index, :]
+    query_metacell_atlas_correlations = query_atlas_corr[query_metacell_index, :]
+    query_metacell_atlas_order = np.argsort(-query_metacell_atlas_correlations)
 
-    if candidates_count < atlas_log_fractions.shape[0]:
-        query_atlas_fold_factors = atlas_log_fractions - query_metacell_log_fractions[np.newaxis, :]
-        query_atlas_fold_factors = np.abs(query_atlas_fold_factors, out=query_atlas_fold_factors)
-        total_umis = atlas_umis + query_metacell_umis[np.newaxis, :]
-        insignificant_folds_mask = total_umis < min_significant_gene_value
-        ut.log_calc("significant_folds_mask", ~insignificant_folds_mask)
-        query_atlas_fold_factors[insignificant_folds_mask] = 0.0
-        if abs_folds:
-            query_atlas_fold_factors = np.abs(query_atlas_fold_factors)
-        query_atlas_max_fold_factors = ut.max_per(query_atlas_fold_factors, per="row")
-        atlas_candidate_indices = np.argpartition(query_atlas_max_fold_factors, candidates_count)[0:candidates_count]
-        atlas_candidate_indices.sort()
-        atlas_candidate_project_data = atlas_project_data[atlas_candidate_indices, :]
-    else:
-        atlas_candidate_indices = np.arange(atlas_log_fractions.shape[0])
-        atlas_candidate_project_data = atlas_project_data
+    atlas_anchor_index = query_metacell_atlas_order[0]
+    ut.log_calc("atlas_anchor_index", atlas_anchor_index)
+    atlas_anchor_log_fractions = atlas_log_fractions[atlas_anchor_index, :]
+    atlas_anchor_umis = ut.to_numpy_vector(atlas_umis[atlas_anchor_index, :])
 
-    represent_result = ut.represent(query_metacell_project_data, atlas_candidate_project_data)
+    atlas_candidate_indices_list = [atlas_anchor_index]
+    position = 1
+    while len(atlas_candidate_indices_list) < candidates_count and position < len(query_metacell_atlas_order):
+        atlas_metacell_index = query_metacell_atlas_order[position]
+        position += 1
+        atlas_metacell_log_fractions = atlas_log_fractions[atlas_metacell_index, :]
+        atlas_metacell_consistency_fold_factors = np.abs(atlas_metacell_log_fractions - atlas_anchor_log_fractions)
+        atlas_metacell_umis = ut.to_numpy_vector(atlas_umis[atlas_metacell_index, :])
+        atlas_metacell_significant_genes_mask = atlas_metacell_umis + atlas_anchor_umis >= min_significant_gene_value
+        atlas_metacell_consistency = np.max(
+            atlas_metacell_consistency_fold_factors[atlas_metacell_significant_genes_mask]
+        )
+        if atlas_metacell_consistency <= max_consistency_fold_factor / 2.0:
+            atlas_candidate_indices_list.append(atlas_metacell_index)
+
+    atlas_candidate_indices = np.array(sorted(atlas_candidate_indices_list))
+    atlas_candidates_project_data = atlas_project_data[atlas_candidate_indices, :]
+
+    represent_result = ut.represent(query_metacell_project_data, atlas_candidates_project_data)
     assert represent_result is not None
     atlas_candidate_weights = represent_result[1]
     atlas_candidate_weights[atlas_candidate_weights < min_usage_weight] = 0
     atlas_candidate_weights[atlas_candidate_weights < min_usage_weight] /= np.sum(atlas_candidate_weights)
 
-    atlas_candidate_used_mask = atlas_candidate_weights > 0
+    atlas_used_mask = atlas_candidate_weights > 0
 
-    atlas_used_indices = atlas_candidate_indices[atlas_candidate_used_mask]
-    atlas_used_indices = atlas_used_indices.astype("int32")
+    atlas_used_indices = atlas_candidate_indices[atlas_used_mask].astype("int32")
     ut.log_return("atlas_used_indices", atlas_used_indices)
 
-    atlas_used_weights = atlas_candidate_weights[atlas_candidate_used_mask]
+    atlas_used_weights = atlas_candidate_weights[atlas_used_mask]
     atlas_used_weights = atlas_used_weights.astype("float32")
     ut.log_return("atlas_used_weights", atlas_used_weights)
 

@@ -324,7 +324,7 @@ def has_data(
         if layout is None:
             return True
         matrix: utt.Matrix = adata.X
-        return utt.matrix_layout(matrix) == layout or f"vo:__x__:{layout}" in derived
+        return utt.is_layout(matrix, layout) or f"vo:__x__:{layout}" in derived
 
     for per, annotations in (
         ("vo", adata.layers),
@@ -338,7 +338,7 @@ def has_data(
         if layout is None:
             return True
         matrix = annotations[name]
-        return utt.matrix_layout(matrix) == layout or f"{per}:{name}:{layout}" in derived
+        return utt.is_layout(matrix, layout) or f"{per}:{name}:{layout}" in derived
 
     assert layout is None
 

@@ -273,7 +273,7 @@ def _rank_outgoing(similarity: ut.NumpyMatrix) -> ut.NumpyMatrix:
 
     np.fill_diagonal(similarity, min_similarity - 1)
 
-    assert ut.matrix_layout(similarity) == "row_major"
+    assert ut.is_layout(similarity, "row_major")
     outgoing_ranks = ut.rank_matrix_by_layout(similarity, ascending=False)
     assert np.sum(np.diagonal(outgoing_ranks) == size) == size
     return outgoing_ranks

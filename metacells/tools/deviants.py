@@ -202,7 +202,7 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
             continue
 
         data_of_candidate: ut.ProperMatrix = data[candidate_cell_indices, :].copy()
-        assert ut.matrix_layout(data_of_candidate) == "row_major"
+        assert ut.is_layout(data_of_candidate, "row_major")
         assert data_of_candidate.shape == (candidate_cells_count, genes_count)
 
         totals_of_candidate_cells = totals_of_cells[candidate_cell_indices]
@@ -347,7 +347,7 @@ def _fold_ranks(
     ut.timed_parameters(cells=cells_count, deviant_genes=deviant_genes_count)
 
     deviant_genes_fold_ranks = np.full((cells_count, deviant_genes_count), cells_count, order="F")
-    assert ut.matrix_layout(deviant_genes_fold_ranks) == "column_major"
+    assert ut.is_layout(deviant_genes_fold_ranks, "column_major")
 
     for deviant_gene_index, gene_index in enumerate(deviant_gene_indices):
         gene_start_offset = fold_factors.indptr[gene_index]

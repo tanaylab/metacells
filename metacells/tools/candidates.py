@@ -123,9 +123,9 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many
 
     outgoing_edge_weights = ut.mustbe_compressed_matrix(edge_weights)
 
-    assert ut.matrix_layout(outgoing_edge_weights) == "row_major"
+    assert ut.is_layout(outgoing_edge_weights, "row_major")
     incoming_edge_weights = ut.mustbe_compressed_matrix(ut.to_layout(outgoing_edge_weights, layout="column_major"))
-    assert ut.matrix_layout(incoming_edge_weights) == "column_major"
+    assert ut.is_layout(incoming_edge_weights, "column_major")
 
     assert outgoing_edge_weights.data.dtype == "float32"
     assert outgoing_edge_weights.indices.dtype == "int32"
@@ -582,10 +582,10 @@ def choose_seeds(
     size = edge_weights.shape[0]
 
     outgoing_edge_weights = ut.mustbe_compressed_matrix(edge_weights)
-    assert ut.matrix_layout(outgoing_edge_weights) == "row_major"
+    assert ut.is_layout(outgoing_edge_weights, "row_major")
 
     incoming_edge_weights = ut.mustbe_compressed_matrix(ut.to_layout(outgoing_edge_weights, layout="column_major"))
-    assert ut.matrix_layout(incoming_edge_weights) == "column_major"
+    assert ut.is_layout(incoming_edge_weights, "column_major")
 
     if seed_of_cells is None:
         seed_of_cells = np.full(size, -1, dtype="int32")
@@ -677,10 +677,10 @@ def optimize_partitions(
     course no claim is made of achieving the global maximum of the goal function.
     """
     outgoing_edge_weights = ut.mustbe_compressed_matrix(edge_weights)
-    assert ut.matrix_layout(outgoing_edge_weights) == "row_major"
+    assert ut.is_layout(outgoing_edge_weights, "row_major")
 
     incoming_edge_weights = ut.mustbe_compressed_matrix(ut.to_layout(outgoing_edge_weights, layout="column_major"))
-    assert ut.matrix_layout(incoming_edge_weights) == "column_major"
+    assert ut.is_layout(incoming_edge_weights, "column_major")
     return _optimize_partitions(
         outgoing_edge_weights=outgoing_edge_weights,
         incoming_edge_weights=incoming_edge_weights,
@@ -746,10 +746,10 @@ def score_partitions(
     """
     assert str(partition_of_nodes.dtype) == "int32"
     outgoing_edge_weights = ut.mustbe_compressed_matrix(edge_weights)
-    assert ut.matrix_layout(outgoing_edge_weights) == "row_major"
+    assert ut.is_layout(outgoing_edge_weights, "row_major")
 
     incoming_edge_weights = ut.mustbe_compressed_matrix(ut.to_layout(outgoing_edge_weights, layout="column_major"))
-    assert ut.matrix_layout(incoming_edge_weights) == "column_major"
+    assert ut.is_layout(incoming_edge_weights, "column_major")
 
     with ut.unfrozen(partition_of_nodes):
         with ut.timed_step(".score"):

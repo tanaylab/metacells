@@ -43,14 +43,11 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
     project_candidates_count: int = pr.project_candidates_count,
     project_min_significant_gene_value: float = pr.project_min_significant_gene_value,
     project_min_usage_weight: float = pr.project_min_usage_weight,
-    project_min_consistency_weight: float = pr.project_min_consistency_weight,
-    project_min_total_consistency_weight: float = pr.project_min_total_consistency_weight,
     project_max_consistency_fold_factor: float = pr.project_max_consistency_fold_factor,
-    project_max_inconsistent_genes: int = pr.project_max_inconsistent_genes,
     project_max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
     min_entry_project_fold_factor: float = pr.min_entry_project_fold_factor,
-    min_entry_project_consistency_fold_factor: float = pr.min_entry_project_consistency_fold_factor,
     project_abs_folds: bool = pr.project_abs_folds,
+    reproducible: bool,
 ) -> ut.CompressedMatrix:
     """
     Complete pipeline for projecting query metacells onto an atlas of metacells for the ``what`` (default: {what}) data.
@@ -127,7 +124,7 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
        the ``project_fold_normalization`` (default: {project_fold_normalization}),
        ``project_min_significant_gene_value`` (default: {project_min_significant_gene_value}),
        ``project_candidates_count`` (default: {project_candidates_count}), ``project_min_usage_weight`` (default:
-       {project_min_usage_weight}), and ``project_abs_folds`` (default: {project_abs_folds}).
+       {project_min_usage_weight}), ``project_abs_folds`` (default: {project_abs_folds}) and ``reproducible``.
 
     4. Invoke :py:func:`metacells.tools.project.compute_significant_projected_fold_factors` to compute the significant
        fold factors between the query and its projection, using the ``project_fold_normalization`` (default:
@@ -141,19 +138,9 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
         {biased_min_metacells_fraction}), and ``project_abs_folds`` (default: {project_abs_folds}). If any such genes
         are found, add them to the ignored genes and repeat steps 3-4.
 
-    6. Invoke :py:func:`metacells.tools.quality.compute_significant_projected_consistency_factors` using the projection
-       weights, ``project_min_consistency_weight`` (default: {project_min_consistency_weight}),
-       ``project_min_total_consistency_weight`` (default: {project_min_total_consistency_weight}),
-       ``project_fold_normalization`` (default: {project_fold_normalization}), ``project_min_significant_gene_value``
-       (default: {project_min_significant_gene_value}), ``project_max_consistency_fold_factor`` (default:
-       {project_max_consistency_fold_factor}), and ``min_entry_project_consistency_fold_factor`` (default:
-       {min_entry_project_consistency_fold_factor}).
-
-    7. Invoke :py:func:`metacells.tools.quality.compute_similar_query_metacells` to annotate the query metacells
+    6. Invoke :py:func:`metacells.tools.quality.compute_similar_query_metacells` to annotate the query metacells
        similar to their projection on the atlas using ``project_max_projection_fold_factor`` (default:
-       {project_max_projection_fold_factor}), ``project_max_consistency_fold_factor`` (default:
-       {project_max_consistency_fold_factor}), and ``project_max_inconsistent_genes`` (default:
-       {project_max_inconsistent_genes}).
+       {project_max_projection_fold_factor}).
     """
     ignored_mask_names = ["|systematic_gene"]
 
@@ -237,9 +224,10 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
             query_total_umis=query_total_umis,
             fold_normalization=project_fold_normalization,
             min_significant_gene_value=project_min_significant_gene_value,
+            max_consistency_fold_factor=project_max_consistency_fold_factor,
             candidates_count=project_candidates_count,
             min_usage_weight=project_min_usage_weight,
-            abs_folds=project_abs_folds,
+            reproducible=reproducible,
         )
 
         tl.compute_query_projection(
@@ -278,25 +266,9 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
         full_biased_genes_mask[full_gene_index_of_included_qdata] = biased_genes_mask
         ignored_mask_names = ["biased_gene"]
 
-    tl.compute_significant_projected_consistency_factors(
-        what,
-        adata=included_adata,
-        qdata=included_qdata,
-        weights=weights,
-        atlas_total_umis=atlas_total_umis,
-        min_consistency_weight=project_min_consistency_weight,
-        min_total_consistency_weight=project_min_total_consistency_weight,
-        fold_normalization=project_fold_normalization,
-        min_significant_gene_value=project_min_significant_gene_value,
-        min_gene_fold_factor=project_max_consistency_fold_factor,
-        min_entry_fold_factor=min_entry_project_consistency_fold_factor,
-    )
-
     tl.compute_similar_query_metacells(
         included_qdata,
         max_projection_fold_factor=project_max_projection_fold_factor,
-        max_consistency_fold_factor=project_max_consistency_fold_factor,
-        max_inconsistent_genes=project_max_inconsistent_genes,
     )
 
     ignored_genes_mask = np.full(qdata.n_vars, True)
@@ -325,13 +297,7 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
     full_projected_fold[:, full_gene_index_of_included_qdata] = projected_fold
     ut.set_vo_data(qdata, "projected_fold", full_projected_fold)
 
-    consistency_fold = ut.get_vo_proper(included_qdata, "consistency_fold")
-    full_consistency_fold = sp.csr_matrix(qdata.shape, dtype="float32")
-    full_consistency_fold[:, full_gene_index_of_included_qdata] = consistency_fold
-    ut.set_vo_data(qdata, "consistency_fold", full_consistency_fold)
-
     ut.set_m_data(qdata, "project_max_projection_fold_factor", project_max_projection_fold_factor)
-    ut.set_m_data(qdata, "project_max_consistency_fold_factor", project_max_consistency_fold_factor)
 
     return weights
 
@@ -356,17 +322,14 @@ def typed_projection_pipeline(
     project_candidates_count: int = pr.project_candidates_count,
     project_min_significant_gene_value: float = pr.project_min_significant_gene_value,
     project_min_usage_weight: float = pr.project_min_usage_weight,
-    project_min_consistency_weight: float = pr.project_min_consistency_weight,
-    project_min_total_consistency_weight: float = pr.project_min_total_consistency_weight,
     project_max_consistency_fold_factor: float = pr.project_max_consistency_fold_factor,
-    project_max_inconsistent_genes: int = pr.project_max_inconsistent_genes,
     project_max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
     min_entry_project_fold_factor: float = pr.min_entry_project_fold_factor,
-    min_entry_project_consistency_fold_factor: float = pr.min_entry_project_consistency_fold_factor,
     project_abs_folds: bool = pr.project_abs_folds,
     ignored_gene_names_of_type: Optional[Dict[str, Collection[str]]] = None,
     ignored_gene_patterns_of_type: Optional[Dict[str, Collection[str]]] = None,
     atlas_type_property_name: str = "type",
+    reproducible: bool,
 ) -> ut.CompressedMatrix:
     """
     Similar to :py:func:`direct_projection_pipeline`, but perform a second phase depending on the ``type`` annotations
@@ -421,8 +384,7 @@ def typed_projection_pipeline(
        such genes are found, add them to the type-specific ignored genes (instead of the global biased genes list)
        and repeat steps 4-5.
 
-    7. Invoke :py:func:`metacells.tools.quality.compute_significant_projected_consistency_factors` and
-       :py:func:`metacells.tools.quality.compute_similar_query_metacells` to validate the updated projection.
+    7. Invoke :py:func:`metacells.tools.quality.compute_similar_query_metacells` to validate the updated projection.
     """
     if ignored_gene_names_of_type is None:
         ignored_gene_names_of_type = {}
@@ -445,14 +407,11 @@ def typed_projection_pipeline(
         project_candidates_count=project_candidates_count,
         project_min_significant_gene_value=project_min_significant_gene_value,
         project_min_usage_weight=project_min_usage_weight,
-        project_min_consistency_weight=project_min_consistency_weight,
-        project_min_total_consistency_weight=project_min_total_consistency_weight,
         project_max_consistency_fold_factor=project_max_consistency_fold_factor,
-        project_max_inconsistent_genes=project_max_inconsistent_genes,
         project_max_projection_fold_factor=project_max_projection_fold_factor,
         min_entry_project_fold_factor=project_max_projection_fold_factor,
-        min_entry_project_consistency_fold_factor=project_max_projection_fold_factor,
         project_abs_folds=project_abs_folds,
+        reproducible=reproducible,
     )
 
     if list(qdata.var_names) != list(adata.var_names):
@@ -475,12 +434,11 @@ def typed_projection_pipeline(
     query_total_umis = ut.get_o_numpy(common_qdata, what, sum=True)
 
     full_projected_fold = np.zeros(qdata.shape, dtype="float32")
-    full_consistency_fold = np.zeros(qdata.shape, dtype="float32")
     full_similar = np.zeros(qdata.n_obs, dtype="bool")
 
     tl.project_atlas_to_query(
-        adata=adata,
-        qdata=qdata,
+        adata=common_adata,
+        qdata=common_qdata,
         weights=weights,
         property_name=atlas_type_property_name,
         to_property_name="projected_type",
@@ -509,20 +467,16 @@ def typed_projection_pipeline(
             project_candidates_count=project_candidates_count,
             project_min_significant_gene_value=project_min_significant_gene_value,
             project_min_usage_weight=project_min_usage_weight,
-            project_min_consistency_weight=project_min_consistency_weight,
-            project_min_total_consistency_weight=project_min_total_consistency_weight,
             project_max_consistency_fold_factor=project_max_consistency_fold_factor,
-            project_max_inconsistent_genes=project_max_inconsistent_genes,
             project_max_projection_fold_factor=project_max_projection_fold_factor,
             min_entry_project_fold_factor=min_entry_project_fold_factor,
-            min_entry_project_consistency_fold_factor=min_entry_project_consistency_fold_factor,
             project_abs_folds=project_abs_folds,
             ignored_gene_names_of_type=ignored_gene_names_of_type,
             ignored_gene_patterns_of_type=ignored_gene_patterns_of_type,
             full_gene_index_of_common_qdata=full_gene_index_of_common_qdata,
             full_projected_fold=full_projected_fold,
-            full_consistency_fold=full_consistency_fold,
             full_similar=full_similar,
+            reproducible=reproducible,
         )
 
         tl.project_atlas_to_query(
@@ -541,7 +495,6 @@ def typed_projection_pipeline(
 
     ut.set_o_data(qdata, "similar", full_similar)
     ut.set_vo_data(qdata, "projected_fold", sp.csr_matrix(full_projected_fold))
-    ut.set_vo_data(qdata, "consistency_fold", sp.csr_matrix(full_consistency_fold))
 
     tl.compute_query_projection(
         adata=common_adata,
@@ -580,20 +533,16 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
     project_candidates_count: int,
     project_min_significant_gene_value: float,
     project_min_usage_weight: float,
-    project_min_consistency_weight: float,
-    project_min_total_consistency_weight: float,
     project_max_consistency_fold_factor: float,
-    project_max_inconsistent_genes: int,
     project_max_projection_fold_factor: float,
     min_entry_project_fold_factor: float,
-    min_entry_project_consistency_fold_factor: float,
     project_abs_folds: bool,
     ignored_gene_names_of_type: Dict[str, Collection[str]],
     ignored_gene_patterns_of_type: Dict[str, Collection[str]],
     full_gene_index_of_common_qdata: ut.NumpyVector,
     full_projected_fold: ut.NumpyVector,
-    full_consistency_fold: ut.NumpyVector,
     full_similar: ut.NumpyVector,
+    reproducible: bool,
 ) -> ut.CompressedMatrix:
     full_weights = sp.csr_matrix((qdata.n_obs, adata.n_obs), dtype="float32")
     unique_types = np.unique(type_of_query_metacells)
@@ -668,9 +617,10 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
                 query_total_umis=query_type_total_umis,
                 fold_normalization=project_fold_normalization,
                 min_significant_gene_value=project_min_significant_gene_value,
+                max_consistency_fold_factor=project_max_consistency_fold_factor,
                 candidates_count=project_candidates_count,
                 min_usage_weight=project_min_usage_weight,
-                abs_folds=project_abs_folds,
+                reproducible=reproducible,
             )
 
             tl.compute_query_projection(
@@ -709,25 +659,9 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
             full_type_biased_genes_mask[full_gene_index_of_type_included_qdata] = type_biased_genes_mask
             type_ignored_mask_names = ["biased_gene"]
 
-        tl.compute_significant_projected_consistency_factors(
-            what,
-            adata=type_included_adata,
-            qdata=type_included_qdata,
-            weights=type_weights,
-            atlas_total_umis=atlas_total_umis,
-            min_consistency_weight=project_min_consistency_weight,
-            min_total_consistency_weight=project_min_total_consistency_weight,
-            fold_normalization=project_fold_normalization,
-            min_significant_gene_value=project_min_significant_gene_value,
-            min_gene_fold_factor=project_max_consistency_fold_factor,
-            min_entry_fold_factor=min_entry_project_consistency_fold_factor,
-        )
-
         tl.compute_similar_query_metacells(
             type_included_qdata,
             max_projection_fold_factor=project_max_projection_fold_factor,
-            max_consistency_fold_factor=project_max_consistency_fold_factor,
-            max_inconsistent_genes=project_max_inconsistent_genes,
         )
 
         full_type_ignored_genes_mask = np.full(qdata.n_vars, True)
@@ -742,9 +676,5 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
         full_projected_fold[
             full_cell_index_of_type_qdata[:, None], full_gene_index_of_type_included_qdata[None, :]
         ] = type_projected_fold
-        type_consistency_fold = ut.to_numpy_matrix(ut.get_vo_proper(type_included_qdata, "consistency_fold"))
-        full_consistency_fold[
-            full_cell_index_of_type_qdata[:, None], full_gene_index_of_type_included_qdata[None, :]
-        ] = type_consistency_fold
 
     return full_weights
