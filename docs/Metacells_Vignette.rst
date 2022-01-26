@@ -36,8 +36,6 @@ on any visualization packages.
 
 .. code::
 
-    /home/obk/metacells/metacells/utilities/documentation.py:65: UserWarning: @expand_doc had no effect on the documentation of the function metacells.tools.quality.compute_similar_query_metacells
-      warn(expand_doc_had_no_effect)
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/ipykernel_launcher.py:14: DeprecationWarning: `set_matplotlib_formats` is deprecated since IPython 7.23, directly use `matplotlib_inline.backend_inline.set_matplotlib_formats()`
 
 
@@ -399,7 +397,7 @@ to matter.
 .. code::
 
     set PBMC.clean.var[related_genes_module]: 21549 outliers (95.28%) out of 22617 int32 elements with 73 groups with mean size 14.63
-    set PBMC.clean.varp[related_genes_similarity]: csr_matrix 22617 X 22617 float32s
+    set PBMC.clean.varp[related_genes_similarity]: csr_matrix 22617 X 22617 float32s (1140624 > 0)
 
 
 This discovered 73 gene modules with ~15 genes in each one. In general,

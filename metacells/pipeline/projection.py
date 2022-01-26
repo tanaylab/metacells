@@ -339,7 +339,7 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def typed_projection_pipeline(  # pylint: disable=too-many-statements
+def typed_projection_pipeline(
     what: str = "__x__",
     *,
     adata: AnnData,
@@ -366,7 +366,7 @@ def typed_projection_pipeline(  # pylint: disable=too-many-statements
     project_abs_folds: bool = pr.project_abs_folds,
     ignored_gene_names_of_type: Optional[Dict[str, Collection[str]]] = None,
     ignored_gene_patterns_of_type: Optional[Dict[str, Collection[str]]] = None,
-    type_property_name: str = "type",
+    atlas_type_property_name: str = "type",
 ) -> ut.CompressedMatrix:
     """
     Similar to :py:func:`direct_projection_pipeline`, but perform a second phase depending on the ``type`` annotations
@@ -398,10 +398,10 @@ def typed_projection_pipeline(  # pylint: disable=too-many-statements
     **Computation Parameters**
 
     1. Invokes :py:func:`direct_projection_pipeline` with all the parameters except for ``typed_ignored_gene_names``,
-       ``typed_ignored_gene_patterns`` and ``type_property_name``.
+       ``typed_ignored_gene_patterns`` and ``atlas_type_property_name``.
 
     2. Invoke :py:func:`metacells.tools.project.project_atlas_to_query` to assign a projected type to each of the
-       query metacells based on the ``type_property_name`` (default: {type_property_name}) of the atlas metacells.
+       query metacells based on the ``atlas_type_property_name`` (default: {atlas_type_property_name}).
 
     For each type of query metacells:
 
@@ -455,14 +455,6 @@ def typed_projection_pipeline(  # pylint: disable=too-many-statements
         project_abs_folds=project_abs_folds,
     )
 
-    tl.project_atlas_to_query(
-        adata=adata,
-        qdata=qdata,
-        weights=weights,
-        property_name=type_property_name,
-        to_property_name="projected_type",
-    )
-
     if list(qdata.var_names) != list(adata.var_names):
         query_genes_list = list(qdata.var_names)
         atlas_genes_list = list(adata.var_names)
@@ -482,15 +474,129 @@ def typed_projection_pipeline(  # pylint: disable=too-many-statements
     atlas_total_umis = ut.get_o_numpy(common_adata, what, sum=True)
     query_total_umis = ut.get_o_numpy(common_qdata, what, sum=True)
 
-    type_of_atlas_metacells = ut.get_o_numpy(common_adata, type_property_name)
-    type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type")
-    unique_types = np.unique(type_of_query_metacells)
-
-    full_weights = sp.csr_matrix((qdata.n_obs, adata.n_obs), dtype="float32")
     full_projected_fold = np.zeros(qdata.shape, dtype="float32")
     full_consistency_fold = np.zeros(qdata.shape, dtype="float32")
     full_similar = np.zeros(qdata.n_obs, dtype="bool")
 
+    tl.project_atlas_to_query(
+        adata=adata,
+        qdata=qdata,
+        weights=weights,
+        property_name=atlas_type_property_name,
+        to_property_name="projected_type",
+    )
+    type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type")
+    type_of_atlas_metacells = ut.get_o_numpy(common_adata, atlas_type_property_name)
+
+    repeat = 0
+    while repeat < 3:
+        repeat += 1
+        weights = _compute_per_type_projection(
+            what,
+            repeat=repeat,
+            adata=adata,
+            qdata=qdata,
+            common_adata=common_adata,
+            common_qdata=common_qdata,
+            atlas_total_umis=atlas_total_umis,
+            query_total_umis=query_total_umis,
+            type_of_atlas_metacells=type_of_atlas_metacells,
+            type_of_query_metacells=type_of_query_metacells,
+            systematic_low_gene_quantile=systematic_low_gene_quantile,
+            systematic_high_gene_quantile=systematic_high_gene_quantile,
+            biased_min_metacells_fraction=biased_min_metacells_fraction,
+            project_fold_normalization=project_fold_normalization,
+            project_candidates_count=project_candidates_count,
+            project_min_significant_gene_value=project_min_significant_gene_value,
+            project_min_usage_weight=project_min_usage_weight,
+            project_min_consistency_weight=project_min_consistency_weight,
+            project_min_total_consistency_weight=project_min_total_consistency_weight,
+            project_max_consistency_fold_factor=project_max_consistency_fold_factor,
+            project_max_inconsistent_genes=project_max_inconsistent_genes,
+            project_max_projection_fold_factor=project_max_projection_fold_factor,
+            min_entry_project_fold_factor=min_entry_project_fold_factor,
+            min_entry_project_consistency_fold_factor=min_entry_project_consistency_fold_factor,
+            project_abs_folds=project_abs_folds,
+            ignored_gene_names_of_type=ignored_gene_names_of_type,
+            ignored_gene_patterns_of_type=ignored_gene_patterns_of_type,
+            full_gene_index_of_common_qdata=full_gene_index_of_common_qdata,
+            full_projected_fold=full_projected_fold,
+            full_consistency_fold=full_consistency_fold,
+            full_similar=full_similar,
+        )
+
+        tl.project_atlas_to_query(
+            adata=adata,
+            qdata=qdata,
+            weights=weights,
+            property_name=atlas_type_property_name,
+            to_property_name="projected_type",
+        )
+        updated_type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type")
+        stable_query_metacells_types = np.all(updated_type_of_query_metacells == type_of_query_metacells)
+        ut.log_calc("stable_query_metacells_types", stable_query_metacells_types)
+        if stable_query_metacells_types:
+            break
+        type_of_query_metacells = updated_type_of_query_metacells
+
+    ut.set_o_data(qdata, "similar", full_similar)
+    ut.set_vo_data(qdata, "projected_fold", sp.csr_matrix(full_projected_fold))
+    ut.set_vo_data(qdata, "consistency_fold", sp.csr_matrix(full_consistency_fold))
+
+    tl.compute_query_projection(
+        adata=common_adata,
+        qdata=common_qdata,
+        weights=weights,
+        atlas_total_umis=atlas_total_umis,
+        query_total_umis=query_total_umis,
+    )
+
+    projected = ut.get_vo_proper(common_qdata, "projected")
+    full_projected = np.zeros(qdata.shape, dtype="float32")
+    full_projected[:, full_gene_index_of_common_qdata] = projected
+    ut.set_vo_data(qdata, "projected", full_projected)
+
+    return weights
+
+
+@ut.logged()
+@ut.timed_call()
+def _compute_per_type_projection(  # pylint: disable=too-many-statements
+    what: str,
+    *,
+    repeat: int,  # pylint: disable=unused-argument
+    adata: AnnData,
+    qdata: AnnData,
+    common_adata: AnnData,
+    common_qdata: AnnData,
+    atlas_total_umis: ut.NumpyVector,
+    query_total_umis: ut.NumpyVector,
+    type_of_atlas_metacells: ut.NumpyVector,
+    type_of_query_metacells: ut.NumpyVector,
+    systematic_low_gene_quantile: float,
+    systematic_high_gene_quantile: float,
+    biased_min_metacells_fraction: float,
+    project_fold_normalization: float,
+    project_candidates_count: int,
+    project_min_significant_gene_value: float,
+    project_min_usage_weight: float,
+    project_min_consistency_weight: float,
+    project_min_total_consistency_weight: float,
+    project_max_consistency_fold_factor: float,
+    project_max_inconsistent_genes: int,
+    project_max_projection_fold_factor: float,
+    min_entry_project_fold_factor: float,
+    min_entry_project_consistency_fold_factor: float,
+    project_abs_folds: bool,
+    ignored_gene_names_of_type: Dict[str, Collection[str]],
+    ignored_gene_patterns_of_type: Dict[str, Collection[str]],
+    full_gene_index_of_common_qdata: ut.NumpyVector,
+    full_projected_fold: ut.NumpyVector,
+    full_consistency_fold: ut.NumpyVector,
+    full_similar: ut.NumpyVector,
+) -> ut.CompressedMatrix:
+    full_weights = sp.csr_matrix((qdata.n_obs, adata.n_obs), dtype="float32")
+    unique_types = np.unique(type_of_query_metacells)
     for type_name in unique_types:
         atlas_type_mask = type_of_atlas_metacells == type_name
         query_type_mask = type_of_query_metacells == type_name
@@ -640,22 +746,5 @@ def typed_projection_pipeline(  # pylint: disable=too-many-statements
         full_consistency_fold[
             full_cell_index_of_type_qdata[:, None], full_gene_index_of_type_included_qdata[None, :]
         ] = type_consistency_fold
-
-    ut.set_o_data(qdata, "similar", full_similar)
-    ut.set_vo_data(qdata, "projected_fold", sp.csr_matrix(full_projected_fold))
-    ut.set_vo_data(qdata, "consistency_fold", sp.csr_matrix(full_consistency_fold))
-
-    tl.compute_query_projection(
-        adata=common_adata,
-        qdata=common_qdata,
-        weights=weights,
-        atlas_total_umis=atlas_total_umis,
-        query_total_umis=query_total_umis,
-    )
-
-    projected = ut.get_vo_proper(common_qdata, "projected")
-    full_projected = np.zeros(qdata.shape, dtype="float32")
-    full_projected[:, full_gene_index_of_common_qdata] = projected
-    ut.set_vo_data(qdata, "projected", full_projected)
 
     return full_weights
