@@ -167,15 +167,15 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
     common_genes_mask[full_gene_index_of_common_qdata] = True
     ut.set_v_data(qdata, "atlas_gene", common_genes_mask)
 
-    atlas_total_umis = ut.get_o_numpy(common_adata, what, sum=True)
-    query_total_umis = ut.get_o_numpy(common_qdata, what, sum=True)
+    atlas_total_common_umis = ut.get_o_numpy(common_adata, what, sum=True)
+    query_total_common_umis = ut.get_o_numpy(common_qdata, what, sum=True)
 
     tl.find_systematic_genes(
         what,
         adata=common_adata,
         qdata=common_qdata,
-        atlas_total_umis=atlas_total_umis,
-        query_total_umis=query_total_umis,
+        atlas_total_umis=atlas_total_common_umis,
+        query_total_umis=query_total_common_umis,
         low_gene_quantile=systematic_low_gene_quantile,
         high_gene_quantile=systematic_high_gene_quantile,
     )
@@ -220,8 +220,8 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
             what,
             adata=included_adata,
             qdata=included_qdata,
-            atlas_total_umis=atlas_total_umis,
-            query_total_umis=query_total_umis,
+            atlas_total_umis=atlas_total_common_umis,
+            query_total_umis=query_total_common_umis,
             fold_normalization=project_fold_normalization,
             min_significant_gene_value=project_min_significant_gene_value,
             max_consistency_fold_factor=project_max_consistency_fold_factor,
@@ -234,14 +234,14 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
             adata=included_adata,
             qdata=included_qdata,
             weights=weights,
-            atlas_total_umis=atlas_total_umis,
-            query_total_umis=query_total_umis,
+            atlas_total_umis=atlas_total_common_umis,
+            query_total_umis=query_total_common_umis,
         )
 
         tl.compute_significant_projected_fold_factors(
             included_qdata,
             what,
-            total_umis=query_total_umis,
+            total_umis=query_total_common_umis,
             fold_normalization=project_fold_normalization,
             min_gene_fold_factor=project_max_projection_fold_factor,
             min_entry_fold_factor=min_entry_project_fold_factor,
@@ -283,8 +283,8 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
         adata=common_adata,
         qdata=common_qdata,
         weights=weights,
-        atlas_total_umis=atlas_total_umis,
-        query_total_umis=query_total_umis,
+        atlas_total_umis=atlas_total_common_umis,
+        query_total_umis=query_total_common_umis,
     )
 
     projected = ut.get_vo_proper(common_qdata, "projected")
@@ -430,8 +430,8 @@ def typed_projection_pipeline(
 
     full_gene_index_of_common_qdata = ut.get_v_numpy(common_qdata, "full_index")
 
-    atlas_total_umis = ut.get_o_numpy(common_adata, what, sum=True)
-    query_total_umis = ut.get_o_numpy(common_qdata, what, sum=True)
+    atlas_total_common_umis = ut.get_o_numpy(common_adata, what, sum=True)
+    query_total_common_umis = ut.get_o_numpy(common_qdata, what, sum=True)
 
     full_projected_fold = np.zeros(qdata.shape, dtype="float32")
     full_similar = np.zeros(qdata.n_obs, dtype="bool")
@@ -456,8 +456,8 @@ def typed_projection_pipeline(
             qdata=qdata,
             common_adata=common_adata,
             common_qdata=common_qdata,
-            atlas_total_umis=atlas_total_umis,
-            query_total_umis=query_total_umis,
+            atlas_total_common_umis=atlas_total_common_umis,
+            query_total_common_umis=query_total_common_umis,
             type_of_atlas_metacells=type_of_atlas_metacells,
             type_of_query_metacells=type_of_query_metacells,
             systematic_low_gene_quantile=systematic_low_gene_quantile,
@@ -500,8 +500,8 @@ def typed_projection_pipeline(
         adata=common_adata,
         qdata=common_qdata,
         weights=weights,
-        atlas_total_umis=atlas_total_umis,
-        query_total_umis=query_total_umis,
+        atlas_total_umis=atlas_total_common_umis,
+        query_total_umis=query_total_common_umis,
     )
 
     projected = ut.get_vo_proper(common_qdata, "projected")
@@ -522,8 +522,8 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
     qdata: AnnData,
     common_adata: AnnData,
     common_qdata: AnnData,
-    atlas_total_umis: ut.NumpyVector,
-    query_total_umis: ut.NumpyVector,
+    atlas_total_common_umis: ut.NumpyVector,
+    query_total_common_umis: ut.NumpyVector,
     type_of_atlas_metacells: ut.NumpyVector,
     type_of_query_metacells: ut.NumpyVector,
     systematic_low_gene_quantile: float,
@@ -555,8 +555,8 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
         ut.log_calc("query cells mask", query_type_mask)
         ut.log_calc("atlas cells mask", atlas_type_mask)
 
-        atlas_type_total_umis = atlas_total_umis[atlas_type_mask]
-        query_type_total_umis = query_total_umis[query_type_mask]
+        atlas_type_total_common_umis = atlas_total_common_umis[atlas_type_mask]
+        query_type_total_common_umis = query_total_common_umis[query_type_mask]
 
         type_common_adata = ut.slice(common_adata, obs=atlas_type_mask, name=f".{type_name}")
         type_common_qdata = ut.slice(common_qdata, obs=query_type_mask, name=f".{type_name}")
@@ -565,8 +565,8 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
             what,
             adata=type_common_adata,
             qdata=type_common_qdata,
-            atlas_total_umis=atlas_type_total_umis,
-            query_total_umis=query_type_total_umis,
+            atlas_total_umis=atlas_type_total_common_umis,
+            query_total_umis=query_type_total_common_umis,
             low_gene_quantile=systematic_low_gene_quantile,
             high_gene_quantile=systematic_high_gene_quantile,
         )
@@ -613,8 +613,8 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
                 what,
                 adata=type_included_adata,
                 qdata=type_included_qdata,
-                atlas_total_umis=atlas_total_umis,
-                query_total_umis=query_type_total_umis,
+                atlas_total_umis=atlas_total_common_umis,
+                query_total_umis=query_type_total_common_umis,
                 fold_normalization=project_fold_normalization,
                 min_significant_gene_value=project_min_significant_gene_value,
                 max_consistency_fold_factor=project_max_consistency_fold_factor,
@@ -627,14 +627,14 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
                 adata=type_included_adata,
                 qdata=type_included_qdata,
                 weights=type_weights,
-                atlas_total_umis=atlas_total_umis,
-                query_total_umis=query_type_total_umis,
+                atlas_total_umis=atlas_total_common_umis,
+                query_total_umis=query_type_total_common_umis,
             )
 
             tl.compute_significant_projected_fold_factors(
                 type_included_qdata,
                 what,
-                total_umis=query_type_total_umis,
+                total_umis=query_type_total_common_umis,
                 fold_normalization=project_fold_normalization,
                 min_gene_fold_factor=project_max_projection_fold_factor,
                 min_entry_fold_factor=min_entry_project_fold_factor,

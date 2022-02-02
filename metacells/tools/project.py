@@ -5,6 +5,7 @@ Project
 
 from typing import Any
 from typing import Callable
+from typing import Dict
 from typing import Optional
 from typing import Tuple
 from typing import Union
@@ -17,12 +18,126 @@ import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
+    "renormalize_query_by_atlas",
     "project_query_onto_atlas",
     "find_systematic_genes",
     "project_atlas_to_query",
     "find_biased_genes",
     "compute_query_projection",
 ]
+
+
+@ut.logged()
+@ut.timed_call()
+def renormalize_query_by_atlas(  # pylint: disable=too-many-statements
+    adata: AnnData,
+    qdata: AnnData,
+    var_annotations: Dict[str, Any],
+) -> Optional[AnnData]:
+    """
+    Add an ``ATLASNORM`` pseudo-gene to query metacells data to compensate for the query having filtered out many genes.
+
+    This renormalizes the gene fractions in the query to fit the atlas in case the query has aggressive filtered a
+    significant amount of genes.
+
+    **Input**
+
+    Annotated query ``qdata`` and atlas ``adata``, where the observations are cells and the variables are genes, where
+    ``X`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing
+    such a matrix. The query must not contain any additional layers and/or ``varp`` annotations.
+
+    **Returns**
+
+    None if no normalization is needed (or possible). Otherwise, a copy of the query metacells data, with an additional
+    variable (gene) called ``ATLASNORM`` to the query data, such that the total number of UMIs for each query metacells
+    is as expected given the total number of UMIs of the genes common to the query and the atlas. This is skipped if the
+    query and the atlas have exactly the same list of genes, or if if the query already contains a high number of genes
+    missing from the atlas so that the total number of UMIs for the query metacells is already at least the expected
+    based on the common genes.
+
+    **Computation Parameters**
+
+    1. Computes how many UMIs should be added to each query metacell so that its (total UMIs / total common gene UMIs)
+       would be the same as the (total atlas UMIs / total atlas common UMIs). If this is zero (or negative), stop.
+
+    2. Add an ``ATLASNORM`` pseudo-gene to the query with the above amount of UMIs. For each per-variable (gene)
+       observation, add the value specified in ``var_annotations``, whose list of keys must be the same as the
+       set of per-variable annotations in the query data.
+    """
+    assert sorted(qdata.var.keys()) == sorted(var_annotations.keys())
+    assert len(qdata.varp) == 0
+    assert len(qdata.layers) == 0
+
+    if list(qdata.var_names) == list(adata.var_names):
+        return None
+
+    query_genes_list = list(qdata.var_names)
+    atlas_genes_list = list(adata.var_names)
+    common_genes_list = list(sorted(set(qdata.var_names) & set(adata.var_names)))
+    query_gene_indices = np.array([query_genes_list.index(gene) for gene in common_genes_list])
+    atlas_gene_indices = np.array([atlas_genes_list.index(gene) for gene in common_genes_list])
+    common_qdata = ut.slice(qdata, name=".common", vars=query_gene_indices, track_var="full_index")
+    common_adata = ut.slice(adata, name=".common", vars=atlas_gene_indices, track_var="full_index")
+
+    assert list(common_qdata.var_names) == list(common_adata.var_names)
+
+    atlas_total_umis_per_metacell = ut.get_o_numpy(adata, "__x__", sum=True)
+    atlas_common_umis_per_metacell = ut.get_o_numpy(common_adata, "__x__", sum=True)
+    atlas_total_umis = np.sum(atlas_total_umis_per_metacell)
+    atlas_common_umis = np.sum(atlas_common_umis_per_metacell)
+    atlas_disjoint_umis_fraction = atlas_total_umis / atlas_common_umis - 1.0
+
+    ut.log_calc("atlas_total_umis", atlas_total_umis)
+    ut.log_calc("atlas_common_umis", atlas_common_umis)
+    ut.log_calc("atlas_disjoint_umis_fraction", atlas_disjoint_umis_fraction)
+
+    query_total_umis_per_metacell = ut.get_o_numpy(qdata, "__x__", sum=True)
+    query_common_umis_per_metacell = ut.get_o_numpy(common_qdata, "__x__", sum=True)
+    query_total_umis = np.sum(query_total_umis_per_metacell)
+    query_common_umis = np.sum(query_common_umis_per_metacell)
+    query_disjoint_umis_fraction = query_total_umis / query_common_umis - 1.0
+
+    ut.log_calc("query_total_umis", query_total_umis)
+    ut.log_calc("query_common_umis", query_common_umis)
+    ut.log_calc("query_disjoint_umis_fraction", query_disjoint_umis_fraction)
+
+    if query_disjoint_umis_fraction >= atlas_disjoint_umis_fraction:
+        return None
+
+    query_normalization_umis_fraction = atlas_disjoint_umis_fraction - query_disjoint_umis_fraction
+    ut.log_calc("query_normalization_umis_fraction", query_normalization_umis_fraction)
+    query_normalization_umis_per_metacell = query_common_umis_per_metacell * query_normalization_umis_fraction
+
+    _proper, dense, compressed = ut.to_proper_matrices(qdata.X)
+    if dense is not None:
+        added = np.concatenate([dense, query_normalization_umis_per_metacell[:, np.newaxis]], axis=1)
+    else:
+        assert compressed is not None
+
+    assert added.shape[0] == qdata.shape[0]
+    assert added.shape[1] == qdata.shape[1] + 1
+
+    ndata = AnnData(added)
+    ndata.obs_names = qdata.obs_names
+    var_names = list(qdata.var_names)
+    var_names.append("ATLASNORM")
+    ndata.var_names = var_names
+
+    for name, value in qdata.uns.items():
+        ut.set_m_data(ndata, name, value)
+
+    for name, value in qdata.obs.items():
+        ut.set_o_data(ndata, name, value)
+
+    for name, value in qdata.obsp.items():
+        ut.set_oo_data(ndata, name, value)
+
+    for name in qdata.var.keys():
+        value = ut.get_v_numpy(qdata, name)
+        value = np.append(value, [var_annotations[name]])
+        ut.set_v_data(ndata, name, value)
+
+    return ndata
 
 
 @ut.logged()
