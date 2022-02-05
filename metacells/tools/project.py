@@ -264,6 +264,58 @@ def project_query_onto_atlas(
        ``project_log_data`` (default: {project_log_data}), compute the match on the log of the data instead of the
        actual data.
     """
+    prepared_arguments = _project_query_atlas_data_arguments(
+        what,
+        adata=adata,
+        qdata=qdata,
+        atlas_total_umis=atlas_total_umis,
+        query_total_umis=query_total_umis,
+        project_log_data=project_log_data,
+        fold_normalization=fold_normalization,
+        min_significant_gene_value=min_significant_gene_value,
+        max_consistency_fold_factor=max_consistency_fold_factor,
+        candidates_count=candidates_count,
+        min_usage_weight=min_usage_weight,
+        reproducible=reproducible,
+    )
+
+    @ut.timed_call("project_single_metacell")
+    def _project_single(query_metacell_index: int) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
+        return _project_single_metacell(
+            query_metacell_index=query_metacell_index,
+            **prepared_arguments,
+        )
+
+    if ut.is_main_process():
+        results = list(ut.parallel_map(_project_single, qdata.n_obs))
+    else:
+        results = [_project_single(query_metacell_index) for query_metacell_index in range(qdata.n_obs)]
+
+    indices = np.concatenate([result[0] for result in results], dtype="int32")
+    data = np.concatenate([result[1] for result in results], dtype="float32")
+
+    atlas_used_sizes = [len(result[0]) for result in results]
+    atlas_used_sizes.insert(0, 0)
+    indptr = np.cumsum(np.array(atlas_used_sizes))
+
+    return sp.csr_matrix((data, indices, indptr), shape=(qdata.n_obs, adata.n_obs))
+
+
+def _project_query_atlas_data_arguments(
+    what: Union[str, ut.Matrix],
+    *,
+    adata: AnnData,
+    qdata: AnnData,
+    atlas_total_umis: Optional[ut.Vector],
+    query_total_umis: Optional[ut.Vector],
+    project_log_data: bool,
+    fold_normalization: float,
+    min_significant_gene_value: float,
+    max_consistency_fold_factor: float,
+    candidates_count: int,
+    min_usage_weight: float,
+    reproducible: bool,
+) -> Dict[str, Any]:
     assert fold_normalization > 0
     assert candidates_count > 0
     assert min_usage_weight >= 0
@@ -302,31 +354,17 @@ def project_query_onto_atlas(
 
     query_atlas_corr = ut.cross_corrcoef_rows(query_project_data, atlas_project_data, reproducible=reproducible)
 
-    @ut.timed_call("project_single_metacell")
-    def _project_single(query_metacell_index: int) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
-        return _project_single_metacell(
-            atlas_umis=atlas_umis,
-            query_atlas_corr=query_atlas_corr,
-            atlas_project_data=atlas_project_data,
-            query_project_data=query_project_data,
-            atlas_log_fractions=atlas_log_fractions,
-            candidates_count=candidates_count,
-            min_significant_gene_value=min_significant_gene_value,
-            min_usage_weight=min_usage_weight,
-            max_consistency_fold_factor=max_consistency_fold_factor,
-            query_metacell_index=query_metacell_index,
-        )
-
-    results = list(ut.parallel_map(_project_single, qdata.n_obs))
-
-    indices = np.concatenate([result[0] for result in results], dtype="int32")
-    data = np.concatenate([result[1] for result in results], dtype="float32")
-
-    atlas_used_sizes = [len(result[0]) for result in results]
-    atlas_used_sizes.insert(0, 0)
-    indptr = np.cumsum(np.array(atlas_used_sizes))
-
-    return sp.csr_matrix((data, indices, indptr), shape=(qdata.n_obs, adata.n_obs))
+    return dict(
+        atlas_umis=atlas_umis,
+        query_atlas_corr=query_atlas_corr,
+        atlas_project_data=atlas_project_data,
+        query_project_data=query_project_data,
+        atlas_log_fractions=atlas_log_fractions,
+        candidates_count=candidates_count,
+        min_significant_gene_value=min_significant_gene_value,
+        min_usage_weight=min_usage_weight,
+        max_consistency_fold_factor=max_consistency_fold_factor,
+    )
 
 
 @ut.logged()
