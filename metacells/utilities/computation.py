@@ -489,7 +489,7 @@ def pairs_corrcoef_rows(
     second_matrix: utt.NumpyMatrix,
     *,
     reproducible: bool,  # pylint: disable=unused-argument
-) -> utt.NumpyMatrix:
+) -> utt.NumpyVector:
     """
     Similar to for ``numpy.corrcoef``, but computes the correlations between each row of the
     ``first_matrix`` and each matching row of the ``second_matrix``. Both matrices must be dense, in

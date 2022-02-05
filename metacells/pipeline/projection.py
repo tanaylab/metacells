@@ -4,9 +4,12 @@ Projection
 """
 
 from re import Pattern
+from typing import Any
 from typing import Collection
 from typing import Dict
+from typing import List
 from typing import Optional
+from typing import Tuple
 from typing import Union
 
 import numpy as np
@@ -18,15 +21,14 @@ import metacells.tools as tl
 import metacells.utilities as ut
 
 __all__ = [
-    "direct_projection_pipeline",
-    "typed_projection_pipeline",
+    "projection_pipeline",
 ]
 
 
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def direct_projection_pipeline(  # pylint: disable=too-many-statements
+def projection_pipeline(
     what: str = "__x__",
     *,
     adata: AnnData,
@@ -47,8 +49,18 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
     project_max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
     min_entry_project_fold_factor: float = pr.min_entry_project_fold_factor,
     project_abs_folds: bool = pr.project_abs_folds,
+    ignored_gene_names_of_type: Optional[Dict[str, Collection[str]]] = None,
+    ignored_gene_patterns_of_type: Optional[Dict[str, Collection[str]]] = None,
+    atlas_type_property_name: str = "type",
+    project_min_corrected_gene_correlation: float = pr.project_min_corrected_gene_correlation,
+    project_min_corrected_gene_factor: float = pr.project_min_corrected_gene_factor,
+    project_max_uncorrelated_gene_correlation: float = pr.project_max_uncorrelated_gene_correlation,
+    renormalize_query_by_atlas: bool = pr.renormalize_query_by_atlas,
+    renormalize_var_annotations: Optional[Dict[str, Any]] = None,
+    renormalize_layers: Optional[Dict[str, Any]] = None,
+    renormalize_varp_annotations: Optional[Dict[str, Any]] = None,
     reproducible: bool,
-) -> ut.CompressedMatrix:
+) -> Tuple[ut.CompressedMatrix, AnnData]:
     """
     Complete pipeline for projecting query metacells onto an atlas of metacells for the ``what`` (default: {what}) data.
 
@@ -56,7 +68,7 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
 
     Annotated query ``qdata`` and atlas ``adata``, where the observations are cells and the variables are genes, where
     ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation
-    containing such a matrix.
+    containing such a matrix. The atlas should also contain a ``type`` per-observation (metacell) annotation.
 
     **Returns**
 
@@ -65,9 +77,26 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
     metacell) is 1. The weighted sum of the atlas metacells using these weights is the "projected" image of the query
     metacell onto the atlas.
 
-    In addition, sets the following annotations in ``qdata``:
+    In addition, a modified version of ``qdata`` with a new ``ATLASNORM`` gene (if requested), and the following
+    additional annotations:
+
+    Observation (Metacell) Annotations
+        ``projected_type``
+            A type assigned to each query metacell based on the types of the atlas metacells it was projected to.
 
     Variable (Gene) Annotations
+        ``correction_factor``
+            The ratio between the original query and the corrected values (>1 if the gene was increased, <1 if it was
+            reduced).
+
+        ``correlated_gene``
+            A boolean mask of genes which were ignored because they were very correlated between the query and the
+            atlas.
+
+        ``uncorrelated_gene``
+            A boolean mask of genes which were ignored because they were too uncorrelated between the query and the
+            atlas.
+
         ``systematic_gene``
             A boolean mask indicating whether the gene is systematically higher or lower in the query compared to the
             atlas.
@@ -77,6 +106,9 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
 
         ``manually_ignored_gene``
             A boolean mask indicating whether the gene was manually ignored (by its name).
+
+        ``atlas_gene``
+            A boolean mask indicating whether the gene exists in the atlas.
 
         ``atlas_forbidden_gene`` (if ``ignore_atlas_forbidden_genes`` and the atlas has a ``forbidden_gene`` mask)
             A boolean mask indicating whether the gene was forbidden from being a feature in the atlas (and hence
@@ -88,16 +120,39 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
         ``ignored_gene``
             A boolean mask indicating whether the gene was ignored by the projection (for any reason).
 
+        ``systematic_gene_of_<type>``
+            For each query metacell type, a boolean mask indicating whether the gene is systematically higher or lower
+            in the query metacells of this type compared to the atlas metacells of this type.
+
+        ``biased_gene_of_<type>``
+            For each query metacell type, a boolean mask indicating whether the gene has a strong bias in the query
+            metacells of this type compared to the atlas metacells of this type.
+
+        ``manually_ignored_gene_of_<type>``
+            For each query metacell type, a boolean mask indicating whether the gene was manually ignored (by its name)
+            when computing the projection for metacells of this type.
+
+        ``ignored_gene_of_<type>``
+            For each query metacell type, a boolean mask indicating whether the gene was ignored by the projection (for
+            any reason) when computing the projection for metacells of this type.
+
     Observation (Cell) Annotations
         ``similar``
-            A boolean mask indicating whether the query metacell is similar to its projection onto the atlas. If
-            ``False`` the metacells is said to be "dissimilar", which may indicate the query contains cell states that
-            do not appear in the atlas.
+            A boolean mask indicating whether the correcteed query metacell is similar to its projection onto the atlas
+            (ignoring the ``ignored_genes``). If ``False`` the metacell is said to be "dissimilar", which may indicate
+            the query contains cell states that do not appear in the atlas. If ``True`` the metacell is said to be
+            "similar", but there may still be significant systematic differences between the query and the atlas as
+            captured by the various per-gene annotations.
+
+        ``projected_type``
+            The type assigned to each query metacell by its projection on the atlas. This should not be taken as gospel,
+            even for "similar" types, as there may still be significant systematic differences between the query and the
+            atlas as captured by the various per-gene annotations.
 
     Observation-Variable (Cell-Gene) Annotations
         ``projected``
-            A matrix of UMIs where the sum of UMIs for each query metacell is the same as the sum of ``what`` UMIs,
-            describing the "projected" image of the query metacell onto the atlas.
+            A matrix of UMIs where the sum of UMIs for each corrected query metacell is the same as the sum of ``what``
+            UMIs, describing the "projected" image of the query metacell onto the atlas.
 
         ``projected_fold``
             For each gene and query metacell, the fold factor of this gene between the query and its projection (unless
@@ -141,325 +196,107 @@ def direct_projection_pipeline(  # pylint: disable=too-many-statements
     6. Invoke :py:func:`metacells.tools.quality.compute_similar_query_metacells` to annotate the query metacells
        similar to their projection on the atlas using ``project_max_projection_fold_factor`` (default:
        {project_max_projection_fold_factor}).
-    """
-    ignored_mask_names = ["|systematic_gene"]
 
-    if ignored_gene_names is not None or ignored_gene_patterns is not None:
-        tl.find_named_genes(qdata, to="manually_ignored_gene", names=ignored_gene_names, patterns=ignored_gene_patterns)
-        ignored_mask_names.append("|manually_ignored_gene")
-
-    if list(qdata.var_names) != list(adata.var_names):
-        query_genes_list = list(qdata.var_names)
-        atlas_genes_list = list(adata.var_names)
-        common_genes_list = list(sorted(set(qdata.var_names) & set(adata.var_names)))
-        query_gene_indices = np.array([query_genes_list.index(gene) for gene in common_genes_list])
-        atlas_gene_indices = np.array([atlas_genes_list.index(gene) for gene in common_genes_list])
-        common_qdata = ut.slice(qdata, name=".common", vars=query_gene_indices, track_var="full_index")
-        common_adata = ut.slice(adata, name=".common", vars=atlas_gene_indices, track_var="full_index")
-    else:
-        common_adata = adata
-        common_qdata = qdata
-
-    assert list(common_qdata.var_names) == list(common_adata.var_names)
-    full_gene_index_of_common_qdata = ut.get_v_numpy(common_qdata, "full_index")
-
-    common_genes_mask = np.full(qdata.n_vars, False)
-    common_genes_mask[full_gene_index_of_common_qdata] = True
-    ut.set_v_data(qdata, "atlas_gene", common_genes_mask)
-
-    atlas_total_common_umis = ut.get_o_numpy(common_adata, what, sum=True)
-    query_total_common_umis = ut.get_o_numpy(common_qdata, what, sum=True)
-
-    tl.find_systematic_genes(
-        what,
-        adata=common_adata,
-        qdata=common_qdata,
-        atlas_total_umis=atlas_total_common_umis,
-        query_total_umis=query_total_common_umis,
-        low_gene_quantile=systematic_low_gene_quantile,
-        high_gene_quantile=systematic_high_gene_quantile,
-    )
-
-    if ignore_atlas_forbidden_genes and ut.has_data(common_adata, "forbidden_gene"):
-        atlas_forbiden_mask = ut.get_v_numpy(common_adata, "forbidden_gene")
-        ut.set_v_data(common_qdata, "atlas_forbidden_gene", atlas_forbiden_mask)
-        ignored_mask_names.append("|atlas_forbidden_gene")
-
-    if ignore_atlas_insignificant_genes and ut.has_data(common_adata, "significant_gene"):
-        atlas_significant_mask = ut.get_v_numpy(common_adata, "significant_gene")
-        ut.set_v_data(common_qdata, "atlas_significant_gene", atlas_significant_mask)
-        ignored_mask_names.append("|~atlas_significant_gene")
-
-    if ignore_query_forbidden_genes and ut.has_data(common_qdata, "forbidden_gene"):
-        ignored_mask_names.append("|forbidden_gene")
-
-    for mask_name in ignored_mask_names:
-        while mask_name[0] in "|&~":
-            mask_name = mask_name[1:]
-        if mask_name == "forbidden_gene":
-            continue
-        full_mask = np.zeros(qdata.n_vars, dtype="bool")
-        full_mask[full_gene_index_of_common_qdata] = ut.get_v_numpy(common_qdata, mask_name)
-        ut.set_v_data(qdata, mask_name, full_mask)
-
-    full_biased_genes_mask = np.zeros(qdata.n_vars, dtype="bool")
-
-    full_gene_index_of_included_qdata = full_gene_index_of_common_qdata
-    included_adata = common_adata
-    included_qdata = common_qdata
-
-    while True:
-
-        tl.combine_masks(included_qdata, ignored_mask_names, to="ignored_gene")
-        included_genes_mask = ~ut.get_v_numpy(included_qdata, "ignored_gene")
-        included_qdata = ut.slice(included_qdata, name=".included", vars=included_genes_mask)
-        included_adata = ut.slice(included_adata, name=".included", vars=included_genes_mask)
-        full_gene_index_of_included_qdata = ut.get_v_numpy(included_qdata, "full_index")
-
-        weights = tl.project_query_onto_atlas(
-            what,
-            adata=included_adata,
-            qdata=included_qdata,
-            atlas_total_umis=atlas_total_common_umis,
-            query_total_umis=query_total_common_umis,
-            fold_normalization=project_fold_normalization,
-            min_significant_gene_value=project_min_significant_gene_value,
-            max_consistency_fold_factor=project_max_consistency_fold_factor,
-            candidates_count=project_candidates_count,
-            min_usage_weight=project_min_usage_weight,
-            reproducible=reproducible,
-        )
-
-        tl.compute_query_projection(
-            adata=included_adata,
-            qdata=included_qdata,
-            weights=weights,
-            atlas_total_umis=atlas_total_common_umis,
-            query_total_umis=query_total_common_umis,
-        )
-
-        tl.compute_significant_projected_fold_factors(
-            included_qdata,
-            what,
-            total_umis=query_total_common_umis,
-            fold_normalization=project_fold_normalization,
-            min_gene_fold_factor=project_max_projection_fold_factor,
-            min_entry_fold_factor=min_entry_project_fold_factor,
-            min_significant_gene_value=project_min_significant_gene_value,
-            abs_folds=project_abs_folds,
-        )
-
-        if ignored_mask_names == ["biased_gene"]:
-            break
-
-        tl.find_biased_genes(
-            included_qdata,
-            max_projection_fold_factor=project_max_projection_fold_factor,
-            min_metacells_fraction=biased_min_metacells_fraction,
-            abs_folds=project_abs_folds,
-        )
-
-        biased_genes_mask = ut.get_v_numpy(included_qdata, "biased_gene")
-        if np.sum(biased_genes_mask) == 0:
-            break
-
-        full_biased_genes_mask[full_gene_index_of_included_qdata] = biased_genes_mask
-        ignored_mask_names = ["biased_gene"]
-
-    tl.compute_similar_query_metacells(
-        included_qdata,
-        max_projection_fold_factor=project_max_projection_fold_factor,
-    )
-
-    ignored_genes_mask = np.full(qdata.n_vars, True)
-    ignored_genes_mask[full_gene_index_of_included_qdata] = False
-    ut.set_v_data(qdata, "ignored_gene", ignored_genes_mask)
-
-    ut.set_v_data(qdata, "biased_gene", full_biased_genes_mask)
-
-    ut.set_o_data(qdata, "similar", ut.get_o_numpy(included_qdata, "similar"))
-
-    tl.compute_query_projection(
-        adata=common_adata,
-        qdata=common_qdata,
-        weights=weights,
-        atlas_total_umis=atlas_total_common_umis,
-        query_total_umis=query_total_common_umis,
-    )
-
-    projected = ut.get_vo_proper(common_qdata, "projected")
-    full_projected = np.zeros(qdata.shape, dtype="float32")
-    full_projected[:, full_gene_index_of_common_qdata] = projected
-    ut.set_vo_data(qdata, "projected", full_projected)
-
-    projected_fold = ut.get_vo_proper(included_qdata, "projected_fold")
-    full_projected_fold = sp.csr_matrix(qdata.shape, dtype="float32")
-    full_projected_fold[:, full_gene_index_of_included_qdata] = projected_fold
-    ut.set_vo_data(qdata, "projected_fold", full_projected_fold)
-
-    ut.set_m_data(qdata, "project_max_projection_fold_factor", project_max_projection_fold_factor)
-
-    return weights
-
-
-@ut.logged()
-@ut.timed_call()
-@ut.expand_doc()
-def typed_projection_pipeline(
-    what: str = "__x__",
-    *,
-    adata: AnnData,
-    qdata: AnnData,
-    ignored_gene_names: Optional[Collection[str]] = None,
-    ignored_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    ignore_atlas_insignificant_genes: bool = pr.ignore_atlas_insignificant_genes,
-    ignore_atlas_forbidden_genes: bool = pr.ignore_atlas_forbidden_genes,
-    ignore_query_forbidden_genes: bool = pr.ignore_query_forbidden_genes,
-    systematic_low_gene_quantile: float = pr.systematic_low_gene_quantile,
-    systematic_high_gene_quantile: float = pr.systematic_high_gene_quantile,
-    biased_min_metacells_fraction: float = pr.biased_min_metacells_fraction,
-    project_fold_normalization: float = pr.project_fold_normalization,
-    project_candidates_count: int = pr.project_candidates_count,
-    project_min_significant_gene_value: float = pr.project_min_significant_gene_value,
-    project_min_usage_weight: float = pr.project_min_usage_weight,
-    project_max_consistency_fold_factor: float = pr.project_max_consistency_fold_factor,
-    project_max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
-    min_entry_project_fold_factor: float = pr.min_entry_project_fold_factor,
-    project_abs_folds: bool = pr.project_abs_folds,
-    ignored_gene_names_of_type: Optional[Dict[str, Collection[str]]] = None,
-    ignored_gene_patterns_of_type: Optional[Dict[str, Collection[str]]] = None,
-    atlas_type_property_name: str = "type",
-    reproducible: bool,
-) -> ut.CompressedMatrix:
-    """
-    Similar to :py:func:`direct_projection_pipeline`, but perform a second phase depending on the ``type`` annotations
-    of the atlas metacells.
-
-    Sets the following additional annotations in ``qdata``:
-
-    Observation (Metacell) Annotations
-        ``projected_type``
-            A type assigned to each query metacell based on the types of the atlas metacells it was projected to.
-
-    Variable (Gene) Annotations
-        ``systematic_gene_of_<type>``
-            For each query metacell type, a boolean mask indicating whether the gene is systematically higher or lower
-            in the query metacells of this type compared to the atlas metacells of this type.
-
-        ``biased_gene_of_<type>``
-            For each query metacell type, a boolean mask indicating whether the gene has a strong bias in the query
-            metacells of this type compared to the atlas metacells of this type.
-
-        ``manually_ignored_gene_of_<type>``
-            For each query metacell type, a boolean mask indicating whether the gene was manually ignored (by its name)
-            when computing the projection for metacells of this type.
-
-        ``ignored_gene_of_<type>``
-            For each query metacell type, a boolean mask indicating whether the gene was ignored by the projection (for
-            any reason) when computing the projection for metacells of this type.
-
-    **Computation Parameters**
-
-    1. Invokes :py:func:`direct_projection_pipeline` with all the parameters except for ``typed_ignored_gene_names``,
-       ``typed_ignored_gene_patterns`` and ``atlas_type_property_name``.
-
-    2. Invoke :py:func:`metacells.tools.project.project_atlas_to_query` to assign a projected type to each of the
+    7. Invoke :py:func:`metacells.tools.project.project_atlas_to_query` to assign a projected type to each of the
        query metacells based on the ``atlas_type_property_name`` (default: {atlas_type_property_name}).
 
     For each type of query metacells:
 
-    3. Invoke :py:func:`metacells.tools.project.find_systematic_genes` to compute the systematic genes using only
+    8. Invoke :py:func:`metacells.tools.project.find_systematic_genes` to compute the systematic genes using only
        metacells of this type in both the query and the atlas. Use these to create a list of type-specific ignored
        genes, instead of the global systematic genes list.
 
-    4. Invoke :py:func:`metacells.tools.project.project_query_onto_atlas` and
+    9. Invoke :py:func:`metacells.tools.project.project_query_onto_atlas` and
        :py:func:`metacells.tools.project.compute_query_projection` to project each query metacell onto the atlas, using
        the type-specific ignored genes in addition to the global ignored genes. Note that this projection is not
        restricted to using atlas metacells of the specific type.
 
-    5. Invoke :py:func:`metacells.tools.project.compute_significant_projected_fold_factors` to compute the significant
+    10. Invoke :py:func:`metacells.tools.project.compute_significant_projected_fold_factors` to compute the significant
        fold factors between the query and its projection.
 
-    6. Invoke :py:func:`metacells.tools.project.find_biased_genes` to identify type-specific biased genes. If any
-       such genes are found, add them to the type-specific ignored genes (instead of the global biased genes list)
-       and repeat steps 4-5.
+    11. Invoke :py:func:`metacells.tools.project.find_biased_genes` to identify type-specific biased genes. If any such
+       genes are found, add them to the type-specific ignored genes (instead of the global biased genes list) and repeat
+       steps 9-10.
 
-    7. Invoke :py:func:`metacells.tools.quality.compute_similar_query_metacells` to validate the updated projection.
+    And then:
+
+    12. If steps 8-11 changed the type assigned to a query metacell (an extremely rate occurrence), repeat them (but do
+       these steps no more than 3 times).
+
+    13. Correlate the expression levels of each gene between the query and projection. If this is less than
+       ``project_max_uncorrelated_gene_correlation`` (default: {project_max_uncorrelated_gene_correlation}), then mark
+       the gene as ignored. If this is at least ``project_min_corrected_gene_correlation`` (default:
+       {project_min_corrected_gene_correlation}), compute the ratio between the mean expression of the gene in the
+       projection and the query. If this is at most 1/(1+``project_min_corrected_gene_factor``) or at least
+       (1+``project_min_corrected_gene_factor``) (default: {project_min_corrected_gene_factor}), then multiply the
+       gene's value by this factor so its level would match the atlas. If any genes were ignored or corrected, then
+       start over from step 2 ignoring the uncorrelated genes and using the corrected gene expression levels.
+
+    14. Invoke :py:func:`metacells.tools.quality.compute_similar_query_metacells` to validate the updated projection.
+
+    15. If ``renormalize_query_by_atlas`` (default: {renormalize_query_by_atlas}), then invoke
+       :py:func:`metacells.tools.project.renormalize_query_by_atlas` using the ``renormalize_var_annotations``,
+       ``renormalize_layers`` and ``renormalize_varp_annotations``, if any, to add an ``ATLASNORM`` pseudo-gene so that
+       the fraction out of the total UMIs in the query of the genes common to the atlas would be the same on average as
+       their fraction out of the total UMIs in the atlas.
     """
+    assert project_min_corrected_gene_factor >= 0
+
     if ignored_gene_names_of_type is None:
         ignored_gene_names_of_type = {}
     if ignored_gene_patterns_of_type is None:
         ignored_gene_patterns_of_type = {}
 
-    weights = direct_projection_pipeline(
-        what,
+    qdata = qdata.copy()
+
+    common_adata, common_qdata = _common_data(
         adata=adata,
         qdata=qdata,
+        project_max_projection_fold_factor=project_max_projection_fold_factor,
         ignored_gene_names=ignored_gene_names,
         ignored_gene_patterns=ignored_gene_patterns,
-        ignore_atlas_insignificant_genes=ignore_atlas_insignificant_genes,
         ignore_atlas_forbidden_genes=ignore_atlas_forbidden_genes,
-        ignore_query_forbidden_genes=ignore_query_forbidden_genes,
-        systematic_low_gene_quantile=systematic_low_gene_quantile,
-        systematic_high_gene_quantile=systematic_high_gene_quantile,
-        biased_min_metacells_fraction=biased_min_metacells_fraction,
-        project_fold_normalization=project_fold_normalization,
-        project_candidates_count=project_candidates_count,
-        project_min_significant_gene_value=project_min_significant_gene_value,
-        project_min_usage_weight=project_min_usage_weight,
-        project_max_consistency_fold_factor=project_max_consistency_fold_factor,
-        project_max_projection_fold_factor=project_max_projection_fold_factor,
-        min_entry_project_fold_factor=project_max_projection_fold_factor,
-        project_abs_folds=project_abs_folds,
-        reproducible=reproducible,
+        ignore_atlas_insignificant_genes=ignore_atlas_insignificant_genes,
     )
-
-    if list(qdata.var_names) != list(adata.var_names):
-        query_genes_list = list(qdata.var_names)
-        atlas_genes_list = list(adata.var_names)
-        common_genes_list = list(sorted(set(qdata.var_names) & set(adata.var_names)))
-        query_gene_indices = np.array([query_genes_list.index(gene) for gene in common_genes_list])
-        atlas_gene_indices = np.array([atlas_genes_list.index(gene) for gene in common_genes_list])
-        common_qdata = ut.slice(qdata, name=".common", vars=query_gene_indices, track_var="full_index")
-        common_adata = ut.slice(adata, name=".common", vars=atlas_gene_indices, track_var="full_index")
-    else:
-        common_adata = adata
-        common_qdata = qdata
-
-    assert list(common_qdata.var_names) == list(common_adata.var_names)
-
-    full_gene_index_of_common_qdata = ut.get_v_numpy(common_qdata, "full_index")
 
     atlas_total_common_umis = ut.get_o_numpy(common_adata, what, sum=True)
     query_total_common_umis = ut.get_o_numpy(common_qdata, what, sum=True)
 
-    full_projected_fold = np.zeros(qdata.shape, dtype="float32")
-    full_similar = np.zeros(qdata.n_obs, dtype="bool")
-
-    tl.project_atlas_to_query(
-        adata=common_adata,
-        qdata=common_qdata,
-        weights=weights,
-        property_name=atlas_type_property_name,
-        to_property_name="projected_type",
-    )
-    type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type")
-    type_of_atlas_metacells = ut.get_o_numpy(common_adata, atlas_type_property_name)
-
     repeat = 0
-    while repeat < 3:
+    while True:
         repeat += 1
-        weights = _compute_per_type_projection(
-            what,
-            repeat=repeat,
-            adata=adata,
-            qdata=qdata,
+        ut.log_calc("correlation repeat", repeat)
+
+        _compute_preliminary_projection(
+            what=what,
             common_adata=common_adata,
             common_qdata=common_qdata,
             atlas_total_common_umis=atlas_total_common_umis,
             query_total_common_umis=query_total_common_umis,
-            type_of_atlas_metacells=type_of_atlas_metacells,
-            type_of_query_metacells=type_of_query_metacells,
+            systematic_low_gene_quantile=systematic_low_gene_quantile,
+            systematic_high_gene_quantile=systematic_high_gene_quantile,
+            ignore_atlas_forbidden_genes=ignore_atlas_forbidden_genes,
+            ignore_atlas_insignificant_genes=ignore_atlas_insignificant_genes,
+            ignore_query_forbidden_genes=ignore_query_forbidden_genes,
+            project_fold_normalization=project_fold_normalization,
+            project_min_significant_gene_value=project_min_significant_gene_value,
+            project_max_consistency_fold_factor=project_max_consistency_fold_factor,
+            project_candidates_count=project_candidates_count,
+            project_min_usage_weight=project_min_usage_weight,
+            project_max_projection_fold_factor=project_max_projection_fold_factor,
+            min_entry_project_fold_factor=min_entry_project_fold_factor,
+            biased_min_metacells_fraction=biased_min_metacells_fraction,
+            project_abs_folds=project_abs_folds,
+            atlas_type_property_name=atlas_type_property_name,
+            reproducible=reproducible,
+        )
+
+        weights = _compute_per_type_projection(
+            what=what,
+            common_adata=common_adata,
+            common_qdata=common_qdata,
+            atlas_total_common_umis=atlas_total_common_umis,
+            query_total_common_umis=query_total_common_umis,
             systematic_low_gene_quantile=systematic_low_gene_quantile,
             systematic_high_gene_quantile=systematic_high_gene_quantile,
             biased_min_metacells_fraction=biased_min_metacells_fraction,
@@ -473,59 +310,470 @@ def typed_projection_pipeline(
             project_abs_folds=project_abs_folds,
             ignored_gene_names_of_type=ignored_gene_names_of_type,
             ignored_gene_patterns_of_type=ignored_gene_patterns_of_type,
-            full_gene_index_of_common_qdata=full_gene_index_of_common_qdata,
-            full_projected_fold=full_projected_fold,
-            full_similar=full_similar,
+            atlas_type_property_name=atlas_type_property_name,
             reproducible=reproducible,
         )
 
-        tl.project_atlas_to_query(
-            adata=adata,
-            qdata=qdata,
-            weights=weights,
-            property_name=atlas_type_property_name,
-            to_property_name="projected_type",
-        )
-        updated_type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type")
-        stable_query_metacells_types = np.all(updated_type_of_query_metacells == type_of_query_metacells)
-        ut.log_calc("stable_query_metacells_types", stable_query_metacells_types)
-        if stable_query_metacells_types:
+        if not _correct_correlated_genes(
+            what=what,
+            common_qdata=common_qdata,
+            project_max_uncorrelated_gene_correlation=project_max_uncorrelated_gene_correlation,
+            project_min_corrected_gene_correlation=project_min_corrected_gene_correlation,
+            project_min_corrected_gene_factor=project_min_corrected_gene_factor,
+            reproducible=reproducible,
+        ):
             break
-        type_of_query_metacells = updated_type_of_query_metacells
 
-    ut.set_o_data(qdata, "similar", full_similar)
+    _convey_query_common_to_full_data(what=what, qdata=qdata, common_qdata=common_qdata)
+
+    qdata = _renormalize_query(
+        adata=adata,
+        qdata=qdata,
+        renormalize_query_by_atlas=renormalize_query_by_atlas,
+        renormalize_var_annotations=renormalize_var_annotations,
+        renormalize_layers=renormalize_layers,
+        renormalize_varp_annotations=renormalize_varp_annotations,
+    )
+
+    return weights, qdata
+
+
+@ut.logged()
+@ut.timed_call()
+def _common_data(
+    *,
+    qdata: AnnData,
+    adata: AnnData,
+    project_max_projection_fold_factor: float,
+    ignored_gene_names: Optional[Collection[str]],
+    ignored_gene_patterns: Optional[Collection[Union[str, Pattern]]],
+    ignore_atlas_forbidden_genes: bool,
+    ignore_atlas_insignificant_genes: bool,
+) -> Tuple[AnnData, AnnData]:
+    ut.set_m_data(qdata, "project_max_projection_fold_factor", project_max_projection_fold_factor)
+
+    if ignored_gene_names is not None or ignored_gene_patterns is not None:
+        tl.find_named_genes(qdata, to="manually_ignored_gene", names=ignored_gene_names, patterns=ignored_gene_patterns)
+
+    if list(qdata.var_names) != list(adata.var_names):
+        atlas_genes_list = list(adata.var_names)
+        query_genes_list = list(qdata.var_names)
+        common_genes_list = list(sorted(set(atlas_genes_list) & set(query_genes_list)))
+        atlas_gene_indices = np.array([atlas_genes_list.index(gene) for gene in common_genes_list])
+        query_gene_indices = np.array([query_genes_list.index(gene) for gene in common_genes_list])
+        common_adata = ut.slice(adata, name=".common", vars=atlas_gene_indices)
+        common_qdata = ut.slice(
+            qdata,
+            name=".common",
+            vars=query_gene_indices,
+            track_obs="full_cell_index_of_qdata",
+            track_var="full_gene_index_of_qdata",
+        )
+    else:
+        common_adata = adata
+        common_qdata = qdata
+        ut.set_o_data(common_qdata, "full_cell_index_of_qdata", np.arange(qdata.n_obs))
+        ut.set_v_data(common_qdata, "full_gene_index_of_qdata", np.arange(qdata.n_vars))
+
+    assert list(common_qdata.var_names) == list(common_adata.var_names)
+
+    ut.set_o_data(common_qdata, "common_cell_index_of_qdata", np.arange(common_qdata.n_obs))
+    ut.set_v_data(common_qdata, "common_gene_index_of_qdata", np.arange(common_qdata.n_vars))
+    ut.set_v_data(common_qdata, "biased_gene", np.full(common_qdata.n_vars, False))
+    ut.set_v_data(common_qdata, "uncorrelated_gene", np.zeros(common_qdata.n_vars, dtype="bool"))
+    ut.set_v_data(common_qdata, "correction_factor", np.full(common_qdata.n_vars, 1.0, dtype="float32"))
+    ut.set_v_data(common_qdata, "atlas_gene", np.full(common_qdata.n_vars, True))
+
+    if ignore_atlas_forbidden_genes and ut.has_data(common_adata, "forbidden_gene"):
+        atlas_forbiden_mask = ut.get_v_numpy(common_adata, "forbidden_gene")
+        ut.set_v_data(common_qdata, "atlas_forbidden_gene", atlas_forbiden_mask)
+
+    if ignore_atlas_insignificant_genes and ut.has_data(common_adata, "significant_gene"):
+        atlas_significant_mask = ut.get_v_numpy(common_adata, "significant_gene")
+        ut.set_v_data(common_qdata, "atlas_significant_gene", atlas_significant_mask)
+
+    return common_adata, common_qdata
+
+
+@ut.logged()
+@ut.timed_call()
+def _convey_query_common_to_full_data(
+    *,
+    what: str,
+    qdata: AnnData,
+    common_qdata: AnnData,
+) -> None:
+    if id(qdata) == id(common_qdata):
+        for data_name in ["full_cell_index_of_qdata", "common_cell_index_of_qdata"]:
+            del qdata.obs[data_name]
+
+        for data_name in ["full_gene_index_of_qdata", "common_gene_index_of_qdata"]:
+            del qdata.var[data_name]
+
+        return
+
+    assert common_qdata.n_obs == qdata.n_obs
+
+    for data_name in ["similar", "projected_type"]:
+        ut.set_o_data(qdata, data_name, ut.get_o_numpy(common_qdata, data_name))
+
+    full_gene_index_of_common_qdata = ut.get_v_numpy(common_qdata, "full_gene_index_of_qdata")
+
+    for (data_name, dtype, default) in [
+        ("atlas_gene", "bool", False),
+        ("atlas_forbidden_gene", "bool", False),
+        ("atlas_significant_gene", "bool", False),
+        ("biased_gene", "bool", False),
+        ("systematic_gene", "bool", False),
+        ("ignored_gene", "bool", True),
+        ("correlated_gene", "bool", False),
+        ("uncorrelated_gene", "bool", False),
+        ("correction_factor", "float32", 1.0),
+    ]:
+        if ut.has_data(common_qdata, data_name):
+            full_data = np.full(qdata.n_vars, default, dtype=dtype)
+            full_data[full_gene_index_of_common_qdata] = ut.get_v_numpy(common_qdata, data_name)
+            ut.set_v_data(qdata, data_name, full_data)
+
+    for type_name in np.unique(ut.get_o_numpy(qdata, "projected_type")):
+        for data_name in ["systematic_gene", "ignored_gene", "biased_gene"]:
+            type_data_name = f"{data_name}_of_{type_name}"
+            full_data = np.zeros(qdata.n_vars, dtype="bool")
+            full_data[full_gene_index_of_common_qdata] = ut.get_v_numpy(common_qdata, type_data_name)
+            ut.set_v_data(qdata, type_data_name, full_data)
+
+    common_corrected_data = ut.to_numpy_matrix(ut.get_vo_proper(common_qdata, what)).copy()
+    full_corrected_data = ut.to_numpy_matrix(ut.get_vo_proper(qdata, what)).copy()
+    full_corrected_data[:, full_gene_index_of_common_qdata] = common_corrected_data
+    ut.set_vo_data(qdata, what, full_corrected_data)
+
+    common_projected_fold = ut.get_vo_proper(common_qdata, "projected_fold")
+    full_projected_fold = np.zeros(qdata.shape, dtype="float32")
+    full_projected_fold[:, full_gene_index_of_common_qdata] = ut.to_numpy_matrix(common_projected_fold)
     ut.set_vo_data(qdata, "projected_fold", sp.csr_matrix(full_projected_fold))
 
-    tl.compute_query_projection(
+    common_projected = ut.get_vo_proper(common_qdata, "projected")
+    full_projected = np.zeros(qdata.shape, dtype="float32")
+    full_projected[:, full_gene_index_of_common_qdata] = ut.to_numpy_matrix(common_projected)
+    ut.set_vo_data(qdata, "projected", full_projected)
+
+
+@ut.logged()
+@ut.timed_call()
+def _renormalize_query(
+    *,
+    adata: AnnData,
+    qdata: AnnData,
+    renormalize_query_by_atlas: bool,
+    renormalize_var_annotations: Optional[Dict[str, Any]],
+    renormalize_layers: Optional[Dict[str, Any]],
+    renormalize_varp_annotations: Optional[Dict[str, Any]],
+) -> AnnData:
+    if not renormalize_query_by_atlas:
+        return qdata
+
+    var_annotations = dict(
+        # Standard MC2 gene annotations.
+        excluded_gene=False,
+        clean_gene=False,
+        forbidden_gene=False,
+        pre_feature_gene=False,
+        feature_gene=False,
+        top_feature_gene=False,
+        significant_gene=False,
+        # Annotations added here (except for per-type).
+        atlas_gene=False,
+        atlas_forbidden_gene=False,
+        atlas_significant_gene=False,
+        biased_gene=False,
+        systematic_gene=False,
+        manually_ignored_gene=False,
+        ignored_gene=False,
+        correlated_gene=False,
+        uncorrelated_gene=False,
+        correction_factor=1.0,
+    )
+
+    if renormalize_var_annotations is not None:
+        var_annotations.update(renormalize_var_annotations)
+
+    layers = dict(inner_fold=0.0, projected=0.0, projected_fold=0.0)
+
+    if renormalize_layers is not None:
+        layers.update(renormalize_layers)
+
+    varp_annotations = dict(var_similarity=0.0)
+    if renormalize_varp_annotations is not None:
+        varp_annotations.update(renormalize_varp_annotations)
+
+    for type_name in np.unique(ut.get_o_numpy(qdata, "projected_type")):
+        var_annotations[f"systematic_gene_of_{type_name}"] = False
+        var_annotations[f"biased_gene_of_{type_name}"] = False
+        var_annotations[f"manually_ignored_gene_of_{type_name}"] = False
+        var_annotations[f"ignored_gene_of_{type_name}"] = False
+
+    renormalized_qdata = tl.renormalize_query_by_atlas(
+        adata=adata,
+        qdata=qdata,
+        var_annotations=var_annotations,
+        layers=layers,
+        varp_annotations=varp_annotations,
+    )
+
+    if renormalized_qdata is not None:
+        return renormalized_qdata
+
+    return qdata
+
+
+@ut.logged()
+@ut.timed_call()
+def _compute_preliminary_projection(
+    *,
+    what: str,
+    common_adata: AnnData,
+    common_qdata: AnnData,
+    atlas_total_common_umis: ut.NumpyVector,
+    query_total_common_umis: ut.NumpyVector,
+    systematic_low_gene_quantile: float,
+    systematic_high_gene_quantile: float,
+    ignore_atlas_forbidden_genes: bool,
+    ignore_atlas_insignificant_genes: bool,
+    ignore_query_forbidden_genes: bool,
+    project_fold_normalization: float,
+    project_min_significant_gene_value: float,
+    project_max_consistency_fold_factor: float,
+    project_candidates_count: int,
+    project_min_usage_weight: float,
+    project_max_projection_fold_factor: float,
+    min_entry_project_fold_factor: float,
+    biased_min_metacells_fraction: float,
+    atlas_type_property_name: str,
+    project_abs_folds: bool,
+    reproducible: bool,
+) -> None:
+    ignored_mask_names = _initial_ignored_mask_names(
+        what=what,
+        common_adata=common_adata,
+        common_qdata=common_qdata,
+        atlas_total_common_umis=atlas_total_common_umis,
+        query_total_common_umis=query_total_common_umis,
+        ignore_atlas_forbidden_genes=ignore_atlas_forbidden_genes,
+        ignore_atlas_insignificant_genes=ignore_atlas_insignificant_genes,
+        ignore_query_forbidden_genes=ignore_query_forbidden_genes,
+        systematic_low_gene_quantile=systematic_low_gene_quantile,
+        systematic_high_gene_quantile=systematic_high_gene_quantile,
+    )
+
+    included_adata = common_adata
+    included_qdata = common_qdata
+
+    repeat = 0
+    while True:
+        repeat += 1
+        ut.log_calc("biased repeat", repeat)
+
+        weights, included_adata, included_qdata = _compute_global_projection(
+            what=what,
+            included_adata=included_adata,
+            included_qdata=included_qdata,
+            atlas_total_common_umis=atlas_total_common_umis,
+            query_total_common_umis=query_total_common_umis,
+            ignored_mask_names=ignored_mask_names,
+            project_fold_normalization=project_fold_normalization,
+            project_min_significant_gene_value=project_min_significant_gene_value,
+            project_max_consistency_fold_factor=project_max_consistency_fold_factor,
+            project_candidates_count=project_candidates_count,
+            project_min_usage_weight=project_min_usage_weight,
+            project_max_projection_fold_factor=project_max_projection_fold_factor,
+            min_entry_project_fold_factor=min_entry_project_fold_factor,
+            project_abs_folds=project_abs_folds,
+            reproducible=reproducible,
+        )
+
+        if not _detect_global_biased_genes(
+            weights=weights,
+            common_adata=common_adata,
+            common_qdata=common_qdata,
+            included_qdata=included_qdata,
+            project_max_projection_fold_factor=project_max_projection_fold_factor,
+            biased_min_metacells_fraction=biased_min_metacells_fraction,
+            atlas_type_property_name=atlas_type_property_name,
+            project_abs_folds=project_abs_folds,
+        ):
+            break
+
+        ignored_mask_names = ["biased_gene"]
+
+    _convey_query_included_to_common_data(common_qdata=common_qdata, included_qdata=included_qdata)
+
+
+def _convey_query_included_to_common_data(
+    *,
+    common_qdata: AnnData,
+    included_qdata: AnnData,
+) -> None:
+    common_gene_index_of_included_qdata = ut.get_v_numpy(included_qdata, "common_gene_index_of_qdata")
+    ignored_genes_mask = np.full(common_qdata.n_vars, True)
+    ignored_genes_mask[common_gene_index_of_included_qdata] = False
+    ut.set_v_data(common_qdata, "ignored_gene", ignored_genes_mask)
+
+    projected_types = ut.get_o_numpy(included_qdata, "projected_type")
+    ut.set_o_data(common_qdata, "projected_type", projected_types)
+
+
+@ut.logged()
+@ut.timed_call()
+def _initial_ignored_mask_names(
+    *,
+    what: str,
+    common_adata: AnnData,
+    common_qdata: AnnData,
+    atlas_total_common_umis: ut.NumpyVector,
+    query_total_common_umis: ut.NumpyVector,
+    ignore_atlas_forbidden_genes: bool,
+    ignore_atlas_insignificant_genes: bool,
+    ignore_query_forbidden_genes: bool,
+    systematic_low_gene_quantile: float,
+    systematic_high_gene_quantile: float,
+) -> List[str]:
+    ignored_mask_names = ["|uncorrelated_gene", "|manually_ignored_gene?"]
+
+    tl.find_systematic_genes(
+        what,
         adata=common_adata,
         qdata=common_qdata,
+        atlas_total_umis=atlas_total_common_umis,
+        query_total_umis=query_total_common_umis,
+        low_gene_quantile=systematic_low_gene_quantile,
+        high_gene_quantile=systematic_high_gene_quantile,
+    )
+    ignored_mask_names.append("|systematic_gene")
+
+    if ignore_atlas_forbidden_genes:
+        ignored_mask_names.append("|atlas_forbidden_gene?")
+
+    if ignore_atlas_insignificant_genes:
+        ignored_mask_names.append("|~atlas_significant_gene?")
+
+    if ignore_atlas_forbidden_genes:
+        ignored_mask_names.append("|atlas_forbidden_gene?")
+
+    if ignore_query_forbidden_genes:
+        ignored_mask_names.append("|forbidden_gene?")
+
+    return ignored_mask_names
+
+
+@ut.logged()
+@ut.timed_call()
+def _compute_global_projection(
+    *,
+    what: str,
+    included_adata: AnnData,
+    included_qdata: AnnData,
+    atlas_total_common_umis: ut.NumpyVector,
+    query_total_common_umis: ut.NumpyVector,
+    ignored_mask_names: List[str],
+    project_fold_normalization: float,
+    project_min_significant_gene_value: float,
+    project_max_consistency_fold_factor: float,
+    project_candidates_count: int,
+    project_min_usage_weight: float,
+    project_max_projection_fold_factor: float,
+    min_entry_project_fold_factor: float,
+    project_abs_folds: bool,
+    reproducible: bool,
+) -> Tuple[ut.CompressedMatrix, AnnData, AnnData]:
+    tl.combine_masks(included_qdata, ignored_mask_names, to="ignored_gene")
+    included_genes_mask = ~ut.get_v_numpy(included_qdata, "ignored_gene")
+
+    included_adata = ut.slice(included_adata, name=".included", vars=included_genes_mask)
+    included_qdata = ut.slice(included_qdata, name=".included", vars=included_genes_mask)
+
+    weights = tl.project_query_onto_atlas(
+        what,
+        adata=included_adata,
+        qdata=included_qdata,
+        atlas_total_umis=atlas_total_common_umis,
+        query_total_umis=query_total_common_umis,
+        fold_normalization=project_fold_normalization,
+        min_significant_gene_value=project_min_significant_gene_value,
+        max_consistency_fold_factor=project_max_consistency_fold_factor,
+        candidates_count=project_candidates_count,
+        min_usage_weight=project_min_usage_weight,
+        reproducible=reproducible,
+    )
+
+    tl.compute_query_projection(
+        adata=included_adata,
+        qdata=included_qdata,
         weights=weights,
         atlas_total_umis=atlas_total_common_umis,
         query_total_umis=query_total_common_umis,
     )
 
-    projected = ut.get_vo_proper(common_qdata, "projected")
-    full_projected = np.zeros(qdata.shape, dtype="float32")
-    full_projected[:, full_gene_index_of_common_qdata] = projected
-    ut.set_vo_data(qdata, "projected", full_projected)
+    tl.compute_significant_projected_fold_factors(
+        included_qdata,
+        what,
+        total_umis=query_total_common_umis,
+        fold_normalization=project_fold_normalization,
+        min_gene_fold_factor=project_max_projection_fold_factor,
+        min_entry_fold_factor=min_entry_project_fold_factor,
+        min_significant_gene_value=project_min_significant_gene_value,
+        abs_folds=project_abs_folds,
+    )
 
-    return weights
+    return weights, included_adata, included_qdata
+
+
+def _detect_global_biased_genes(
+    *,
+    weights: ut.CompressedMatrix,
+    common_adata: AnnData,
+    common_qdata: AnnData,
+    included_qdata: AnnData,
+    project_max_projection_fold_factor: float,
+    biased_min_metacells_fraction: float,
+    atlas_type_property_name: str,
+    project_abs_folds: bool,
+) -> bool:
+    tl.project_atlas_to_query(
+        adata=common_adata,
+        qdata=included_qdata,
+        weights=weights,
+        property_name=atlas_type_property_name,
+        to_property_name="projected_type",
+    )
+
+    tl.find_biased_genes(
+        included_qdata,
+        max_projection_fold_factor=project_max_projection_fold_factor,
+        min_metacells_fraction=biased_min_metacells_fraction,
+        abs_folds=project_abs_folds,
+    )
+
+    included_biased_genes_mask = ut.get_v_numpy(included_qdata, "biased_gene")
+    if not np.any(included_biased_genes_mask):
+        return False
+
+    common_biased_genes_mask = ut.get_v_numpy(common_qdata, "biased_gene").copy()
+    common_gene_index_of_included_qdata = ut.get_v_numpy(included_qdata, "common_gene_index_of_qdata")
+    common_biased_genes_mask[common_gene_index_of_included_qdata] = included_biased_genes_mask
+    ut.set_v_data(common_qdata, "biased_gene", common_biased_genes_mask)
+
+    return True
 
 
 @ut.logged()
 @ut.timed_call()
-def _compute_per_type_projection(  # pylint: disable=too-many-statements
-    what: str,
+def _compute_per_type_projection(
     *,
-    repeat: int,  # pylint: disable=unused-argument
-    adata: AnnData,
-    qdata: AnnData,
+    what: str,
     common_adata: AnnData,
     common_qdata: AnnData,
     atlas_total_common_umis: ut.NumpyVector,
     query_total_common_umis: ut.NumpyVector,
-    type_of_atlas_metacells: ut.NumpyVector,
-    type_of_query_metacells: ut.NumpyVector,
     systematic_low_gene_quantile: float,
     systematic_high_gene_quantile: float,
     biased_min_metacells_fraction: float,
@@ -539,142 +787,471 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
     project_abs_folds: bool,
     ignored_gene_names_of_type: Dict[str, Collection[str]],
     ignored_gene_patterns_of_type: Dict[str, Collection[str]],
-    full_gene_index_of_common_qdata: ut.NumpyVector,
-    full_projected_fold: ut.NumpyVector,
-    full_similar: ut.NumpyVector,
+    atlas_type_property_name: str,
     reproducible: bool,
 ) -> ut.CompressedMatrix:
-    full_weights = sp.csr_matrix((qdata.n_obs, adata.n_obs), dtype="float32")
-    unique_types = np.unique(type_of_query_metacells)
-    for type_name in unique_types:
-        atlas_type_mask = type_of_atlas_metacells == type_name
-        query_type_mask = type_of_query_metacells == type_name
-        full_cell_index_of_type_qdata = np.where(query_type_mask)[0]
+    repeat = 0
+    while repeat < 3:
+        repeat += 1
+        ut.log_calc("types repeat", repeat)
 
-        ut.log_calc("type_name", type_name)
-        ut.log_calc("query cells mask", query_type_mask)
-        ut.log_calc("atlas cells mask", atlas_type_mask)
+        similar = np.zeros(common_qdata.n_obs, dtype="bool")
+        weights = sp.csr_matrix((common_qdata.n_obs, common_adata.n_obs), dtype="float32")
+        projected_folds = np.zeros(common_qdata.shape, dtype="float32")
 
-        atlas_type_total_common_umis = atlas_total_common_umis[atlas_type_mask]
-        query_type_total_common_umis = query_total_common_umis[query_type_mask]
-
-        type_common_adata = ut.slice(common_adata, obs=atlas_type_mask, name=f".{type_name}")
-        type_common_qdata = ut.slice(common_qdata, obs=query_type_mask, name=f".{type_name}")
-
-        tl.find_systematic_genes(
-            what,
-            adata=type_common_adata,
-            qdata=type_common_qdata,
-            atlas_total_umis=atlas_type_total_common_umis,
-            query_total_umis=query_type_total_common_umis,
-            low_gene_quantile=systematic_low_gene_quantile,
-            high_gene_quantile=systematic_high_gene_quantile,
-        )
-
-        type_ignored_mask_names = ["|ignored_gene"]
-
-        type_systematic_genes_mask = ut.get_v_numpy(type_common_qdata, "systematic_gene")
-        ut.set_v_data(type_common_qdata, f"systematic_gene_of_{type_name}", type_systematic_genes_mask)
-        type_ignored_mask_names.append(f"|systematic_gene_of_{type_name}")
-
-        if type_name in ignored_gene_names_of_type or type_name in ignored_gene_patterns_of_type:
-            tl.find_named_genes(
-                type_common_qdata,
-                to=f"manually_ignored_gene_of_{type_name}",
-                names=ignored_gene_names_of_type.get(type_name),
-                patterns=ignored_gene_patterns_of_type.get(type_name),
-            )
-            type_ignored_mask_names.append(f"|manually_ignored_gene_of_{type_name}")
-
-        for mask_name in type_ignored_mask_names:
-            while mask_name[0] in "|&~":
-                mask_name = mask_name[1:]
-            if mask_name == "ignored_gene":
-                continue
-            full_mask = np.zeros(qdata.n_vars, dtype="bool")
-            full_mask[full_gene_index_of_common_qdata] = ut.get_v_numpy(type_common_qdata, mask_name)
-            ut.set_v_data(qdata, mask_name, full_mask)
-
-        full_type_biased_genes_mask = np.zeros(qdata.n_vars, dtype="bool")
-
-        type_included_adata = common_adata
-        type_included_qdata = type_common_qdata
-        full_gene_index_of_type_included_qdata = full_gene_index_of_common_qdata
-
-        while True:
-
-            tl.combine_masks(type_included_qdata, type_ignored_mask_names, to=f"ignored_gene_of_{type_name}")
-            type_included_genes_mask = ~ut.get_v_numpy(type_included_qdata, f"ignored_gene_of_{type_name}")
-            type_included_qdata = ut.slice(type_included_qdata, name=".included", vars=type_included_genes_mask)
-            type_included_adata = ut.slice(type_included_adata, name=".included", vars=type_included_genes_mask)
-            full_gene_index_of_type_included_qdata = ut.get_v_numpy(type_included_qdata, "full_index")
-
-            type_weights = tl.project_query_onto_atlas(
-                what,
-                adata=type_included_adata,
-                qdata=type_included_qdata,
-                atlas_total_umis=atlas_total_common_umis,
-                query_total_umis=query_type_total_common_umis,
-                fold_normalization=project_fold_normalization,
-                min_significant_gene_value=project_min_significant_gene_value,
-                max_consistency_fold_factor=project_max_consistency_fold_factor,
-                candidates_count=project_candidates_count,
-                min_usage_weight=project_min_usage_weight,
+        type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type")
+        unique_types = np.unique(type_of_query_metacells)
+        for type_name in unique_types:
+            _compute_single_type_projection(
+                what=what,
+                type_name=type_name,
+                weights=weights,
+                projected_folds=projected_folds,
+                common_adata=common_adata,
+                common_qdata=common_qdata,
+                atlas_total_common_umis=atlas_total_common_umis,
+                query_total_common_umis=query_total_common_umis,
+                systematic_low_gene_quantile=systematic_low_gene_quantile,
+                systematic_high_gene_quantile=systematic_high_gene_quantile,
+                biased_min_metacells_fraction=biased_min_metacells_fraction,
+                project_fold_normalization=project_fold_normalization,
+                project_candidates_count=project_candidates_count,
+                project_min_significant_gene_value=project_min_significant_gene_value,
+                project_min_usage_weight=project_min_usage_weight,
+                project_max_consistency_fold_factor=project_max_consistency_fold_factor,
+                project_max_projection_fold_factor=project_max_projection_fold_factor,
+                min_entry_project_fold_factor=min_entry_project_fold_factor,
+                project_abs_folds=project_abs_folds,
+                ignored_gene_names_of_type=ignored_gene_names_of_type,
+                ignored_gene_patterns_of_type=ignored_gene_patterns_of_type,
+                atlas_type_property_name=atlas_type_property_name,
+                similar=similar,
                 reproducible=reproducible,
             )
 
-            tl.compute_query_projection(
-                adata=type_included_adata,
-                qdata=type_included_qdata,
-                weights=type_weights,
-                atlas_total_umis=atlas_total_common_umis,
-                query_total_umis=query_type_total_common_umis,
-            )
+        ut.set_o_data(common_qdata, "similar", similar)
 
-            tl.compute_significant_projected_fold_factors(
-                type_included_qdata,
-                what,
-                total_umis=query_type_total_common_umis,
-                fold_normalization=project_fold_normalization,
-                min_gene_fold_factor=project_max_projection_fold_factor,
-                min_entry_fold_factor=min_entry_project_fold_factor,
-                min_significant_gene_value=project_min_significant_gene_value,
-                abs_folds=project_abs_folds,
-            )
+        if not _changed_projected_types(
+            common_adata=common_adata,
+            common_qdata=common_qdata,
+            weights=weights,
+            atlas_type_property_name=atlas_type_property_name,
+        ):
+            break
 
-            if type_ignored_mask_names == ["biased_gene"]:
-                break
+    tl.compute_query_projection(
+        adata=common_adata,
+        qdata=common_qdata,
+        weights=weights,
+        atlas_total_umis=atlas_total_common_umis,
+        query_total_umis=query_total_common_umis,
+    )
 
-            tl.find_biased_genes(
-                type_included_qdata,
-                max_projection_fold_factor=project_max_projection_fold_factor,
-                min_metacells_fraction=biased_min_metacells_fraction,
-                abs_folds=project_abs_folds,
-            )
+    ut.set_vo_data(common_qdata, "projected_fold", projected_folds)
 
-            type_biased_genes_mask = ut.get_v_numpy(type_included_qdata, "biased_gene")
-            if np.sum(type_biased_genes_mask) == 0:
-                break
+    return weights
 
-            full_type_biased_genes_mask[full_gene_index_of_type_included_qdata] = type_biased_genes_mask
-            type_ignored_mask_names = ["biased_gene"]
 
-        tl.compute_similar_query_metacells(
-            type_included_qdata,
-            max_projection_fold_factor=project_max_projection_fold_factor,
+@ut.logged()
+@ut.timed_call()
+def _compute_single_type_projection(
+    *,
+    what: str,
+    type_name: str,
+    weights: ut.CompressedMatrix,
+    projected_folds: ut.NumpyVector,
+    common_adata: AnnData,
+    common_qdata: AnnData,
+    atlas_total_common_umis: ut.NumpyVector,
+    query_total_common_umis: ut.NumpyVector,
+    systematic_low_gene_quantile: float,
+    systematic_high_gene_quantile: float,
+    biased_min_metacells_fraction: float,
+    project_fold_normalization: float,
+    project_candidates_count: int,
+    project_min_significant_gene_value: float,
+    project_min_usage_weight: float,
+    project_max_consistency_fold_factor: float,
+    project_max_projection_fold_factor: float,
+    min_entry_project_fold_factor: float,
+    project_abs_folds: bool,
+    ignored_gene_names_of_type: Dict[str, Collection[str]],
+    ignored_gene_patterns_of_type: Dict[str, Collection[str]],
+    atlas_type_property_name: str,
+    similar: ut.NumpyVector,
+    reproducible: bool,
+) -> None:
+    ut.set_v_data(common_qdata, f"systematic_gene_of_{type_name}", np.zeros(common_qdata.n_vars, dtype="bool"))
+    ut.set_v_data(common_qdata, f"biased_gene_of_{type_name}", np.zeros(common_qdata.n_vars, dtype="bool"))
+    ut.set_v_data(common_qdata, f"ignored_gene_of_{type_name}", np.zeros(common_qdata.n_vars, dtype="bool"))
+
+    (
+        type_common_adata,
+        type_common_qdata,
+        atlas_type_total_common_umis,
+        query_type_total_common_umis,
+    ) = _common_type_data(
+        type_name=type_name,
+        common_adata=common_adata,
+        common_qdata=common_qdata,
+        atlas_total_common_umis=atlas_total_common_umis,
+        query_total_common_umis=query_total_common_umis,
+        atlas_type_property_name=atlas_type_property_name,
+    )
+
+    type_ignored_mask_names = _initial_type_ignored_mask_names(
+        type_name=type_name,
+        what=what,
+        ignored_gene_names_of_type=ignored_gene_names_of_type,
+        ignored_gene_patterns_of_type=ignored_gene_patterns_of_type,
+        common_qdata=common_qdata,
+        type_common_adata=type_common_adata,
+        type_common_qdata=type_common_qdata,
+        atlas_type_total_common_umis=atlas_type_total_common_umis,
+        query_type_total_common_umis=query_type_total_common_umis,
+        systematic_low_gene_quantile=systematic_low_gene_quantile,
+        systematic_high_gene_quantile=systematic_high_gene_quantile,
+    )
+
+    type_included_adata = common_adata
+    type_included_qdata = type_common_qdata
+
+    repeat = 0
+    while True:
+        repeat += 1
+        ut.log_calc(f"{type_name} biased repeat", repeat)
+
+        type_included_adata, type_included_qdata, type_weights = _compute_type_projection(
+            what=what,
+            type_name=type_name,
+            type_included_adata=type_included_adata,
+            type_included_qdata=type_included_qdata,
+            atlas_total_common_umis=atlas_total_common_umis,
+            query_type_total_common_umis=query_type_total_common_umis,
+            type_ignored_mask_names=type_ignored_mask_names,
+            project_fold_normalization=project_fold_normalization,
+            project_min_significant_gene_value=project_min_significant_gene_value,
+            project_max_consistency_fold_factor=project_max_consistency_fold_factor,
+            project_candidates_count=project_candidates_count,
+            project_min_usage_weight=project_min_usage_weight,
+            project_max_projection_fold_factor=project_max_projection_fold_factor,
+            min_entry_project_fold_factor=min_entry_project_fold_factor,
+            project_abs_folds=project_abs_folds,
+            reproducible=reproducible,
+        )
+        if not _detect_type_biased_genes(
+            type_name=type_name,
+            common_qdata=common_qdata,
+            type_included_qdata=type_included_qdata,
+            project_max_projection_fold_factor=project_max_projection_fold_factor,
+            biased_min_metacells_fraction=biased_min_metacells_fraction,
+            project_abs_folds=project_abs_folds,
+        ):
+            break
+        type_ignored_mask_names = [f"biased_gene_of_{type_name}"]
+
+    tl.compute_similar_query_metacells(
+        type_included_qdata,
+        max_projection_fold_factor=project_max_projection_fold_factor,
+    )
+
+    _convey_query_type_to_common_data(
+        type_name=type_name,
+        type_weights=type_weights,
+        weights=weights,
+        projected_folds=projected_folds,
+        common_qdata=common_qdata,
+        type_included_qdata=type_included_qdata,
+        similar=similar,
+    )
+
+
+def _convey_query_type_to_common_data(
+    *,
+    type_name: str,
+    type_weights: ut.CompressedMatrix,
+    weights: ut.CompressedMatrix,
+    projected_folds: ut.NumpyMatrix,
+    common_qdata: AnnData,
+    type_included_qdata: AnnData,
+    similar: ut.NumpyVector,
+) -> None:
+    common_gene_index_of_type_included_qdata = ut.get_v_numpy(type_included_qdata, "common_gene_index_of_qdata")
+
+    common_type_ignored_genes_mask = np.full(common_qdata.n_vars, True)
+    common_type_ignored_genes_mask[common_gene_index_of_type_included_qdata] = False
+    ut.set_v_data(common_qdata, f"ignored_gene_of_{type_name}", common_type_ignored_genes_mask)
+
+    full_cell_index_of_type_qdata = ut.get_o_numpy(type_included_qdata, "full_cell_index_of_qdata")
+    similar[full_cell_index_of_type_qdata] = ut.get_o_numpy(type_included_qdata, "similar")
+
+    weights[full_cell_index_of_type_qdata, :] = type_weights
+    type_projected_fold = ut.to_numpy_matrix(ut.get_vo_proper(type_included_qdata, "projected_fold"))
+    projected_folds[
+        full_cell_index_of_type_qdata[:, None], common_gene_index_of_type_included_qdata[None, :]
+    ] = type_projected_fold
+
+
+@ut.logged()
+@ut.timed_call()
+def _common_type_data(
+    *,
+    type_name: str,
+    common_adata: AnnData,
+    common_qdata: AnnData,
+    atlas_total_common_umis: ut.NumpyVector,
+    query_total_common_umis: ut.NumpyVector,
+    atlas_type_property_name: str,
+) -> Tuple[AnnData, AnnData, ut.NumpyVector, ut.NumpyVector]:
+    type_of_atlas_metacells = ut.get_o_numpy(common_adata, atlas_type_property_name)
+    type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type")
+
+    atlas_type_mask = type_of_atlas_metacells == type_name
+    query_type_mask = type_of_query_metacells == type_name
+
+    ut.log_calc("atlas cells mask", atlas_type_mask)
+    ut.log_calc("query cells mask", query_type_mask)
+
+    type_common_adata = ut.slice(common_adata, obs=atlas_type_mask, name=f".{type_name}")
+    type_common_qdata = ut.slice(
+        common_qdata, obs=query_type_mask, name=f".{type_name}", track_var="full_cell_index_of_qdata"
+    )
+
+    atlas_type_total_common_umis = atlas_total_common_umis[atlas_type_mask]
+    query_type_total_common_umis = query_total_common_umis[query_type_mask]
+
+    return type_common_adata, type_common_qdata, atlas_type_total_common_umis, query_type_total_common_umis
+
+
+@ut.logged()
+@ut.timed_call()
+def _initial_type_ignored_mask_names(
+    *,
+    type_name: str,
+    what: str,
+    ignored_gene_names_of_type: Dict[str, Collection[str]],
+    ignored_gene_patterns_of_type: Dict[str, Collection[str]],
+    common_qdata: AnnData,
+    type_common_adata: AnnData,
+    type_common_qdata: AnnData,
+    atlas_type_total_common_umis: ut.NumpyVector,
+    query_type_total_common_umis: ut.NumpyVector,
+    systematic_low_gene_quantile: float,
+    systematic_high_gene_quantile: float,
+) -> List[str]:
+    type_ignored_mask_names = ["|ignored_gene"]
+
+    tl.find_systematic_genes(
+        what,
+        adata=type_common_adata,
+        qdata=type_common_qdata,
+        atlas_total_umis=atlas_type_total_common_umis,
+        query_total_umis=query_type_total_common_umis,
+        low_gene_quantile=systematic_low_gene_quantile,
+        high_gene_quantile=systematic_high_gene_quantile,
+        to_property_name=f"systematic_gene_of_{type_name}",
+    )
+    type_ignored_mask_names.append(f"|systematic_gene_of_{type_name}")
+
+    ut.set_v_data(
+        common_qdata,
+        f"systematic_gene_of_{type_name}",
+        ut.get_v_numpy(type_common_qdata, f"systematic_gene_of_{type_name}"),
+    )
+
+    if type_name in ignored_gene_names_of_type or type_name in ignored_gene_patterns_of_type:
+        tl.find_named_genes(
+            type_common_qdata,
+            to=f"manually_ignored_gene_of_{type_name}",
+            names=ignored_gene_names_of_type.get(type_name),
+            patterns=ignored_gene_patterns_of_type.get(type_name),
+        )
+        type_ignored_mask_names.append(f"|manually_ignored_gene_of_{type_name}")
+        ut.set_v_data(
+            common_qdata,
+            f"manually_ignored_gene_of_{type_name}",
+            ut.get_v_numpy(type_common_qdata, f"manually_ignored_gene_of_{type_name}"),
         )
 
-        full_type_ignored_genes_mask = np.full(qdata.n_vars, True)
-        full_type_ignored_genes_mask[full_gene_index_of_type_included_qdata] = False
-        ut.set_v_data(qdata, f"ignored_gene_of_{type_name}", full_type_ignored_genes_mask)
+    return type_ignored_mask_names
 
-        ut.set_v_data(qdata, f"biased_gene_of_{type_name}", full_type_biased_genes_mask)
 
-        full_weights[full_cell_index_of_type_qdata, :] = type_weights
-        full_similar[full_cell_index_of_type_qdata] = ut.get_o_numpy(type_included_qdata, "similar")
-        type_projected_fold = ut.to_numpy_matrix(ut.get_vo_proper(type_included_qdata, "projected_fold"))
-        full_projected_fold[
-            full_cell_index_of_type_qdata[:, None], full_gene_index_of_type_included_qdata[None, :]
-        ] = type_projected_fold
+@ut.logged()
+@ut.timed_call()
+def _compute_type_projection(
+    *,
+    what: str,
+    type_name: str,
+    type_included_adata: AnnData,
+    type_included_qdata: AnnData,
+    atlas_total_common_umis: ut.NumpyVector,
+    query_type_total_common_umis: ut.NumpyVector,
+    type_ignored_mask_names: List[str],
+    project_fold_normalization: float,
+    project_min_significant_gene_value: float,
+    project_max_consistency_fold_factor: float,
+    project_candidates_count: int,
+    project_min_usage_weight: float,
+    project_max_projection_fold_factor: float,
+    min_entry_project_fold_factor: float,
+    project_abs_folds: bool,
+    reproducible: bool,
+) -> Tuple[AnnData, AnnData, ut.CompressedMatrix]:
+    tl.combine_masks(type_included_qdata, type_ignored_mask_names, to=f"ignored_gene_of_{type_name}")
+    type_included_genes_mask = ~ut.get_v_numpy(type_included_qdata, f"ignored_gene_of_{type_name}")
+    type_included_qdata = ut.slice(type_included_qdata, name=".included", vars=type_included_genes_mask)
+    type_included_adata = ut.slice(type_included_adata, name=".included", vars=type_included_genes_mask)
 
-    return full_weights
+    type_weights = tl.project_query_onto_atlas(
+        what,
+        adata=type_included_adata,
+        qdata=type_included_qdata,
+        atlas_total_umis=atlas_total_common_umis,
+        query_total_umis=query_type_total_common_umis,
+        fold_normalization=project_fold_normalization,
+        min_significant_gene_value=project_min_significant_gene_value,
+        max_consistency_fold_factor=project_max_consistency_fold_factor,
+        candidates_count=project_candidates_count,
+        min_usage_weight=project_min_usage_weight,
+        reproducible=reproducible,
+    )
+
+    tl.compute_query_projection(
+        adata=type_included_adata,
+        qdata=type_included_qdata,
+        weights=type_weights,
+        atlas_total_umis=atlas_total_common_umis,
+        query_total_umis=query_type_total_common_umis,
+    )
+
+    tl.compute_significant_projected_fold_factors(
+        type_included_qdata,
+        what,
+        total_umis=query_type_total_common_umis,
+        fold_normalization=project_fold_normalization,
+        min_gene_fold_factor=project_max_projection_fold_factor,
+        min_entry_fold_factor=min_entry_project_fold_factor,
+        min_significant_gene_value=project_min_significant_gene_value,
+        abs_folds=project_abs_folds,
+    )
+
+    return type_included_adata, type_included_qdata, type_weights
+
+
+def _detect_type_biased_genes(
+    *,
+    type_name: str,
+    common_qdata: AnnData,
+    type_included_qdata: AnnData,
+    project_max_projection_fold_factor: float,
+    biased_min_metacells_fraction: float,
+    project_abs_folds: bool,
+) -> bool:
+    tl.find_biased_genes(
+        type_included_qdata,
+        max_projection_fold_factor=project_max_projection_fold_factor,
+        min_metacells_fraction=biased_min_metacells_fraction,
+        abs_folds=project_abs_folds,
+        to_property_name=f"biased_gene_of_{type_name}",
+    )
+
+    new_type_biased_genes_mask = ut.get_v_numpy(type_included_qdata, f"biased_gene_of_{type_name}")
+    if not np.any(new_type_biased_genes_mask):
+        return False
+
+    common_biased_genes_mask = ut.get_v_numpy(common_qdata, f"biased_gene_of_{type_name}").copy()
+    common_gene_index_of_type_included_qdata = ut.get_v_numpy(type_included_qdata, "common_gene_index_of_qdata")
+    common_biased_genes_mask[common_gene_index_of_type_included_qdata] = new_type_biased_genes_mask
+    ut.set_v_data(common_qdata, f"biased_gene_of_{type_name}", common_biased_genes_mask)
+
+    return True
+
+
+@ut.logged()
+@ut.timed_call()
+def _changed_projected_types(
+    *,
+    common_adata: AnnData,
+    common_qdata: AnnData,
+    weights: ut.CompressedMatrix,
+    atlas_type_property_name: str,
+) -> bool:
+    old_type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type")
+    tl.project_atlas_to_query(
+        adata=common_adata,
+        qdata=common_qdata,
+        weights=weights,
+        property_name=atlas_type_property_name,
+        to_property_name="projected_type",
+    )
+    new_type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type")
+    changed_types = bool(np.any(new_type_of_query_metacells != old_type_of_query_metacells))
+    ut.log_return("changed_types", changed_types)
+    return changed_types
+
+
+def _correct_correlated_genes(
+    *,
+    what: str,
+    common_qdata: AnnData,
+    project_max_uncorrelated_gene_correlation: float,
+    project_min_corrected_gene_correlation: float,
+    project_min_corrected_gene_factor: float,
+    reproducible: bool,
+) -> bool:
+    projected_gene_columns = ut.to_numpy_matrix(ut.get_vo_proper(common_qdata, "projected", layout="column_major"))
+    projected_gene_rows = projected_gene_columns.transpose()
+
+    observed_gene_columns = ut.to_numpy_matrix(ut.get_vo_proper(common_qdata, what, layout="column_major"))
+    observed_gene_rows = observed_gene_columns.transpose()
+
+    common_gene_correlations = ut.pairs_corrcoef_rows(
+        projected_gene_rows, observed_gene_rows, reproducible=reproducible
+    )
+    assert len(common_gene_correlations) == common_qdata.n_vars
+
+    prev_common_uncorrelated_genes_mask = ut.get_v_numpy(common_qdata, "uncorrelated_gene")
+
+    did_correct = False
+
+    new_common_uncorrelated_genes_mask = common_gene_correlations <= project_max_uncorrelated_gene_correlation
+    add_common_uncorrelated_genes_mask = new_common_uncorrelated_genes_mask & ~prev_common_uncorrelated_genes_mask
+    ut.log_calc("add_common_uncorrelated_genes_mask", add_common_uncorrelated_genes_mask)
+    if np.any(add_common_uncorrelated_genes_mask):
+        new_common_uncorrelated_genes_mask |= prev_common_uncorrelated_genes_mask
+        ut.set_v_data(common_qdata, "uncorrelated_gene", new_common_uncorrelated_genes_mask)
+        did_correct = True
+
+    correlated_common_genes_mask = common_gene_correlations >= project_min_corrected_gene_correlation
+    ut.set_v_data(common_qdata, "correlated_gene", correlated_common_genes_mask)
+
+    if np.any(correlated_common_genes_mask):
+        correlated_common_gene_indices = np.where(correlated_common_genes_mask)[0]
+        projected_correlated_gene_rows = projected_gene_rows[correlated_common_gene_indices, :]
+        observed_correlated_gene_rows = observed_gene_rows[correlated_common_gene_indices, :]
+        projected_correlated_genes_totals = ut.sum_per(projected_correlated_gene_rows, per="row")
+        observed_correlated_genes_totals = ut.sum_per(observed_correlated_gene_rows, per="row")
+        correlated_common_genes_correction_factors = (
+            projected_correlated_genes_totals / observed_correlated_genes_totals
+        )
+
+        atlas_significant_mask = ut.get_v_numpy(common_qdata, "atlas_significant_gene")
+        corrected_genes_mask = atlas_significant_mask[correlated_common_gene_indices] & (
+            (correlated_common_genes_correction_factors < (1.0 / (1 + project_min_corrected_gene_factor)))
+            | (correlated_common_genes_correction_factors > (1 + project_min_corrected_gene_factor))
+        )
+
+        ut.log_calc("corrected_genes_mask", corrected_genes_mask)
+        if np.any(corrected_genes_mask):
+            corrected_common_gene_indices = correlated_common_gene_indices[corrected_genes_mask]
+            corrected_gene_factors = correlated_common_genes_correction_factors[corrected_genes_mask]
+            prev_common_genes_correction_factors = ut.get_v_numpy(common_qdata, "correction_factor")
+            new_common_genes_correction_factors = prev_common_genes_correction_factors.copy()
+            new_common_genes_correction_factors[corrected_common_gene_indices] *= corrected_gene_factors
+            ut.set_v_data(common_qdata, "correction_factor", new_common_genes_correction_factors)
+            corrected_data = observed_gene_columns.copy()
+            corrected_data[:, corrected_common_gene_indices] *= corrected_gene_factors[None, :]
+            ut.set_vo_data(common_qdata, what, corrected_data)
+            did_correct = True
+
+    return did_correct

@@ -987,3 +987,21 @@ min_significant_metacells_gene_fraction: float = 1e-4
 #: See :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
 #: and :py:func:`metacells.pipeline.projection.typed_projection_pipeline`.
 project_renormalize_query: bool = False
+
+#: The minimal correlation between observed and projected genes for considering linear correction of the query gene
+#: value.
+#: See :py:func:`metacells.pipeline.projection.typed_projection_pipeline`.
+project_min_corrected_gene_correlation: float = 0.8
+
+#: The minimal strength of the correction between the mean query and projected mean value (for correlated genes).
+#: See :py:func:`metacells.pipeline.projection.typed_projection_pipeline`.
+project_min_corrected_gene_factor: float = 0.15
+
+#: The m aximal correlation between observed and projected genes for ignoring the gene as uncorrelated.
+#: See :py:func:`metacells.pipeline.projection.typed_projection_pipeline`.
+project_max_uncorrelated_gene_correlation: float = 0.5
+
+#: Whether to add a pseudo-gene to the query to renormalize its total UMIs so that the fractions of the common genes
+#: would be as expected. See :py:func:`metacells.tools.project.renormalize_query_by_atlas` and
+#: :py:func:`metacells.pipeline.projection.typed_projection_pipeline`.
+renormalize_query_by_atlas: bool = True

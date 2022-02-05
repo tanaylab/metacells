@@ -11,8 +11,8 @@ from typing import Tuple
 from typing import Union
 
 import numpy as np
+import scipy.sparse as sp  # type: ignore
 from anndata import AnnData  # type: ignore
-from scipy import sparse  # type: ignore
 
 import metacells.parameters as pr
 import metacells.utilities as ut
@@ -29,10 +29,14 @@ __all__ = [
 
 @ut.logged()
 @ut.timed_call()
-def renormalize_query_by_atlas(  # pylint: disable=too-many-statements
+def renormalize_query_by_atlas(  # pylint: disable=too-many-statements,too-many-branches
+    what: str = "__x__",
+    *,
     adata: AnnData,
     qdata: AnnData,
     var_annotations: Dict[str, Any],
+    layers: Dict[str, Any],
+    varp_annotations: Dict[str, Any],
 ) -> Optional[AnnData]:
     """
     Add an ``ATLASNORM`` pseudo-gene to query metacells data to compensate for the query having filtered out many genes.
@@ -44,7 +48,7 @@ def renormalize_query_by_atlas(  # pylint: disable=too-many-statements
 
     Annotated query ``qdata`` and atlas ``adata``, where the observations are cells and the variables are genes, where
     ``X`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing
-    such a matrix. The query must not contain any additional layers and/or ``varp`` annotations.
+    such a matrix.
 
     **Returns**
 
@@ -61,12 +65,22 @@ def renormalize_query_by_atlas(  # pylint: disable=too-many-statements
        would be the same as the (total atlas UMIs / total atlas common UMIs). If this is zero (or negative), stop.
 
     2. Add an ``ATLASNORM`` pseudo-gene to the query with the above amount of UMIs. For each per-variable (gene)
-       observation, add the value specified in ``var_annotations``, whose list of keys must be the same as the
-       set of per-variable annotations in the query data.
+       observation, add the value specified in ``var_annotations``, whose list of keys must cover the set of
+       per-variable annotations in the query data. For each per-observation-per-variable layer, add the value specified
+       in ``layers``, whose list of keys must cover the existing layers. For each per-variable-per-variable annotation,
+       add the value specified in ``varp_annotations``.
     """
-    assert sorted(qdata.var.keys()) == sorted(var_annotations.keys())
-    assert len(qdata.varp) == 0
-    assert len(qdata.layers) == 0
+    for name in qdata.var.keys():
+        if "|" not in name and name not in var_annotations.keys():
+            raise RuntimeError(f"missing default value for variable annotation {name}")
+
+    for name in qdata.layers.keys():
+        if name not in layers.keys():
+            raise RuntimeError(f"missing default value for layer {name}")
+
+    for name in qdata.varp.keys():
+        if name not in varp_annotations.keys():
+            raise RuntimeError(f"missing default value for variable-variable {name}")
 
     if list(qdata.var_names) == list(adata.var_names):
         return None
@@ -81,8 +95,8 @@ def renormalize_query_by_atlas(  # pylint: disable=too-many-statements
 
     assert list(common_qdata.var_names) == list(common_adata.var_names)
 
-    atlas_total_umis_per_metacell = ut.get_o_numpy(adata, "__x__", sum=True)
-    atlas_common_umis_per_metacell = ut.get_o_numpy(common_adata, "__x__", sum=True)
+    atlas_total_umis_per_metacell = ut.get_o_numpy(adata, what, sum=True)
+    atlas_common_umis_per_metacell = ut.get_o_numpy(common_adata, what, sum=True)
     atlas_total_umis = np.sum(atlas_total_umis_per_metacell)
     atlas_common_umis = np.sum(atlas_common_umis_per_metacell)
     atlas_disjoint_umis_fraction = atlas_total_umis / atlas_common_umis - 1.0
@@ -91,8 +105,8 @@ def renormalize_query_by_atlas(  # pylint: disable=too-many-statements
     ut.log_calc("atlas_common_umis", atlas_common_umis)
     ut.log_calc("atlas_disjoint_umis_fraction", atlas_disjoint_umis_fraction)
 
-    query_total_umis_per_metacell = ut.get_o_numpy(qdata, "__x__", sum=True)
-    query_common_umis_per_metacell = ut.get_o_numpy(common_qdata, "__x__", sum=True)
+    query_total_umis_per_metacell = ut.get_o_numpy(qdata, what, sum=True)
+    query_common_umis_per_metacell = ut.get_o_numpy(common_qdata, what, sum=True)
     query_total_umis = np.sum(query_total_umis_per_metacell)
     query_common_umis = np.sum(query_common_umis_per_metacell)
     query_disjoint_umis_fraction = query_total_umis / query_common_umis - 1.0
@@ -109,10 +123,14 @@ def renormalize_query_by_atlas(  # pylint: disable=too-many-statements
     query_normalization_umis_per_metacell = query_common_umis_per_metacell * query_normalization_umis_fraction
 
     _proper, dense, compressed = ut.to_proper_matrices(qdata.X)
-    if dense is not None:
-        added = np.concatenate([dense, query_normalization_umis_per_metacell[:, np.newaxis]], axis=1)
-    else:
+
+    if dense is None:
         assert compressed is not None
+        dense = ut.to_numpy_matrix(compressed)
+    added = np.concatenate([dense, query_normalization_umis_per_metacell[:, np.newaxis]], axis=1)
+
+    if compressed is not None:
+        added = sp.csr_matrix(added)
 
     assert added.shape[0] == qdata.shape[0]
     assert added.shape[1] == qdata.shape[1] + 1
@@ -133,9 +151,45 @@ def renormalize_query_by_atlas(  # pylint: disable=too-many-statements
         ut.set_oo_data(ndata, name, value)
 
     for name in qdata.var.keys():
+        if "|" in name:
+            continue
         value = ut.get_v_numpy(qdata, name)
         value = np.append(value, [var_annotations[name]])
         ut.set_v_data(ndata, name, value)
+
+    for name in qdata.layers.keys():
+        data = ut.get_vo_proper(qdata, name)
+        _proper, dense, compressed = ut.to_proper_matrices(data)
+
+        if dense is None:
+            assert compressed is not None
+            dense = ut.to_numpy_matrix(compressed)
+
+        values = np.full(qdata.n_obs, layers[name], dtype=dense.dtype)
+        added = np.concatenate([dense, values[:, np.newaxis]], axis=1)
+
+        if compressed is not None:
+            added = sp.csr_matrix(added)
+
+        ut.set_vo_data(ndata, name, added)
+
+    for name in qdata.varp.keys():
+        data = ut.get_vv_proper(qdata, name)
+        _proper, dense, compressed = ut.to_proper_matrices(data)
+
+        if dense is None:
+            assert compressed is not None
+            dense = ut.to_numpy_matrix(compressed)
+
+        values = np.full(qdata.n_vars, varp_annotations[name], dtype=dense.dtype)
+        added = np.concatenate([dense, values[:, np.newaxis]], axis=1)
+        values = np.full(qdata.n_vars + 1, varp_annotations[name], dtype=dense.dtype)
+        added = np.concatenate([added, values[:, np.newaxis]], axis=0)
+
+        if compressed is not None:
+            added = sp.csr_matrix(added)
+
+        ut.set_vv_data(ndata, name, added)
 
     return ndata
 
@@ -272,7 +326,7 @@ def project_query_onto_atlas(
     atlas_used_sizes.insert(0, 0)
     indptr = np.cumsum(np.array(atlas_used_sizes))
 
-    return sparse.csr_matrix((data, indices, indptr), shape=(qdata.n_obs, adata.n_obs))
+    return sp.csr_matrix((data, indices, indptr), shape=(qdata.n_obs, adata.n_obs))
 
 
 @ut.logged()
@@ -346,6 +400,7 @@ def find_systematic_genes(
     query_total_umis: Optional[ut.Vector] = None,
     low_gene_quantile: float = pr.systematic_low_gene_quantile,
     high_gene_quantile: float = pr.systematic_high_gene_quantile,
+    to_property_name: str = "systematic_gene",
 ) -> None:
     """
     Find genes that
@@ -366,7 +421,7 @@ def find_systematic_genes(
     In addition, sets the following annotations in ``qdata``:
 
     Variable (Gene) Annotations
-        ``systematic_gene``
+        ``systematic_gene`` (or ``to_property_name``)
             A boolean mask indicating whether the gene is systematically higher or lower in the query compared to the
             atlas.
 
@@ -410,7 +465,7 @@ def find_systematic_genes(
 
     systematic = query_above_atlas | atlas_above_query
 
-    ut.set_v_data(qdata, "systematic_gene", systematic)
+    ut.set_v_data(qdata, to_property_name, systematic)
 
 
 @ut.logged()
@@ -461,6 +516,7 @@ def find_biased_genes(
     max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
     min_metacells_fraction: float = pr.biased_min_metacells_fraction,
     abs_folds: bool = pr.project_abs_folds,
+    to_property_name: str = "biased_gene",
 ) -> None:
     """
     Find genes that have a strong bias in the query compared to the atlas.
@@ -479,7 +535,7 @@ def find_biased_genes(
     Sets the following annotations in ``adata``:
 
     Variable (Gene) Annotations
-        ``biased_gene``
+        ``biased_gene`` (or ``to_property_name``):
             A boolean mask indicating whether the gene has a strong bias in the query compared to the atlas.
 
     **Computation Parameters**
@@ -504,8 +560,7 @@ def find_biased_genes(
     min_count = adata.n_obs * min_metacells_fraction
     mask_of_genes = count_of_genes >= min_count
 
-    ut.log_calc("biased genes", mask_of_genes)
-    ut.set_v_data(adata, "biased_gene", mask_of_genes)
+    ut.set_v_data(adata, to_property_name, mask_of_genes)
 
 
 @ut.logged()
