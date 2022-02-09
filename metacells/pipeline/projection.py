@@ -92,6 +92,10 @@ def projection_pipeline(
             The ratio between the original query and the corrected values (>1 if the gene was increased, <1 if it was
             reduced).
 
+        ``projected_correlation``
+            For each gene, the correlation between the (corrected) query expression level and the projected expression
+            level.
+
         ``correlated_gene``
             A boolean mask of genes which were ignored because they were very correlated between the query and the
             atlas.
@@ -243,7 +247,8 @@ def projection_pipeline(
        projection and the query. If this is at most 1/(1+``project_min_corrected_gene_factor``) or at least
        (1+``project_min_corrected_gene_factor``) (default: {project_min_corrected_gene_factor}), then multiply the
        gene's value by this factor so its level would match the atlas. If any genes were ignored or corrected, then
-       start over from step 2 ignoring the uncorrelated genes and using the corrected gene expression levels.
+       start over from step 2 ignoring the uncorrelated genes and using the corrected gene expression levels (but do
+       these steps no more than 3 times).
 
     14. Invoke :py:func:`metacells.tools.quality.compute_similar_query_metacells` to validate the updated projection.
 
@@ -327,7 +332,7 @@ def projection_pipeline(
             reproducible=reproducible,
         )
 
-        if not _correct_correlated_genes(
+        if repeat > 2 or not _correct_correlated_genes(
             what=what,
             common_qdata=common_qdata,
             project_max_uncorrelated_gene_correlation=project_max_uncorrelated_gene_correlation,
@@ -461,6 +466,7 @@ def _convey_query_common_to_full_data(
         ("biased_gene", "bool", False),
         ("systematic_gene", "bool", False),
         ("ignored_gene", "bool", True),
+        ("projected_correlation", "float32", 0.0),
         ("correlated_gene", "bool", False),
         ("uncorrelated_gene", "bool", False),
         ("correction_factor", "float32", 1.0),
@@ -524,6 +530,7 @@ def _renormalize_query(
         systematic_gene=False,
         manually_ignored_gene=False,
         ignored_gene=False,
+        projected_correlation=0.0,
         correlated_gene=False,
         uncorrelated_gene=False,
         correction_factor=1.0,
@@ -825,7 +832,7 @@ def _compute_per_type_projection(
     reproducible: bool,
 ) -> ut.NumpyMatrix:
     repeat = 0
-    while repeat < 3:
+    while True:
         repeat += 1
         ut.log_calc("types repeat", repeat)
 
@@ -917,7 +924,7 @@ def _compute_per_type_projection(
 
         ut.set_o_data(common_qdata, "similar", similar)
 
-        if not _changed_projected_types(
+        if repeat > 2 or not _changed_projected_types(
             common_adata=common_adata,
             common_qdata=common_qdata,
             weights=weights,
@@ -1269,6 +1276,7 @@ def _correct_correlated_genes(
         projected_gene_rows, observed_gene_rows, reproducible=reproducible
     )
     assert len(common_gene_correlations) == common_qdata.n_vars
+    ut.set_v_data(common_qdata, "projected_correlation", common_gene_correlations)
 
     prev_common_uncorrelated_genes_mask = ut.get_v_numpy(common_qdata, "uncorrelated_gene")
 
