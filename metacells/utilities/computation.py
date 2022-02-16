@@ -109,6 +109,7 @@ __all__ = [
     "group_piles",
     "represent",
     "min_cut",
+    "sparsify_matrix",
 ]
 
 
@@ -2177,7 +2178,13 @@ def represent(
     objective = cvxpy.norm(goal - variables @ basis, 2)
 
     problem = cvxpy.Problem(cvxpy.Minimize(objective), constraints)
-    result = problem.solve()
+    try:
+        result = problem.solve(solver="SCS")
+    except cvxpy.error.SolverError:
+        try:
+            result = problem.solve(solver="ECOS")
+        except cvxpy.error.SolverError:
+            result = problem.solve(solver="QSQP")
 
     if result is None:
         return None
@@ -2266,3 +2273,38 @@ def min_cut(  # pylint: disable=too-many-branches,too-many-statements
         cut_strength = None
 
     return (cut, cut_strength)
+
+
+@utm.timed_call()
+def sparsify_matrix(
+    full: utt.ProperMatrix,
+    min_column_max_value: float,
+    min_entry_value: float,
+    abs_values: bool,
+) -> utt.CompressedMatrix:
+    """
+    Given a full matrix, return a sparse matrix such that all non-zero entries are at least ``min_entry_value``, and
+    columns that have no value above ``min_column_max_value`` are set to all-zero. If ``abs_values`` consider the
+    absolute values when comparing to the thresholds.
+    """
+    assert 0 <= min_entry_value <= min_column_max_value
+
+    if abs_values:
+        comparable = np.abs(full)  # type: ignore
+    else:
+        comparable = full
+
+    max_per_column = max_per(comparable, per="column")
+    low_columns = max_per_column < min_column_max_value
+
+    sparse_comparable = utt.maybe_compressed_matrix(comparable)
+    if sparse_comparable is None:
+        low_entries = comparable < min_entry_value
+    else:
+        low_entries = ~utt.to_numpy_matrix(comparable >= min_entry_value)
+
+    lil = sp.lil_matrix(full)
+    lil[:, low_columns] = 0
+    lil[low_entries] = 0
+
+    return sp.csr_matrix(lil)

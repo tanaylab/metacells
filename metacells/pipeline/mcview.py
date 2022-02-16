@@ -10,6 +10,7 @@ from typing import Dict
 from typing import Optional
 from typing import Union
 
+import numpy as np
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
@@ -37,10 +38,11 @@ def compute_for_mcview(
     compute_umap_by_features_3: Optional[Dict[str, Any]] = {},
     compute_inner_fold_factors: Optional[Dict[str, Any]] = {},
     compute_outliers_matches: Optional[Dict[str, Any]] = {},
+    compute_outliers_fold_factors: Optional[Dict[str, Any]] = {},
     compute_deviant_fold_factors: Optional[Dict[str, Any]] = {},
     compute_var_var_similarity: Optional[Dict[str, Any]] = {},
     find_metacells_significant_genes: Optional[Dict[str, Any]] = {},
-) -> None:
+) -> Optional[AnnData]:
     """
     Compute metacell analysis in preparation for exporting the data to MCView.
 
@@ -62,6 +64,10 @@ def compute_for_mcview(
     genes as ``adata``.
 
     **Returns**
+
+    Sets many properties in ``gdata``, see below. If ``compute_outliers_fold_factors`` is not ``None``, return a new
+    annotated data containing just the outliers with their ``most_similar_fold`` sparse layer. Otherwise, returns
+    ``None``.
 
     **Computation Parameters**
 
@@ -109,3 +115,13 @@ def compute_for_mcview(
         tl.compute_var_var_similarity(gdata, what, **compute_var_var_similarity)
     if find_metacells_significant_genes is not None:
         tl.find_metacells_significant_genes(gdata, what, **find_metacells_significant_genes)
+
+    if compute_outliers_fold_factors is None:
+        return None
+    group_of_cells = ut.get_o_numpy(adata, group)
+    outliers_mask = group_of_cells < 0
+    if np.sum(outliers_mask) == 0:
+        return None
+    odata = ut.slice(adata, name=".outliers", obs=outliers_mask)
+    tl.compute_outliers_fold_factors(what, adata=odata, gdata=gdata, **compute_outliers_fold_factors)
+    return odata

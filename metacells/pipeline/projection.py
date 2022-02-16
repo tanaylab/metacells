@@ -24,6 +24,7 @@ import metacells.utilities as ut
 
 __all__ = [
     "projection_pipeline",
+    "outliers_projection_pipeline",
 ]
 
 
@@ -1303,11 +1304,13 @@ def _correct_correlated_genes(
             projected_correlated_genes_totals / observed_correlated_genes_totals
         )
 
-        atlas_significant_mask = ut.get_v_numpy(common_qdata, "atlas_significant_gene")
-        corrected_genes_mask = atlas_significant_mask[correlated_common_gene_indices] & (
-            (correlated_common_genes_correction_factors < (1.0 / (1 + project_min_corrected_gene_factor)))
-            | (correlated_common_genes_correction_factors > (1 + project_min_corrected_gene_factor))
-        )
+        corrected_genes_mask = (
+            correlated_common_genes_correction_factors < (1.0 / (1 + project_min_corrected_gene_factor))
+        ) | (correlated_common_genes_correction_factors > (1 + project_min_corrected_gene_factor))
+
+        if ut.has_data(common_qdata, "atlas_significant_gene"):
+            atlas_significant_mask = ut.get_v_numpy(common_qdata, "atlas_significant_gene")
+            corrected_genes_mask &= atlas_significant_mask[correlated_common_gene_indices]
 
         ut.log_calc("corrected_genes_mask", corrected_genes_mask)
         if np.any(corrected_genes_mask):
@@ -1323,3 +1326,93 @@ def _correct_correlated_genes(
             did_correct = True
 
     return did_correct
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def outliers_projection_pipeline(
+    what: str = "__x__",
+    *,
+    adata: AnnData,
+    odata: AnnData,
+    fold_normalization: float = pr.outliers_fold_normalization,
+    min_gene_outliers_fold_factor: float = pr.min_gene_outliers_fold_factor,
+    min_entry_outliers_fold_factor: float = pr.min_entry_outliers_fold_factor,
+    abs_folds: bool = pr.outliers_abs_folds,
+    reproducible: bool,
+) -> None:
+    """
+    Project outliers on an atlas.
+
+    **Returns**
+
+    Sets the following in ``odata``:
+
+    Per-Observation (Cell) Annotations
+
+        ``atlas_most_similar``
+            For each observation (outlier), the index of the "most similar" atlas metacell.
+
+    Per-Variable Per-Observation (Gene-Cell) Annotations
+
+        ``atlas_most_similar_fold``
+            The fold factor between the outlier gene expression and their expression in the most similar atlas metacell
+            (unless the value is too low to be of interest, in which case it will be zero).
+
+    **Computation Parameters**
+
+    1. Invoke :py:func:`metacells.tools.quality.compute_outliers_matches` using the ``fold_normalization``
+       (default: {fold_normalization}) and ``reproducible``.
+
+    2. Invoke :py:func:`metacells.tools.quality.compute_outliers_fold_factors` using the ``fold_normalization``
+       (default: {fold_normalization}), ``min_gene_outliers_fold_factor`` (default: {min_gene_outliers_fold_factor}),
+       ``min_entry_outliers_fold_factor`` (default: {min_entry_outliers_fold_factor}) and ``abs_folds`` (default:
+       {abs_folds}).
+    """
+    if list(odata.var_names) != list(adata.var_names):
+        atlas_genes_list = list(adata.var_names)
+        query_genes_list = list(odata.var_names)
+        common_genes_list = list(sorted(set(atlas_genes_list) & set(query_genes_list)))
+        atlas_gene_indices = np.array([atlas_genes_list.index(gene) for gene in common_genes_list])
+        query_gene_indices = np.array([query_genes_list.index(gene) for gene in common_genes_list])
+        common_adata = ut.slice(adata, name=".common", vars=atlas_gene_indices)
+        common_odata = ut.slice(
+            odata,
+            name=".common",
+            vars=query_gene_indices,
+            track_var="full_gene_index_of_odata",
+        )
+    else:
+        common_adata = adata
+        common_odata = odata
+
+    tl.compute_outliers_matches(
+        what,
+        adata=common_odata,
+        gdata=common_adata,
+        most_similar="atlas_most_similar",
+        value_normalization=fold_normalization,
+        reproducible=reproducible,
+    )
+
+    tl.compute_outliers_fold_factors(
+        what,
+        adata=common_odata,
+        gdata=common_adata,
+        most_similar="atlas_most_similar",
+        fold_normalization=fold_normalization,
+        min_gene_outliers_fold_factor=min_gene_outliers_fold_factor,
+        min_entry_outliers_fold_factor=min_entry_outliers_fold_factor,
+        abs_folds=abs_folds,
+    )
+
+    if list(odata.var_names) != list(adata.var_names):
+        atlas_most_similar = ut.get_o_numpy(common_odata, "atlas_most_similar")
+        ut.set_o_data(odata, "atlas_most_similar", atlas_most_similar)
+
+        common_gene_indices = ut.get_v_numpy(common_odata, "full_gene_index_of_odata")
+        common_folds = ut.get_vo_proper(common_odata, "atlas_most_similar_fold")
+        atlas_most_similar_fold = sp.csr_matrix(odata.shape, dtype="float32")
+        atlas_most_similar_fold[:, common_gene_indices] = common_folds
+        ut.set_vo_data(odata, "atlas_most_similar_fold", atlas_most_similar_fold)

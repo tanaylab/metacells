@@ -46,6 +46,8 @@ significant_gene_fold_factor: float = 3.0
 #: Whether to use the absolute folds when considering fold factors. See
 #: :py:const:`deviants_abs_folds`,
 #: :py:const:`distinct_abs_folds`,
+#: :py:const:`inner_abs_folds`,
+#: :py:const:`outliers_abs_folds`,
 #: :py:const:`project_abs_folds`,
 #: and
 #: :py:func:`inner_abs_folds`.
@@ -929,13 +931,25 @@ min_entry_inner_fold_factor: float = significant_gene_fold_factor - 1.0
 #: :py:func:`metacells.tools.distinct.compute_inner_fold_factors`.
 inner_abs_folds: bool = abs_folds
 
+#: The minimal fold factor for a gene to be significant for outliers. See
+#: :py:func:`metacell.tools.compute_outliers_fold_factors`.
+min_gene_outliers_fold_factor: float = significant_gene_fold_factor
+
+#: The minimal fold factor for a gene entry in a metacell to be significant for outliers. See
+#: :py:func:`metacell.tools.compute_outliers_fold_factors`.
+min_entry_outliers_fold_factor: float = significant_gene_fold_factor - 1.0
+
+#: Whether to consider the absolute fold factor when evaluating the outliers folds. See
+#: :py:func:`metacells.tools.distinct.compute_outliers_fold_factors`.
+outliers_abs_folds: bool = abs_folds
+
 #: The minimal fold factor for a gene entry in a metacell to be significant for metacell projection quality. See
 #: :py:func:`metacell.tools.compute_project_fold_factors`.
 min_entry_project_fold_factor: float = significant_gene_fold_factor - 1.0
 
 #: The normalization factor to use when computing log of fractions for finding the most similar group for outliers. See
 #: :py:func:`metacells.tools.quality.compute_outliers_matches`.
-outliers_value_normalization: float = 1e-5
+outliers_fold_normalization: float = 1e-5
 
 #: Whether to ignore the forbidden genes of the atlas when computing projections. See
 #: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`

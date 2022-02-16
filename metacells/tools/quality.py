@@ -26,6 +26,7 @@ __all__ = [
     "compute_similar_query_metacells",
     "compute_outliers_matches",
     "compute_deviant_fold_factors",
+    "compute_outliers_fold_factors",
 ]
 
 
@@ -370,7 +371,7 @@ def compute_inner_fold_factors(
     group: Union[str, ut.Vector] = "metacell",
     min_gene_inner_fold_factor: float = pr.min_gene_inner_fold_factor,
     min_entry_inner_fold_factor: float = pr.min_entry_inner_fold_factor,
-    inner_abs_folds: float = pr.inner_abs_folds,
+    inner_abs_folds: bool = pr.inner_abs_folds,
 ) -> None:
     """
     Compute the inner fold factors of genes within in each metacell.
@@ -438,17 +439,12 @@ def compute_inner_fold_factors(
     results = list(ut.parallel_map(_compute_single_metacell_inner_folds, gdata.n_obs))
     dense_inner_folds_by_row = np.array(results)
     dense_inner_folds_by_column = ut.to_layout(dense_inner_folds_by_row, "column_major")
-    if inner_abs_folds:
-        comparable_dense_inner_folds_by_column = np.abs(dense_inner_folds_by_column)
-    else:
-        comparable_dense_inner_folds_by_column = dense_inner_folds_by_column
-    max_fold_per_gene = ut.max_per(comparable_dense_inner_folds_by_column, per="column")
-    significant_genes_mask = max_fold_per_gene >= min_gene_inner_fold_factor
-    ut.log_calc("significant_genes_mask", significant_genes_mask)
-    dense_inner_folds_by_column[:, ~significant_genes_mask] = 0
-    dense_inner_folds_by_column[comparable_dense_inner_folds_by_column < min_entry_inner_fold_factor] = 0
-    dense_inner_folds_by_row = ut.to_layout(dense_inner_folds_by_column, layout="row_major")
-    sparse_inner_folds = sparse.csr_matrix(dense_inner_folds_by_row)
+    sparse_inner_folds = ut.sparsify_matrix(
+        dense_inner_folds_by_column,
+        min_column_max_value=min_gene_inner_fold_factor,
+        min_entry_value=min_entry_inner_fold_factor,
+        abs_values=inner_abs_folds,
+    )
     ut.set_vo_data(gdata, "inner_fold", sparse_inner_folds)
 
 
@@ -555,35 +551,15 @@ def compute_significant_projected_fold_factors(
     insignificant_folds_mask = total_umis < min_significant_gene_value
     ut.log_calc("insignificant entries", insignificant_folds_mask)
     dense_folds[insignificant_folds_mask] = 0.0
+    dense_folds_by_column = ut.to_layout(dense_folds, layout="column_major")
+    sparse_folds = ut.sparsify_matrix(
+        dense_folds_by_column,
+        min_column_max_value=min_gene_fold_factor,
+        min_entry_value=min_entry_fold_factor,
+        abs_values=abs_folds,
+    )
 
-    significant_folds = significant_folds_matrix(dense_folds, min_gene_fold_factor, min_entry_fold_factor, abs_folds)
-    ut.set_vo_data(adata, "projected_fold", significant_folds)
-
-
-def significant_folds_matrix(
-    folds: ut.NumpyMatrix,
-    min_significant_value: float,
-    min_entry_value: float,
-    abs_folds: bool,
-) -> ut.CompressedMatrix:
-    """
-    Convert a dense folds matrix to a sparse one containing just the significant values.
-    """
-    folds_by_column = ut.to_layout(folds, layout="column_major")
-    if abs_folds:
-        comparable_folds_by_column = np.abs(folds_by_column)
-    else:
-        comparable_folds_by_column = folds_by_column
-
-    max_fold_per_gene = ut.max_per(comparable_folds_by_column, per="column")
-    significant_genes_mask = max_fold_per_gene >= min_significant_value
-    ut.log_calc("significant_genes_mask", significant_genes_mask)
-
-    folds_by_column[:, ~significant_genes_mask] = 0
-    folds_by_column[comparable_folds_by_column < min_entry_value] = 0
-
-    folds_by_row = ut.to_layout(folds_by_column, layout="row_major")
-    return sparse.csr_matrix(folds_by_row)
+    ut.set_vo_data(adata, "projected_fold", sparse_folds)
 
 
 @ut.logged()
@@ -643,8 +619,8 @@ def compute_outliers_matches(
     adata: AnnData,
     gdata: AnnData,
     group: Union[str, ut.Vector] = "metacell",
-    similar: str = "similar",
-    value_normalization: float = pr.outliers_value_normalization,
+    most_similar: str = "most_similar",
+    value_normalization: float = pr.outliers_fold_normalization,
     reproducible: bool,
 ) -> None:
     """
@@ -657,7 +633,10 @@ def compute_outliers_matches(
     per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
     matrix.
 
-    In addition, ``gdata`` is assumed to have one observation for each group, and use the same genes as ``adata``.
+    In addition, ``gdata`` is assumed to have one observation for each group, and use the same genes as ``adata``. Note
+    that there's no requirement that the ``gdata`` will contain the groups defined in ``adata``. That is, it is possible
+    to give query cells data in ``adata`` and atlas metacells in ``gdata`` to find the most similar atlas metacell for
+    each outlier query metacell.
 
     **Returns**
 
@@ -665,7 +644,7 @@ def compute_outliers_matches(
 
     Per-Observation (Cell) Annotations
 
-        ``similar`` (default: {similar})
+        ``most_similar`` (default: {most_similar})
             For each observation (cell), the index of the "most similar" group.
 
     **Computation Parameters**
@@ -675,6 +654,8 @@ def compute_outliers_matches(
 
     2. Cross-correlate each of the outlier cells with each of the group metacells, in a ``reproducible`` manner.
     """
+    assert list(adata.var_names) == list(gdata.var_names)
+
     group_of_cells = ut.get_o_numpy(adata, group)
     outliers_mask = group_of_cells < 0
     odata = ut.slice(adata, obs=outliers_mask)
@@ -702,7 +683,7 @@ def compute_outliers_matches(
 
     cells_similar_group_indices = np.full(adata.n_obs, -1, dtype="int32")
     cells_similar_group_indices[outliers_mask] = outliers_similar_group_indices
-    ut.set_o_data(adata, similar, cells_similar_group_indices)
+    ut.set_o_data(adata, most_similar, cells_similar_group_indices)
 
 
 @ut.logged()
@@ -714,13 +695,13 @@ def compute_deviant_fold_factors(
     adata: AnnData,
     gdata: AnnData,
     group: Union[str, ut.Vector] = "metacell",
-    similar: Union[str, ut.Vector] = "similar",
+    most_similar: Union[str, ut.Vector] = "most_similar",
     significant_gene_fold_factor: float = pr.significant_gene_fold_factor,
 ) -> None:
     """
-    Given an assignment of observations (cells) to groups (metacells) or, if an outlier, to the most
-    similar groups, compute for each observation and gene the fold factor relative to its group
-    for the purpose of detecting deviant cells.
+    Given an assignment of observations (cells) to groups (metacells) or, if an outlier, to the most similar groups,
+    compute for each observation and gene the fold factor relative to its group for the purpose of detecting deviant
+    cells.
 
     Ideally, all grouped cells would have no genes with high enough fold factors to be considered deviants, and all
     outlier cells would. In practice grouped cells might have a (few) such genes to the restriction on the fraction
@@ -760,7 +741,7 @@ def compute_deviant_fold_factors(
     total_umis_per_metacell = ut.sum_per(metacells_data, per="row")
 
     group_of_cells = ut.get_o_numpy(adata, group, formatter=ut.groups_description)
-    similar_of_cells = ut.get_o_numpy(adata, similar, formatter=ut.groups_description)
+    most_similar_of_cells = ut.get_o_numpy(adata, most_similar, formatter=ut.groups_description)
 
     @ut.timed_call("compute_cell_deviant_certificates")
     def _compute_cell_deviant_certificates(cell_index: int) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
@@ -769,7 +750,7 @@ def compute_deviant_fold_factors(
             cells_data=cells_data,
             metacells_data=metacells_data,
             group_of_cells=group_of_cells,
-            similar_of_cells=similar_of_cells,
+            most_similar_of_cells=most_similar_of_cells,
             total_umis_per_cell=total_umis_per_cell,
             total_umis_per_metacell=total_umis_per_metacell,
             significant_gene_fold_factor=significant_gene_fold_factor,
@@ -794,15 +775,15 @@ def _compute_cell_certificates(
     cells_data: ut.Matrix,
     metacells_data: ut.Matrix,
     group_of_cells: ut.NumpyVector,
-    similar_of_cells: ut.NumpyVector,
+    most_similar_of_cells: ut.NumpyVector,
     total_umis_per_cell: ut.NumpyVector,
     total_umis_per_metacell: ut.NumpyVector,
     significant_gene_fold_factor: float,
 ) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
     group_index = group_of_cells[cell_index]
-    similar_index = similar_of_cells[cell_index]
-    assert (group_index < 0) != (similar_index < 0)
-    metacell_index = max(group_index, similar_index)
+    most_similar_index = most_similar_of_cells[cell_index]
+    assert (group_index < 0) != (most_similar_index < 0)
+    metacell_index = max(group_index, most_similar_index)
 
     expected_scale = total_umis_per_cell[cell_index] / total_umis_per_metacell[metacell_index]
     expected_data = ut.to_numpy_vector(metacells_data[metacell_index, :], copy=True)
@@ -824,3 +805,85 @@ def _compute_cell_certificates(
     significant_gene_indices = np.where(significant_folds_mask)[0].astype("int32")
     significant_gene_folds = fold_factors[significant_folds_mask].astype("float32")
     return (significant_gene_indices, significant_gene_folds)
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def compute_outliers_fold_factors(
+    what: Union[str, ut.Matrix] = "__x__",
+    *,
+    adata: AnnData,
+    gdata: AnnData,
+    most_similar: Union[str, ut.Vector] = "most_similar",
+    fold_normalization: float = pr.outliers_fold_normalization,
+    min_gene_outliers_fold_factor: float = pr.min_gene_outliers_fold_factor,
+    min_entry_outliers_fold_factor: float = pr.min_entry_outliers_fold_factor,
+    abs_folds: bool = pr.outliers_abs_folds,
+) -> None:
+    """
+    Given annotated data which is a slice containing just the outliers, where each has a "most similar" group, compute
+    for each observation and gene the fold factor relative to its group.
+
+    All outliers should have at least one (typically several) genes with high fold factors, which are the reason they
+    couldn't be merged into their most similar group.
+
+    **Input**
+
+    Annotated ``adata``, where the observations are outlier cells and the variables are genes, where ``what`` is a
+    per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
+    matrix.
+
+    In addition, ``gdata`` is assumed to have one observation for each group, and use the same genes as ``adata``.
+    It should have a ``significant_gene`` mask.
+
+    **Returns**
+
+    Sets the following in ``adata``:
+
+    Per-Variable Per-Observation (Gene-Cell) Annotations
+
+        ``<most_similar>_fold`` (default: {most_similar}_fold)
+            The fold factor between the outlier gene expression and their expression in the most similar group, (unless
+            the value is too low to be of interest, in which case it will be zero).
+
+    **Computation Parameters**
+
+    1. For each outlier, compute the expected UMIs for each gene given the fraction of the gene in the metacell
+       associated with the outlier by the ``most_similar`` (default: {most_similar}). If this is less than
+       ``min_entry_outliers_fold_factor`` (default: {min_entry_outliers_fold_factor}), or if the gene doesn't
+       have a fold factor of at least ``min_gene_outliers_fold_factor`` (default: {min_gene_outliers_fold_factor})
+       in any outlier, this is set to zero to make the matrix sparse. Also, all columns for genes not listed
+       in the ``significant_gene`` mask are also set to zero.
+    """
+    assert list(adata.var_names) == list(gdata.var_names)
+
+    most_similar_of_outliers = ut.get_o_numpy(adata, most_similar, formatter=ut.groups_description)
+    assert np.min(most_similar_of_outliers) >= 0
+
+    outliers_data = ut.to_numpy_matrix(ut.get_vo_proper(adata, what, layout="row_major"))
+    groups_data = ut.to_numpy_matrix(ut.get_vo_proper(gdata, what, layout="row_major"))
+    most_similar_data = groups_data[most_similar_of_outliers, :]
+
+    outliers_fractions = ut.fraction_by(outliers_data, by="row")
+    most_similar_fractions = ut.fraction_by(most_similar_data, by="row")
+
+    outliers_fractions += fold_normalization  # type: ignore
+    most_similar_fractions += fold_normalization  # type: ignore
+
+    outliers_log_fractions = np.log2(outliers_fractions, out=outliers_fractions)  # type: ignore
+    most_similar_log_fractions = np.log2(most_similar_fractions, out=most_similar_fractions)  # type: ignore
+
+    fold_factors = ut.to_layout(outliers_log_fractions - most_similar_log_fractions, layout="column_major")
+
+    significant_gene_mask = ut.get_v_numpy(gdata, "significant_gene")
+    fold_factors[:, ~significant_gene_mask] = 0
+
+    sparse_folds = ut.sparsify_matrix(
+        fold_factors,
+        min_column_max_value=min_gene_outliers_fold_factor,
+        min_entry_value=min_entry_outliers_fold_factor,
+        abs_values=abs_folds,
+    )
+
+    ut.set_vo_data(adata, f"{most_similar}_fold", sparse_folds)
