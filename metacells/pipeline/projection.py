@@ -11,6 +11,7 @@ from typing import Collection
 from typing import Dict
 from typing import List
 from typing import Optional
+from typing import Set
 from typing import Tuple
 from typing import Union
 
@@ -348,6 +349,7 @@ def projection_pipeline(
     qdata = _renormalize_query(
         adata=adata,
         qdata=qdata,
+        atlas_type_property_name=atlas_type_property_name,
         renormalize_query_by_atlas=renormalize_query_by_atlas,
         renormalize_var_annotations=renormalize_var_annotations,
         renormalize_layers=renormalize_layers,
@@ -506,6 +508,7 @@ def _renormalize_query(
     *,
     adata: AnnData,
     qdata: AnnData,
+    atlas_type_property_name: str,
     renormalize_query_by_atlas: bool,
     renormalize_var_annotations: Optional[Dict[str, Any]],
     renormalize_layers: Optional[Dict[str, Any]],
@@ -549,7 +552,7 @@ def _renormalize_query(
     if renormalize_varp_annotations is not None:
         varp_annotations.update(renormalize_varp_annotations)
 
-    for type_name in np.unique(ut.get_o_numpy(qdata, "projected_type")):
+    for type_name in np.unique(ut.get_o_numpy(adata, atlas_type_property_name)):
         var_annotations[f"systematic_gene_of_{type_name}"] = False
         var_annotations[f"biased_gene_of_{type_name}"] = False
         var_annotations[f"manually_ignored_gene_of_{type_name}"] = False
@@ -832,6 +835,10 @@ def _compute_per_type_projection(
     top_level_parallel: bool,
     reproducible: bool,
 ) -> ut.NumpyMatrix:
+    taboo_types: List[Set[str]] = []
+    for _metacell_index in range(common_qdata.n_obs):
+        taboo_types.append(set())
+
     repeat = 0
     while True:
         repeat += 1
@@ -937,6 +944,7 @@ def _compute_per_type_projection(
             common_qdata=common_qdata,
             weights=weights,
             atlas_type_property_name=atlas_type_property_name,
+            taboo_types=taboo_types,
         ):
             break
 
@@ -1250,8 +1258,12 @@ def _changed_projected_types(
     common_qdata: AnnData,
     weights: ut.NumpyMatrix,
     atlas_type_property_name: str,
+    taboo_types: List[Set[str]],
 ) -> bool:
-    old_type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type")
+    old_type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type").copy()
+    for metacell_index, old_type in enumerate(old_type_of_query_metacells):
+        taboo_types[metacell_index].add(old_type)
+
     tl.project_atlas_to_query(
         adata=common_adata,
         qdata=common_qdata,
@@ -1259,10 +1271,18 @@ def _changed_projected_types(
         property_name=atlas_type_property_name,
         to_property_name="projected_type",
     )
+
     new_type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type")
-    changed_types = bool(np.any(new_type_of_query_metacells != old_type_of_query_metacells))
-    ut.log_return("changed_types", changed_types)
-    return changed_types
+    has_changed = False
+    for metacell_index, new_type in enumerate(new_type_of_query_metacells):
+        if new_type not in taboo_types[metacell_index]:
+            old_type = old_type_of_query_metacells[metacell_index]
+            ut.log_calc(f"metacell: {metacell_index} changed from: {old_type} to", new_type)
+            taboo_types[metacell_index].add(new_type)
+            has_changed = True
+
+    ut.log_return("has_changed", has_changed)
+    return has_changed
 
 
 def _correct_correlated_genes(

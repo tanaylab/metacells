@@ -90,8 +90,8 @@ def renormalize_query_by_atlas(  # pylint: disable=too-many-statements,too-many-
     common_genes_list = list(sorted(set(qdata.var_names) & set(adata.var_names)))
     query_gene_indices = np.array([query_genes_list.index(gene) for gene in common_genes_list])
     atlas_gene_indices = np.array([atlas_genes_list.index(gene) for gene in common_genes_list])
-    common_qdata = ut.slice(qdata, name=".common", vars=query_gene_indices, track_var="full_index")
-    common_adata = ut.slice(adata, name=".common", vars=atlas_gene_indices, track_var="full_index")
+    common_qdata = ut.slice(qdata, name=".common", vars=query_gene_indices)
+    common_adata = ut.slice(adata, name=".common", vars=atlas_gene_indices)
 
     assert list(common_qdata.var_names) == list(common_adata.var_names)
 
