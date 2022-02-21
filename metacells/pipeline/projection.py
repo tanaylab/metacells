@@ -837,6 +837,13 @@ def _compute_per_type_projection(
         repeat += 1
         ut.log_calc("types repeat", repeat)
 
+        all_types = np.unique(ut.get_o_numpy(common_adata, atlas_type_property_name))
+        for type_name in all_types:
+            for data_name in ["systematic_gene", "biased_gene", "ignored_gene"]:
+                full_name = f"{data_name}_of_{type_name}"
+                if full_name in common_qdata.var:
+                    del common_qdata.var[full_name]
+
         type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type")
         unique_types = np.unique(type_of_query_metacells)
 

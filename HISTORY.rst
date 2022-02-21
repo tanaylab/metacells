@@ -32,3 +32,4 @@ History
 * Add convenience function for computing data for MCView.
 * Better control over filtering using absolute fold factors.
 * Fix edge case in computing noisy lonely genes.
+* Additional outliers certificates.
