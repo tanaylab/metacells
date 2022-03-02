@@ -40,7 +40,7 @@ def compute_for_mcview(
     compute_outliers_matches: Optional[Dict[str, Any]] = {},
     compute_outliers_fold_factors: Optional[Dict[str, Any]] = {},
     compute_deviant_fold_factors: Optional[Dict[str, Any]] = {},
-    compute_var_var_similarity: Optional[Dict[str, Any]] = {},
+    compute_var_var_similarity: Optional[Dict[str, Any]] = dict(top=50, bottom=50),
     find_metacells_significant_genes: Optional[Dict[str, Any]] = {},
 ) -> Optional[AnnData]:
     """
@@ -90,11 +90,10 @@ def compute_for_mcview(
     4. Compute for each metacell the fold factor between the metacell and the outliers most similar to it using
        :py:func:`metacells.tools.compute_deviant_fold_factors`.
 
-    5. Compute the gene-gene (variable-variable) similarity matrix. This is an example where you probably want to
-       override the default parameters; specifically, you very probably want to specify
-       ``compute_var_var_similarity=dict(top=N, bottom=N)`` for some reasonable ``N`` (say, up to 100), to keep just the
-       top correlated genes and bottom (anti-)correlated genes for each gene. Otherwise you will get a dense matrix of
-       20K by 20K entries, which typically isn't what you want.
+    5. Compute the gene-gene (variable-variable) similarity matrix. Note by default this will use
+       {compute_var_var_similarity} which aren't the normal defaults for ``compute_var_var_similarity``, in order to
+       keep just the top correlated genes and bottom (anti-)correlated genes for each gene. Otherwise you will get a
+       dense matrix of ~X0K by ~X0K entries, which typically isn't what you want.
 
     6. Compute the significant metacell genes using :py:func:`metacells.tools.find_metacells_significant_genes`.
     """

@@ -249,7 +249,7 @@ class CompressedMatrix(SparseMatrix, Protocol):
     """
     A ``mypy`` type for sparse CSR/CSC 2-dimensional data.
 
-    Should have been ``CompressedMatrix = sp.compressed._cs_matrix``.
+    Should have been ``CompressedMatrix = sp..._cs_matrix``.
     """
 
     indices: np.ndarray
@@ -411,7 +411,7 @@ def maybe_compressed_matrix(shaped: Any) -> Optional[CompressedMatrix]:
     """
     Return ``shaped`` as a :py:const:`CompressedMatrix`, if it is one.
     """
-    if isinstance(shaped, sp.compressed._cs_matrix):  # pylint: disable=protected-access
+    if isinstance(shaped, (sp.csr_matrix, sp.csc_matrix)):
         return shaped
     return None
 
@@ -473,7 +473,7 @@ def mustbe_compressed_matrix(shaped: Any) -> CompressedMatrix:
     """
     Return ``shaped`` as a :py:const:`CompressedMatrix`, asserting it must be one.
     """
-    assert isinstance(shaped, sp.compressed._cs_matrix)  # pylint: disable=protected-access
+    assert isinstance(shaped, (sp.csr_matrix, sp.csc_matrix))
     return shaped
 
 
