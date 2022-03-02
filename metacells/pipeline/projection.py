@@ -40,6 +40,7 @@ def projection_pipeline(
     ignored_gene_names: Optional[Collection[str]] = None,
     ignored_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     ignore_atlas_insignificant_genes: bool = pr.ignore_atlas_insignificant_genes,
+    ignore_query_insignificant_genes: bool = pr.ignore_query_insignificant_genes,
     ignore_atlas_forbidden_genes: bool = pr.ignore_atlas_forbidden_genes,
     ignore_query_forbidden_genes: bool = pr.ignore_query_forbidden_genes,
     systematic_low_gene_quantile: float = pr.systematic_low_gene_quantile,
@@ -119,12 +120,12 @@ def projection_pipeline(
         ``atlas_gene``
             A boolean mask indicating whether the gene exists in the atlas.
 
-        ``atlas_forbidden_gene`` (if ``ignore_atlas_forbidden_genes`` and the atlas has a ``forbidden_gene`` mask)
+        ``atlas_significant_gene`` (``ignore_atlas_insignificant_genes`` requires an atlas ``significant_gene`` mask)
+            A boolean mask indicating whether the gene is considered significant in the atlas.
+
+        ``atlas_forbidden_gene`` (``ignore_atlas_forbidden_genes`` requires an atlas has ``forbidden_gene`` mask)
             A boolean mask indicating whether the gene was forbidden from being a feature in the atlas (and hence
             ignored).
-
-        ``atlas_significant_gene`` (if ``ignore_atlas_insignificant_genes`` and the atlas has ``significant_gene`` mask)
-            A boolean mask indicating whether the gene is considered significant in the atlas.
 
         ``ignored_gene``
             A boolean mask indicating whether the gene was ignored by the projection (for any reason).
@@ -177,9 +178,11 @@ def projection_pipeline(
 
     2. Compute a mask of ignored genes, containing any genes named in ``ignored_gene_names`` or that match any of the
        ``ignored_gene_patterns``. If ``ignore_atlas_insignificant_genes`` (default:
-       ``ignore_atlas_insignificant_genes``), ignore genes the atlas did not mark as significant. If
+       ``ignore_atlas_insignificant_genes``), ignore genes the atlas did not mark as significant (and store the
+       ``atlas_significant_gene`` mask). If ``ignore_query_insignificant_genes`` (default:
+       ``ignore_query_insignificant_genes``), ignore genes the query did not mark as significant. If
        ``ignore_atlas_forbidden_genes`` (default: {ignore_atlas_forbidden_genes}), also ignore the ``forbidden_gene`` of
-       the atlas (and store them as a ``atlas_forbidden_gene`` mask). If ``ignore_query_forbidden_genes`` (default:
+       the atlas (and store them as an ``atlas_forbidden_gene`` mask). If ``ignore_query_forbidden_genes`` (default:
        {ignore_query_forbidden_genes}), also ignore the ``forbidden_gene`` of the query. All these genes are ignored by
        the following code.
 
@@ -276,8 +279,8 @@ def projection_pipeline(
         adata=adata,
         qdata=qdata,
         project_max_projection_fold_factor=project_max_projection_fold_factor,
-        ignore_atlas_forbidden_genes=ignore_atlas_forbidden_genes,
         ignore_atlas_insignificant_genes=ignore_atlas_insignificant_genes,
+        ignore_atlas_forbidden_genes=ignore_atlas_forbidden_genes,
     )
 
     atlas_total_common_umis = ut.get_o_numpy(common_adata, what, sum=True)
@@ -296,8 +299,9 @@ def projection_pipeline(
             query_total_common_umis=query_total_common_umis,
             systematic_low_gene_quantile=systematic_low_gene_quantile,
             systematic_high_gene_quantile=systematic_high_gene_quantile,
-            ignore_atlas_forbidden_genes=ignore_atlas_forbidden_genes,
             ignore_atlas_insignificant_genes=ignore_atlas_insignificant_genes,
+            ignore_query_insignificant_genes=ignore_query_insignificant_genes,
+            ignore_atlas_forbidden_genes=ignore_atlas_forbidden_genes,
             ignore_query_forbidden_genes=ignore_query_forbidden_genes,
             project_fold_normalization=project_fold_normalization,
             project_min_significant_gene_value=project_min_significant_gene_value,
@@ -393,8 +397,8 @@ def _common_data(
     qdata: AnnData,
     adata: AnnData,
     project_max_projection_fold_factor: float,
-    ignore_atlas_forbidden_genes: bool,
     ignore_atlas_insignificant_genes: bool,
+    ignore_atlas_forbidden_genes: bool,
 ) -> Tuple[AnnData, AnnData]:
     ut.set_m_data(qdata, "project_max_projection_fold_factor", project_max_projection_fold_factor)
 
@@ -427,13 +431,13 @@ def _common_data(
     ut.set_v_data(common_qdata, "correction_factor", np.full(common_qdata.n_vars, 1.0, dtype="float32"))
     ut.set_v_data(common_qdata, "atlas_gene", np.full(common_qdata.n_vars, True))
 
-    if ignore_atlas_forbidden_genes and ut.has_data(common_adata, "forbidden_gene"):
-        atlas_forbiden_mask = ut.get_v_numpy(common_adata, "forbidden_gene")
-        ut.set_v_data(common_qdata, "atlas_forbidden_gene", atlas_forbiden_mask)
-
-    if ignore_atlas_insignificant_genes and ut.has_data(common_adata, "significant_gene"):
+    if ignore_atlas_insignificant_genes:
         atlas_significant_mask = ut.get_v_numpy(common_adata, "significant_gene")
         ut.set_v_data(common_qdata, "atlas_significant_gene", atlas_significant_mask)
+
+    if ignore_atlas_forbidden_genes:
+        atlas_forbiden_mask = ut.get_v_numpy(common_adata, "forbidden_gene")
+        ut.set_v_data(common_qdata, "atlas_forbidden_gene", atlas_forbiden_mask)
 
     return common_adata, common_qdata
 
@@ -583,8 +587,9 @@ def _compute_preliminary_projection(
     query_total_common_umis: ut.NumpyVector,
     systematic_low_gene_quantile: float,
     systematic_high_gene_quantile: float,
-    ignore_atlas_forbidden_genes: bool,
     ignore_atlas_insignificant_genes: bool,
+    ignore_query_insignificant_genes: bool,
+    ignore_atlas_forbidden_genes: bool,
     ignore_query_forbidden_genes: bool,
     project_fold_normalization: float,
     project_min_significant_gene_value: float,
@@ -604,8 +609,9 @@ def _compute_preliminary_projection(
         common_qdata=common_qdata,
         atlas_total_common_umis=atlas_total_common_umis,
         query_total_common_umis=query_total_common_umis,
-        ignore_atlas_forbidden_genes=ignore_atlas_forbidden_genes,
         ignore_atlas_insignificant_genes=ignore_atlas_insignificant_genes,
+        ignore_query_insignificant_genes=ignore_query_insignificant_genes,
+        ignore_atlas_forbidden_genes=ignore_atlas_forbidden_genes,
         ignore_query_forbidden_genes=ignore_query_forbidden_genes,
         systematic_low_gene_quantile=systematic_low_gene_quantile,
         systematic_high_gene_quantile=systematic_high_gene_quantile,
@@ -677,8 +683,9 @@ def _initial_ignored_mask_names(
     common_qdata: AnnData,
     atlas_total_common_umis: ut.NumpyVector,
     query_total_common_umis: ut.NumpyVector,
-    ignore_atlas_forbidden_genes: bool,
     ignore_atlas_insignificant_genes: bool,
+    ignore_query_insignificant_genes: bool,
+    ignore_atlas_forbidden_genes: bool,
     ignore_query_forbidden_genes: bool,
     systematic_low_gene_quantile: float,
     systematic_high_gene_quantile: float,
@@ -696,17 +703,17 @@ def _initial_ignored_mask_names(
     )
     ignored_mask_names.append("|systematic_gene")
 
-    if ignore_atlas_forbidden_genes:
-        ignored_mask_names.append("|atlas_forbidden_gene?")
-
     if ignore_atlas_insignificant_genes:
-        ignored_mask_names.append("|~atlas_significant_gene?")
+        ignored_mask_names.append("|~atlas_significant_gene")
+
+    if ignore_query_insignificant_genes:
+        ignored_mask_names.append("|~significant_gene")
 
     if ignore_atlas_forbidden_genes:
-        ignored_mask_names.append("|atlas_forbidden_gene?")
+        ignored_mask_names.append("|atlas_forbidden_gene")
 
     if ignore_query_forbidden_genes:
-        ignored_mask_names.append("|forbidden_gene?")
+        ignored_mask_names.append("|forbidden_gene")
 
     return ignored_mask_names
 

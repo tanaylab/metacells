@@ -961,6 +961,11 @@ ignore_atlas_forbidden_genes: bool = True
 #: and :py:func:`metacells.pipeline.projection.typed_projection_pipeline`.
 ignore_atlas_insignificant_genes: bool = True
 
+#: Whether to ignore the insignificant genes of the query when computing projections. See
+#: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
+#: and :py:func:`metacells.pipeline.projection.typed_projection_pipeline`.
+ignore_query_insignificant_genes: bool = False
+
 #: Whether to ignore the forbidden genes of the query when computing projections. See
 #: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
 #: and :py:func:`metacells.pipeline.projection.typed_projection_pipeline`.

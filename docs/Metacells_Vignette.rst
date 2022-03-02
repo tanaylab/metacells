@@ -795,20 +795,63 @@ the “same” (or very similar) cell state together, since the grouping
 will obey some (artificial) maximal size limit.
 
 Thus, the best thing we can do now is to save the data, and feed it to a
-separate further data analysis pipeline. To import the data into Seurat,
-we first need to delete the special ``__name__`` property, since for
-some reason it breaks the Seurat importer.
+separate further data analysis pipeline:
 
-The `manual analysis vignette <Manual_Analysis.html>`__ demonstrates
-manual analysis of the data (based on the
-`MCView <https://tanaylab.github.io/MCView>`__ tool), and the `seurat
-analysis vignette <Seurat_Analysis.html>`__ demonstrates importing the
-metacells into `Seurat <https://satijalab.org/seurat/index.html>`__ for
-further analysis there.
+One option is to feed the metacells to
+`Seurat <https://satijalab.org/seurat/index.html>`__ for further
+analysis there, as demonstrated in the `seurat analysis
+vignette <Seurat_Analysis.html>`__. Note that to import the data into
+Seurat, we first need to delete the special ``__name__`` property, since
+for some reason it breaks the Seurat importer.
+
+Another option is to compute additional metadata to prepare the data for
+analysis in `MCView <https://tanaylab.github.io/MCView>`__. This
+computes UMAP projections and various quality-control per-gene and
+per-metacell annotations, and even some per-outlier-cell data (which
+needs to be stored in a separate file). The results can then be imported
+to MCView for analysis.
+
+It is also possible to directly manually analyze the data, as
+demonstrated in the `manual analysis vignette <Manual_Analysis.html>`__.
+
+Finally, one can feed the data to any other scRNA analysis pipeline.
 
 .. code:: python
 
-    clean.write('cells.h5ad')
-    metacells.write('metacells.h5ad')
+    name = metacells.uns['__name__']
     del metacells.uns['__name__']
     metacells.write('for_seurat.h5ad')
+    metacells.uns['__name__'] = name
+    outliers = mc.pl.compute_for_mcview(adata=clean, gdata=metacells, random_seed=123456, compute_var_var_similarity=dict(top=50, bottom=50))
+    outliers.write('outliers.h5ad')
+    clean.write('cells.h5ad')
+    metacells.write('metacells.h5ad')
+
+
+
+.. code::
+
+    set PBMC.metacells.var[top_feature_gene]: 702 true (3.104%) out of 22617 bools
+    set PBMC.metacells.obsp[obs_balanced_ranks]: 18831 nonzero (0.7848%) out of 2399401 elements
+    set PBMC.metacells.obsp[obs_pruned_ranks]: 6235 nonzero (0.2599%) out of 2399401 elements
+    set PBMC.metacells.obsp[obs_outgoing_weights]: 6235 nonzero (0.2599%) out of 2399401 elements
+    /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1780: UserWarning: using precomputed metric; inverse_transform will be unavailable
+      warn("using precomputed metric; inverse_transform will be unavailable")
+    set PBMC.metacells.obs[umap_x]: 1549 float32s
+    set PBMC.metacells.obs[umap_y]: 1549 float32s
+    set PBMC.metacells.var[top_feature_gene]: 702 true (3.104%) out of 22617 bools
+    set PBMC.metacells.obsp[obs_balanced_ranks]: 18831 nonzero (0.7848%) out of 2399401 elements
+    set PBMC.metacells.obsp[obs_pruned_ranks]: 6235 nonzero (0.2599%) out of 2399401 elements
+    set PBMC.metacells.obsp[obs_outgoing_weights]: 6235 nonzero (0.2599%) out of 2399401 elements
+    /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1780: UserWarning: using precomputed metric; inverse_transform will be unavailable
+      warn("using precomputed metric; inverse_transform will be unavailable")
+    set PBMC.metacells.obs[umap_u]: 1549 float32s
+    set PBMC.metacells.obs[umap_v]: 1549 float32s
+    set PBMC.metacells.obs[umap_w]: 1549 float32s
+    set PBMC.clean.obs[most_similar]: 149825 int32s
+    set PBMC.metacells.layers[inner_fold]: csr_matrix 1549 X 22617 float32s (72033 > 0)
+    set PBMC.clean.layers[deviant_folds]: csr_matrix 149825 X 22617 float32s (6610 > 0)
+    set PBMC.metacells.varp[var_similarity]: csr_matrix 22617 X 22617 float32s (2242890 > 0)
+    set PBMC.metacells.var[significant_gene]: 5242 true (23.18%) out of 22617 bools
+    set PBMC.clean.outliers.layers[most_similar_fold]: csr_matrix 942 X 22617 float32s (2146247 > 0)
+
