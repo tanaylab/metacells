@@ -28,7 +28,7 @@ __all__ = [
 @ut.logged(candidates=ut.groups_description)
 @ut.timed_call()
 @ut.expand_doc()
-def find_deviant_cells(
+def find_deviant_cells(  # pylint: disable=too-many-statements
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
@@ -96,6 +96,9 @@ def find_deviant_cells(
        of the cells. If the fraction of such cells is higher than ``max_cell_fraction`` (default:
        {max_cell_fraction}), reduce the maximal rank such that at most this fraction of cells are
        selected as deviants.
+
+    6. If the total fraction of deviants is below the ``max_cell_fraction``, repeats steps 1-5 to account for the mean
+       expression in each candidate metacell having been modified due to the removal of deviant cells.
     """
     if max_gene_fraction is None:
         max_gene_fraction = 1
@@ -110,27 +113,35 @@ def find_deviant_cells(
     cells_count, genes_count = adata.shape
     assert cells_count > 0
 
-    candidate_of_cells = ut.get_o_numpy(adata, candidates, formatter=ut.groups_description)
+    candidate_of_cells = ut.get_o_numpy(adata, candidates, formatter=ut.groups_description).copy()
 
     totals_of_cells = ut.get_o_numpy(adata, what, sum=True)
     assert totals_of_cells.size == cells_count
 
     data = ut.get_vo_proper(adata, what, layout="row_major")
-    list_of_fold_factors, list_of_cell_index_of_rows = _collect_fold_factors(
-        data=data,
-        candidate_of_cells=candidate_of_cells,
-        totals_of_cells=totals_of_cells,
-        min_gene_fold_factor=min_gene_fold_factor,
-        abs_folds=abs_folds,
-    )
 
-    fold_factors = _construct_fold_factors(cells_count, list_of_fold_factors, list_of_cell_index_of_rows)
+    full_indices_of_remaining_cells = np.arange(cells_count)
+    full_votes_of_deviant_cells = np.zeros(cells_count, dtype="int32")
+    votes_of_deviant_genes = np.zeros(genes_count, dtype="int32")
+    max_deviant_cells_count = cells_count * max_cell_fraction
 
-    if fold_factors is None:
-        votes_of_deviant_cells = np.zeros(adata.n_obs, dtype="int32")
-        votes_of_deviant_genes = np.zeros(adata.n_vars, dtype="int32")
+    while True:
+        ut.log_calc("max_deviant_cells_count", max_deviant_cells_count)
+        acceptable_cells_mask = np.zeros(cells_count, dtype="bool")
+        list_of_fold_factors, list_of_cell_index_of_rows = _collect_fold_factors(
+            data=data,
+            candidate_of_cells=candidate_of_cells,
+            totals_of_cells=totals_of_cells,
+            min_gene_fold_factor=min_gene_fold_factor,
+            abs_folds=abs_folds,
+            acceptable_cells_mask=acceptable_cells_mask,
+        )
 
-    else:
+        fold_factors = _construct_fold_factors(cells_count, list_of_fold_factors, list_of_cell_index_of_rows)
+        ut.log_calc("fold_factors_nnz", fold_factors.nnz)
+        if fold_factors.nnz == 0:
+            break
+
         deviant_gene_indices = _filter_genes(
             cells_count=cells_count,
             genes_count=genes_count,
@@ -143,21 +154,45 @@ def find_deviant_cells(
             cells_count=cells_count, fold_factors=fold_factors, deviant_gene_indices=deviant_gene_indices
         )
 
-        votes_of_deviant_cells, votes_of_deviant_genes = _filter_cells(
+        votes_of_deviant_cells, did_reach_max_deviant_cells = _filter_cells(
             cells_count=cells_count,
-            genes_count=genes_count,
             deviant_genes_fold_ranks=deviant_genes_fold_ranks,
             deviant_gene_indices=deviant_gene_indices,
-            max_cell_fraction=max_cell_fraction,
+            votes_of_deviant_genes=votes_of_deviant_genes,
+            max_deviant_cells_count=max_deviant_cells_count,
         )
+
+        full_votes_of_deviant_cells[full_indices_of_remaining_cells] = votes_of_deviant_cells
+        remaining_cells_mask = votes_of_deviant_cells == 0
+
+        ut.log_calc("did_reach_max_deviant_cells", did_reach_max_deviant_cells)
+        ut.log_calc("surviving_cells_mask", remaining_cells_mask)
+
+        if did_reach_max_deviant_cells or np.all(remaining_cells_mask):
+            break
+
+        max_deviant_cells_count -= np.sum(~remaining_cells_mask)
+        assert max_deviant_cells_count > 0
+
+        ut.log_calc("acceptable_cells_mask", acceptable_cells_mask)
+        remaining_cells_mask &= ~acceptable_cells_mask
+        ut.log_calc("remaining_cells_mask", remaining_cells_mask)
+        if not np.any(remaining_cells_mask):
+            break
+
+        data = data[remaining_cells_mask, :]
+        candidate_of_cells = candidate_of_cells[remaining_cells_mask]
+        totals_of_cells = totals_of_cells[remaining_cells_mask]
+        full_indices_of_remaining_cells = full_indices_of_remaining_cells[remaining_cells_mask]
+        cells_count = len(full_indices_of_remaining_cells)
 
     if inplace:
         ut.set_v_data(adata, "gene_deviant_votes", votes_of_deviant_genes, formatter=ut.mask_description)
-        ut.set_o_data(adata, "cell_deviant_votes", votes_of_deviant_cells, formatter=ut.mask_description)
+        ut.set_o_data(adata, "cell_deviant_votes", full_votes_of_deviant_cells, formatter=ut.mask_description)
         return None
 
     ut.log_return("gene_deviant_votes", votes_of_deviant_genes, formatter=ut.mask_description)
-    ut.log_return("cell_deviant_votes", votes_of_deviant_cells, formatter=ut.mask_description)
+    ut.log_return("cell_deviant_votes", full_votes_of_deviant_cells, formatter=ut.mask_description)
 
     return (
         ut.to_pandas_series(votes_of_deviant_cells, index=adata.obs_names),
@@ -173,6 +208,7 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
     totals_of_cells: ut.NumpyVector,
     min_gene_fold_factor: float,
     abs_folds: bool,
+    acceptable_cells_mask: ut.NumpyVector,
 ) -> Tuple[List[ut.CompressedMatrix], List[ut.NumpyVector]]:
     list_of_fold_factors: List[ut.CompressedMatrix] = []
     list_of_cell_index_of_rows: List[ut.NumpyVector] = []
@@ -187,7 +223,8 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
         candidate_cell_indices = np.where(candidate_of_cells == candidate_index)[0]
 
         candidate_cells_count = candidate_cell_indices.size
-        assert candidate_cells_count > 0
+        if candidate_cells_count == 0:
+            continue
 
         list_of_cell_index_of_rows.append(candidate_cell_indices)
         remaining_cells_count -= candidate_cells_count
@@ -258,6 +295,8 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
             assert compressed.has_sorted_indices
             assert compressed.has_canonical_format
 
+        if compressed.nnz == 0:
+            acceptable_cells_mask[candidate_cell_indices] = True
         list_of_fold_factors.append(compressed)
 
     if remaining_cells_count > 0:
@@ -278,20 +317,18 @@ def _construct_fold_factors(
     cells_count: int,
     list_of_fold_factors: List[ut.CompressedMatrix],
     list_of_cell_index_of_rows: List[ut.NumpyVector],
-) -> Optional[ut.CompressedMatrix]:
+) -> ut.CompressedMatrix:
     cell_index_of_rows = np.concatenate(list_of_cell_index_of_rows)
     if cell_index_of_rows.size == 0:
-        return None
+        return sparse.csr_matrix((0, 0))
 
     cell_row_of_indices = np.empty_like(cell_index_of_rows)
     cell_row_of_indices[cell_index_of_rows] = np.arange(cells_count)
 
     fold_factors = sparse.vstack(list_of_fold_factors, format="csr")
     fold_factors = fold_factors[cell_row_of_indices, :]
-    if fold_factors.nnz == 0:
-        return None
-
-    fold_factors = ut.to_layout(fold_factors, "column_major")
+    if fold_factors.nnz > 0:
+        fold_factors = ut.to_layout(fold_factors, "column_major")
     return fold_factors
 
 
@@ -369,26 +406,24 @@ def _fold_ranks(
 def _filter_cells(
     *,
     cells_count: int,
-    genes_count: int,
     deviant_genes_fold_ranks: ut.NumpyMatrix,
     deviant_gene_indices: ut.NumpyVector,
-    max_cell_fraction: Optional[float],
-) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
+    votes_of_deviant_genes: ut.NumpyVector,
+    max_deviant_cells_count: float,
+) -> Tuple[ut.NumpyVector, bool]:
     min_fold_ranks_of_cells = np.min(deviant_genes_fold_ranks, axis=1)
     assert min_fold_ranks_of_cells.size == cells_count
 
     threshold_cells_fold_rank = cells_count
 
     mask_of_deviant_cells = min_fold_ranks_of_cells < threshold_cells_fold_rank
-    deviants_cells_count = sum(mask_of_deviant_cells)
-    deviant_cell_fraction = deviants_cells_count / cells_count
+    deviant_cells_count = sum(mask_of_deviant_cells)
 
-    if ut.logging_calc():
-        ut.log_calc("deviant_cells", mask_of_deviant_cells)
+    ut.log_calc("deviant_cells", mask_of_deviant_cells)
 
-    if max_cell_fraction is not None and deviant_cell_fraction > max_cell_fraction:
-
-        quantile_cells_fold_rank = np.quantile(min_fold_ranks_of_cells, max_cell_fraction)
+    did_reach_max_deviant_cells = deviant_cells_count >= max_deviant_cells_count
+    if did_reach_max_deviant_cells:
+        quantile_cells_fold_rank = np.quantile(min_fold_ranks_of_cells, max_deviant_cells_count / cells_count)
         assert quantile_cells_fold_rank is not None
 
         ut.log_calc("quantile_cells_fold_rank", quantile_cells_fold_rank)
@@ -402,10 +437,9 @@ def _filter_cells(
     votes_of_deviant_cells = ut.sum_per(ut.to_layout(deviant_votes, "row_major"), per="row")
     assert votes_of_deviant_cells.size == cells_count
 
-    votes_of_deviant_genes = ut.sum_per(deviant_votes, per="column")
-    assert votes_of_deviant_genes.size == deviant_gene_indices.size
+    used_votes_of_deviant_genes = ut.sum_per(deviant_votes, per="column")
+    assert used_votes_of_deviant_genes.size == deviant_gene_indices.size
 
-    votes_of_all_genes = np.zeros(genes_count, dtype="int32")
-    votes_of_all_genes[deviant_gene_indices] = votes_of_deviant_genes
+    votes_of_deviant_genes[deviant_gene_indices] += used_votes_of_deviant_genes
 
-    return votes_of_deviant_cells, votes_of_all_genes
+    return votes_of_deviant_cells, did_reach_max_deviant_cells

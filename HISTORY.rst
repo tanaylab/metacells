@@ -33,3 +33,4 @@ History
 * Better control over filtering using absolute fold factors.
 * Fix edge case in computing noisy lonely genes.
 * Additional outliers certificates.
+* Stricter deviants detection policy

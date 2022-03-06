@@ -448,11 +448,11 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
             return f"{value:g} (reproducible)"
         if "rank" in name:
             return f"{value:g}"
-        if "fold" in name:
+        if "fold" in name and "nnz" not in name and (-10 <= value <= 10):
             return fold_description(value)
         if "fraction" in name or "quantile" in name:
             return fraction_description(value)
-        if "factor" in name:
+        if "factor" in name and "nnz" not in name:
             return f"X {value:.4g}"
         return f"{value:g}" + checksum
 

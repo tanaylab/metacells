@@ -182,7 +182,7 @@ def renormalize_query_by_atlas(  # pylint: disable=too-many-statements,too-many-
             dense = ut.to_numpy_matrix(compressed)
 
         values = np.full(qdata.n_vars, varp_annotations[name], dtype=dense.dtype)
-        added = np.concatenate([dense, values[:, np.newaxis]], axis=1)
+        added = np.concatenate([dense, values[np.newaxis, :]], axis=1)
         values = np.full(qdata.n_vars + 1, varp_annotations[name], dtype=dense.dtype)
         added = np.concatenate([added, values[:, np.newaxis]], axis=0)
 
