@@ -91,7 +91,7 @@ purpose, without this property:
 .. code::
 
     An object of class Seurat
-    22617 features across 1549 samples within 1 assay
+    22617 features across 1551 samples within 1 assay
     Active assay: RNA (22617 features, 0 variable features)
 
 

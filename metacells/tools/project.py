@@ -483,25 +483,28 @@ def find_systematic_genes(
     assert 0 <= high_gene_quantile <= 1
     assert np.all(adata.var_names == qdata.var_names)
 
-    query_umis = ut.get_vo_proper(qdata, what, layout="row_major")
-    atlas_umis = ut.get_vo_proper(adata, what, layout="row_major")
+    if adata.n_obs == 1:
+        systematic = np.zeros(adata.n_vars, dtype="bool")
+    else:
+        query_umis = ut.get_vo_proper(qdata, what, layout="row_major")
+        atlas_umis = ut.get_vo_proper(adata, what, layout="row_major")
 
-    atlas_fractions = ut.to_numpy_matrix(ut.fraction_by(atlas_umis, by="row", sums=atlas_total_umis))
-    query_fractions = ut.to_numpy_matrix(ut.fraction_by(query_umis, by="row", sums=query_total_umis))
+        atlas_fractions = ut.to_numpy_matrix(ut.fraction_by(atlas_umis, by="row", sums=atlas_total_umis))
+        query_fractions = ut.to_numpy_matrix(ut.fraction_by(query_umis, by="row", sums=query_total_umis))
 
-    query_fractions = ut.to_layout(query_fractions, layout="column_major")
-    atlas_fractions = ut.to_layout(atlas_fractions, layout="column_major")
+        query_fractions = ut.to_layout(query_fractions, layout="column_major")
+        atlas_fractions = ut.to_layout(atlas_fractions, layout="column_major")
 
-    query_low_gene_values = ut.quantile_per(query_fractions, low_gene_quantile, per="column")
-    atlas_low_gene_values = ut.quantile_per(atlas_fractions, low_gene_quantile, per="column")
+        query_low_gene_values = ut.quantile_per(query_fractions, low_gene_quantile, per="column")
+        atlas_low_gene_values = ut.quantile_per(atlas_fractions, low_gene_quantile, per="column")
 
-    query_high_gene_values = ut.quantile_per(query_fractions, high_gene_quantile, per="column")
-    atlas_high_gene_values = ut.quantile_per(atlas_fractions, high_gene_quantile, per="column")
+        query_high_gene_values = ut.quantile_per(query_fractions, high_gene_quantile, per="column")
+        atlas_high_gene_values = ut.quantile_per(atlas_fractions, high_gene_quantile, per="column")
 
-    query_above_atlas = query_low_gene_values > atlas_high_gene_values
-    atlas_above_query = atlas_low_gene_values >= query_high_gene_values
+        query_above_atlas = query_low_gene_values > atlas_high_gene_values
+        atlas_above_query = atlas_low_gene_values >= query_high_gene_values
 
-    systematic = query_above_atlas | atlas_above_query
+        systematic = query_above_atlas | atlas_above_query
 
     ut.set_v_data(qdata, to_property_name, systematic)
 

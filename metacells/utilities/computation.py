@@ -1400,7 +1400,7 @@ def variance_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
 
 
 @utm.timed_call()
-def normalized_variance_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
+def normalized_variance_per(matrix: utt.Matrix, *, per: Optional[str], zero_value: float = 1.0) -> utt.NumpyVector:
     """
     Get the normalized variance (variance / mean) ``per`` (``row`` or ``column``) of some ``matrix``.
 
@@ -1408,6 +1408,8 @@ def normalized_variance_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.Nu
     efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
     ``column``, and the matrix must be in the appropriate layout (``row_major`` operating on rows,
     ``column_major`` for operating on columns).
+
+    If all the values are zero, writes the ``zero_value`` (default: {zero_value}) into the result.
     """
     variance_per_element = variance_per(matrix, per=per)
     mean_per_element = mean_per(matrix, per=per)
@@ -1415,7 +1417,7 @@ def normalized_variance_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.Nu
     result = np.reciprocal(mean_per_element, where=~zeros_mask)
     result[zeros_mask] = 0
     result *= variance_per_element
-    result[zeros_mask] = 1
+    result[zeros_mask] = zero_value
     return result
 
 

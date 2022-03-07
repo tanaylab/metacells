@@ -103,7 +103,7 @@ are most entriched in it compated to the overall population:
 
 .. code::
 
-    [1] 80
+    [1] 82
 
 
 This gave us 84 genes to look at (you can get more or less genes
@@ -202,7 +202,7 @@ reasonable quality clusters.
     .list-inline>li {display: inline-block}
     .list-inline>li:not(:last-child)::after {content: "\00b7"; padding: 0 .5ex}
     </style>
-    <ol class=list-inline><li>1549</li><li>702</li></ol>
+    <ol class=list-inline><li>1551</li><li>715</li></ol>
 
 
 

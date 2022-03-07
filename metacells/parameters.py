@@ -1024,3 +1024,8 @@ project_max_uncorrelated_gene_correlation: float = 0.5
 #: would be as expected. See :py:func:`metacells.tools.project.renormalize_query_by_atlas` and
 #: :py:func:`metacells.pipeline.projection.typed_projection_pipeline`.
 renormalize_query_by_atlas: bool = True
+
+
+#: The quantile of each gene's normalized variance across the metacells to use for the overall gene's variability.
+#: See :py:func:`metacells.tools.quality.compute_type_gene_normalized_variance`.
+type_gene_normalized_variance_quantile: float = 0.95

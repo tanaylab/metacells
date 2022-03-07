@@ -27,6 +27,7 @@ __all__ = [
     "compute_outliers_matches",
     "compute_deviant_fold_factors",
     "compute_outliers_fold_factors",
+    "compute_type_genes_normalized_variances",
 ]
 
 
@@ -481,7 +482,7 @@ def compute_significant_projected_fold_factors(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
-    total_umis: Optional[ut.Vector],
+    total_umis: Optional[ut.Vector] = None,
     projected: Union[str, ut.Matrix] = "projected",
     fold_normalization: float = pr.project_fold_normalization,
     min_significant_gene_value: float = pr.project_min_significant_gene_value,
@@ -887,3 +888,112 @@ def compute_outliers_fold_factors(
     )
 
     ut.set_vo_data(adata, f"{most_similar}_fold", sparse_folds)
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def compute_type_genes_normalized_variances(
+    what: Union[str, ut.Matrix] = "__x__",
+    *,
+    adata: AnnData,
+    gdata: AnnData,
+    group_property: str = "metacell",
+    type_property: str = "type",
+    type_gene_normalized_variance_quantile: float = pr.type_gene_normalized_variance_quantile,
+) -> None:
+    """
+    Given metacells annotated data with type annotations, compute for each gene for each type how variable
+    it is in the cells of the metacells of that type.
+
+    **Input**
+
+    Annotated ``adata``, where the observations are cells and the variables are genes, where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
+    annotation containing such a matrix.
+
+    In addition, ``gdata`` is assumed to have one observation for each group, and use the same
+    genes as ``adata``. This should have a type annotation.
+
+    **Returns**
+
+    Sets the following in ``gdata``:
+
+    Per-Variable (gene) Annotations:
+
+        ``normalized_variance_in_<type>``
+            For each type, the normalized variance (variance over mean) of the gene in the cells of the
+            metacells of this type.
+
+    **Computation Parameters**
+
+    1. For each ``type_property`` (default: {type_property}) of metacell in ``gdata``, for each metacell of this type,
+       consider all the cells in ``adata`` whose ``group_property`` (default: {group_property}) is that metacell,
+       compute the normalized variance (variance over mean) of each gene's expression level, when normalizing each
+       cell's total UMIs to the median in its metacell.
+
+    2. Take the ``type_gene_normalized_variance_quantile`` (default: {type_gene_normalized_variance_quantile}) of the
+       normalized variance of each gene across all metacells of each type.
+    """
+    assert list(adata.var_names) == list(gdata.var_names)
+
+    type_of_metacell = ut.get_o_numpy(gdata, type_property)
+    unique_types = np.unique(type_of_metacell)
+    ut.log_calc("types_count", len(unique_types))
+
+    metacell_of_cells = ut.get_o_numpy(adata, group_property)
+    cells_umis = ut.get_vo_proper(adata, what, layout="row_major")
+
+    @ut.logged()
+    @ut.timed_call()
+    def _compute_single_type_genes_normalized_variances(type_index: int) -> Tuple[str, ut.NumpyVector]:
+        type_name = unique_types[type_index]
+        ut.log_calc("type_name", type_name)
+        type_metacells_indices = np.where(type_of_metacell == type_name)[0]
+        ut.log_calc("type_metacells_count", len(type_metacells_indices))
+        type_gene_normalized_variances_per_metacell = np.empty(
+            (len(type_metacells_indices), adata.n_vars), dtype="float32"
+        )
+
+        for position, metacell_index in enumerate(type_metacells_indices):
+            _compute_metacell_genes_normalized_variances(
+                metacell_of_cells=metacell_of_cells,
+                cells_umis=cells_umis,
+                position=position,
+                metacell_index=metacell_index,
+                type_gene_normalized_variances_per_metacell=type_gene_normalized_variances_per_metacell,
+            )
+
+        type_gene_normalized_variances_per_metacell = ut.to_layout(
+            type_gene_normalized_variances_per_metacell, layout="column_major"
+        )
+        return type_name, ut.quantile_per(
+            type_gene_normalized_variances_per_metacell, quantile=type_gene_normalized_variance_quantile, per="column"
+        )
+
+    for (type_name, type_gene_normalized_variances) in list(
+        ut.parallel_map(_compute_single_type_genes_normalized_variances, len(unique_types))
+    ):
+        ut.set_v_data(gdata, f"normalized_variance_in_{type_name}", type_gene_normalized_variances)
+
+
+@ut.logged()
+@ut.timed_call()
+def _compute_metacell_genes_normalized_variances(
+    *,
+    metacell_of_cells: ut.NumpyVector,
+    cells_umis: ut.Matrix,
+    position: int,
+    metacell_index: int,
+    type_gene_normalized_variances_per_metacell: ut.NumpyVector,
+) -> None:
+    metacell_cells_mask = metacell_of_cells == metacell_index
+    metacell_umis = cells_umis[metacell_cells_mask, :]
+    total_umis = ut.sum_per(metacell_umis, per="row")
+    median_total_umis = np.median(total_umis)
+    ut.log_calc("median_total_umis", median_total_umis)
+    metacell_fractions = ut.fraction_by(metacell_umis, by="row")
+    metacell_fractions = ut.to_layout(metacell_fractions, layout="column_major")
+    metacell_fractions *= median_total_umis
+    genes_normalized_variance = ut.normalized_variance_per(metacell_fractions, per="column")
+    type_gene_normalized_variances_per_metacell[position, :] = genes_normalized_variance
