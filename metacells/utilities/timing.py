@@ -88,8 +88,6 @@ def collect_timing(
     This may be followed by a series of ``name,value`` pairs describing parameters of interest for
     this context, such as data sizes and layouts, to help understand the performance of the code.
     """
-    assert current_thread().name in ("#0", "MainThread")
-
     global TIMING_PATH
     global TIMING_MODE
     global TIMING_BUFFERING

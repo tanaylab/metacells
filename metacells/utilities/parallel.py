@@ -221,6 +221,7 @@ def _invocation(index: int) -> Any:
             NEXT_PROCESS_INDEX.value += 1  # type: ignore
 
         current_thread().name = f"#{MAP_INDEX}.{PROCESS_INDEX}"
+        utm.in_parallel_map(MAP_INDEX, PROCESS_INDEX)
 
         global PROCESSORS_COUNT
         start_processor_index = int(round(PROCESSORS_COUNT * PROCESS_INDEX / PROCESSES_COUNT))
