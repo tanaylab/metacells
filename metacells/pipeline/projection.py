@@ -52,6 +52,7 @@ def projection_pipeline(
     project_min_usage_weight: float = pr.project_min_usage_weight,
     project_max_consistency_fold_factor: float = pr.project_max_consistency_fold_factor,
     project_max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
+    project_max_dissimilar_genes: int = pr.project_max_dissimilar_genes,
     min_entry_project_fold_factor: float = pr.min_entry_project_fold_factor,
     project_abs_folds: bool = pr.project_abs_folds,
     ignored_gene_names_of_type: Optional[Dict[str, Collection[str]]] = None,
@@ -148,11 +149,14 @@ def projection_pipeline(
 
     Observation (Cell) Annotations
         ``similar``
-            A boolean mask indicating whether the correcteed query metacell is similar to its projection onto the atlas
+            A boolean mask indicating whether the corrected query metacell is similar to its projection onto the atlas
             (ignoring the ``ignored_genes``). If ``False`` the metacell is said to be "dissimilar", which may indicate
             the query contains cell states that do not appear in the atlas. If ``True`` the metacell is said to be
             "similar", but there may still be significant systematic differences between the query and the atlas as
             captured by the various per-gene annotations.
+
+        ``dissimilar_genes_count``
+            The number of genes whose fold factor is above the threshold.
 
         ``projected_type``
             The type assigned to each query metacell by its projection on the atlas. This should not be taken as gospel,
@@ -207,7 +211,8 @@ def projection_pipeline(
 
     6. Invoke :py:func:`metacells.tools.quality.compute_similar_query_metacells` to annotate the query metacells
        similar to their projection on the atlas using ``project_max_projection_fold_factor`` (default:
-       {project_max_projection_fold_factor}).
+       {project_max_projection_fold_factor}) and the ``project_max_dissimilar_genes`` (default:
+       {project_max_dissimilar_genes}).
 
     7. Invoke :py:func:`metacells.tools.project.project_atlas_to_query` to assign a projected type to each of the
        query metacells based on the ``atlas_type_property_name`` (default: {atlas_type_property_name}).
@@ -279,6 +284,7 @@ def projection_pipeline(
         adata=adata,
         qdata=qdata,
         project_max_projection_fold_factor=project_max_projection_fold_factor,
+        project_max_dissimilar_genes=project_max_dissimilar_genes,
         ignore_atlas_insignificant_genes=ignore_atlas_insignificant_genes,
         ignore_atlas_forbidden_genes=ignore_atlas_forbidden_genes,
     )
@@ -331,6 +337,7 @@ def projection_pipeline(
             project_min_usage_weight=project_min_usage_weight,
             project_max_consistency_fold_factor=project_max_consistency_fold_factor,
             project_max_projection_fold_factor=project_max_projection_fold_factor,
+            project_max_dissimilar_genes=project_max_dissimilar_genes,
             min_entry_project_fold_factor=min_entry_project_fold_factor,
             project_abs_folds=project_abs_folds,
             atlas_type_property_name=atlas_type_property_name,
@@ -397,10 +404,12 @@ def _common_data(
     qdata: AnnData,
     adata: AnnData,
     project_max_projection_fold_factor: float,
+    project_max_dissimilar_genes: int,
     ignore_atlas_insignificant_genes: bool,
     ignore_atlas_forbidden_genes: bool,
 ) -> Tuple[AnnData, AnnData]:
     ut.set_m_data(qdata, "project_max_projection_fold_factor", project_max_projection_fold_factor)
+    ut.set_m_data(qdata, "project_max_dissimilar_genes", project_max_dissimilar_genes)
 
     if list(qdata.var_names) != list(adata.var_names):
         atlas_genes_list = list(adata.var_names)
@@ -463,6 +472,10 @@ def _convey_query_common_to_full_data(
 
     for data_name in ["similar", "projected_type"]:
         ut.set_o_data(qdata, data_name, ut.get_o_numpy(common_qdata, data_name))
+
+    dissimilar_genes_count = ut.get_o_numpy(common_qdata, "dissimilar_genes_count")
+    ut.log_calc("max dissimilar_genes_count", np.max(dissimilar_genes_count))
+    ut.set_o_data(qdata, "dissimilar_genes_count", dissimilar_genes_count, formatter=ut.mask_description)
 
     full_gene_index_of_common_qdata = ut.get_v_numpy(common_qdata, "full_gene_index_of_qdata")
 
@@ -836,6 +849,7 @@ def _compute_per_type_projection(
     project_min_usage_weight: float,
     project_max_consistency_fold_factor: float,
     project_max_projection_fold_factor: float,
+    project_max_dissimilar_genes: int,
     min_entry_project_fold_factor: float,
     project_abs_folds: bool,
     atlas_type_property_name: str,
@@ -863,6 +877,9 @@ def _compute_per_type_projection(
 
         similar = np.frombuffer(mp.Array(ct.c_bool, common_qdata.n_obs).get_obj(), dtype="bool")
         similar[:] = False
+
+        dissimilar_genes_count = np.frombuffer(mp.Array(ct.c_int32, common_qdata.n_obs).get_obj(), dtype="int32")
+        dissimilar_genes_count[:] = 0
 
         weights = np.frombuffer(
             mp.Array(ct.c_float, common_qdata.n_obs * common_adata.n_obs).get_obj(), dtype="float32"
@@ -915,10 +932,12 @@ def _compute_per_type_projection(
                 project_min_usage_weight=project_min_usage_weight,
                 project_max_consistency_fold_factor=project_max_consistency_fold_factor,
                 project_max_projection_fold_factor=project_max_projection_fold_factor,
+                project_max_dissimilar_genes=project_max_dissimilar_genes,
                 min_entry_project_fold_factor=min_entry_project_fold_factor,
                 project_abs_folds=project_abs_folds,
                 atlas_type_property_name=atlas_type_property_name,
                 similar=similar,
+                dissimilar_genes_count=dissimilar_genes_count,
                 systematic_gene_of_types=systematic_gene_of_types,
                 biased_gene_of_types=biased_gene_of_types,
                 ignored_gene_of_types=ignored_gene_of_types,
@@ -945,6 +964,8 @@ def _compute_per_type_projection(
             )
 
         ut.set_o_data(common_qdata, "similar", similar)
+        ut.log_calc("max dissimilar_genes_count", np.max(dissimilar_genes_count))
+        ut.set_o_data(common_qdata, "dissimilar_genes_count", dissimilar_genes_count, formatter=ut.mask_description)
 
         if repeat > 2 or not _changed_projected_types(
             common_adata=common_adata,
@@ -990,10 +1011,12 @@ def _compute_single_type_projection(
     project_min_usage_weight: float,
     project_max_consistency_fold_factor: float,
     project_max_projection_fold_factor: float,
+    project_max_dissimilar_genes: int,
     min_entry_project_fold_factor: float,
     project_abs_folds: bool,
     atlas_type_property_name: str,
     similar: ut.NumpyVector,
+    dissimilar_genes_count: ut.NumpyVector,
     systematic_gene_of_types: ut.NumpyMatrix,
     biased_gene_of_types: ut.NumpyMatrix,
     ignored_gene_of_types: ut.NumpyMatrix,
@@ -1067,6 +1090,7 @@ def _compute_single_type_projection(
     tl.compute_similar_query_metacells(
         type_included_qdata,
         max_projection_fold_factor=project_max_projection_fold_factor,
+        max_dissimilar_genes=project_max_dissimilar_genes,
     )
 
     _convey_query_type_to_common_data(
@@ -1076,6 +1100,7 @@ def _compute_single_type_projection(
         projected_folds=projected_folds,
         type_included_qdata=type_included_qdata,
         similar=similar,
+        dissimilar_genes_count=dissimilar_genes_count,
         ignored_gene_of_types=ignored_gene_of_types,
     )
 
@@ -1088,6 +1113,7 @@ def _convey_query_type_to_common_data(
     projected_folds: ut.NumpyMatrix,
     type_included_qdata: AnnData,
     similar: ut.NumpyVector,
+    dissimilar_genes_count: ut.NumpyVector,
     ignored_gene_of_types: ut.NumpyMatrix,
 ) -> None:
     common_gene_index_of_type_included_qdata = ut.get_v_numpy(type_included_qdata, "common_gene_index_of_qdata")
@@ -1095,6 +1121,9 @@ def _convey_query_type_to_common_data(
 
     full_cell_index_of_type_qdata = ut.get_o_numpy(type_included_qdata, "full_cell_index_of_qdata")
     similar[full_cell_index_of_type_qdata] = ut.get_o_numpy(type_included_qdata, "similar")
+    dissimilar_genes_count[full_cell_index_of_type_qdata] = ut.get_o_numpy(
+        type_included_qdata, "dissimilar_genes_count", formatter=ut.mask_description
+    )
 
     weights[full_cell_index_of_type_qdata, :] = ut.to_numpy_matrix(type_weights)
     type_projected_fold = ut.to_numpy_matrix(ut.get_vo_proper(type_included_qdata, "projected_fold"))

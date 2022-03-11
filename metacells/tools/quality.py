@@ -568,6 +568,7 @@ def compute_significant_projected_fold_factors(
 def compute_similar_query_metacells(
     adata: AnnData,
     max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
+    max_dissimilar_genes: int = pr.project_max_dissimilar_genes,
     abs_folds: bool = pr.project_abs_folds,
 ) -> None:
     """
@@ -594,20 +595,25 @@ def compute_similar_query_metacells(
 
         ``similar``
             A boolean mask indicating the query metacell is similar to its projection in the atlas.
+        ``dissimilar_genes_count``
+            The number of genes whose fold factor is above the threshold.
 
     **Computation Parameters**
 
-    1. Mark as dissimilar any query metacells which have even one gene whose projection fold is above
-       ``max_projection_fold_factor``.
+    1. Mark as dissimilar any query metacells which have more than ``max_dissimilar_genes`` (default:
+       {max_dissimilar_genes}) genes whose projection fold is above ``max_projection_fold_factor``.
     """
     assert max_projection_fold_factor >= 0
+    assert max_dissimilar_genes >= 0
 
     projected_folds = ut.get_vo_proper(adata, "projected_fold", layout="row_major")
     if abs_folds:
         projected_folds = np.abs(projected_folds)  # type: ignore
     high_folds = projected_folds > max_projection_fold_factor  # type: ignore
     high_folds_per_metacell = ut.sum_per(high_folds, per="row")  # type: ignore
-    similar_mask = high_folds_per_metacell == 0
+    similar_mask = high_folds_per_metacell <= max_dissimilar_genes
+    ut.log_calc("max dissimilar_genes_count", np.max(high_folds_per_metacell))
+    ut.set_o_data(adata, "dissimilar_genes_count", high_folds_per_metacell, formatter=ut.mask_description)
     ut.set_o_data(adata, "similar", similar_mask)
 
 
