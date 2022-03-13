@@ -4,12 +4,14 @@ Direct
 """
 
 from re import Pattern
+from typing import Callable
 from typing import Collection
 from typing import Optional
 from typing import Union
 
 import numpy as np
 from anndata import AnnData  # type: ignore
+from mypy_extensions import NamedArg
 
 import metacells.parameters as pr
 import metacells.tools as tl
@@ -20,6 +22,38 @@ from .feature import extract_feature_data
 
 __all__ = [
     "compute_direct_metacells",
+]
+
+
+#: A function to correct the extracted feature values before computing cell-cell similarity.
+#:
+#: This function takes the following named arguments:
+#:
+#: ``adata`` - The full annotated data of the cells.
+#:
+#: ``fdata`` - The feature genes annotated data of the cells (a slice of ``adata``). This has a ``downsample_samples``
+#: unstructured annotation with the target number of samples per cell.
+#:
+#: ``downsampled`` - A dense matrix of the downsampled UMIs of the features of the cells (a copy of the ``downsampled``
+#: layer of ``fdata``).
+#:
+#: The function is free to modify ``downsampled`` as it sees fit to perform any type of correction (typically, some form
+#: of batch correction). The data type of ``downsampled`` is ``float32`` so the corrected values need not be integers
+#: (even though their initial values will be).
+#:
+#: Note that this is only invoked for metacells-of-cells by
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline` or
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`, and is not invoked for
+#: computing groups of metacelles. Therefore the function can access any metadata of the original input.
+#:
+#: See :py:func:`compute_direct_metacells`.
+FeatureCorrection = Callable[
+    [
+        NamedArg(AnnData, "adata"),  # noqa: F821
+        NamedArg(AnnData, "fdata"),  # noqa: F821
+        NamedArg(ut.NumpyMatrix, "downsampled"),  # noqa: F821
+    ],
+    None,
 ]
 
 
@@ -40,6 +74,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     forbidden_gene_names: Optional[Collection[str]] = None,
     forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    feature_correction: Optional[FeatureCorrection] = None,
     cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_method: str = pr.cells_similarity_method,
@@ -171,24 +206,26 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        (default: {forbidden_gene_patterns}) and ``random_seed`` (default: {random_seed}) to make
        this replicable.
 
-    2. Compute the fractions of each variable in each cell, and add the
+    2. Apply the ``feature_correction`` function, if any, to modify the downsampled features data.
+
+    3. Compute the fractions of each variable in each cell, and add the
        ``cells_similarity_value_normalization`` (default: {cells_similarity_value_normalization}) to
        it.
 
-    3. If ``cells_similarity_log_data`` (default: {cells_similarity_log_data}), invoke the
+    4. If ``cells_similarity_log_data`` (default: {cells_similarity_log_data}), invoke the
        :py:func:`metacells.utilities.computation.log_data` function to compute the log (base 2) of
        the data.
 
-    4. Invoke :py:func:`metacells.tools.similarity.compute_obs_obs_similarity` to compute the
+    5. Invoke :py:func:`metacells.tools.similarity.compute_obs_obs_similarity` to compute the
        similarity between each pair of cells, using the
        ``cells_similarity_method`` (default: {cells_similarity_method}).
 
-    5. Invoke :py:func:`metacells.pipeline.collect.compute_effective_cell_sizes` using
+    6. Invoke :py:func:`metacells.pipeline.collect.compute_effective_cell_sizes` using
        ``max_cell_size`` (default: {max_cell_size}), ``max_cell_size_factor`` (default:
        {max_cell_size_factor}) and ``cell_sizes`` (default: {cell_sizes}) to get the effective cell
        sizes to use.
 
-    5. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a
+    7. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a
        K-Nearest-Neighbors graph, using the
        ``knn_balanced_ranks_factor`` (default: {knn_balanced_ranks_factor}),
        ``knn_incoming_degree_factor`` (default: {knn_incoming_degree_factor})
@@ -198,7 +235,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        chosen to be the median number of cells required to reach the target metacell size,
        but at least ``min_knn_k`` (default: {min_knn_k}).
 
-    6. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
+    8. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
        the candidate metacells, using the
        ``candidates_cell_seeds`` (default: {candidates_cell_seeds}),
        ``min_seed_size_quantile`` (default: {min_seed_size_quantile}),
@@ -215,7 +252,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        ``target_metacell_size`` (default: {target_metacell_size})
        using the effective cell sizes.
 
-    7. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
+    9. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
        :py:func:`metacells.tools.deviants.find_deviant_cells` to remove deviants from the candidate
        metacells, using the
        ``deviants_min_gene_fold_factor`` (default: {deviants_min_gene_fold_factor}),
@@ -224,7 +261,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        and
        ``deviants_max_cell_fraction`` (default: {deviants_max_cell_fraction}).
 
-    8. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
+    10. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
        :py:func:`metacells.tools.dissolve.dissolve_metacells` to dissolve small unconvincing
        metacells, using the same
        ``target_metacell_size`` (default: {target_metacell_size}),
@@ -273,6 +310,9 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
 
     data = ut.get_vo_proper(fdata, "downsampled", layout="row_major")
     data = ut.to_numpy_matrix(data, copy=True)
+
+    if feature_correction is not None:
+        feature_correction(adata=adata, fdata=fdata, downsampled=data)
 
     if cells_similarity_value_normalization > 0:
         data += cells_similarity_value_normalization

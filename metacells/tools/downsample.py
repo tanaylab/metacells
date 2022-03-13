@@ -4,6 +4,7 @@ Downsample
 """
 
 from typing import Optional
+from typing import Tuple
 from typing import Union
 
 import numpy as np
@@ -29,7 +30,7 @@ def downsample_cells(
     downsample_max_cell_quantile: float = pr.downsample_max_cell_quantile,
     random_seed: int = pr.random_seed,
     inplace: bool = True,
-) -> Optional[ut.PandasFrame]:
+) -> Optional[Tuple[int, ut.PandasFrame]]:
     """
     Downsample the values of ``what`` (default: {what}) data.
 
@@ -50,14 +51,17 @@ def downsample_cells(
 
     **Returns**
 
+    Unstructured Annotations
+        ``downsample_samples``
+            The target total number of samples in each downsampled cell.
+
     Variable-Observation (Gene-Cell) Annotations
         ``downsampled``
             The downsampled data where the total number of samples in each cell is at most
-            ``samples``.
+            ``downsample_samples``.
 
-    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
-    ``None``. Otherwise this is returned as a pandas data frame (indexed by the cell and gene
-    names).
+    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns ``None``. Otherwise this
+    is returned as a tuple with the samples and a pandas data frame (indexed by the cell and gene names).
 
     **Computation Parameters**
 
@@ -94,6 +98,7 @@ def downsample_cells(
     downsampled = ut.downsample_matrix(data, per="row", samples=samples, random_seed=random_seed)
     if inplace:
         ut.set_vo_data(adata, "downsampled", downsampled)
+        ut.set_m_data(adata, "downsample_samples", samples)
         return None
 
-    return ut.to_pandas_frame(downsampled, index=adata.obs_names, columns=adata.var_names)
+    return samples, ut.to_pandas_frame(downsampled, index=adata.obs_names, columns=adata.var_names)
