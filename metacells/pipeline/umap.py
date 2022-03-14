@@ -174,6 +174,10 @@ def compute_umap_by_features(
             A boolean mask of the top feature genes used to compute similarities between the
             metacells.
 
+    Observation-Observation (Metacell-Metacell) Annotations
+        ``umap_distances``
+            A sparse symmetric matrix of the graph of distances between the metacells.
+
     Observation (Metacell) Annotations
         ``umap_x``, ``umap_y``
             The X and Y coordinates of each metacell in the UMAP projection.
@@ -214,6 +218,8 @@ def compute_umap_by_features(
     distances += 1
     np.fill_diagonal(distances, 0.0)
     distances = sparse.csr_matrix(distances)
+
+    ut.set_oo_data(adata, "umap_distances", distances)
 
     tl.umap_by_distances(
         adata, distances, k=umap_k, dimensions=dimensions, min_dist=min_dist, spread=spread, random_seed=random_seed
