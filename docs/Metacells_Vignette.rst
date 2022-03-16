@@ -703,6 +703,7 @@ single-threaded implementation.
     set PBMC.metacells.obsp[obs_balanced_ranks]: 18810 nonzero (0.7819%) out of 2405601 elements
     set PBMC.metacells.obsp[obs_pruned_ranks]: 6223 nonzero (0.2587%) out of 2405601 elements
     set PBMC.metacells.obsp[obs_outgoing_weights]: 6223 nonzero (0.2587%) out of 2405601 elements
+    set PBMC.metacells.obsp[umap_distances]: csr_matrix 1551 X 1551 float32s (2404050 > 0)
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1356: RuntimeWarning: divide by zero encountered in power
       return 1.0 / (1.0 + a * x ** (2 * b))
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1780: UserWarning: using precomputed metric; inverse_transform will be unavailable
@@ -835,6 +836,7 @@ Finally, one can feed the data to any other scRNA analysis pipeline.
     set PBMC.metacells.obsp[obs_balanced_ranks]: 18810 nonzero (0.7819%) out of 2405601 elements
     set PBMC.metacells.obsp[obs_pruned_ranks]: 6223 nonzero (0.2587%) out of 2405601 elements
     set PBMC.metacells.obsp[obs_outgoing_weights]: 6223 nonzero (0.2587%) out of 2405601 elements
+    set PBMC.metacells.obsp[umap_distances]: csr_matrix 1551 X 1551 float32s (2404050 > 0)
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1780: UserWarning: using precomputed metric; inverse_transform will be unavailable
       warn("using precomputed metric; inverse_transform will be unavailable")
     set PBMC.metacells.obs[umap_x]: 1551 float32s
@@ -843,6 +845,7 @@ Finally, one can feed the data to any other scRNA analysis pipeline.
     set PBMC.metacells.obsp[obs_balanced_ranks]: 18810 nonzero (0.7819%) out of 2405601 elements
     set PBMC.metacells.obsp[obs_pruned_ranks]: 6223 nonzero (0.2587%) out of 2405601 elements
     set PBMC.metacells.obsp[obs_outgoing_weights]: 6223 nonzero (0.2587%) out of 2405601 elements
+    set PBMC.metacells.obsp[umap_distances]: csr_matrix 1551 X 1551 float32s (2404050 > 0)
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1780: UserWarning: using precomputed metric; inverse_transform will be unavailable
       warn("using precomputed metric; inverse_transform will be unavailable")
     set PBMC.metacells.obs[umap_u]: 1551 float32s

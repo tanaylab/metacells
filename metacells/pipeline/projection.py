@@ -833,7 +833,7 @@ def _detect_global_biased_genes(
 
 @ut.logged()
 @ut.timed_call()
-def _compute_per_type_projection(
+def _compute_per_type_projection(  # pylint: disable=too-many-statements
     *,
     what: str,
     common_adata: AnnData,
@@ -872,8 +872,11 @@ def _compute_per_type_projection(
                 if full_name in common_qdata.var:
                     del common_qdata.var[full_name]
 
+        type_of_atlas_metacells = ut.get_o_numpy(common_adata, "projected_type")
+        atlas_unique_types = np.unique(type_of_atlas_metacells)
+
         type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type")
-        unique_types = np.unique(type_of_query_metacells)
+        query_unique_types = np.unique(type_of_query_metacells)
 
         similar = np.frombuffer(mp.Array(ct.c_bool, common_qdata.n_obs).get_obj(), dtype="bool")
         similar[:] = False
@@ -894,29 +897,29 @@ def _compute_per_type_projection(
         projected_folds = projected_folds.reshape(common_qdata.shape)
 
         systematic_gene_of_types = np.frombuffer(
-            mp.Array(ct.c_bool, len(unique_types) * common_qdata.n_vars).get_obj(), dtype="bool"
+            mp.Array(ct.c_bool, len(query_unique_types) * common_qdata.n_vars).get_obj(), dtype="bool"
         )
         systematic_gene_of_types[:] = False
-        systematic_gene_of_types = systematic_gene_of_types.reshape((len(unique_types), common_qdata.n_vars))
+        systematic_gene_of_types = systematic_gene_of_types.reshape((len(query_unique_types), common_qdata.n_vars))
 
         biased_gene_of_types = np.frombuffer(
-            mp.Array(ct.c_bool, len(unique_types) * common_qdata.n_vars).get_obj(), dtype="bool"
+            mp.Array(ct.c_bool, len(query_unique_types) * common_qdata.n_vars).get_obj(), dtype="bool"
         )
         biased_gene_of_types[:] = False
-        biased_gene_of_types = biased_gene_of_types.reshape((len(unique_types), common_qdata.n_vars))
+        biased_gene_of_types = biased_gene_of_types.reshape((len(query_unique_types), common_qdata.n_vars))
 
         ignored_gene_of_types = np.frombuffer(
-            mp.Array(ct.c_bool, len(unique_types) * common_qdata.n_vars).get_obj(), dtype="bool"
+            mp.Array(ct.c_bool, len(query_unique_types) * common_qdata.n_vars).get_obj(), dtype="bool"
         )
         ignored_gene_of_types[:] = False
-        ignored_gene_of_types = ignored_gene_of_types.reshape((len(unique_types), common_qdata.n_vars))
+        ignored_gene_of_types = ignored_gene_of_types.reshape((len(query_unique_types), common_qdata.n_vars))
 
         @ut.timed_call("single_type_projection")
         def _single_type_projection(type_index: int) -> None:
             _compute_single_type_projection(
                 what=what,
                 type_index=type_index,
-                type_name=unique_types[type_index],
+                type_name=query_unique_types[type_index],
                 weights=weights,
                 projected_folds=projected_folds,
                 common_adata=common_adata,
@@ -945,12 +948,12 @@ def _compute_per_type_projection(
             )
 
         if top_level_parallel:
-            ut.parallel_map(_single_type_projection, len(unique_types))
+            ut.parallel_map(_single_type_projection, len(query_unique_types))
         else:
-            for type_index in range(len(unique_types)):
+            for type_index in range(len(query_unique_types)):
                 _single_type_projection(type_index)
 
-        for type_index, type_name in enumerate(unique_types):
+        for type_index, type_name in enumerate(query_unique_types):
             ut.set_v_data(
                 common_qdata,
                 f"systematic_gene_of_{type_name}",
@@ -962,6 +965,11 @@ def _compute_per_type_projection(
             ut.set_v_data(
                 common_qdata, f"ignored_gene_of_{type_name}", ut.to_numpy_vector(ignored_gene_of_types[type_index, :])
             )
+
+        for type_name in set(atlas_unique_types) - set(query_unique_types):
+            ut.set_v_data(common_qdata, f"systematic_gene_of_{type_name}", np.zeros(common_qdata.n_vars, dtype="bool"))
+            ut.set_v_data(common_qdata, f"biased_gene_of_{type_name}", np.zeros(common_qdata.n_vars, dtype="bool"))
+            ut.set_v_data(common_qdata, f"ignored_gene_of_{type_name}", np.zeros(common_qdata.n_vars, dtype="bool"))
 
         ut.set_o_data(common_qdata, "similar", similar)
         ut.log_calc("max dissimilar_genes_count", np.max(dissimilar_genes_count))

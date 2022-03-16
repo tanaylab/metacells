@@ -11,7 +11,6 @@ from typing import Union
 
 import numpy as np
 from anndata import AnnData  # type: ignore
-from mypy_extensions import NamedArg
 
 import metacells.parameters as pr
 import metacells.tools as tl
@@ -24,37 +23,42 @@ __all__ = [
     "compute_direct_metacells",
 ]
 
+try:
+    from mypy_extensions import NamedArg
 
-#: A function to correct the extracted feature values before computing cell-cell similarity.
-#:
-#: This function takes the following named arguments:
-#:
-#: ``adata`` - The full annotated data of the cells.
-#:
-#: ``fdata`` - The feature genes annotated data of the cells (a slice of ``adata``). This has a ``downsample_samples``
-#: unstructured annotation with the target number of samples per cell.
-#:
-#: ``downsampled`` - A dense matrix of the downsampled UMIs of the features of the cells (a copy of the ``downsampled``
-#: layer of ``fdata``).
-#:
-#: The function is free to modify ``downsampled`` as it sees fit to perform any type of correction (typically, some form
-#: of batch correction). The data type of ``downsampled`` is ``float32`` so the corrected values need not be integers
-#: (even though their initial values will be).
-#:
-#: Note that this is only invoked for metacells-of-cells by
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline` or
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`, and is not invoked for
-#: computing groups of metacelles. Therefore the function can access any metadata of the original input.
-#:
-#: See :py:func:`compute_direct_metacells`.
-FeatureCorrection = Callable[
-    [
-        NamedArg(AnnData, "adata"),  # noqa: F821
-        NamedArg(AnnData, "fdata"),  # noqa: F821
-        NamedArg(ut.NumpyMatrix, "downsampled"),  # noqa: F821
-    ],
-    None,
-]
+    #: A function to correct the extracted feature values before computing cell-cell similarity.
+    #:
+    #: This function takes the following named arguments:
+    #:
+    #: ``adata`` - The full annotated data of the cells.
+    #:
+    #: ``fdata`` - The feature genes annotated data of the cells (a slice of ``adata``). This has a
+    #: ``downsample_samples`` unstructured annotation with the target number of samples per cell.
+    #:
+    #: ``downsampled`` - A dense matrix of the downsampled UMIs of the features of the cells (a copy of the
+    #: ``downsampled`` layer of ``fdata``).
+    #:
+    #: The function is free to modify ``downsampled`` as it sees fit to perform any type of correction (typically, some
+    #: form of batch correction). The data type of ``downsampled`` is ``float32`` so the corrected values need not be
+    #: integers (even though their initial values will be).
+    #:
+    #: Note that this is only invoked for metacells-of-cells by
+    #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline` or
+    #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`, and is not invoked for
+    #: computing groups of metacelles. Therefore the function can access any metadata of the original input.
+    #:
+    #: See :py:func:`compute_direct_metacells`.
+    FeatureCorrection = Callable[
+        [
+            NamedArg(AnnData, "adata"),  # noqa: F821
+            NamedArg(AnnData, "fdata"),  # noqa: F821
+            NamedArg(ut.NumpyMatrix, "downsampled"),  # noqa: F821
+        ],
+        None,
+    ]
+
+except ModuleNotFoundError:
+    FeatureCorrection = Callable  # type: ignore
 
 
 @ut.logged()

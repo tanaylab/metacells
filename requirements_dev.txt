@@ -3,6 +3,7 @@ bumpversion
 flake8
 isort
 mypy
+mypy_extensions
 pylint
 pytest
 pytest-cov
