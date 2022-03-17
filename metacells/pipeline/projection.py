@@ -872,7 +872,7 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
                 if full_name in common_qdata.var:
                     del common_qdata.var[full_name]
 
-        type_of_atlas_metacells = ut.get_o_numpy(common_adata, "projected_type")
+        type_of_atlas_metacells = ut.get_o_numpy(common_adata, atlas_type_property_name)
         atlas_unique_types = np.unique(type_of_atlas_metacells)
 
         type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type")
