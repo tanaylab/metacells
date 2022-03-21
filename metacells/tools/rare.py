@@ -84,11 +84,11 @@ def find_rare_gene_modules(
             A boolean mask for the (few) cells that express a rare gene module.
 
     Variable (Gene) Annotations
-        ``rare_gene_module_<N>``
-            A boolean mask for the genes in the gene module with index ``N``.
-
         ``rare_gene``
             A boolean mask for the genes in any of the rare gene modules.
+
+        ``rare_gene_module``
+            The index of the rare gene module a gene belongs to (-1 for non-rare genes).
 
     If ``inplace``, these are written to to the data, and the function returns ``None``. Otherwise
     they are returned as tuple containing two data frames.
@@ -658,22 +658,19 @@ def _results(
         var_metrics = ut.to_pandas_frame(index=adata.var_names)
 
     rare_gene_mask = np.zeros(adata.n_vars, dtype="bool")
+    rare_gene_modules = np.full(adata.n_vars, -1, dtype="int32")
     for module_index, rare_gene_indices_of_module in enumerate(list_of_rare_gene_indices_of_modules):
-        rare_module_gene_mask = np.zeros(adata.n_vars, dtype="bool")
-        rare_module_gene_mask[rare_gene_indices_of_module] = True
-        property_name = f"rare_gene_module_{module_index}"
-        if inplace:
-            ut.set_v_data(adata, property_name, rare_module_gene_mask)
-        else:
-            var_metrics[property_name] = rare_module_gene_mask
-            ut.log_return(property_name, rare_module_gene_mask)
-        rare_gene_mask |= rare_module_gene_mask
+        rare_gene_mask[rare_gene_indices_of_module] = True
+        rare_gene_modules[rare_gene_indices_of_module] = module_index
 
     if inplace:
         ut.set_v_data(adata, "rare_gene", rare_gene_mask)
+        ut.set_v_data(adata, "rare_gene_module", rare_gene_modules, formatter=ut.groups_description)
     else:
         var_metrics["rare_gene"] = rare_gene_mask
         ut.log_return("rare_gene", rare_gene_mask)
+        var_metrics["rare_gene_module"] = rare_gene_modules
+        ut.log_return("rare_gene_module", rare_gene_modules, formatter=ut.groups_description)
 
     if inplace:
         ut.set_o_data(adata, "cells_rare_gene_module", rare_module_of_cells, formatter=ut.groups_description)

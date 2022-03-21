@@ -917,7 +917,7 @@ project_abs_folds: bool = abs_folds
 
 #: The maximal fold factor of genes between the atlas metacells used for the projection of a query metacell. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
-project_max_consistency_fold_factor: float = 4.0
+project_max_consistency_fold_factor: float = significant_gene_fold_factor - 1.0
 
 #: The minimal fold factor for a gene to be significant for metacell quality. See
 #: :py:func:`metacell.tools.compute_inner_fold_factors`.

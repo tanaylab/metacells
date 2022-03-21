@@ -49,13 +49,11 @@ def test_find_rare_gene_modules() -> None:
             **expected.get("find_rare_gene_modules", {}),
         )
 
-        module_index = 0
         actual_rare_gene_modules = []
-        while mc.ut.has_data(adata, f"rare_gene_module_{module_index}"):
-            actual_rare_gene_modules.append(
-                sorted(adata.var_names[mc.ut.get_v_numpy(adata, f"rare_gene_module_{module_index}")])  #
-            )
-            module_index += 1
+        rare_gene_modules = mc.ut.get_v_numpy(adata, "rare_gene_module")
+        max_gene_module = np.max(rare_gene_modules)
+        for module_index in range(max_gene_module + 1):
+            actual_rare_gene_modules.append(sorted(adata.var_names[rare_gene_modules == module_index]))
 
         expected_rare_gene_modules = expected["rare_gene_modules"]
 
