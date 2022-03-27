@@ -626,9 +626,8 @@ cores on your server. For ~2 million cells this takes ~10 minutes on a
 
 .. code::
 
-    set PBMC.clean.var[rare_gene_module_0]: 4 true (0.01769%) out of 22617 bools
-    set PBMC.clean.var[rare_gene_module_1]: 29 true (0.1282%) out of 22617 bools
     set PBMC.clean.var[rare_gene]: 33 true (0.1459%) out of 22617 bools
+    set PBMC.clean.var[rare_gene_module]: 22584 outliers (99.85%) out of 22617 int32 elements with 2 groups with mean size 16.5
     set PBMC.clean.obs[cells_rare_gene_module]: 149102 outliers (99.52%) out of 149825 int32 elements with 2 groups with mean size 361.5
     set PBMC.clean.obs[rare_cell]: 723 true (0.4826%) out of 149825 bools
     set PBMC.clean.uns[pre_directs]: 16

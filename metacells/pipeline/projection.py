@@ -1584,10 +1584,10 @@ def _compute_dissimilar_residuals_projection(
     top_level_parallel: bool,
     reproducible: bool,
 ) -> ut.NumpyMatrix:
-    secondary_type = np.full(common_qdata.n_obs, "", dtype="U")
+    secondary_type = [""] * common_qdata.n_obs
     dissimilar_mask = ~ut.get_o_numpy(common_qdata, "similar")
     if not np.any(dissimilar_mask):
-        ut.set_o_data(common_qdata, "projected_secondary_type", secondary_type)
+        ut.set_o_data(common_qdata, "projected_secondary_type", np.array(secondary_type))
         return weights
 
     dissimilar_qdata = ut.slice(common_qdata, obs=dissimilar_mask, name=".dissimilar")
@@ -1650,7 +1650,7 @@ def _compute_dissimilar_residuals_projection(
 
     ut.set_vo_data(common_qdata, "projected_fold", sp.csr_matrix(projected_folds))
     ut.set_o_data(common_qdata, "projected_type", primary_type)
-    ut.set_o_data(common_qdata, "projected_secondary_type", secondary_type)
+    ut.set_o_data(common_qdata, "projected_secondary_type", np.array(secondary_type))
     ut.set_o_data(common_qdata, "similar", similar)
 
     tl.compute_query_projection(
