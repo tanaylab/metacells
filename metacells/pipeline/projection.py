@@ -1687,17 +1687,17 @@ def _compute_single_metacell_residuals(
     reproducible: bool,
 ) -> Tuple[ut.NumpyVector, ut.NumpyVector, ut.NumpyVector, str, str, bool]:
     primary_type = ut.get_o_numpy(dissimilar_qdata, "projected_type")[dissimilar_metacell_index]
-    secondary_type: Optional[str] = None
+    secondary_type = ""
 
     repeat = 0
     while True:
         repeat += 1
         ut.log_calc("types repeat", repeat)
         ut.log_calc("primary_type", primary_type)
-        ut.log_calc("secondary_type", str(secondary_type))
+        ut.log_calc("secondary_type", secondary_type)
 
         ignored_genes_mask = ut.get_v_numpy(dissimilar_qdata, f"ignored_gene_of_{primary_type}")
-        if secondary_type is not None:
+        if secondary_type != "":
             ignored_genes_mask = ignored_genes_mask | ut.get_v_numpy(
                 dissimilar_qdata, f"ignored_gene_of_{secondary_type}"
             )
@@ -1746,19 +1746,21 @@ def _compute_single_metacell_residuals(
             property_name=atlas_type_property_name,
             to_property_name="projected_type",
         )
-
-        second_anchor_weights = weights - first_anchor_weights  # type: ignore
-
-        tl.project_atlas_to_query(
-            adata=included_adata,
-            qdata=metacell_included_qdata,
-            weights=second_anchor_weights,
-            property_name=atlas_type_property_name,
-            to_property_name="projected_secondary_type",
-        )
-
         new_primary_type = ut.get_o_numpy(metacell_included_qdata, "projected_type")[0]
-        new_secondary_type = ut.get_o_numpy(metacell_included_qdata, "projected_secondary_type")[0]
+
+        if len(second_anchor_indices) == 0:
+            new_secondary_type = ""
+        else:
+            second_anchor_weights = weights - first_anchor_weights  # type: ignore
+
+            tl.project_atlas_to_query(
+                adata=included_adata,
+                qdata=metacell_included_qdata,
+                weights=second_anchor_weights,
+                property_name=atlas_type_property_name,
+                to_property_name="projected_secondary_type",
+            )
+            new_secondary_type = ut.get_o_numpy(metacell_included_qdata, "projected_secondary_type")[0]
 
         if repeat > 2 or (new_primary_type == primary_type and new_secondary_type == secondary_type):
             break

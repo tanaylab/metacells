@@ -190,7 +190,7 @@ class ShortLoggingFormatter(LoggingFormatter):
         return LoggingFormatter.format(self, record)
 
 
-# ' Global logger object.
+# Global logger object.
 LOG: Optional[Logger] = None
 
 

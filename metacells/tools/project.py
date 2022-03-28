@@ -616,6 +616,7 @@ def project_atlas_to_query(
     for query_metacell_index in range(qdata.n_obs):
         metacell_weights = ut.to_numpy_vector(weights[query_metacell_index, :])
         metacell_mask = metacell_weights > 0
+        assert np.any(metacell_mask)
         metacell_weights = ut.to_numpy_vector(metacell_weights[metacell_mask])
         metacell_values = property_of_atlas_metacells[metacell_mask]
         property_of_query_metacells.append(method(metacell_weights, metacell_values))

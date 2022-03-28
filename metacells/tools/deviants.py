@@ -431,6 +431,8 @@ def _filter_cells(
         if quantile_cells_fold_rank < threshold_cells_fold_rank:
             threshold_cells_fold_rank = quantile_cells_fold_rank
 
+    threshold_cells_fold_rank = max(threshold_cells_fold_rank, 2)
+
     ut.log_calc("threshold_cells_fold_rank", threshold_cells_fold_rank)
     deviant_votes = deviant_genes_fold_ranks < threshold_cells_fold_rank
 
