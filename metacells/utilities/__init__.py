@@ -11,5 +11,6 @@ from .computation import *
 from .documentation import *
 from .logging import *
 from .parallel import *
+from .progress import *
 from .timing import *
 from .typing import *

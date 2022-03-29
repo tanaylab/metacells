@@ -295,7 +295,7 @@ def project_query_onto_atlas(
         )
 
     if ut.is_main_process():
-        results = list(ut.parallel_map(_project_single, qdata.n_obs))
+        results = ut.parallel_map(_project_single, qdata.n_obs)
     else:
         results = [_project_single(query_metacell_index) for query_metacell_index in range(qdata.n_obs)]
 

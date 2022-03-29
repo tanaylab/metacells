@@ -15,6 +15,9 @@ Utilities
 .. automodule:: metacells.utilities.parallel
     :members:
 
+.. automodule:: metacells.utilities.progress
+    :members:
+
 .. automodule:: metacells.utilities.timing
     :members:
 

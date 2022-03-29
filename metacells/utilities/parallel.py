@@ -56,8 +56,9 @@ from multiprocessing import get_context
 from threading import current_thread
 from typing import Any
 from typing import Callable
-from typing import Iterable
+from typing import List
 from typing import Optional
+from typing import Tuple
 from typing import TypeVar
 
 import psutil  # type: ignore
@@ -65,6 +66,7 @@ from threadpoolctl import threadpool_limits  # type: ignore
 
 import metacells.utilities.documentation as utd
 import metacells.utilities.logging as utl
+import metacells.utilities.progress as utp
 import metacells.utilities.timing as utm
 
 if "sphinx" not in sys.argv[0]:
@@ -148,31 +150,33 @@ def parallel_map(
     invocations: int,
     *,
     max_processors: int = 0,
-) -> Iterable[T]:
+    hide_from_progress_bar: bool = False,
+) -> List[T]:
     """
-    Execute ``function``, in parallel, ``invocations`` times. Each invocation is given the
-    invocation's index as its single argument.
+    Execute ``function``, in parallel, ``invocations`` times. Each invocation is given the invocation's index as its
+    single argument.
 
-    For our simple pipelines, only the main process is allowed to execute functions in parallel
-    processes, that is, we do not support nested ``parallel_map`` calls.
+    For our simple pipelines, only the main process is allowed to execute functions in parallel processes, that is, we
+    do not support nested ``parallel_map`` calls.
 
-    This uses :py:func:`get_processors_count` processes. If ``max_processors`` (default:
-    {max_processors}) is zero, use all available processors. Otherwise, further reduces the number
-    of processes used to at most the specified value.
+    This uses :py:func:`get_processors_count` processes. If ``max_processors`` (default: {max_processors}) is zero, use
+    all available processors. Otherwise, further reduces the number of processes used to at most the specified value.
 
-    If this ends up using a single process, runs the function serially. Otherwise, fork new
-    processes to execute the function invocations (using
-    ``multiprocessing.get_context('fork').Pool.map``).
+    If this ends up using a single process, runs the function serially. Otherwise, fork new processes to execute the
+    function invocations (using ``multiprocessing.get_context('fork').Pool.map``).
 
-    The downside is that this is slow, and you need to set up **mutable** shared memory (e.g. for
-    large results) in advance. The upside is that each of these processes starts with a shared
-    memory copy(-on-write) of the full Python state, that is, all the inputs for the function are
-    available "for free".
+    The downside is that this is slow, and you need to set up **mutable** shared memory (e.g. for large results) in
+    advance. The upside is that each of these processes starts with a shared memory copy(-on-write) of the full Python
+    state, that is, all the inputs for the function are available "for free".
+
+    If a progress bar is active at the time of invoking ``parallel_map``, and ``hide_from_progress_bar`` is not set,
+    then it is assumed the parallel map will cover all the current (slice of) the progress bar, and it is reported into
+    it in increments of ``1/invocations``.
 
     .. todo::
 
-        It is currently only possible to invoke :py:func:`parallel_map` from the main application
-        thread (that is, it does not nest).
+        It is currently only possible to invoke :py:func:`parallel_map` from the main application thread (that is, it
+        does not nest).
     """
     assert function.__is_timed__  # type: ignore
 
@@ -199,17 +203,22 @@ def parallel_map(
     PARALLEL_FUNCTION = function
     IS_MAIN_PROCESS = None
     try:
+        results: List[Optional[T]] = [None] * invocations
         utm.flush_timing()
         with utm.timed_step("parallel_map"):
             utm.timed_parameters(index=MAP_INDEX, processes=PROCESSES_COUNT)
             with get_context("fork").Pool(PROCESSES_COUNT) as pool:
-                return pool.map(_invocation, range(invocations))
+                for index, result in pool.imap_unordered(_invocation, range(invocations)):
+                    if utp.has_progress_bar() and not hide_from_progress_bar:
+                        utp.did_progress(1 / invocations)
+                    results[index] = result
+        return results  # type: ignore
     finally:
         IS_MAIN_PROCESS = True
         PARALLEL_FUNCTION = None
 
 
-def _invocation(index: int) -> Any:
+def _invocation(index: int) -> Tuple[int, Any]:
     global IS_MAIN_PROCESS
     if IS_MAIN_PROCESS is None:
         IS_MAIN_PROCESS = os.getpid() == MAIN_PROCESS_PID
@@ -234,4 +243,4 @@ def _invocation(index: int) -> Any:
         xt.set_threads_count(PROCESSORS_COUNT)
 
     assert PARALLEL_FUNCTION is not None
-    return PARALLEL_FUNCTION(index)
+    return index, PARALLEL_FUNCTION(index)

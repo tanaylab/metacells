@@ -161,7 +161,7 @@ fstrings: .make.fstrings  ## check f-strings in Python code
 
 .make.fstrings: $(PY_SOURCE_FILES)
 	@echo "fstrings"
-	@if grep -Hn '^[^"]*\("\([^"]\|\\"\)*"[^"]*\)*[^f]"\([^"]\|\\"\)*{' $(PY_SOURCE_FILES); \
+	@if grep -Hn '^[^"]*\("\([^"]\|\\"\)*"[^"]*\)*[^f]"\([^"]\|\\"\)*{(?!.*# NOT F-STRING)' $(PY_SOURCE_FILES); \
 	then \
 	    echo 'Strings appear to be f-strings, but are not (fix manually).'; \
 	    false; \
