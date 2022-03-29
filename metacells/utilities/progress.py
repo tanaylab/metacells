@@ -86,7 +86,7 @@ def start_progress_bar(**tqdm_kwargs: Any) -> Any:
 
     TQDM_KWARGS = tqdm_kwargs.copy()
     if "bar_format" not in TQDM_KWARGS:
-        TQDM_KWARGS["bar_format"] = "{l_bar}{bar}[{elapsed}]"
+        TQDM_KWARGS["bar_format"] = "{l_bar}{bar}[{elapsed}]"  # NOT F-STRING
 
     PROGRESS_POSITION = 0
     PROGRESS_END = int(1e15)
