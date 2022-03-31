@@ -1201,8 +1201,8 @@ def _convey_query_type_to_common_data(
     full_cell_index_of_type_qdata = ut.get_o_numpy(type_included_qdata, "full_metacell_index_of_qdata")
     similar[full_cell_index_of_type_qdata] = ut.get_o_numpy(type_included_qdata, "similar")
     ignored_gene_of_type[:] = True
-    full_gene_index_of_type_qdata = ut.get_v_numpy(type_included_qdata, "full_gene_index_of_qdata")
-    ignored_gene_of_type[full_gene_index_of_type_qdata] = False
+    common_gene_index_of_type_qdata = ut.get_v_numpy(type_included_qdata, "common_gene_index_of_qdata")
+    ignored_gene_of_type[common_gene_index_of_type_qdata] = False
     dissimilar_genes_count[full_cell_index_of_type_qdata] = ut.get_o_numpy(
         type_included_qdata, "dissimilar_genes_count", formatter=ut.mask_description
     )
@@ -1795,7 +1795,7 @@ def _compute_single_metacell_residuals(
     )
 
     weights_vector = ut.to_numpy_vector(weights)
-    gene_indices = ut.get_v_numpy(metacell_included_qdata, "full_gene_index_of_qdata")
+    gene_indices = ut.get_v_numpy(metacell_included_qdata, "common_gene_index_of_qdata")
     projected_folds = ut.to_numpy_vector(ut.get_vo_proper(metacell_included_qdata, "projected_fold"))
     similar = ut.get_o_numpy(metacell_included_qdata, "similar")[0]
 
