@@ -614,46 +614,23 @@ Grouping into Metacells
 We can finally compute the metacells. We are only running this on ~160K
 cells, still this may take a few minutes, depending on the number of
 cores on your server. For ~2 million cells this takes ~10 minutes on a
-28-core server.
+28-core server. Since this may take a while, it is possible to run this
+with a progress bar, as demonstrated below.
 
 .. code:: python
 
-    mc.pl.divide_and_conquer_pipeline(clean,
-                                      forbidden_gene_names=forbidden_gene_names,
-                                      #target_metacell_size=...,
-                                      random_seed=123456)
+    with mc.ut.progress_bar():
+        mc.pl.divide_and_conquer_pipeline(clean,
+                                          forbidden_gene_names=forbidden_gene_names,
+                                          #target_metacell_size=...,
+                                          random_seed=123456)
 
 
 .. code::
 
-    set PBMC.clean.var[rare_gene]: 33 true (0.1459%) out of 22617 bools
-    set PBMC.clean.var[rare_gene_module]: 22584 outliers (99.85%) out of 22617 int32 elements with 2 groups with mean size 16.5
-    set PBMC.clean.obs[cells_rare_gene_module]: 149102 outliers (99.52%) out of 149825 int32 elements with 2 groups with mean size 361.5
-    set PBMC.clean.obs[rare_cell]: 723 true (0.4826%) out of 149825 bools
-    set PBMC.clean.uns[pre_directs]: 16
-    set PBMC.clean.uns[directs]: 22
-    set PBMC.clean.var[pre_high_total_gene]: 8309 positive (36.74%) out of 22617 int32s
-    set PBMC.clean.var[high_total_gene]: 10507 positive (46.46%) out of 22617 int32s
-    set PBMC.clean.var[pre_high_relative_variance_gene]: 11755 positive (51.97%) out of 22617 int32s
-    set PBMC.clean.var[high_relative_variance_gene]: 13067 positive (57.78%) out of 22617 int32s
-    set PBMC.clean.var[forbidden_gene]: 106 true (0.4687%) out of 22617 bools
-    set PBMC.clean.var[pre_feature_gene]: 462 positive (2.043%) out of 22617 int32s
-    set PBMC.clean.var[feature_gene]: 715 positive (3.161%) out of 22617 int32s
-    set PBMC.clean.var[pre_gene_deviant_votes]: 2379 positive (10.52%) out of 22617 int32s
-    set PBMC.clean.var[gene_deviant_votes]: 2320 positive (10.26%) out of 22617 int32s
-    set PBMC.clean.obs[pre_cell_directs]: 149825 int32s with mean 1.045
-    set PBMC.clean.obs[cell_directs]: 149825 int32s with mean 1.032
-    set PBMC.clean.obs[pre_pile]: 0 outliers (0%) out of 149825 int32 elements with 18 groups with mean size 8324
-    set PBMC.clean.obs[pile]: 0 outliers (0%) out of 149825 int32 elements with 22 groups with mean size 6810
-    set PBMC.clean.obs[pre_candidate]: 0 outliers (0%) out of 149825 int32 elements with 1696 groups with mean size 88.34
-    set PBMC.clean.obs[candidate]: 0 outliers (0%) out of 149825 int32 elements with 1581 groups with mean size 94.77
-    set PBMC.clean.obs[pre_cell_deviant_votes]: 0 positive (0%) out of 149825 int32s
-    set PBMC.clean.obs[cell_deviant_votes]: 1431 positive (0.9551%) out of 149825 int32s
-    set PBMC.clean.obs[pre_dissolved]: 0 true (0%) out of 149825 bools
-    set PBMC.clean.obs[dissolved]: 104 true (0.06941%) out of 149825 bools
-    set PBMC.clean.obs[pre_metacell]: 0 outliers (0%) out of 149825 int32 elements with 1651 groups with mean size 90.75
-    set PBMC.clean.obs[metacell]: 1535 outliers (1.025%) out of 149825 int32 elements with 1549 groups with mean size 95.73
-    set PBMC.clean.obs[outlier]: 1535 true (1.025%) out of 149825 bools
+    Compute metacells for rare gene modules...
+    Compute common metacells...
+    100%|█████████▉[01:46]
 
 
 This has written many annotations for each cell (observation), the most

@@ -196,7 +196,16 @@ def compute_umap_by_features(
 
     2. Invoke :py:func:`metacells.tools.layout.umap_by_distances` using the distances, ``umap_k``
        (default: {umap_k}), ``min_dist`` (default: {min_dist}), ``spread`` (default: {spread}),
-       dimensions (default: {dimensions})q"""
+       dimensions (default: {dimensions})
+
+    .. note::
+
+        Keep in mind that the KNN graph used by UMAP (controlled by ``umap_k``) is *not* identical to the KNN graph we
+        compute (controlled by ``skeleton_k``). By default, we choose ``skeleton_k < umap_k``, as the purpose of the
+        skeleton KNN is to highlight the "strong" structure of the data; in practice this strong skeleton is highly
+        compatible with the structure used by UMAP, so it serves it purpose reasonably well. It would have been nice to
+        make these compatible, but UMAP is not friendly towards dictating a KNN graph from the outside.
+    """
     similarities = compute_knn_by_features(
         adata,
         what,
