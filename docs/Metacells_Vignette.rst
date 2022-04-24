@@ -630,7 +630,7 @@ with a progress bar, as demonstrated below.
 
     Compute metacells for rare gene modules...
     Compute common metacells...
-    100%|█████████▉[01:46]
+    100%|█████████▉[01:44]
 
 
 This has written many annotations for each cell (observation), the most

@@ -161,21 +161,17 @@ def projection_pipeline(
             the threshold.
 
         ``projected_type``
-            The type assigned to each query metacell by its projection on the atlas. This should not be taken as gospel,
-            even for "similar" metacells, as there may still be significant systematic differences between the query and
-            the atlas as captured by the various per-gene annotations.
+            The type assigned to each query metacell by its projection on the atlas, if it is "similar" and matches a
+            single region in the atlas. This will be the special value "Dissimilar" for query metacells that are not
+            similar to their projection, and "Mixture" for query metacells that are similar to a mixture of two regions
+            of the same type in the atlas, or "Doublet" if the two regions have different types. Even so, this should
+            not be taken as gospel, as there may still be significant systematic differences between the query and the
+            atlas as captured by the various per-gene annotations.
 
         ``projected_secondary_type``
-            If the query metacell is "similar" to its projection to a single point in the atlas, this will be the empty
-            string. Otherwise, we try to project it using two distinct points in the atlas, in which case this would
-            contain the type associated with that second point. Thus, if a query metacell contains doublet cells, it
-            might end up being "similar" but to a combination of two types in the atlas. For a truly novel query
-            metacell type, this will also end up being "dissimilar", and the secondary type may or may not be helpful.
-            Also, even if the query metacell ends up being "similar" to a combination of two atlas points, this can be
-            either due to the query metacell containing true doublet cells, or possibly due to the atlas having
-            metacells that span some gradient where the query has only one metacell that covers a "too large" range of
-            this gradient (in this case the secondary type might even end up being the same as the main projected type).
-            In either case, having a non-empty value here doesn't guarantee this is a metacell of doublets.
+            If the query metacell is "Dissimilar" or "Doublet", this contains the additional type information (the type
+            that best describes the projection for "Dissimilar" query metacells, or the ``;``-separated two types that
+            are mixed for a "Doublet" query metacells).
 
     Observation-Variable (Cell-Gene) Annotations
         ``projected``
@@ -489,6 +485,24 @@ def _common_data(
     return common_adata, common_qdata
 
 
+def _final_primary_of(primary: str, secondary: str, is_similar: bool) -> str:
+    if not is_similar:
+        return "Dissimilar"
+    if secondary == primary:
+        return "Mixture"
+    if secondary != "":
+        return "Doublet"
+    return primary
+
+
+def _final_secondary_of(primary: str, secondary: str, is_similar: bool) -> str:
+    if secondary != "":
+        return f"{primary};{secondary}"
+    if not is_similar:
+        return primary
+    return ""
+
+
 @ut.logged()
 @ut.timed_call()
 def _convey_query_common_to_full_data(
@@ -497,6 +511,29 @@ def _convey_query_common_to_full_data(
     qdata: AnnData,
     common_qdata: AnnData,
 ) -> None:
+    similar_mask = ut.get_o_numpy(common_qdata, "similar")
+    primary_type = ut.get_o_numpy(common_qdata, "projected_type")
+    secondary_type = ut.get_o_numpy(common_qdata, "projected_secondary_type")
+
+    final_primary_type = np.array(
+        [
+            _final_primary_of(primary, secondary, is_similar)
+            for primary, secondary, is_similar in zip(primary_type, secondary_type, similar_mask)
+        ],
+        dtype="U",
+    )
+
+    final_secondary_type = np.array(
+        [
+            _final_secondary_of(primary, secondary, is_similar)
+            for primary, secondary, is_similar in zip(primary_type, secondary_type, similar_mask)
+        ],
+        dtype="U",
+    )
+
+    ut.set_o_data(qdata, "projected_type", final_primary_type)
+    ut.set_o_data(qdata, "projected_secondary_type", final_secondary_type)
+
     if id(qdata) == id(common_qdata):
         for data_name in ["full_metacell_index_of_qdata", "common_cell_index_of_qdata"]:
             del qdata.obs[data_name]
@@ -507,9 +544,7 @@ def _convey_query_common_to_full_data(
         return
 
     assert common_qdata.n_obs == qdata.n_obs
-
-    for data_name in ["similar", "projected_type", "projected_secondary_type"]:
-        ut.set_o_data(qdata, data_name, ut.get_o_numpy(common_qdata, data_name))
+    ut.set_o_data(qdata, "similar", similar_mask)
 
     dissimilar_genes_count = ut.get_o_numpy(common_qdata, "dissimilar_genes_count")
     ut.log_calc("max dissimilar_genes_count", np.max(dissimilar_genes_count))

@@ -34,3 +34,8 @@ History
 * Fix edge case in computing noisy lonely genes.
 * Additional outliers certificates.
 * Stricter deviants detection policy
+
+0.9.0
+-----
+
+* Improved projection metadata.
