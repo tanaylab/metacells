@@ -430,6 +430,8 @@ def _corrcoef_reproducible(
     result = np.empty((dense.shape[0], dense.shape[0]), dtype="float32")
     extension = getattr(xt, extension_name)
     extension(dense, result)
+    result[np.isnan(result)] = 0.0
+    np.fill_diagonal(result, 1.0)
     return result
 
 

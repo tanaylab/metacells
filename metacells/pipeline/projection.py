@@ -169,9 +169,9 @@ def projection_pipeline(
             atlas as captured by the various per-gene annotations.
 
         ``projected_secondary_type``
-            If the query metacell is "Dissimilar" or "Doublet", this contains the additional type information (the type
-            that best describes the projection for "Dissimilar" query metacells, or the ``;``-separated two types that
-            are mixed for a "Doublet" query metacells).
+            If the query metacell is "Dissimilar", "Doublet" or "Mixture", this contains the additional type information
+            (the type that best describes the projection for "Dissimilar" query metacells, or the ``;``-separated two
+            types that are mixed for a "Doublet" or "Mixture" query metacells).
 
     Observation-Variable (Cell-Gene) Annotations
         ``projected``
@@ -496,10 +496,12 @@ def _final_primary_of(primary: str, secondary: str, is_similar: bool) -> str:
 
 
 def _final_secondary_of(primary: str, secondary: str, is_similar: bool) -> str:
-    if secondary != "":
-        return f"{primary};{secondary}"
     if not is_similar:
         return primary
+    if secondary == primary:
+        return primary
+    if secondary != "":
+        return f"{primary};{secondary}"
     return ""
 
 
