@@ -130,7 +130,6 @@ def set_processors_count(processors: int) -> None:
     xt.set_threads_count(PROCESSORS_COUNT)
     os.environ["OMP_NUM_THREADS"] = str(PROCESSORS_COUNT)
     os.environ["MKL_NUM_THREADS"] = str(PROCESSORS_COUNT)
-    utl.logger().debug("SET NUM_THREADS TO %s", PROCESSORS_COUNT)
 
 
 if "sphinx" not in sys.argv[0]:
@@ -206,7 +205,6 @@ def parallel_map(
 
     os.environ["OMP_NUM_THREADS"] = str(ceil(PROCESSES_COUNT / invocations))
     os.environ["MKL_NUM_THREADS"] = str(ceil(PROCESSES_COUNT / invocations))
-    utl.logger().debug("SET NUM_THREADS TO %s", PROCESSORS_COUNT)
 
     PARALLEL_FUNCTION = function
     IS_MAIN_PROCESS = None
@@ -226,7 +224,6 @@ def parallel_map(
         PARALLEL_FUNCTION = None
         os.environ["OMP_NUM_THREADS"] = str(PROCESSES_COUNT)
         os.environ["MKL_NUM_THREADS"] = str(PROCESSES_COUNT)
-        utl.logger().debug("SET NUM_THREADS TO %s", PROCESSORS_COUNT)
 
 
 def _invocation(index: int) -> Tuple[int, Any]:
@@ -254,7 +251,6 @@ def _invocation(index: int) -> Tuple[int, Any]:
         xt.set_threads_count(PROCESSORS_COUNT)
         os.environ["OMP_NUM_THREADS"] = str(PROCESSORS_COUNT)
         os.environ["MKL_NUM_THREADS"] = str(PROCESSORS_COUNT)
-        utl.logger().debug("SET NUM_THREADS TO %s", PROCESSORS_COUNT)
 
     assert PARALLEL_FUNCTION is not None
     return index, PARALLEL_FUNCTION(index)
