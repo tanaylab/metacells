@@ -52,6 +52,7 @@ def projection_pipeline(
     project_max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
     project_max_dissimilar_genes: int = pr.project_max_dissimilar_genes,
     min_entry_project_fold_factor: float = pr.min_entry_project_fold_factor,
+    min_similar_significant_genes_fraction: Optional[float] = pr.min_similar_significant_genes_fraction,
     project_abs_folds: bool = pr.project_abs_folds,
     ignored_gene_names_of_type: Optional[Dict[str, Collection[str]]] = None,
     ignored_gene_patterns_of_type: Optional[Dict[str, Collection[str]]] = None,
@@ -281,6 +282,12 @@ def projection_pipeline(
     """
     assert project_min_corrected_gene_factor >= 0
 
+    min_similar_significant_genes = (
+        None
+        if min_similar_significant_genes_fraction is None
+        else int(np.sum(ut.get_v_numpy(adata, "significant_gene")) * min_similar_significant_genes_fraction)
+    )
+
     qdata = qdata.copy()
 
     _fill_manually_ignored_genes(
@@ -351,6 +358,7 @@ def projection_pipeline(
             project_max_projection_fold_factor=project_max_projection_fold_factor,
             project_max_dissimilar_genes=project_max_dissimilar_genes,
             min_entry_project_fold_factor=min_entry_project_fold_factor,
+            min_similar_significant_genes=min_similar_significant_genes,
             project_abs_folds=project_abs_folds,
             atlas_type_property_name=atlas_type_property_name,
             top_level_parallel=top_level_parallel,
@@ -382,6 +390,7 @@ def projection_pipeline(
         project_max_projection_fold_factor=project_max_projection_fold_factor,
         project_max_dissimilar_genes=project_max_dissimilar_genes,
         min_entry_project_fold_factor=min_entry_project_fold_factor,
+        min_similar_significant_genes=min_similar_significant_genes,
         project_abs_folds=project_abs_folds,
         atlas_type_property_name=atlas_type_property_name,
         top_level_parallel=top_level_parallel,
@@ -840,6 +849,9 @@ def _compute_global_projection(
     tl.combine_masks(included_qdata, ignored_mask_names, to="ignored_gene")
     included_genes_mask = ~ut.get_v_numpy(included_qdata, "ignored_gene")
 
+    if not np.any(included_genes_mask):
+        included_genes_mask[0] = True
+
     included_adata = ut.slice(included_adata, name=".included", vars=included_genes_mask)
     included_qdata = ut.slice(included_qdata, name=".included", vars=included_genes_mask)
 
@@ -937,6 +949,7 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
     min_entry_project_fold_factor: float,
+    min_similar_significant_genes: Optional[int],
     project_abs_folds: bool,
     atlas_type_property_name: str,
     top_level_parallel: bool,
@@ -1002,6 +1015,7 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
                 project_max_projection_fold_factor=project_max_projection_fold_factor,
                 project_max_dissimilar_genes=project_max_dissimilar_genes,
                 min_entry_project_fold_factor=min_entry_project_fold_factor,
+                min_similar_significant_genes=min_similar_significant_genes,
                 project_abs_folds=project_abs_folds,
                 atlas_type_property_name=atlas_type_property_name,
                 top_level_parallel=top_level_parallel,
@@ -1106,6 +1120,7 @@ def _compute_single_type_projection(
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
     min_entry_project_fold_factor: float,
+    min_similar_significant_genes: Optional[int],
     project_abs_folds: bool,
     atlas_type_property_name: str,
     top_level_parallel: bool,
@@ -1194,6 +1209,8 @@ def _compute_single_type_projection(
         type_included_qdata,
         max_projection_fold_factor=project_max_projection_fold_factor,
         max_dissimilar_genes=project_max_dissimilar_genes,
+        marker_genes_property="significant_gene",
+        min_similar_marker_genes=min_similar_significant_genes,
         abs_folds=project_abs_folds,
     )
 
@@ -1338,6 +1355,9 @@ def _compute_type_projection(
 ) -> Tuple[AnnData, AnnData, ut.CompressedMatrix]:
     tl.combine_masks(type_included_qdata, type_ignored_mask_names, to=f"ignored_gene_of_{type_name}")
     type_included_genes_mask = ~ut.get_v_numpy(type_included_qdata, f"ignored_gene_of_{type_name}")
+    if not np.any(type_included_genes_mask):
+        type_included_genes_mask[0] = True
+
     type_included_adata = ut.slice(type_included_adata, name=".included", vars=type_included_genes_mask)
     type_included_qdata = ut.slice(type_included_qdata, name=".included", vars=type_included_genes_mask)
 
@@ -1616,6 +1636,7 @@ def _compute_dissimilar_residuals_projection(
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
     min_entry_project_fold_factor: float,
+    min_similar_significant_genes: Optional[int],
     project_abs_folds: bool,
     atlas_type_property_name: str,
     top_level_parallel: bool,
@@ -1649,6 +1670,7 @@ def _compute_dissimilar_residuals_projection(
             project_max_projection_fold_factor=project_max_projection_fold_factor,
             project_max_dissimilar_genes=project_max_dissimilar_genes,
             min_entry_project_fold_factor=min_entry_project_fold_factor,
+            min_similar_significant_genes=min_similar_significant_genes,
             project_abs_folds=project_abs_folds,
             atlas_type_property_name=atlas_type_property_name,
             reproducible=reproducible,
@@ -1719,6 +1741,7 @@ def _compute_single_metacell_residuals(
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
     min_entry_project_fold_factor: float,
+    min_similar_significant_genes: Optional[int],
     project_abs_folds: bool,
     atlas_type_property_name: str,
     reproducible: bool,
@@ -1828,6 +1851,8 @@ def _compute_single_metacell_residuals(
         metacell_included_qdata,
         max_projection_fold_factor=project_max_projection_fold_factor,
         max_dissimilar_genes=project_max_dissimilar_genes,
+        marker_genes_property="significant_gene",
+        min_similar_marker_genes=min_similar_significant_genes,
         abs_folds=project_abs_folds,
     )
 

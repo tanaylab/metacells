@@ -440,11 +440,12 @@ def _project_single_metacell(  # pylint: disable=too-many-statements
         atlas_metacell_consistency_fold_factors = np.abs(atlas_metacell_log_fractions - atlas_anchor_log_fractions)
         atlas_metacell_umis = ut.to_numpy_vector(atlas_umis[atlas_metacell_index, :])
         atlas_metacell_significant_genes_mask = atlas_metacell_umis + atlas_anchor_umis >= min_significant_gene_value
-        atlas_metacell_consistency = np.max(
-            atlas_metacell_consistency_fold_factors[atlas_metacell_significant_genes_mask]
-        )
-        if atlas_metacell_consistency <= max_consistency_fold_factor:
-            atlas_candidate_indices_set.add(atlas_metacell_index)
+        if np.any(atlas_metacell_significant_genes_mask):
+            atlas_metacell_consistency = np.max(
+                atlas_metacell_consistency_fold_factors[atlas_metacell_significant_genes_mask]
+            )
+            if atlas_metacell_consistency <= max_consistency_fold_factor:
+                atlas_candidate_indices_set.add(atlas_metacell_index)
 
     if query_atlas_corr_residual is not None:
         query_metacell_atlas_residual_correlations = query_atlas_corr_residual[query_metacell_index, :]
@@ -466,11 +467,12 @@ def _project_single_metacell(  # pylint: disable=too-many-statements
             atlas_metacell_significant_genes_mask = (
                 atlas_metacell_umis + atlas_anchor_umis >= min_significant_gene_value
             )
-            atlas_metacell_consistency = np.max(
-                atlas_metacell_consistency_fold_factors[atlas_metacell_significant_genes_mask]
-            )
-            if atlas_metacell_consistency <= max_consistency_fold_factor:
-                atlas_secondary_candidate_indices_set.add(atlas_metacell_index)
+            if np.any(atlas_metacell_significant_genes_mask):
+                atlas_metacell_consistency = np.max(
+                    atlas_metacell_consistency_fold_factors[atlas_metacell_significant_genes_mask]
+                )
+                if atlas_metacell_consistency <= max_consistency_fold_factor:
+                    atlas_secondary_candidate_indices_set.add(atlas_metacell_index)
 
         atlas_candidate_indices = np.array(sorted(atlas_candidate_indices_set | atlas_secondary_candidate_indices_set))
     else:

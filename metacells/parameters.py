@@ -1033,3 +1033,6 @@ renormalize_query_by_atlas: bool = True
 #: The quantile of each gene's normalized variance across the metacells to use for the overall gene's variability.
 #: See :py:func:`metacells.tools.quality.compute_type_gene_normalized_variance`.
 type_gene_normalized_variance_quantile: float = 0.95
+
+#: Minimal fraction of atlas significant genes which must be similar for a projection to be valid.
+min_similar_significant_genes_fraction: float = 0.5
