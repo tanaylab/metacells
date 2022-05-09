@@ -85,7 +85,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'Metacells'
-copyright = "2020,2021 Weizmann Institute of Science"
+copyright = "2020,2021,2022 Weizmann Institute of Science"
 author = "Oren Ben-Kiki"
 
 # The version info for the project you're documenting, acts as replacement
