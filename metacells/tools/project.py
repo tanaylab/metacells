@@ -484,7 +484,7 @@ def _project_single_metacell(  # pylint: disable=too-many-statements
     assert represent_result is not None
     atlas_candidate_weights = represent_result[1]
     atlas_candidate_weights[atlas_candidate_weights < min_usage_weight] = 0
-    atlas_candidate_weights[atlas_candidate_weights < min_usage_weight] /= np.sum(atlas_candidate_weights)
+    atlas_candidate_weights[:] /= np.sum(atlas_candidate_weights)
 
     atlas_used_mask = atlas_candidate_weights > 0
 

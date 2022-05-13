@@ -315,6 +315,9 @@ def projection_pipeline(
         ut.log_calc("correlation repeat", repeat)
 
         query_total_common_umis = ut.get_o_numpy(common_qdata, what, sum=True)
+        ut.log_calc("QUERY TOTAL UMIS[0]", query_total_common_umis[0])
+        if query_total_common_umis.shape[0] > 2:
+            ut.log_calc("QUERY TOTAL UMIS[2]", query_total_common_umis[2])
 
         _compute_preliminary_projection(
             what=what,
@@ -580,7 +583,7 @@ def _convey_query_common_to_full_data(
             full_data[full_gene_index_of_common_qdata] = ut.get_v_numpy(common_qdata, data_name)
             ut.set_v_data(qdata, data_name, full_data)
 
-    for type_name in np.unique(ut.get_o_numpy(qdata, "projected_type")):
+    for type_name in np.unique(primary_type):
         for data_name in ["systematic_gene", "ignored_gene", "biased_gene"]:
             type_data_name = f"{data_name}_of_{type_name}"
             full_data = np.zeros(qdata.n_vars, dtype="bool")

@@ -1111,10 +1111,13 @@ def set_vo_data(
 
     if hasattr(adata, "__derived__"):
         derived = getattr(adata, "__derived__")
-        for layout in ["column_major", "row_major"]:
-            layout_name = f"vo:{name}:{layout}"
-            if layout_name in derived:
-                del derived[layout_name]
+        marker_name = f":{name}:"
+        deleted_names: List[str] = []
+        for derived_name in derived.keys():
+            if marker_name in derived_name:
+                deleted_names.append(derived_name)
+        for deleted_name in deleted_names:
+            del derived[deleted_name]
 
 
 def _unknown_data(adata: AnnData, name: str, per: Optional[str] = None) -> KeyError:
