@@ -209,11 +209,9 @@ def projection_pipeline(
        ``project_candidates_count`` (default: {project_candidates_count}), ``project_min_usage_weight`` (default:
        {project_min_usage_weight}), ``project_abs_folds`` (default: {project_abs_folds}) and ``reproducible``.
 
-    4. Invoke :py:func:`metacells.tools.project.compute_significant_projected_fold_factors` to compute the significant
+    4. Invoke :py:func:`metacells.tools.project.compute_projected_fold_factors` to compute the significant
        fold factors between the query and its projection, using the ``project_fold_normalization`` (default:
-       {project_fold_normalization}), ``project_max_projection_fold_factor`` (default:
-       {project_max_projection_fold_factor}), ``min_entry_project_fold_factor`` (default:
-       {min_entry_project_fold_factor}), ``project_min_significant_gene_value`` (default:
+       {project_fold_normalization}), ``project_min_significant_gene_value`` (default:
        {project_min_significant_gene_value}) and ``project_abs_folds`` (default: {project_abs_folds}).
 
     5. Invoke :py:func:`metacells.tools.project.find_biased_genes` using the ``project_max_projection_fold_factor``
@@ -245,8 +243,8 @@ def projection_pipeline(
        the type-specific ignored genes in addition to the global ignored genes. Note that this projection is not
        restricted to using atlas metacells of the specific type.
 
-    10. Invoke :py:func:`metacells.tools.project.compute_significant_projected_fold_factors` to compute the significant
-       fold factors between the query and its projection.
+    10. Invoke :py:func:`metacells.tools.project.compute_projected_fold_factors` to compute the significant fold factors
+       between the query and its projection.
 
     .. todo::
         Implement a more clever typed projection algorithm that maximizes parallelism both across types and within each
@@ -274,7 +272,12 @@ def projection_pipeline(
 
     14. Invoke :py:func:`metacells.tools.quality.compute_similar_query_metacells` to validate the updated projection.
 
-    15. If ``renormalize_query_by_atlas`` (default: {renormalize_query_by_atlas}), then invoke
+    15. Invoke :py:func:`metacells.utilities.computation.sparsify_matrix` to preserve only the significant
+        ``projected_fold`` values, using ``project_max_projection_fold_factor`` (default:
+        {project_max_projection_fold_factor}) and ``min_entry_project_fold_factor`` (default:
+        ``min_entry_project_fold_factor``).
+
+    16. If ``renormalize_query_by_atlas`` (default: {renormalize_query_by_atlas}), then invoke
        :py:func:`metacells.tools.project.renormalize_query_by_atlas` using the ``renormalize_var_annotations``,
        ``renormalize_layers`` and ``renormalize_varp_annotations``, if any, to add an ``ATLASNORM`` pseudo-gene so that
        the fraction out of the total UMIs in the query of the genes common to the atlas would be the same on average as
@@ -337,7 +340,6 @@ def projection_pipeline(
             project_candidates_count=project_candidates_count,
             project_min_usage_weight=project_min_usage_weight,
             project_max_projection_fold_factor=project_max_projection_fold_factor,
-            min_entry_project_fold_factor=min_entry_project_fold_factor,
             biased_min_metacells_fraction=biased_min_metacells_fraction,
             project_abs_folds=project_abs_folds,
             atlas_type_property_name=atlas_type_property_name,
@@ -360,7 +362,6 @@ def projection_pipeline(
             project_max_consistency_fold_factor=project_max_consistency_fold_factor,
             project_max_projection_fold_factor=project_max_projection_fold_factor,
             project_max_dissimilar_genes=project_max_dissimilar_genes,
-            min_entry_project_fold_factor=min_entry_project_fold_factor,
             min_similar_significant_genes=min_similar_significant_genes,
             project_abs_folds=project_abs_folds,
             atlas_type_property_name=atlas_type_property_name,
@@ -392,7 +393,6 @@ def projection_pipeline(
         project_max_consistency_fold_factor=project_max_consistency_fold_factor,
         project_max_projection_fold_factor=project_max_projection_fold_factor,
         project_max_dissimilar_genes=project_max_dissimilar_genes,
-        min_entry_project_fold_factor=min_entry_project_fold_factor,
         min_similar_significant_genes=min_similar_significant_genes,
         project_abs_folds=project_abs_folds,
         atlas_type_property_name=atlas_type_property_name,
@@ -400,7 +400,14 @@ def projection_pipeline(
         reproducible=reproducible,
     )
 
-    _convey_query_common_to_full_data(what=what, qdata=qdata, common_qdata=common_qdata)
+    _convey_query_common_to_full_data(
+        what=what,
+        qdata=qdata,
+        common_qdata=common_qdata,
+        project_max_projection_fold_factor=project_max_projection_fold_factor,
+        min_entry_project_fold_factor=min_entry_project_fold_factor,
+        project_abs_folds=project_abs_folds,
+    )
 
     qdata = _renormalize_query(
         adata=adata,
@@ -509,6 +516,8 @@ def _final_primary_of(primary: str, secondary: str, is_similar: bool) -> str:
 
 def _final_secondary_of(primary: str, secondary: str, is_similar: bool) -> str:
     if not is_similar:
+        if primary != secondary:
+            return f"{primary};{secondary}"
         return primary
     if secondary == primary:
         return primary
@@ -524,6 +533,9 @@ def _convey_query_common_to_full_data(
     what: str,
     qdata: AnnData,
     common_qdata: AnnData,
+    project_max_projection_fold_factor: float,
+    min_entry_project_fold_factor: float,
+    project_abs_folds: bool,
 ) -> None:
     similar_mask = ut.get_o_numpy(common_qdata, "similar")
     primary_type = ut.get_o_numpy(common_qdata, "projected_type")
@@ -597,8 +609,14 @@ def _convey_query_common_to_full_data(
 
     common_projected_fold = ut.get_vo_proper(common_qdata, "projected_fold")
     full_projected_fold = np.zeros(qdata.shape, dtype="float32")
-    full_projected_fold[:, full_gene_index_of_common_qdata] = ut.to_numpy_matrix(common_projected_fold)
-    ut.set_vo_data(qdata, "projected_fold", sp.csr_matrix(full_projected_fold))
+    full_projected_fold[:, full_gene_index_of_common_qdata] = common_projected_fold
+    sparse_projected_fold = ut.sparsify_matrix(
+        full_projected_fold,
+        min_column_max_value=project_max_projection_fold_factor,
+        min_entry_value=min_entry_project_fold_factor,
+        abs_values=project_abs_folds,
+    )
+    ut.set_vo_data(qdata, "projected_fold", sp.csr_matrix(sparse_projected_fold))
 
     common_projected = ut.get_vo_proper(common_qdata, "projected")
     full_projected = np.zeros(qdata.shape, dtype="float32")
@@ -708,7 +726,6 @@ def _compute_preliminary_projection(
     project_candidates_count: int,
     project_min_usage_weight: float,
     project_max_projection_fold_factor: float,
-    min_entry_project_fold_factor: float,
     biased_min_metacells_fraction: float,
     atlas_type_property_name: str,
     project_abs_folds: bool,
@@ -748,9 +765,6 @@ def _compute_preliminary_projection(
             project_max_consistency_fold_factor=project_max_consistency_fold_factor,
             project_candidates_count=project_candidates_count,
             project_min_usage_weight=project_min_usage_weight,
-            project_max_projection_fold_factor=project_max_projection_fold_factor,
-            min_entry_project_fold_factor=min_entry_project_fold_factor,
-            project_abs_folds=project_abs_folds,
             reproducible=reproducible,
         )
 
@@ -844,9 +858,6 @@ def _compute_global_projection(
     project_max_consistency_fold_factor: float,
     project_candidates_count: int,
     project_min_usage_weight: float,
-    project_max_projection_fold_factor: float,
-    min_entry_project_fold_factor: float,
-    project_abs_folds: bool,
     reproducible: bool,
 ) -> Tuple[ut.CompressedMatrix, AnnData, AnnData]:
     tl.combine_masks(included_qdata, ignored_mask_names, to="ignored_gene")
@@ -880,15 +891,12 @@ def _compute_global_projection(
         query_total_umis=query_total_common_umis,
     )
 
-    tl.compute_significant_projected_fold_factors(
+    tl.compute_projected_fold_factors(
         included_qdata,
         what,
         total_umis=query_total_common_umis,
         fold_normalization=project_fold_normalization,
-        min_gene_fold_factor=project_max_projection_fold_factor,
-        min_entry_fold_factor=min_entry_project_fold_factor,
         min_significant_gene_value=project_min_significant_gene_value,
-        abs_folds=project_abs_folds,
     )
 
     return weights, included_adata, included_qdata
@@ -951,7 +959,6 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
     project_max_consistency_fold_factor: float,
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
-    min_entry_project_fold_factor: float,
     min_similar_significant_genes: Optional[int],
     project_abs_folds: bool,
     atlas_type_property_name: str,
@@ -995,7 +1002,7 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
             ut.NumpyVector,
             ut.NumpyVector,
             ut.ProperMatrix,
-            ut.ProperMatrix,
+            ut.NumpyMatrix,
             ut.NumpyVector,
             ut.NumpyVector,
             ut.NumpyVector,
@@ -1017,7 +1024,6 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
                 project_max_consistency_fold_factor=project_max_consistency_fold_factor,
                 project_max_projection_fold_factor=project_max_projection_fold_factor,
                 project_max_dissimilar_genes=project_max_dissimilar_genes,
-                min_entry_project_fold_factor=min_entry_project_fold_factor,
                 min_similar_significant_genes=min_similar_significant_genes,
                 project_abs_folds=project_abs_folds,
                 atlas_type_property_name=atlas_type_property_name,
@@ -1030,7 +1036,7 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
             similar_of_type: ut.NumpyVector,
             dissimilar_genes_count_of_type: ut.NumpyVector,
             weights_of_type: ut.ProperMatrix,
-            projected_folds_of_type: ut.ProperMatrix,
+            projected_folds_of_type: ut.NumpyMatrix,
             systematic_gene_of_type: ut.NumpyVector,
             biased_gene_of_type: ut.NumpyVector,
             ignored_gene_of_type: ut.NumpyVector,
@@ -1042,7 +1048,7 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
             nonlocal weights
             weights += weights_of_type  # type: ignore
             nonlocal projected_folds
-            projected_folds += projected_folds_of_type  # type: ignore
+            projected_folds += projected_folds_of_type
             nonlocal systematic_gene_of_types
             systematic_gene_of_types[type_index, :] = systematic_gene_of_type
             nonlocal biased_gene_of_types
@@ -1122,7 +1128,6 @@ def _compute_single_type_projection(
     project_max_consistency_fold_factor: float,
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
-    min_entry_project_fold_factor: float,
     min_similar_significant_genes: Optional[int],
     project_abs_folds: bool,
     atlas_type_property_name: str,
@@ -1192,9 +1197,6 @@ def _compute_single_type_projection(
             project_max_consistency_fold_factor=project_max_consistency_fold_factor,
             project_candidates_count=project_candidates_count,
             project_min_usage_weight=project_min_usage_weight,
-            project_max_projection_fold_factor=project_max_projection_fold_factor,
-            min_entry_project_fold_factor=min_entry_project_fold_factor,
-            project_abs_folds=project_abs_folds,
             reproducible=reproducible,
         )
         if not _detect_type_biased_genes(
@@ -1229,7 +1231,6 @@ def _compute_single_type_projection(
 
     if top_level_parallel:
         weights = sp.csr_matrix(weights)
-        projected_folds = sp.csr_matrix(projected_folds)
 
     return (
         similar,
@@ -1351,9 +1352,6 @@ def _compute_type_projection(
     project_max_consistency_fold_factor: float,
     project_candidates_count: int,
     project_min_usage_weight: float,
-    project_max_projection_fold_factor: float,
-    min_entry_project_fold_factor: float,
-    project_abs_folds: bool,
     reproducible: bool,
 ) -> Tuple[AnnData, AnnData, ut.CompressedMatrix]:
     tl.combine_masks(type_included_qdata, type_ignored_mask_names, to=f"ignored_gene_of_{type_name}")
@@ -1386,15 +1384,12 @@ def _compute_type_projection(
         query_total_umis=query_type_total_common_umis,
     )
 
-    tl.compute_significant_projected_fold_factors(
+    tl.compute_projected_fold_factors(
         type_included_qdata,
         what,
         total_umis=query_type_total_common_umis,
         fold_normalization=project_fold_normalization,
-        min_gene_fold_factor=project_max_projection_fold_factor,
-        min_entry_fold_factor=min_entry_project_fold_factor,
         min_significant_gene_value=project_min_significant_gene_value,
-        abs_folds=project_abs_folds,
     )
 
     return type_included_adata, type_included_qdata, type_weights
@@ -1638,7 +1633,6 @@ def _compute_dissimilar_residuals_projection(
     project_max_consistency_fold_factor: float,
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
-    min_entry_project_fold_factor: float,
     min_similar_significant_genes: Optional[int],
     project_abs_folds: bool,
     atlas_type_property_name: str,
@@ -1672,7 +1666,6 @@ def _compute_dissimilar_residuals_projection(
             project_max_consistency_fold_factor=project_max_consistency_fold_factor,
             project_max_projection_fold_factor=project_max_projection_fold_factor,
             project_max_dissimilar_genes=project_max_dissimilar_genes,
-            min_entry_project_fold_factor=min_entry_project_fold_factor,
             min_similar_significant_genes=min_similar_significant_genes,
             project_abs_folds=project_abs_folds,
             atlas_type_property_name=atlas_type_property_name,
@@ -1710,7 +1703,7 @@ def _compute_dissimilar_residuals_projection(
         secondary_type[metacell_index] = metacell_secondary_type
         similar[metacell_index] = metacell_similar
 
-    ut.set_vo_data(common_qdata, "projected_fold", sp.csr_matrix(projected_folds))
+    ut.set_vo_data(common_qdata, "projected_fold", projected_folds)
     ut.set_o_data(common_qdata, "projected_type", primary_type)
     ut.set_o_data(common_qdata, "projected_secondary_type", np.array(secondary_type))
     ut.set_o_data(common_qdata, "similar", similar)
@@ -1743,7 +1736,6 @@ def _compute_single_metacell_residuals(
     project_max_consistency_fold_factor: float,
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
-    min_entry_project_fold_factor: float,
     min_similar_significant_genes: Optional[int],
     project_abs_folds: bool,
     atlas_type_property_name: str,
@@ -1839,15 +1831,12 @@ def _compute_single_metacell_residuals(
         query_total_umis=metacell_total_common_umis,
     )
 
-    tl.compute_significant_projected_fold_factors(
+    tl.compute_projected_fold_factors(
         metacell_included_qdata,
         what,
         total_umis=metacell_total_common_umis,
         fold_normalization=project_fold_normalization,
-        min_gene_fold_factor=project_max_projection_fold_factor,
-        min_entry_fold_factor=min_entry_project_fold_factor,
         min_significant_gene_value=project_min_significant_gene_value,
-        abs_folds=project_abs_folds,
     )
 
     tl.compute_similar_query_metacells(

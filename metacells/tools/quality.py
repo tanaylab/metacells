@@ -22,7 +22,7 @@ __all__ = [
     "compute_type_compatible_sizes",
     "compute_inner_normalized_variance",
     "compute_inner_fold_factors",
-    "compute_significant_projected_fold_factors",
+    "compute_projected_fold_factors",
     "compute_similar_query_metacells",
     "compute_outliers_matches",
     "compute_deviant_fold_factors",
@@ -478,7 +478,7 @@ def _compute_metacell_inner_folds(
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def compute_significant_projected_fold_factors(
+def compute_projected_fold_factors(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
@@ -486,18 +486,12 @@ def compute_significant_projected_fold_factors(
     projected: Union[str, ut.Matrix] = "projected",
     fold_normalization: float = pr.project_fold_normalization,
     min_significant_gene_value: float = pr.project_min_significant_gene_value,
-    min_gene_fold_factor: float = pr.project_max_projection_fold_factor,
-    min_entry_fold_factor: float = pr.min_entry_project_fold_factor,
-    abs_folds: bool = pr.project_abs_folds,
 ) -> None:
     """
-    Compute the significant projected fold factors of genes for each query metacell.
+    Compute the projected fold factors of genes for each query metacell.
 
     This computes, for each metacell of the query, the fold factors between the actual query UMIs and the UMIs of the
-    projection of the metacell onto the atlas (see :py:func:`metacells.tools.project.project_query_onto_atlas`). The
-    result per-metacell-per-gene matrix is then made sparse by discarding too-low values (setting them to zero).
-    Ideally, this matrix should be "very" sparse. If it contains "too many" non-zero values, more genes need to
-    be ignored by the projection, or somehow corrected for batch effects prior to computing the projection.
+    projection of the metacell onto the atlas (see :py:func:`metacells.tools.project.project_query_onto_atlas`).
 
     **Input**
 
@@ -513,8 +507,7 @@ def compute_significant_projected_fold_factors(
 
     Per-Variable Per-Observation (Gene-Cell) Annotations
         ``projected_fold``
-            For each gene and query metacell, the fold factor of this gene between the query and its projection (unless
-            the value is too low to be of interest, in which case it will be zero).
+            For each gene and query metacell, the fold factor of this gene between the query and its projection.
 
     **Computation Parameters**
 
@@ -525,15 +518,7 @@ def compute_significant_projected_fold_factors(
 
     2. Set the fold factor to zero for every case where the total UMIs in the query metacell and the projected image is
        not at least ``min_significant_gene_value`` (default: {min_significant_gene_value}).
-
-    3. If the maximal fold factor for a gene (across all metacells) is below ``min_gene_fold_factor`` (default:
-       {min_gene_fold_factor}), then set all the gene's fold factors to zero (too low to be of interest).
-
-    4. Otherwise, for any metacell whose fold factor for the gene is less than ``min_entry_fold_factor`` (default:
-       {min_entry_fold_factor}), set the fold factor to zero (too low to be of interest). If ``abs_folds`` (default:
-       {abs_folds}), consider the absolute fold factors.
     """
-    assert 0 <= min_entry_fold_factor <= min_gene_fold_factor
     assert fold_normalization >= 0
 
     metacells_data = ut.get_vo_proper(adata, what, layout="row_major")
@@ -551,16 +536,11 @@ def compute_significant_projected_fold_factors(
     total_umis = ut.to_numpy_matrix(metacells_data + projected_data)  # type: ignore
     insignificant_folds_mask = total_umis < min_significant_gene_value
     ut.log_calc("insignificant entries", insignificant_folds_mask)
+
     dense_folds[insignificant_folds_mask] = 0.0
     dense_folds_by_column = ut.to_layout(dense_folds, layout="column_major")
-    sparse_folds = ut.sparsify_matrix(
-        dense_folds_by_column,
-        min_column_max_value=min_gene_fold_factor,
-        min_entry_value=min_entry_fold_factor,
-        abs_values=abs_folds,
-    )
 
-    ut.set_vo_data(adata, "projected_fold", sparse_folds)
+    ut.set_vo_data(adata, "projected_fold", dense_folds_by_column)
 
 
 @ut.logged()
