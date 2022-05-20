@@ -4,6 +4,7 @@ Quality
 """
 
 from typing import Any
+from typing import Collection
 from typing import List
 from typing import Optional
 from typing import Set
@@ -549,8 +550,8 @@ def compute_similar_query_metacells(
     adata: AnnData,
     max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
     max_dissimilar_genes: int = pr.project_max_dissimilar_genes,
-    marker_genes_property: Optional[str] = None,
-    min_similar_marker_genes: Optional[int] = None,
+    marker_genes_property: Union[None, str, Collection[str]] = None,
+    min_similar_marker_genes: Optional[float] = None,
     abs_folds: bool = pr.project_abs_folds,
 ) -> None:
     """
@@ -568,8 +569,8 @@ def compute_similar_query_metacells(
 
     The data should contain per-observation-per-variable annotations ``projected_fold`` with the significant projection
     folds factors, as computed by :py:func:`compute_significant_projected_fold_factors`. If
-    ``min_similar_significant_genes_fraction``, it should also contain a per-variable ``significant_gene`` mask denoting
-    the significant genes.
+    ``min_marker_significant_genes_fraction``, and ``marker_genes_property`` are specified, then the data may contain
+    additional per-observation (gene) mask(s) denoting the marker genes.
 
     **Returns**
 
@@ -587,9 +588,9 @@ def compute_similar_query_metacells(
     1. Mark as dissimilar any query metacells which have more than ``max_dissimilar_genes`` (default:
        {max_dissimilar_genes}) genes whose projection fold is above ``max_projection_fold_factor``.
 
-    2. If ``marker_genes_property`` and ``min_similar_marker_genes`` are specified, the latter should be the name of a
-       boolean per-gene property, and we will mark as dissimilar any query metacells which do not have at least this
-       number of genes denoted by that mask with a projection fold at most ``max_projection_fold_factor``.
+    2. If ``marker_genes_property`` and ``min_similar_marker_genes`` are specified, the former should be the name(s) of
+       boolean per-gene property/ies, and we will mark as dissimilar any query metacells which do not have at least this
+       number of genes denoted by that mask(s) with a projection fold at most ``max_projection_fold_factor``.
     """
     assert max_projection_fold_factor >= 0
     assert max_dissimilar_genes >= 0
@@ -599,24 +600,28 @@ def compute_similar_query_metacells(
         projected_folds = np.abs(projected_folds)  # type: ignore
     high_folds = projected_folds > max_projection_fold_factor  # type: ignore
     high_folds_per_metacell = ut.sum_per(high_folds, per="row")  # type: ignore
-    similar_mask = high_folds_per_metacell <= max_dissimilar_genes
-    ut.log_calc("max dissimilar_genes_count", np.max(high_folds_per_metacell))
-    if marker_genes_property is not None and min_similar_marker_genes is not None:
-        marker_mask = ut.get_v_numpy(adata, marker_genes_property)
-        marker_count = np.sum(marker_mask)
-        if marker_count == 0:
-            similar_mask[:] = False
-        else:
-            marker_projected_folds = projected_folds[:, marker_mask]
-            marker_high_folds_per_metacell = ut.sum_per(marker_projected_folds, per="row")
-            marker_projected_counts = marker_count - marker_high_folds_per_metacell
-            ut.log_calc("marker_projected_counts", marker_projected_counts)
-            marker_projected_mask = marker_projected_counts >= min_similar_marker_genes
-            ut.log_calc("marker_projected_mask", marker_projected_mask)
-            ut.set_o_data(adata, "similar_marker_genes_count", marker_projected_counts)
-            similar_mask &= marker_projected_mask
-
     ut.set_o_data(adata, "dissimilar_genes_count", high_folds_per_metacell, formatter=ut.mask_description)
+
+    ut.log_calc("max dissimilar_genes_count", np.max(high_folds_per_metacell))
+    similar_mask = high_folds_per_metacell <= max_dissimilar_genes
+
+    if marker_genes_property is not None and min_similar_marker_genes is not None:
+        marker_genes_mask = np.zeros(adata.n_vars, dtype="bool")
+        if isinstance(marker_genes_property, str):
+            marker_genes_property = [marker_genes_property]
+        for property_name in marker_genes_property:
+            marker_genes_mask |= ut.get_v_numpy(adata, property_name)
+
+        ut.log_calc("marker_genes_mask", marker_genes_mask)
+        marker_similar_genes_mask = ~high_folds[:, marker_genes_mask]  # type: ignore
+        marker_similar_genes_per_metacell = ut.sum_per(
+            ut.to_layout(marker_similar_genes_mask, layout="row_major"), per="row"
+        )
+        ut.set_o_data(adata, "similar_marker_genes_count", marker_similar_genes_per_metacell)
+        marker_metacells_similar_mask = marker_similar_genes_per_metacell >= min_similar_marker_genes
+        ut.log_calc("marker_metacells_similar_mask", marker_metacells_similar_mask)
+        similar_mask &= marker_metacells_similar_mask
+
     ut.set_o_data(adata, "similar", similar_mask)
 
 
