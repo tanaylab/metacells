@@ -467,7 +467,7 @@ def _common_data(
     ignore_atlas_insignificant_genes: bool,
     ignore_atlas_forbidden_genes: bool,
     atlas_type_property_name: str,
-) -> Tuple[AnnData, AnnData, Optional[Dict[str, float]]]:
+) -> Tuple[AnnData, AnnData, Optional[Dict[str, Optional[float]]]]:
     ut.set_m_data(qdata, "project_max_projection_fold_factor", project_max_projection_fold_factor)
     ut.set_m_data(qdata, "project_max_dissimilar_genes", project_max_dissimilar_genes)
 
@@ -509,7 +509,7 @@ def _common_data(
         atlas_forbiden_mask = ut.get_v_numpy(common_adata, "forbidden_gene")
         ut.set_v_data(common_qdata, "atlas_forbidden_gene", atlas_forbiden_mask)
 
-    min_marker_genes_of_type: Optional[Dict[str, float]] = None
+    min_marker_genes_of_type: Optional[Dict[str, Optional[float]]] = None
     if project_min_similar_marker_genes_fraction is not None:
         min_marker_genes_of_type = {}
         for marker_genes_name in common_adata.var.keys():
@@ -522,8 +522,8 @@ def _common_data(
             min_marker_genes_of_type[marker_genes_name[15:]] = min_marker_genes_count
         for type_name in np.unique(ut.get_o_numpy(common_adata, atlas_type_property_name)):
             if type_name == "Outliers" and type_name not in min_marker_genes_of_type:
-                min_marker_genes_of_type[type_name] = 0
-            else:
+                min_marker_genes_of_type[type_name] = None
+            elif min_marker_genes_of_type[type_name] is not None:
                 assert min_marker_genes_of_type[type_name] > 0
 
     return common_adata, common_qdata, min_marker_genes_of_type
@@ -994,7 +994,7 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
     project_max_consistency_fold_factor: float,
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
-    min_marker_genes_of_type: Optional[Dict[str, float]],
+    min_marker_genes_of_type: Optional[Dict[str, Optional[float]]],
     project_abs_folds: bool,
     atlas_type_property_name: str,
     top_level_parallel: bool,
@@ -1163,7 +1163,7 @@ def _compute_single_type_projection(
     project_max_consistency_fold_factor: float,
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
-    min_marker_genes_of_type: Optional[Dict[str, float]],
+    min_marker_genes_of_type: Optional[Dict[str, Optional[float]]],
     project_abs_folds: bool,
     atlas_type_property_name: str,
     top_level_parallel: bool,
@@ -1668,7 +1668,7 @@ def _compute_dissimilar_residuals_projection(
     project_max_consistency_fold_factor: float,
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
-    min_marker_genes_of_type: Optional[Dict[str, float]],
+    min_marker_genes_of_type: Optional[Dict[str, Optional[float]]],
     project_abs_folds: bool,
     atlas_type_property_name: str,
     top_level_parallel: bool,
@@ -1771,7 +1771,7 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
     project_max_consistency_fold_factor: float,
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
-    min_marker_genes_of_type: Optional[Dict[str, float]],
+    min_marker_genes_of_type: Optional[Dict[str, Optional[float]]],
     project_abs_folds: bool,
     atlas_type_property_name: str,
     reproducible: bool,
@@ -1877,12 +1877,16 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
     min_similar_marker_genes: Optional[float] = None
     marker_genes_property: Optional[List[str]] = None
     if min_marker_genes_of_type is not None:
-        min_similar_marker_genes = 0
+        min_similar_marker_genes = None
         marker_genes_property = []
         for type_name in (primary_type, secondary_type):
-            if type_name != "":
-                min_similar_marker_genes += min_marker_genes_of_type[type_name]
-                marker_genes_property.append(f"marker_gene_of_{type_name}")
+            if type_name == "" or min_marker_genes_of_type[type_name] is None:
+                continue
+            if min_similar_marker_genes is None:
+                min_similar_marker_genes = min_marker_genes_of_type[type_name]
+            else:
+                min_similar_marker_genes += min_marker_genes_of_type[type_name]  # type: ignore
+            marker_genes_property.append(f"marker_gene_of_{type_name}")
 
     tl.compute_similar_query_metacells(
         metacell_included_qdata,
