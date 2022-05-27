@@ -523,7 +523,7 @@ def _common_data(
             ut.set_v_data(common_qdata, essential_genes_name, essential_genes_mask)
             essential_genes_mask = ut.get_v_numpy(adata, essential_genes_name)
             min_essential_genes_count = project_min_similar_essential_genes_fraction * np.sum(essential_genes_mask)
-            min_essential_genes_of_type[essential_genes_name[15:]] = min_essential_genes_count
+            min_essential_genes_of_type[essential_genes_name[18:]] = min_essential_genes_count
         for type_name in np.unique(ut.get_o_numpy(common_adata, atlas_type_property_name)):
             if type_name == "Outliers" and type_name not in min_essential_genes_of_type:
                 min_essential_genes_of_type[type_name] = None
