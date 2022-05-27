@@ -52,7 +52,7 @@ def projection_pipeline(
     project_max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
     project_max_dissimilar_genes: int = pr.project_max_dissimilar_genes,
     min_entry_project_fold_factor: float = pr.min_entry_project_fold_factor,
-    project_min_similar_marker_genes_fraction: Optional[float] = pr.project_min_similar_marker_genes_fraction,
+    project_min_similar_essential_genes_fraction: Optional[float] = pr.project_min_similar_essential_genes_fraction,
     project_abs_folds: bool = pr.project_abs_folds,
     ignored_gene_names_of_type: Optional[Dict[str, Collection[str]]] = None,
     ignored_gene_patterns_of_type: Optional[Dict[str, Collection[str]]] = None,
@@ -131,9 +131,9 @@ def projection_pipeline(
         ``ignored_gene``
             A boolean mask indicating whether the gene was ignored by the projection (for any reason).
 
-        ``marker_gene_of_<type>``
+        ``essential_gene_of_<type>``
             For each query metacell type, a boolean mask indicating whether the gene is always high in any metacells
-            annotated by that type. This is copied from the atlas if ``project_min_similar_marker_genes_fraction`` is
+            annotated by that type. This is copied from the atlas if ``project_min_similar_essential_genes_fraction`` is
             specified.
 
         ``systematic_gene_of_<type>``
@@ -162,9 +162,13 @@ def projection_pipeline(
             query metacell is a doublet combining two different points in the atlas (see below). In either case, being
             "similar" doesn't guarantee we have a good query metacell that exists in the atlas.
 
-        ``similar_marker_genes_count``
-            If ``project_min_similar_marker_genes_fraction`` was specified, the number of marker genes for the metacell
-            projected type(s) that were projected within the ``project_max_projection_fold_factor`` similarity
+        ``essential_genes_count``
+            If ``project_min_similar_essential_genes_fraction`` was specified, the number of essential genes for the
+            metacell projected type(s).
+
+        ``similar_essential_genes_count``
+            If ``project_min_similar_essential_genes_fraction`` was specified, the number of essential genes for the
+            metacell projected type(s) that were projected within the ``project_max_projection_fold_factor`` similarity
             threshold.
 
         ``dissimilar_genes_count``
@@ -305,12 +309,12 @@ def projection_pipeline(
         ignored_gene_patterns_of_type=ignored_gene_patterns_of_type,
     )
 
-    common_adata, common_qdata, min_marker_genes_of_type = _common_data(
+    common_adata, common_qdata, min_essential_genes_of_type = _common_data(
         adata=adata,
         qdata=qdata,
         project_max_projection_fold_factor=project_max_projection_fold_factor,
         project_max_dissimilar_genes=project_max_dissimilar_genes,
-        project_min_similar_marker_genes_fraction=project_min_similar_marker_genes_fraction,
+        project_min_similar_essential_genes_fraction=project_min_similar_essential_genes_fraction,
         ignore_atlas_insignificant_genes=ignore_atlas_insignificant_genes,
         ignore_atlas_forbidden_genes=ignore_atlas_forbidden_genes,
         atlas_type_property_name=atlas_type_property_name,
@@ -365,7 +369,7 @@ def projection_pipeline(
             project_max_consistency_fold_factor=project_max_consistency_fold_factor,
             project_max_projection_fold_factor=project_max_projection_fold_factor,
             project_max_dissimilar_genes=project_max_dissimilar_genes,
-            min_marker_genes_of_type=min_marker_genes_of_type,
+            min_essential_genes_of_type=min_essential_genes_of_type,
             project_abs_folds=project_abs_folds,
             atlas_type_property_name=atlas_type_property_name,
             top_level_parallel=top_level_parallel,
@@ -396,7 +400,7 @@ def projection_pipeline(
         project_max_consistency_fold_factor=project_max_consistency_fold_factor,
         project_max_projection_fold_factor=project_max_projection_fold_factor,
         project_max_dissimilar_genes=project_max_dissimilar_genes,
-        min_marker_genes_of_type=min_marker_genes_of_type,
+        min_essential_genes_of_type=min_essential_genes_of_type,
         project_abs_folds=project_abs_folds,
         atlas_type_property_name=atlas_type_property_name,
         top_level_parallel=top_level_parallel,
@@ -410,7 +414,7 @@ def projection_pipeline(
         common_qdata=common_qdata,
         project_max_projection_fold_factor=project_max_projection_fold_factor,
         min_entry_project_fold_factor=min_entry_project_fold_factor,
-        project_min_similar_marker_genes_fraction=project_min_similar_marker_genes_fraction,
+        project_min_similar_essential_genes_fraction=project_min_similar_essential_genes_fraction,
         atlas_type_property_name=atlas_type_property_name,
         project_abs_folds=project_abs_folds,
     )
@@ -463,7 +467,7 @@ def _common_data(
     adata: AnnData,
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
-    project_min_similar_marker_genes_fraction: Optional[float],
+    project_min_similar_essential_genes_fraction: Optional[float],
     ignore_atlas_insignificant_genes: bool,
     ignore_atlas_forbidden_genes: bool,
     atlas_type_property_name: str,
@@ -509,24 +513,24 @@ def _common_data(
         atlas_forbiden_mask = ut.get_v_numpy(common_adata, "forbidden_gene")
         ut.set_v_data(common_qdata, "atlas_forbidden_gene", atlas_forbiden_mask)
 
-    min_marker_genes_of_type: Optional[Dict[str, Optional[float]]] = None
-    if project_min_similar_marker_genes_fraction is not None:
-        min_marker_genes_of_type = {}
-        for marker_genes_name in common_adata.var.keys():
-            if not marker_genes_name.startswith("marker_gene_of_"):
+    min_essential_genes_of_type: Optional[Dict[str, Optional[float]]] = None
+    if project_min_similar_essential_genes_fraction is not None:
+        min_essential_genes_of_type = {}
+        for essential_genes_name in common_adata.var.keys():
+            if not essential_genes_name.startswith("essential_gene_of_"):
                 continue
-            marker_genes_mask = ut.get_v_numpy(common_adata, marker_genes_name)
-            ut.set_v_data(common_qdata, marker_genes_name, marker_genes_mask)
-            marker_genes_mask = ut.get_v_numpy(adata, marker_genes_name)
-            min_marker_genes_count = project_min_similar_marker_genes_fraction * np.sum(marker_genes_mask)
-            min_marker_genes_of_type[marker_genes_name[15:]] = min_marker_genes_count
+            essential_genes_mask = ut.get_v_numpy(common_adata, essential_genes_name)
+            ut.set_v_data(common_qdata, essential_genes_name, essential_genes_mask)
+            essential_genes_mask = ut.get_v_numpy(adata, essential_genes_name)
+            min_essential_genes_count = project_min_similar_essential_genes_fraction * np.sum(essential_genes_mask)
+            min_essential_genes_of_type[essential_genes_name[15:]] = min_essential_genes_count
         for type_name in np.unique(ut.get_o_numpy(common_adata, atlas_type_property_name)):
-            if type_name == "Outliers" and type_name not in min_marker_genes_of_type:
-                min_marker_genes_of_type[type_name] = None
-            elif min_marker_genes_of_type[type_name] is not None:
-                assert min_marker_genes_of_type[type_name] > 0
+            if type_name == "Outliers" and type_name not in min_essential_genes_of_type:
+                min_essential_genes_of_type[type_name] = None
+            elif min_essential_genes_of_type[type_name] is not None:
+                assert min_essential_genes_of_type[type_name] > 0  # type: ignore
 
-    return common_adata, common_qdata, min_marker_genes_of_type
+    return common_adata, common_qdata, min_essential_genes_of_type
 
 
 def _final_primary_of(primary: str, secondary: str, is_similar: bool) -> str:
@@ -561,7 +565,7 @@ def _convey_query_common_to_full_data(
     common_qdata: AnnData,
     project_max_projection_fold_factor: float,
     min_entry_project_fold_factor: float,
-    project_min_similar_marker_genes_fraction: Optional[float],
+    project_min_similar_essential_genes_fraction: Optional[float],
     atlas_type_property_name: str,
     project_abs_folds: bool,
 ) -> None:
@@ -626,8 +630,8 @@ def _convey_query_common_to_full_data(
     all_types = np.unique(ut.get_o_numpy(adata, atlas_type_property_name))
     for type_name in all_types:
         data_names = ["systematic_gene", "biased_gene", "ignored_gene"]
-        if project_min_similar_marker_genes_fraction is not None:
-            data_names.append("marker_gene")
+        if project_min_similar_essential_genes_fraction is not None:
+            data_names.append("essential_gene")
         for data_name in data_names:
             type_data_name = f"{data_name}_of_{type_name}"
             full_data = np.zeros(qdata.n_vars, dtype="bool")
@@ -722,9 +726,9 @@ def _renormalize_query(
         var_annotations[f"biased_gene_of_{type_name}"] = False
         var_annotations[f"manually_ignored_gene_of_{type_name}"] = False
         var_annotations[f"ignored_gene_of_{type_name}"] = False
-    for marker_genes_name in adata.var.keys():
-        if marker_genes_name.startswith("marker_gene_of_"):
-            var_annotations[marker_genes_name] = False
+    for essential_genes_name in adata.var.keys():
+        if essential_genes_name.startswith("essential_gene_of_"):
+            var_annotations[essential_genes_name] = False
 
     renormalized_qdata = tl.renormalize_query_by_atlas(
         adata=adata,
@@ -994,7 +998,7 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
     project_max_consistency_fold_factor: float,
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
-    min_marker_genes_of_type: Optional[Dict[str, Optional[float]]],
+    min_essential_genes_of_type: Optional[Dict[str, Optional[float]]],
     project_abs_folds: bool,
     atlas_type_property_name: str,
     top_level_parallel: bool,
@@ -1059,7 +1063,7 @@ def _compute_per_type_projection(  # pylint: disable=too-many-statements
                 project_max_consistency_fold_factor=project_max_consistency_fold_factor,
                 project_max_projection_fold_factor=project_max_projection_fold_factor,
                 project_max_dissimilar_genes=project_max_dissimilar_genes,
-                min_marker_genes_of_type=min_marker_genes_of_type,
+                min_essential_genes_of_type=min_essential_genes_of_type,
                 project_abs_folds=project_abs_folds,
                 atlas_type_property_name=atlas_type_property_name,
                 top_level_parallel=top_level_parallel,
@@ -1163,7 +1167,7 @@ def _compute_single_type_projection(
     project_max_consistency_fold_factor: float,
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
-    min_marker_genes_of_type: Optional[Dict[str, Optional[float]]],
+    min_essential_genes_of_type: Optional[Dict[str, Optional[float]]],
     project_abs_folds: bool,
     atlas_type_property_name: str,
     top_level_parallel: bool,
@@ -1249,8 +1253,10 @@ def _compute_single_type_projection(
         type_included_qdata,
         max_projection_fold_factor=project_max_projection_fold_factor,
         max_dissimilar_genes=project_max_dissimilar_genes,
-        marker_genes_property=f"marker_gene_of_{type_name}",
-        min_similar_marker_genes=None if min_marker_genes_of_type is None else min_marker_genes_of_type[type_name],
+        essential_genes_property=f"essential_gene_of_{type_name}",
+        min_similar_essential_genes=None
+        if min_essential_genes_of_type is None
+        else min_essential_genes_of_type[type_name],
         abs_folds=project_abs_folds,
     )
 
@@ -1668,7 +1674,7 @@ def _compute_dissimilar_residuals_projection(
     project_max_consistency_fold_factor: float,
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
-    min_marker_genes_of_type: Optional[Dict[str, Optional[float]]],
+    min_essential_genes_of_type: Optional[Dict[str, Optional[float]]],
     project_abs_folds: bool,
     atlas_type_property_name: str,
     top_level_parallel: bool,
@@ -1701,7 +1707,7 @@ def _compute_dissimilar_residuals_projection(
             project_max_consistency_fold_factor=project_max_consistency_fold_factor,
             project_max_projection_fold_factor=project_max_projection_fold_factor,
             project_max_dissimilar_genes=project_max_dissimilar_genes,
-            min_marker_genes_of_type=min_marker_genes_of_type,
+            min_essential_genes_of_type=min_essential_genes_of_type,
             project_abs_folds=project_abs_folds,
             atlas_type_property_name=atlas_type_property_name,
             reproducible=reproducible,
@@ -1771,7 +1777,7 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
     project_max_consistency_fold_factor: float,
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
-    min_marker_genes_of_type: Optional[Dict[str, Optional[float]]],
+    min_essential_genes_of_type: Optional[Dict[str, Optional[float]]],
     project_abs_folds: bool,
     atlas_type_property_name: str,
     reproducible: bool,
@@ -1874,26 +1880,26 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
         min_significant_gene_value=project_min_significant_gene_value,
     )
 
-    min_similar_marker_genes: Optional[float] = None
-    marker_genes_property: Optional[List[str]] = None
-    if min_marker_genes_of_type is not None:
-        min_similar_marker_genes = None
-        marker_genes_property = []
+    min_similar_essential_genes: Optional[float] = None
+    essential_genes_property: Optional[List[str]] = None
+    if min_essential_genes_of_type is not None:
+        min_similar_essential_genes = None
+        essential_genes_property = []
         for type_name in (primary_type, secondary_type):
-            if type_name == "" or min_marker_genes_of_type[type_name] is None:
+            if type_name == "" or min_essential_genes_of_type[type_name] is None:
                 continue
-            if min_similar_marker_genes is None:
-                min_similar_marker_genes = min_marker_genes_of_type[type_name]
+            if min_similar_essential_genes is None:
+                min_similar_essential_genes = min_essential_genes_of_type[type_name]
             else:
-                min_similar_marker_genes += min_marker_genes_of_type[type_name]  # type: ignore
-            marker_genes_property.append(f"marker_gene_of_{type_name}")
+                min_similar_essential_genes += min_essential_genes_of_type[type_name]  # type: ignore
+            essential_genes_property.append(f"essential_gene_of_{type_name}")
 
     tl.compute_similar_query_metacells(
         metacell_included_qdata,
         max_projection_fold_factor=project_max_projection_fold_factor,
         max_dissimilar_genes=project_max_dissimilar_genes,
-        marker_genes_property=marker_genes_property,
-        min_similar_marker_genes=min_similar_marker_genes,
+        essential_genes_property=essential_genes_property,
+        min_similar_essential_genes=min_similar_essential_genes,
         abs_folds=project_abs_folds,
     )
 

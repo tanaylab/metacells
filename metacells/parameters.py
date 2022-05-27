@@ -1034,5 +1034,5 @@ renormalize_query_by_atlas: bool = True
 #: See :py:func:`metacells.tools.quality.compute_type_gene_normalized_variance`.
 type_gene_normalized_variance_quantile: float = 0.95
 
-#: Minimal fraction of atlas marker genes which must be similar for a projection to be valid.
-project_min_similar_marker_genes_fraction: float = 0.75
+#: Minimal fraction of atlas essential genes which must be similar for a projection to be valid.
+project_min_similar_essential_genes_fraction: float = 0.75
