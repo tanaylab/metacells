@@ -19,11 +19,14 @@ from scipy import sparse  # type: ignore
 import metacells.parameters as pr
 import metacells.utilities as ut
 
+from .mask import combine_masks
+
 __all__ = [
     "compute_type_compatible_sizes",
     "compute_inner_normalized_variance",
     "compute_inner_fold_factors",
     "compute_projected_fold_factors",
+    "compute_metacells_projection_correlation",
     "compute_similar_query_metacells",
     "compute_outliers_matches",
     "compute_deviant_fold_factors",
@@ -546,6 +549,51 @@ def compute_projected_fold_factors(
 
 @ut.logged()
 @ut.timed_call()
+def compute_metacells_projection_correlation(
+    adata: AnnData,
+    what: Union[str, ut.Matrix] = "__x__",
+    *,
+    gene_masks: Collection[str] = [
+        "&atlas_gene?",
+        "&significant_gene?",
+        "&atlas_significant_gene?",
+        "&~forbidden_gene?",
+        "&~atlas_forbidden_gene?",
+    ],
+    projected: Union[str, ut.Matrix] = "projected",
+    reproducible: bool,
+) -> None:
+    """
+    Compute the correlation between the metacells UMIs and their projection on the atlas.
+
+    **Input**
+
+    Annotated query ``adata``, where the observations are metacells and the variables are genes and ``what`` is the
+    (corrected) UMIs of the metacells.
+
+    The data should contain per-observation-per-variable annotations ``projected`` with the projection of the
+    metacells on some atlas.
+
+    **Returns**
+
+    Sets the ``projected_correlation`` per-observation annotation to the correlation between the corrected and the
+    projected UMIs for each metacell. Correlation only looks at a subset of the genes specified by the ``mask_names``;
+    by default, it looks only at genes common to the atlas and the query, that were "significant" in both, and that were
+    not forbidden to be used as feature in either.
+
+    If ``reproducible``, a slower (still parallel) but reproducible algorithm will be used.
+    """
+
+    mask = combine_masks(adata, gene_masks)
+    included_adata = ut.slice(adata, vars=mask, name=".included")
+    corrected = ut.to_numpy_matrix(ut.get_vo_proper(included_adata, what))
+    projected = ut.to_numpy_matrix(ut.get_vo_proper(included_adata, projected))
+    projected_correlation = ut.pairs_corrcoef_rows(corrected, projected, reproducible=reproducible)
+    ut.set_o_data(adata, "projected_correlation", projected_correlation)
+
+
+@ut.logged()
+@ut.timed_call()
 def compute_similar_query_metacells(
     adata: AnnData,
     max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
@@ -563,9 +611,7 @@ def compute_similar_query_metacells(
 
     **Input**
 
-    Annotated query ``adata``, where the observations are cells and the variables are genes, where ``what`` is a
-    per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
-    matrix.
+    Annotated query ``adata``, where the observations are metacells and the variables are genes.
 
     The data should contain per-observation-per-variable annotations ``projected_fold`` with the significant projection
     folds factors, as computed by :py:func:`compute_significant_projected_fold_factors`. If
@@ -603,7 +649,7 @@ def compute_similar_query_metacells(
     ut.set_o_data(adata, "dissimilar_genes_count", high_folds_per_metacell, formatter=ut.mask_description)
 
     ut.log_calc("max dissimilar_genes_count", np.max(high_folds_per_metacell))
-    similar_mask = high_folds_per_metacell <= max_dissimilar_genes
+    similar_mask = high_folds_per_metacell <= min(max_dissimilar_genes, adata.n_vars)
 
     if essential_genes_property is not None and min_similar_essential_genes is not None:
         essential_genes_mask = np.zeros(adata.n_vars, dtype="bool")
@@ -613,6 +659,7 @@ def compute_similar_query_metacells(
             essential_genes_mask |= ut.get_v_numpy(adata, property_name)
 
         ut.log_calc("essential_genes_mask", essential_genes_mask)
+        ut.log_calc("essential_gene_names", adata.var_names[essential_genes_mask])
         essential_similar_genes_mask = ~high_folds[:, essential_genes_mask]  # type: ignore
         essential_similar_genes_per_metacell = ut.sum_per(
             ut.to_layout(essential_similar_genes_mask, layout="row_major"), per="row"

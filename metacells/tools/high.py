@@ -59,12 +59,16 @@ def find_top_feature_genes(
 
     **Computation Parameters**
 
-    1. Look for the lowest positive ``feature_gene`` threshold such that at most ``max_genes`` are
+    1. Restrict the search just to genes included in the ``significant_gene`` mask.
+
+    2. Look for the lowest positive ``feature_gene`` threshold such that at most ``max_genes`` are
        picked as top feature genes. Note we may still pick more than ``max_genes``, for example when
        using the direct algorithm, we always return all feature genes as there's no way to
        distinguish between them using the ``feature_gene`` data.
     """
-    feature_of_gene = ut.get_v_numpy(adata, "feature_gene", formatter=ut.mask_description)
+    significant_gene = ut.get_v_numpy(adata, "significant_gene")
+    feature_of_gene = ut.get_v_numpy(adata, "feature_gene", formatter=ut.mask_description).copy()
+    feature_of_gene[~significant_gene] = -1
     max_threshold = np.max(feature_of_gene)
     assert max_threshold > 0
     threshold = 0

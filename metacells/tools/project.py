@@ -21,9 +21,8 @@ import metacells.utilities as ut
 __all__ = [
     "renormalize_query_by_atlas",
     "project_query_onto_atlas",
-    "find_systematic_genes",
     "project_atlas_to_query",
-    "find_biased_genes",
+    "find_misfit_genes",
     "compute_query_projection",
 ]
 
@@ -223,8 +222,7 @@ def project_query_onto_atlas(
     ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation
     containing such a matrix.
 
-    Typically this data excludes any genes having a systematic difference between the query and the atlas, e.g. genes
-    detected by by :py:func:`metacells.tools.project.find_systematic_genes`.
+    Typically this data excludes any genes having a systematic difference between the query and the atlas.
 
     **Returns**
 
@@ -505,89 +503,6 @@ def _project_single_metacell(  # pylint: disable=too-many-statements
 
 @ut.logged()
 @ut.timed_call()
-@ut.expand_doc()
-def find_systematic_genes(
-    what: Union[str, ut.Matrix] = "__x__",
-    *,
-    adata: AnnData,
-    qdata: AnnData,
-    atlas_total_umis: Optional[ut.Vector] = None,
-    query_total_umis: Optional[ut.Vector] = None,
-    low_gene_quantile: float = pr.systematic_low_gene_quantile,
-    high_gene_quantile: float = pr.systematic_high_gene_quantile,
-    to_property_name: str = "systematic_gene",
-) -> None:
-    """
-    Find genes that
-
-    **Input**
-
-    Annotated query ``qdata`` and atlas ``adata``, where the observations are cells and the variables are genes, where
-    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation
-    containing such a matrix.
-
-    **Returns**
-
-    A matrix whose rows are query metacells and columns are atlas metacells, where each entry is the weight of the atlas
-    metacell in the projection of the query metacells. The sum of weights in each row (that is, for a single query
-    metacell) is 1. The weighted sum of the atlas metacells using these weights is the "projected" image of the query
-    metacell onto the atlas.
-
-    In addition, sets the following annotations in ``qdata``:
-
-    Variable (Gene) Annotations
-        ``systematic_gene`` (or ``to_property_name``)
-            A boolean mask indicating whether the gene is systematically higher or lower in the query compared to the
-            atlas.
-
-    **Computation Parameters**
-
-    1. Compute the fraction of each gene out of the total UMIs in both the atlas and the query. If ``atlas_total_umis``
-       and/or ``query_total_umis`` are given, use them as the basis instead of the sum of the UMIs.
-
-    2. Compute for each gene its ``low_gene_quantile`` (default: {low_gene_quantile}) fraction in the query, and its
-       ``high_gene_quantile`` (default: {high_gene_quantile}) fraction in the atlas.
-
-    3. Compute for each gene its standard deviation in the atlas.
-
-    4. Mark as systematic the genes for which the low quantile value in the query is at least the atlas high quantile
-       value.
-
-    5. Mark as systematic the genes for which the low quantile value in the atlas is at least the query high quantile
-       value.
-    """
-    assert 0 <= low_gene_quantile <= 1
-    assert 0 <= high_gene_quantile <= 1
-    assert np.all(adata.var_names == qdata.var_names)
-
-    if adata.n_obs == 1:
-        systematic = np.zeros(adata.n_vars, dtype="bool")
-    else:
-        query_umis = ut.get_vo_proper(qdata, what, layout="row_major")
-        atlas_umis = ut.get_vo_proper(adata, what, layout="row_major")
-
-        atlas_fractions = ut.to_numpy_matrix(ut.fraction_by(atlas_umis, by="row", sums=atlas_total_umis))
-        query_fractions = ut.to_numpy_matrix(ut.fraction_by(query_umis, by="row", sums=query_total_umis))
-
-        query_fractions = ut.to_layout(query_fractions, layout="column_major")
-        atlas_fractions = ut.to_layout(atlas_fractions, layout="column_major")
-
-        query_low_gene_values = ut.quantile_per(query_fractions, low_gene_quantile, per="column")
-        atlas_low_gene_values = ut.quantile_per(atlas_fractions, low_gene_quantile, per="column")
-
-        query_high_gene_values = ut.quantile_per(query_fractions, high_gene_quantile, per="column")
-        atlas_high_gene_values = ut.quantile_per(atlas_fractions, high_gene_quantile, per="column")
-
-        query_above_atlas = query_low_gene_values > atlas_high_gene_values
-        atlas_above_query = atlas_low_gene_values >= query_high_gene_values
-
-        systematic = query_above_atlas | atlas_above_query
-
-    ut.set_v_data(qdata, to_property_name, systematic)
-
-
-@ut.logged()
-@ut.timed_call()
 def project_atlas_to_query(
     *,
     adata: AnnData,
@@ -629,16 +544,16 @@ def project_atlas_to_query(
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def find_biased_genes(
+def find_misfit_genes(
     adata: AnnData,
     *,
     max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
-    min_metacells_fraction: float = pr.biased_min_metacells_fraction,
+    min_metacells_fraction: float = pr.misfit_min_metacells_fraction,
     abs_folds: bool = pr.project_abs_folds,
-    to_property_name: str = "biased_gene",
+    to_property_name: str = "misfit_gene",
 ) -> None:
     """
-    Find genes that have a strong bias in the query compared to the atlas.
+    Find genes with a very poor fit between the query and the atlas.
 
     **Input**
 
@@ -654,15 +569,15 @@ def find_biased_genes(
     Sets the following annotations in ``adata``:
 
     Variable (Gene) Annotations
-        ``biased_gene`` (or ``to_property_name``):
-            A boolean mask indicating whether the gene has a strong bias in the query compared to the atlas.
+        ``misfit_gene`` (or ``to_property_name``):
+            A boolean mask indicating whether the gene has a very poor fit between the query and the atlas.
 
     **Computation Parameters**
 
     1. Count for each such gene the number of query metacells for which the ``projected_fold`` is above
        ``max_projection_fold_factor``. If ``abs_folds`` (default: {abs_folds}), consider the absolute fold factor.
 
-    2. Mark the gene as biased if either count is at least a ``min_metacells_fraction`` (default:
+    2. Mark the gene as misfit if either count is at least a ``min_metacells_fraction`` (default:
        {min_metacells_fraction}) of the metacells.
     """
     assert max_projection_fold_factor >= 0

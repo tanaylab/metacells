@@ -971,23 +971,11 @@ ignore_query_insignificant_genes: bool = False
 #: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
 ignore_query_forbidden_genes: bool = False
 
-#: The quantile of the gene value to use for the query gene expressions when looking for systematic genes. See
-#: :py:func:`metacells.tools.project.find_systematic_genes`,
+#: The minimal fraction of metacells where a gene has a high projection fold factor to mark the gene as "misfit".
+#: See :py:func:`metacells.tools.project.find_misfit_genes`,
 #: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
 #: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
-systematic_low_gene_quantile: float = 0.05
-
-#: The quantile of the gene value to use for the atlas gene expressions when looking for systematic genes. See
-#: :py:func:`metacells.tools.project.find_systematic_genes`
-#: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
-#: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
-systematic_high_gene_quantile: float = 0.95
-
-#: The minimal fraction of metacells where a gene has a high projection fold factor to mark the gene as biased.
-#: See :py:func:`metacells.tools.project.find_biased_genes`,
-#: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
-#: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
-biased_min_metacells_fraction: float = 0.5
+misfit_min_metacells_fraction: float = 0.5
 
 #: The minimal fold between the maximal and minimal gene expression in metacells to be significant.
 #: See :py:func:`metacells.tools.high.find_significant_metacells_genes`.
@@ -1015,10 +1003,6 @@ project_min_corrected_gene_correlation: float = 0.8
 #: The minimal strength of the correction between the mean query and projected mean value (for correlated genes).
 #: See :py:func:`metacells.pipeline.projection.projection_pipeline`.
 project_min_corrected_gene_factor: float = 0.15
-
-#: The m aximal correlation between observed and projected genes for ignoring the gene as uncorrelated.
-#: See :py:func:`metacells.pipeline.projection.projection_pipeline`.
-project_max_uncorrelated_gene_correlation: float = 0.5
 
 #: The maximal number of deviant genes allowed for saying a query is similar to the projection in the atlas.
 #: See :py:func:`metacells.tools.quality.compute_similar_query_metacells`
