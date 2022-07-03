@@ -577,9 +577,9 @@ def compute_metacells_projection_correlation(
     **Returns**
 
     Sets the ``projected_correlation`` per-observation annotation to the correlation between the corrected and the
-    projected UMIs for each metacell. Correlation only looks at a subset of the genes specified by the ``mask_names``;
-    by default, it looks only at genes common to the atlas and the query, that were "significant" in both, and that were
-    not forbidden to be used as feature in either.
+    projected UMIs for each metacell. Correlation only looks at a subset of the genes specified by the
+    ``mask_names``; by default, it looks only at genes common to the atlas and the query, that were "significant" in
+    both, and that were not forbidden to be used as feature in either.
 
     If ``reproducible``, a slower (still parallel) but reproducible algorithm will be used.
     """
