@@ -903,6 +903,10 @@ project_min_significant_gene_value: float = 40
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
 project_candidates_count: int = 50
 
+#: The minimal number of atlas candidates to use even if they fail the consistency check. See
+#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+project_min_candidates_fraction: float = 1.0 / 3.0
+
 #: The minimal weight of an atlas metacell used for the projection of a query metacell. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
 project_min_usage_weight: float = 1e-5
@@ -995,9 +999,12 @@ min_significant_metacells_gene_fraction: float = 1e-4
 #: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
 project_renormalize_query: bool = False
 
-#: The minimal correlation between observed and projected genes for considering linear correction of the query gene
-#: value.
+#: Whether to compute linear corrections for genes between the query and the atlas.
 #: See :py:func:`metacells.pipeline.projection.projection_pipeline`.
+project_corrections: bool = False
+
+#: The minimal correlation between observed and projected genes for considering linear correction of the query gene
+#: value. See :py:func:`metacells.pipeline.projection.projection_pipeline`.
 project_min_corrected_gene_correlation: float = 0.8
 
 #: The minimal strength of the correction between the mean query and projected mean value (for correlated genes).

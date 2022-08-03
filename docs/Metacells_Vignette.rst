@@ -630,7 +630,7 @@ with a progress bar, as demonstrated below.
 
     Compute metacells for rare gene modules...
     Compute common metacells...
-    100%|█████████▉[01:44]
+    100%|█████████▉[01:51]
 
 
 This has written many annotations for each cell (observation), the most
@@ -808,19 +808,20 @@ Finally, one can feed the data to any other scRNA analysis pipeline.
 
 .. code::
 
-    set PBMC.metacells.var[top_feature_gene]: 715 true (3.161%) out of 22617 bools
-    set PBMC.metacells.obsp[obs_balanced_ranks]: 18762 nonzero (0.7819%) out of 2399401 elements
-    set PBMC.metacells.obsp[obs_pruned_ranks]: 6218 nonzero (0.2591%) out of 2399401 elements
-    set PBMC.metacells.obsp[obs_outgoing_weights]: 6218 nonzero (0.2591%) out of 2399401 elements
+    set PBMC.metacells.var[significant_gene]: 5226 true (23.11%) out of 22617 bools
+    set PBMC.metacells.var[top_feature_gene]: 713 true (3.152%) out of 22617 bools
+    set PBMC.metacells.obsp[obs_balanced_ranks]: 18924 nonzero (0.7887%) out of 2399401 elements
+    set PBMC.metacells.obsp[obs_pruned_ranks]: 6197 nonzero (0.2583%) out of 2399401 elements
+    set PBMC.metacells.obsp[obs_outgoing_weights]: 6197 nonzero (0.2583%) out of 2399401 elements
     set PBMC.metacells.obsp[umap_distances]: csr_matrix 1549 X 1549 float32s (2397852 > 0)
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1780: UserWarning: using precomputed metric; inverse_transform will be unavailable
       warn("using precomputed metric; inverse_transform will be unavailable")
     set PBMC.metacells.obs[umap_x]: 1549 float32s
     set PBMC.metacells.obs[umap_y]: 1549 float32s
-    set PBMC.metacells.var[top_feature_gene]: 715 true (3.161%) out of 22617 bools
-    set PBMC.metacells.obsp[obs_balanced_ranks]: 18762 nonzero (0.7819%) out of 2399401 elements
-    set PBMC.metacells.obsp[obs_pruned_ranks]: 6218 nonzero (0.2591%) out of 2399401 elements
-    set PBMC.metacells.obsp[obs_outgoing_weights]: 6218 nonzero (0.2591%) out of 2399401 elements
+    set PBMC.metacells.var[top_feature_gene]: 713 true (3.152%) out of 22617 bools
+    set PBMC.metacells.obsp[obs_balanced_ranks]: 18924 nonzero (0.7887%) out of 2399401 elements
+    set PBMC.metacells.obsp[obs_pruned_ranks]: 6197 nonzero (0.2583%) out of 2399401 elements
+    set PBMC.metacells.obsp[obs_outgoing_weights]: 6197 nonzero (0.2583%) out of 2399401 elements
     set PBMC.metacells.obsp[umap_distances]: csr_matrix 1549 X 1549 float32s (2397852 > 0)
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1780: UserWarning: using precomputed metric; inverse_transform will be unavailable
       warn("using precomputed metric; inverse_transform will be unavailable")
@@ -831,6 +832,5 @@ Finally, one can feed the data to any other scRNA analysis pipeline.
     set PBMC.metacells.layers[inner_fold]: csr_matrix 1549 X 22617 float32s (72784 > 0)
     set PBMC.clean.layers[deviant_folds]: csr_matrix 149825 X 22617 float32s (6460 > 0)
     set PBMC.metacells.varp[var_similarity]: csr_matrix 22617 X 22617 float32s (2242593 > 0)
-    set PBMC.metacells.var[significant_gene]: 5226 true (23.11%) out of 22617 bools
     set PBMC.clean.outliers.layers[most_similar_fold]: csr_matrix 1535 X 22617 float32s (3417132 > 0)
 

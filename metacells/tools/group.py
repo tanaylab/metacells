@@ -4,6 +4,7 @@ Group
 """
 
 from hashlib import shake_128
+from textwrap import wrap
 from typing import Any
 from typing import Callable
 from typing import List
@@ -96,7 +97,7 @@ def _obs_names(name_of_members: ut.NumpyVector, group_of_members: ut.NumpyVector
         hasher = shake_128()
         for member_name in name_of_members[groups_mask]:
             hasher.update(member_name.encode("utf8"))
-        name_of_groups.append(hasher.hexdigest(16).upper())  # pylint: disable=too-many-function-args
+        name_of_groups.append(".".join(wrap(hasher.hexdigest(16).upper(), 4)))  # pylint: disable=too-many-function-args
     return name_of_groups
 
 

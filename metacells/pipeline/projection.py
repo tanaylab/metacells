@@ -55,6 +55,7 @@ def projection_pipeline(
     ignored_gene_names_of_type: Optional[Dict[str, Collection[str]]] = None,
     ignored_gene_patterns_of_type: Optional[Dict[str, Collection[str]]] = None,
     atlas_type_property_name: str = "type",
+    project_corrections: bool = pr.project_corrections,
     project_min_corrected_gene_correlation: float = pr.project_min_corrected_gene_correlation,
     project_min_corrected_gene_factor: float = pr.project_min_corrected_gene_factor,
     renormalize_query_by_atlas: bool = pr.renormalize_query_by_atlas,
@@ -215,7 +216,8 @@ def projection_pipeline(
        between the mean expression of the gene in the projection and the query. If this is at most
        1/(1+``project_min_corrected_gene_factor``) or at least (1+``project_min_corrected_gene_factor``) (default:
        {project_min_corrected_gene_factor}), then multiply the gene's value by this factor so its level would match the
-       atlas. If any genes were ignored or corrected, then repeat steps 1-4.
+       atlas. If any genes were ignored or corrected, then repeat steps 1-4. However, if not ``project_corrections``,
+       only record the correction factor and proceed without actually performing the correction.
 
     5. Invoke :py:func:`metacells.tools.project.project_atlas_to_query` to assign a projected type to each of the
        query metacells based on the ``atlas_type_property_name`` (default: {atlas_type_property_name}).
@@ -326,6 +328,7 @@ def projection_pipeline(
         project_max_consistency_fold_factor=project_max_consistency_fold_factor,
         project_candidates_count=project_candidates_count,
         project_min_usage_weight=project_min_usage_weight,
+        project_corrections=project_corrections,
         project_min_corrected_gene_correlation=project_min_corrected_gene_correlation,
         project_min_corrected_gene_factor=project_min_corrected_gene_factor,
         atlas_type_property_name=atlas_type_property_name,
@@ -723,6 +726,7 @@ def _compute_preliminary_projection(
     project_max_consistency_fold_factor: float,
     project_candidates_count: int,
     project_min_usage_weight: float,
+    project_corrections: bool,
     project_min_corrected_gene_correlation: float,
     project_min_corrected_gene_factor: float,
     atlas_type_property_name: str,
@@ -779,6 +783,7 @@ def _compute_preliminary_projection(
             qdata=qdata,
             common_qdata=common_qdata,
             included_qdata=included_qdata,
+            project_corrections=project_corrections,
             project_min_corrected_gene_correlation=project_min_corrected_gene_correlation,
             project_min_corrected_gene_factor=project_min_corrected_gene_factor,
             reproducible=reproducible,
@@ -1281,6 +1286,7 @@ def _correct_correlated_genes(
     qdata: AnnData,
     common_qdata: AnnData,
     included_qdata: AnnData,
+    project_corrections: bool,
     project_min_corrected_gene_correlation: float,
     project_min_corrected_gene_factor: float,
     reproducible: bool,
@@ -1342,9 +1348,12 @@ def _correct_correlated_genes(
     included_genes_correction_factors[corrected_included_gene_indices] *= corrected_gene_factors
     ut.set_v_data(included_qdata, "correction_factor", included_genes_correction_factors)
 
-    included_corrected_data = ut.to_numpy_matrix(ut.get_vo_proper(included_qdata, what, layout="column_major")).copy()
-    included_corrected_data[:, corrected_included_gene_indices] *= corrected_gene_factors[None, :]
-    ut.set_vo_data(included_qdata, what, included_corrected_data)
+    if project_corrections:
+        included_corrected_data = ut.to_numpy_matrix(
+            ut.get_vo_proper(included_qdata, what, layout="column_major")
+        ).copy()
+        included_corrected_data[:, corrected_included_gene_indices] *= corrected_gene_factors[None, :]
+        ut.set_vo_data(included_qdata, what, included_corrected_data)
 
     if id(included_qdata) != id(common_qdata):
         common_gene_index_of_included_qdata = ut.get_v_numpy(included_qdata, "common_gene_index_of_qdata")
@@ -1354,11 +1363,14 @@ def _correct_correlated_genes(
         common_genes_correction_factors[corrected_common_gene_indices] *= corrected_gene_factors
         ut.set_v_data(common_qdata, "correction_factor", common_genes_correction_factors)
 
-        common_corrected_data = ut.to_numpy_matrix(ut.get_vo_proper(common_qdata, what, layout="column_major")).copy()
-        common_corrected_data[:, corrected_common_gene_indices] *= corrected_gene_factors[None, :]
-        ut.set_vo_data(common_qdata, what, common_corrected_data)
+        if project_corrections:
+            common_corrected_data = ut.to_numpy_matrix(
+                ut.get_vo_proper(common_qdata, what, layout="column_major")
+            ).copy()
+            common_corrected_data[:, corrected_common_gene_indices] *= corrected_gene_factors[None, :]
+            ut.set_vo_data(common_qdata, what, common_corrected_data)
 
-    return True
+    return project_corrections
 
 
 @ut.logged()
