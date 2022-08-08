@@ -38,4 +38,5 @@ History
 0.9.0
 -----
 
-* Improved projection metadata.
+* Improved and published projection algorithm.
+* Add bystander genes (forbidden, but also ignored when computing deviant outlier cells).

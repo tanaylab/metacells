@@ -4,6 +4,8 @@ Deviants
 """
 
 import sys
+from re import Pattern
+from typing import Collection
 from typing import List
 from typing import Optional
 from typing import Tuple
@@ -16,6 +18,8 @@ from scipy import stats
 
 import metacells.parameters as pr
 import metacells.utilities as ut
+
+from .named import find_named_genes
 
 if "sphinx" not in sys.argv[0]:
     import metacells.extensions as xt  # type: ignore
@@ -37,6 +41,8 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
     abs_folds: bool = pr.deviants_abs_folds,
     max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
+    bystander_gene_names: Optional[Collection[str]] = None,
+    bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     inplace: bool = True,
 ) -> Optional[Tuple[ut.PandasSeries, ut.PandasSeries]]:
     """
@@ -57,6 +63,9 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
             cell is not deviant).
 
     Variable (Gene) Annotations
+        ``bystander_gene``
+            A boolean mask of genes which are ignored when computing deviant (outlier) cells, based on their name.
+
         ``gene_deviant_votes``
             The number of cells each gene marked as deviant (if zero, the gene did not mark any cell
             as deviant).
@@ -77,27 +86,30 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
        Compute the fold factor log2((actual UMIs + 1) / (expected UMIs + 1)) for each gene for each
        cell.
 
-    2. Ignore all fold factors less than the ``min_gene_fold_factor`` (default: {min_gene_fold_factor}). If
+    2. If ``bystander_gene_names`` (default: {bystander_gene_names}) and/or ``bystander_gene_patterns`` (default:
+       {bystander_gene_patterns}) were specified, then ignore all the matching genes.
+
+    3. Ignore all fold factors less than the ``min_gene_fold_factor`` (default: {min_gene_fold_factor}). If
        ``abs_folds`` (default: {abs_folds}), consider the absolute fold factors. Count the number of genes which have a
        fold factor above this minimum in at least one cell. If the fraction of such genes is above ``max_gene_fraction``
        (default: {max_gene_fraction}), then raise the minimal gene fold factor such that at most this fraction of genes
        remain.
 
-    3. For each remaining gene, rank all the cells where it is expressed above the min fold
+    4. For each remaining gene, rank all the cells where it is expressed above the min fold
        factor. Give an artificial maximum rank to all cells with fold factor 0, that is, below the
        minimum.
 
-    4. For each cell, compute the minimal rank it has in any of these genes. That is, if a cell has
+    5. For each cell, compute the minimal rank it has in any of these genes. That is, if a cell has
        a rank of 1, it means that it has at least one gene whose expression fold factor is the worst
        (highest) across all cells (and is also above the minimum).
 
-    5. Select as deviants all cells whose minimal rank is below the artificial maximum rank, that
+    6. Select as deviants all cells whose minimal rank is below the artificial maximum rank, that
        is, which contain at least one gene whose expression fold factor is high relative to the rest
        of the cells. If the fraction of such cells is higher than ``max_cell_fraction`` (default:
        {max_cell_fraction}), reduce the maximal rank such that at most this fraction of cells are
        selected as deviants.
 
-    6. If the total fraction of deviants is below the ``max_cell_fraction``, repeats steps 1-5 to account for the mean
+    7. If the total fraction of deviants is below the ``max_cell_fraction``, repeats steps 1-5 to account for the mean
        expression in each candidate metacell having been modified due to the removal of deviant cells.
     """
     if max_gene_fraction is None:
@@ -118,6 +130,9 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
     totals_of_cells = ut.get_o_numpy(adata, what, sum=True)
     assert totals_of_cells.size == cells_count
 
+    find_named_genes(adata, names=bystander_gene_names, patterns=bystander_gene_patterns, to="bystander_gene")
+    bystander_genes_mask = ut.get_v_numpy(adata, "bystander_gene")
+
     data = ut.get_vo_proper(adata, what, layout="row_major")
 
     full_indices_of_remaining_cells = np.arange(cells_count)
@@ -135,6 +150,7 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
             min_gene_fold_factor=min_gene_fold_factor,
             abs_folds=abs_folds,
             acceptable_cells_mask=acceptable_cells_mask,
+            bystander_genes_mask=bystander_genes_mask,
         )
 
         fold_factors = _construct_fold_factors(cells_count, list_of_fold_factors, list_of_cell_index_of_rows)
@@ -209,6 +225,7 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
     min_gene_fold_factor: float,
     abs_folds: bool,
     acceptable_cells_mask: ut.NumpyVector,
+    bystander_genes_mask: ut.NumpyVector,
 ) -> Tuple[List[ut.CompressedMatrix], List[ut.NumpyVector]]:
     list_of_fold_factors: List[ut.CompressedMatrix] = []
     list_of_cell_index_of_rows: List[ut.NumpyVector] = []
@@ -274,6 +291,7 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
                     fractions_of_candidate_genes,
                 )
 
+            compressed[:, bystander_genes_mask] = 0.0
             ut.eliminate_zeros(compressed)
 
         else:
@@ -291,6 +309,7 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
                     fractions_of_candidate_genes,
                 )
 
+            dense[:, bystander_genes_mask] = 0.0
             compressed = sparse.csr_matrix(dense)
             assert compressed.has_sorted_indices
             assert compressed.has_canonical_format

@@ -1748,14 +1748,18 @@ def patterns_matches(
 
     utm.timed_parameters(patterns=len(patterns), strings=len(strings))
 
-    unified_pattern = (
-        "("
-        + ")|(".join([alternative if isinstance(alternative, str) else alternative.pattern for alternative in patterns])
-        + ")"
-    )
-    pattern: Pattern = re.compile(unified_pattern, re.IGNORECASE)
-
-    mask = np.array([bool(pattern.match(string)) for string in strings])
+    if len(patterns) == 0:
+        mask = np.full(len(strings), False, dtype="bool")
+    else:
+        unified_pattern = (
+            "("
+            + ")|(".join(
+                [alternative if isinstance(alternative, str) else alternative.pattern for alternative in patterns]
+            )
+            + ")"
+        )
+        pattern: Pattern = re.compile(unified_pattern, re.IGNORECASE)
+        mask = np.array([bool(pattern.match(string)) for string in strings])
 
     if invert:
         mask = ~mask

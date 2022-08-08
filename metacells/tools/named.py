@@ -42,13 +42,13 @@ def find_named_genes(
 
     Otherwise, it returns it as a pandas series (indexed by the variable, that is gene, names).
     """
-    if names is None:
+    if names is None or len(names) == 0:
         names_mask = np.zeros(adata.n_vars, dtype="bool")
     else:
         lower_names_set = {name.lower() for name in names}
         names_mask = np.array([name.lower() in lower_names_set for name in adata.var_names])  #
 
-    if patterns is None:
+    if patterns is None or len(patterns) == 0:
         patterns_mask = np.zeros(adata.n_vars, dtype="bool")
     else:
         patterns_mask = ut.patterns_matches(patterns, adata.var_names)
