@@ -778,7 +778,7 @@ def _compute_preliminary_projection(
             min_significant_gene_value=project_min_significant_gene_value,
         )
 
-        if not _correct_correlated_genes(
+        if repeat > 2 or not _correct_correlated_genes(
             what=what,
             qdata=qdata,
             common_qdata=common_qdata,

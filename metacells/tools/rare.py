@@ -34,6 +34,7 @@ def find_rare_gene_modules(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
+    max_genes: int = pr.rare_max_genes,
     max_gene_cell_fraction: float = pr.rare_max_gene_cell_fraction,
     min_gene_maximum: int = pr.rare_min_gene_maximum,
     genes_similarity_method: str = pr.rare_genes_similarity_method,
@@ -95,10 +96,11 @@ def find_rare_gene_modules(
 
     **Computation Parameters**
 
-    1. Pick as candidates all genes that are expressed in at most than ``max_gene_cell_fraction``
-       (default: {max_gene_cell_fraction}) of the cells, and whose maximal value in a cell is at
-       least ``min_gene_maximum`` (default: {min_gene_maximum}), as long as they do not match the
-       ``forbidden_gene_names`` or the ``forbidden_gene_patterns``.
+    1. Pick as candidates all genes that are expressed in at most ``max_gene_cell_fraction``
+       (default: {max_gene_cell_fraction}) of the cells, and whose maximal value in a cell is at least
+       ``min_gene_maximum`` (default: {min_gene_maximum}), as long as they do not match the ``forbidden_gene_names`` or
+       the ``forbidden_gene_patterns``. Out of these, pick at most ``max_genes`` (default {max_genes}) which are
+       expressed in the least cells.
 
     2. Compute the similarity between the genes using
        :py:func:`metacells.tools.similarity.compute_var_var_similarity` using the
@@ -161,6 +163,7 @@ def find_rare_gene_modules(
     candidates = _pick_candidates(
         adata_of_all_genes_of_all_cells=adata,
         what=what,
+        max_genes=max_genes,
         max_gene_cell_fraction=max_gene_cell_fraction,
         min_gene_maximum=min_gene_maximum,
         min_genes_of_modules=min_genes_of_modules,
@@ -242,6 +245,7 @@ def _pick_candidates(
     *,
     adata_of_all_genes_of_all_cells: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
+    max_genes: int,
     max_gene_cell_fraction: float,
     min_gene_maximum: int,
     min_genes_of_modules: int,
@@ -261,6 +265,13 @@ def _pick_candidates(
 
     candidate_genes_indices = np.where(candidates_mask_of_genes)[0]
     candidate_genes_count = candidate_genes_indices.size
+
+    if candidate_genes_count > max_genes:
+        nnz_cell_fraction_of_candidates = nnz_cell_fraction_of_genes[candidate_genes_indices]
+        partitioned_genes_indices = np.argpartition(nnz_cell_fraction_of_candidates, max_genes)
+        candidate_genes_indices = candidate_genes_indices[partitioned_genes_indices[0:max_genes]]
+        candidate_genes_count = candidate_genes_indices.size
+
     if candidate_genes_count < min_genes_of_modules:
         return None
 

@@ -40,3 +40,4 @@ History
 
 * Improved and published projection algorithm.
 * Add bystander genes (forbidden, but also ignored when computing deviant outlier cells).
+* Restrict number of rare gene candidates.

@@ -541,6 +541,7 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
     adata: AnnData,
     what: str = "__x__",
     *,
+    rare_max_genes: int = pr.rare_max_genes,
     rare_max_gene_cell_fraction: float = pr.rare_max_gene_cell_fraction,
     rare_min_gene_maximum: int = pr.rare_min_gene_maximum,
     rare_genes_similarity_method: str = pr.rare_genes_similarity_method,
@@ -734,6 +735,7 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
        rare gene modules, using the
        ``forbidden_gene_names``, ``forbidden_gene_patterns``,
        ``bystander_gene_names``, ``bystander_gene_patterns``,
+       ``rare_max_genes`` (default: {rare_max_genes}),
        ``rare_max_gene_cell_fraction`` (default: {rare_max_gene_cell_fraction}),
        ``rare_min_gene_maximum`` (default: {rare_min_gene_maximum}),
        ``rare_genes_similarity_method`` (default: {rare_genes_similarity_method}),
@@ -798,6 +800,7 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
                 what,
                 forbidden_gene_names=list(forbidden_gene_names or []) + list(bystander_gene_names or []),
                 forbidden_gene_patterns=list(forbidden_gene_patterns or []) + list(bystander_gene_patterns or []),
+                max_genes=rare_max_genes,
                 max_gene_cell_fraction=rare_max_gene_cell_fraction,
                 min_gene_maximum=rare_min_gene_maximum,
                 genes_similarity_method=rare_genes_similarity_method,

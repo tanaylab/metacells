@@ -374,6 +374,12 @@ noisy_lonely_min_gene_normalized_variance: float = significant_gene_normalized_v
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
 noisy_lonely_max_gene_similarity: float = significant_gene_similarity
 
+#: The maximal number of candidate rare genes. See
+#: :py:func:`metacells.tools.rare.find_rare_gene_modules`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+rare_max_genes: int = 500
+
 #: The maximal fraction of the cells where a gene is expressed to be considered "rare". See
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
 #: and
