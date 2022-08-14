@@ -53,8 +53,8 @@ def collect_metacells(
         ``clean_gene``
             A boolean mask of the clean genes.
 
-        ``forbidden_gene``
-            A boolean mask of genes which are forbidden from being chosen as "feature" genes based
+        ``lateral_gene``
+            A boolean mask of genes which are lateral from being chosen as "feature" genes based
             on their name. This is ``False`` for non-"clean" genes.
 
         If directly computing metecalls:
@@ -109,7 +109,7 @@ def collect_metacells(
     if top_level:
         ut.top_level(mdata)
 
-    for annotation_name in ("excluded_gene", "clean_gene", "forbidden_gene", "pre_feature_gene", "feature_gene"):
+    for annotation_name in ("excluded_gene", "clean_gene", "lateral_gene", "pre_feature_gene", "feature_gene"):
         if not ut.has_data(adata, annotation_name):
             continue
         value_per_gene = ut.get_v_numpy(adata, annotation_name, formatter=ut.mask_description)

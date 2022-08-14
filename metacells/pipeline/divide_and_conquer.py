@@ -156,7 +156,7 @@ GENE_ANNOTATIONS = [
     ResultAnnotation(name="high_total_gene", default=0, dtype="int32", formatter=ut.mask_description),
     ResultAnnotation(name="pre_high_relative_variance_gene", default=0, dtype="int32", formatter=ut.mask_description),
     ResultAnnotation(name="high_relative_variance_gene", default=0, dtype="int32", formatter=ut.mask_description),
-    ResultAnnotation(name="forbidden_gene", default=False, dtype="bool", formatter=None),
+    ResultAnnotation(name="lateral_gene", default=False, dtype="bool", formatter=None),
     ResultAnnotation(name="pre_feature_gene", default=0, dtype="int32", formatter=ut.mask_description),
     ResultAnnotation(name="feature_gene", default=0, dtype="int32", formatter=ut.mask_description),
     ResultAnnotation(name="pre_gene_deviant_votes", default=0, dtype="int32", formatter=ut.mask_description),
@@ -237,7 +237,7 @@ class SubsetResults:
         #:
         #: This must cover all the genes of the "complete" (clean) data. It must contain a
         #: ``feature_gene`` column, and optionally the ``high_total_gene``,
-        #: ``high_relative_variance_gene``, ``forbidden_gene`` and ``gene_deviant_votes`` columns.
+        #: ``high_relative_variance_gene``, ``lateral_gene`` and ``gene_deviant_votes`` columns.
         self.genes_frame = ut.to_pandas_frame(index=range(adata.n_vars))
 
         for gene_annotation in GENE_ANNOTATIONS:
@@ -300,7 +300,7 @@ class SubsetResults:
                 target_name = gene_annotation.name
 
             else:
-                if self.final_target == "preliminary" and gene_annotation.name != "forbidden_gene":
+                if self.final_target == "preliminary" and gene_annotation.name != "lateral_gene":
                     target_name = "pre_" + gene_annotation.name
                 else:
                     target_name = gene_annotation.name
@@ -565,8 +565,8 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
     feature_min_gene_relative_variance: Optional[float] = pr.feature_min_gene_relative_variance,
     feature_gene_names: Optional[Collection[str]] = None,
     feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    forbidden_gene_names: Optional[Collection[str]] = None,
-    forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    lateral_gene_names: Optional[Collection[str]] = None,
+    lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     bystander_gene_names: Optional[Collection[str]] = None,
     bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     feature_correction: Optional[FeatureCorrection] = None,
@@ -664,8 +664,8 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
             other genes with a similar expression level when when computing the preliminary and
             final metacells. This is zero for non-"clean" genes.
 
-        ``forbidden_gene``
-            A boolean mask of genes which are forbidden from being chosen as "feature" genes based
+        ``lateral_gene``
+            A boolean mask of genes which are lateral from being chosen as "feature" genes based
             on their name. This is ``False`` for non-"clean" genes.
 
         ``pre_feature_gene``, ``feature_gene``
@@ -733,7 +733,7 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
 
     1. Invoke :py:func:`metacells.tools.rare.find_rare_gene_modules` to isolate cells expressing
        rare gene modules, using the
-       ``forbidden_gene_names``, ``forbidden_gene_patterns``,
+       ``lateral_gene_names``, ``lateral_gene_patterns``,
        ``bystander_gene_names``, ``bystander_gene_patterns``,
        ``rare_max_genes`` (default: {rare_max_genes}),
        ``rare_max_gene_cell_fraction`` (default: {rare_max_gene_cell_fraction}),
@@ -798,8 +798,8 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
             tl.find_rare_gene_modules(
                 adata,
                 what,
-                forbidden_gene_names=list(forbidden_gene_names or []) + list(bystander_gene_names or []),
-                forbidden_gene_patterns=list(forbidden_gene_patterns or []) + list(bystander_gene_patterns or []),
+                lateral_gene_names=list(lateral_gene_names or []) + list(bystander_gene_names or []),
+                lateral_gene_patterns=list(lateral_gene_patterns or []) + list(bystander_gene_patterns or []),
                 max_genes=rare_max_genes,
                 max_gene_cell_fraction=rare_max_gene_cell_fraction,
                 min_gene_maximum=rare_min_gene_maximum,
@@ -835,8 +835,8 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
                     feature_min_gene_relative_variance=feature_min_gene_relative_variance,
                     feature_gene_names=feature_gene_names,
                     feature_gene_patterns=feature_gene_patterns,
-                    forbidden_gene_names=forbidden_gene_names,
-                    forbidden_gene_patterns=forbidden_gene_patterns,
+                    lateral_gene_names=lateral_gene_names,
+                    lateral_gene_patterns=lateral_gene_patterns,
                     bystander_gene_names=bystander_gene_names,
                     bystander_gene_patterns=bystander_gene_patterns,
                     feature_correction=feature_correction,
@@ -924,8 +924,8 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
             feature_min_gene_relative_variance=feature_min_gene_relative_variance,
             feature_gene_names=feature_gene_names,
             feature_gene_patterns=feature_gene_patterns,
-            forbidden_gene_names=forbidden_gene_names,
-            forbidden_gene_patterns=forbidden_gene_patterns,
+            lateral_gene_names=lateral_gene_names,
+            lateral_gene_patterns=lateral_gene_patterns,
             bystander_gene_names=bystander_gene_names,
             bystander_gene_patterns=bystander_gene_patterns,
             feature_correction=feature_correction,
@@ -1002,8 +1002,8 @@ def compute_divide_and_conquer_metacells(
     feature_min_gene_relative_variance: Optional[float] = pr.feature_min_gene_relative_variance,
     feature_gene_names: Optional[Collection[str]] = None,
     feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    forbidden_gene_names: Optional[Collection[str]] = None,
-    forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    lateral_gene_names: Optional[Collection[str]] = None,
+    lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     bystander_gene_names: Optional[Collection[str]] = None,
     bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     feature_correction: Optional[FeatureCorrection] = None,
@@ -1098,8 +1098,8 @@ def compute_divide_and_conquer_metacells(
             other genes with a similar expression level when when computing the preliminary and
             final metacells. This is zero for non-"clean" genes.
 
-        ``forbidden_gene``
-            A boolean mask of genes which are forbidden from being chosen as "feature" genes based
+        ``lateral_gene``
+            A boolean mask of genes which are lateral from being chosen as "feature" genes based
             on their name. This is ``False`` for non-"clean" genes.
 
         ``pre_feature_gene``, ``feature_gene``
@@ -1213,8 +1213,8 @@ def compute_divide_and_conquer_metacells(
                 feature_min_gene_relative_variance=feature_min_gene_relative_variance,
                 feature_gene_names=feature_gene_names,
                 feature_gene_patterns=feature_gene_patterns,
-                forbidden_gene_names=forbidden_gene_names,
-                forbidden_gene_patterns=forbidden_gene_patterns,
+                lateral_gene_names=lateral_gene_names,
+                lateral_gene_patterns=lateral_gene_patterns,
                 bystander_gene_names=bystander_gene_names,
                 bystander_gene_patterns=bystander_gene_patterns,
                 feature_correction=feature_correction,
@@ -1287,8 +1287,8 @@ def compute_divide_and_conquer_metacells(
                     feature_min_gene_relative_variance=feature_min_gene_relative_variance,
                     feature_gene_names=feature_gene_names,
                     feature_gene_patterns=feature_gene_patterns,
-                    forbidden_gene_names=forbidden_gene_names,
-                    forbidden_gene_patterns=forbidden_gene_patterns,
+                    lateral_gene_names=lateral_gene_names,
+                    lateral_gene_patterns=lateral_gene_patterns,
                     bystander_gene_names=bystander_gene_names,
                     bystander_gene_patterns=bystander_gene_patterns,
                     feature_correction=feature_correction,
@@ -1352,8 +1352,8 @@ def compute_divide_and_conquer_metacells(
                     feature_min_gene_relative_variance=feature_min_gene_relative_variance,
                     feature_gene_names=feature_gene_names,
                     feature_gene_patterns=feature_gene_patterns,
-                    forbidden_gene_names=forbidden_gene_names,
-                    forbidden_gene_patterns=forbidden_gene_patterns,
+                    lateral_gene_names=lateral_gene_names,
+                    lateral_gene_patterns=lateral_gene_patterns,
                     bystander_gene_names=bystander_gene_names,
                     bystander_gene_patterns=bystander_gene_patterns,
                     feature_correction=None,
@@ -1420,8 +1420,8 @@ def compute_divide_and_conquer_metacells(
                     feature_min_gene_relative_variance=feature_min_gene_relative_variance,
                     feature_gene_names=feature_gene_names,
                     feature_gene_patterns=feature_gene_patterns,
-                    forbidden_gene_names=forbidden_gene_names,
-                    forbidden_gene_patterns=forbidden_gene_patterns,
+                    lateral_gene_names=lateral_gene_names,
+                    lateral_gene_patterns=lateral_gene_patterns,
                     bystander_gene_names=bystander_gene_names,
                     bystander_gene_patterns=bystander_gene_patterns,
                     feature_correction=feature_correction,
@@ -1490,8 +1490,8 @@ def compute_piled_metacells(
     feature_min_gene_relative_variance: Optional[float],
     feature_gene_names: Optional[Collection[str]] = None,
     feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    forbidden_gene_names: Optional[Collection[str]],
-    forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]],
+    lateral_gene_names: Optional[Collection[str]],
+    lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]],
     bystander_gene_names: Optional[Collection[str]] = None,
     bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     feature_correction: Optional[FeatureCorrection],
@@ -1573,8 +1573,8 @@ def compute_piled_metacells(
             feature_min_gene_relative_variance=feature_min_gene_relative_variance,
             feature_gene_names=feature_gene_names,
             feature_gene_patterns=feature_gene_patterns,
-            forbidden_gene_names=forbidden_gene_names,
-            forbidden_gene_patterns=forbidden_gene_patterns,
+            lateral_gene_names=lateral_gene_names,
+            lateral_gene_patterns=lateral_gene_patterns,
             bystander_gene_names=bystander_gene_names,
             bystander_gene_patterns=bystander_gene_patterns,
             feature_correction=feature_correction,
@@ -1660,8 +1660,8 @@ def compute_piled_metacells(
                 feature_min_gene_relative_variance=feature_min_gene_relative_variance,
                 feature_gene_names=feature_gene_names,
                 feature_gene_patterns=feature_gene_patterns,
-                forbidden_gene_names=forbidden_gene_names,
-                forbidden_gene_patterns=forbidden_gene_patterns,
+                lateral_gene_names=lateral_gene_names,
+                lateral_gene_patterns=lateral_gene_patterns,
                 bystander_gene_names=bystander_gene_names,
                 bystander_gene_patterns=bystander_gene_patterns,
                 feature_correction=feature_correction,
@@ -1730,8 +1730,8 @@ def _run_parallel_piles(
     feature_min_gene_relative_variance: Optional[float],
     feature_gene_names: Optional[Collection[str]] = None,
     feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    forbidden_gene_names: Optional[Collection[str]],
-    forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]],
+    lateral_gene_names: Optional[Collection[str]],
+    lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]],
     bystander_gene_names: Optional[Collection[str]] = None,
     bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     feature_correction: Optional[FeatureCorrection],
@@ -1785,8 +1785,8 @@ def _run_parallel_piles(
             feature_min_gene_relative_variance=feature_min_gene_relative_variance,
             feature_gene_names=feature_gene_names,
             feature_gene_patterns=feature_gene_patterns,
-            forbidden_gene_names=forbidden_gene_names,
-            forbidden_gene_patterns=forbidden_gene_patterns,
+            lateral_gene_names=lateral_gene_names,
+            lateral_gene_patterns=lateral_gene_patterns,
             bystander_gene_names=bystander_gene_names,
             bystander_gene_patterns=bystander_gene_patterns,
             feature_correction=feature_correction,

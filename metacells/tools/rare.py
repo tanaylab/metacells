@@ -39,8 +39,8 @@ def find_rare_gene_modules(
     min_gene_maximum: int = pr.rare_min_gene_maximum,
     genes_similarity_method: str = pr.rare_genes_similarity_method,
     genes_cluster_method: str = pr.rare_genes_cluster_method,
-    forbidden_gene_names: Optional[Collection[str]] = None,
-    forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    lateral_gene_names: Optional[Collection[str]] = None,
+    lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     min_genes_of_modules: int = pr.rare_min_genes_of_modules,
     min_cells_of_modules: int = pr.rare_min_cells_of_modules,
     target_pile_size: int = pr.min_target_pile_size,
@@ -98,8 +98,8 @@ def find_rare_gene_modules(
 
     1. Pick as candidates all genes that are expressed in at most ``max_gene_cell_fraction``
        (default: {max_gene_cell_fraction}) of the cells, and whose maximal value in a cell is at least
-       ``min_gene_maximum`` (default: {min_gene_maximum}), as long as they do not match the ``forbidden_gene_names`` or
-       the ``forbidden_gene_patterns``. Out of these, pick at most ``max_genes`` (default {max_genes}) which are
+       ``min_gene_maximum`` (default: {min_gene_maximum}), as long as they do not match the ``lateral_gene_names`` or
+       the ``lateral_gene_patterns``. Out of these, pick at most ``max_genes`` (default {max_genes}) which are
        expressed in the least cells.
 
     2. Compute the similarity between the genes using
@@ -126,7 +126,7 @@ def find_rare_gene_modules(
        as their maximal value in one of the expressing cells is at least ``min_gene_maximum``,
        as long as this doesn't add more than ``max_related_gene_increase_factor`` times the original
        number of cells to the rare gene module, and as long as they do not match the
-       ``forbidden_gene_names`` or the ``forbidden_gene_patterns``. If a gene is above the threshold
+       ``lateral_gene_names`` or the ``lateral_gene_patterns``. If a gene is above the threshold
        for multiple gene modules, associate it with the gene module for which its fold factor is
        higher.
 
@@ -151,10 +151,10 @@ def find_rare_gene_modules(
     max_cells_of_random_pile = mean_metacells_size * max_cells_factor_of_random_pile
     ut.log_calc("max_cells_of_random_pile", max_cells_of_random_pile)
 
-    forbidden_genes_mask = find_named_genes(adata, names=forbidden_gene_names, patterns=forbidden_gene_patterns)
-    assert forbidden_genes_mask is not None
+    lateral_genes_mask = find_named_genes(adata, names=lateral_gene_names, patterns=lateral_gene_patterns)
+    assert lateral_genes_mask is not None
 
-    allowed_genes_mask = ~forbidden_genes_mask.values
+    allowed_genes_mask = ~lateral_genes_mask.values
     ut.log_calc("allowed_genes_mask", allowed_genes_mask)
 
     rare_module_of_cells = np.full(adata.n_obs, -1, dtype="int32")

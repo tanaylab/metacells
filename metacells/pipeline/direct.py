@@ -76,8 +76,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     feature_min_gene_relative_variance: Optional[float] = pr.feature_min_gene_relative_variance,
     feature_gene_names: Optional[Collection[str]] = None,
     feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    forbidden_gene_names: Optional[Collection[str]] = None,
-    forbidden_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    lateral_gene_names: Optional[Collection[str]] = None,
+    lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     bystander_gene_names: Optional[Collection[str]] = None,
     bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     feature_correction: Optional[FeatureCorrection] = None,
@@ -162,12 +162,12 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
             A boolean mask of genes with "high" normalized variance, relative to other genes with a
             similar expression level.
 
-        ``forbidden_gene``
-            A boolean mask of genes which are forbidden from being chosen as "feature" genes based
+        ``lateral_gene``
+            A boolean mask of genes which are lateral from being chosen as "feature" genes based
             on their name.
 
         ``bystander_gene``
-            A boolean mask of genes which are not only forbidden from being chosen as "feature" genes, but also are
+            A boolean mask of genes which are not only lateral from being chosen as "feature" genes, but also are
             ignored when computing deviant (outlier) cells, based on their name.
 
         ``feature_gene``
@@ -211,8 +211,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        ``feature_min_gene_total`` (default: {feature_min_gene_total}), ``feature_min_gene_top3``
        (default: {feature_min_gene_top3}), ``feature_min_gene_relative_variance`` (default:
        {feature_min_gene_relative_variance}), ``feature_gene_names`` (default:
-       {feature_gene_names}), ``feature_gene_patterns`` (default: {feature_gene_patterns}), ``forbidden_gene_names``
-       (default: {forbidden_gene_names}), ``forbidden_gene_patterns`` (default: {forbidden_gene_patterns})
+       {feature_gene_names}), ``feature_gene_patterns`` (default: {feature_gene_patterns}), ``lateral_gene_names``
+       (default: {lateral_gene_names}), ``lateral_gene_patterns`` (default: {lateral_gene_patterns})
        ``bystander_gene_names`` (default: {bystander_gene_names}), ``bystander_gene_patterns`` (default:
        {bystander_gene_patterns}) and ``random_seed`` (default: {random_seed}) to make this replicable.
 
@@ -295,8 +295,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
         min_gene_top3=feature_min_gene_top3,
         forced_gene_names=feature_gene_names,
         forced_gene_patterns=feature_gene_patterns,
-        forbidden_gene_names=list(forbidden_gene_names or []) + list(bystander_gene_names or []),
-        forbidden_gene_patterns=list(forbidden_gene_patterns or []) + list(bystander_gene_patterns or []),
+        lateral_gene_names=list(lateral_gene_names or []) + list(bystander_gene_names or []),
+        lateral_gene_patterns=list(lateral_gene_patterns or []) + list(bystander_gene_patterns or []),
         random_seed=random_seed,
     )
 

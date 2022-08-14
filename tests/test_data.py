@@ -45,7 +45,7 @@ def test_find_rare_gene_modules() -> None:
 
         mc.tl.find_rare_gene_modules(  #
             adata,
-            forbidden_gene_names=expected["compute_direct_metacells"]["forbidden_gene_names"],
+            lateral_gene_names=expected["compute_direct_metacells"]["lateral_gene_names"],
             **expected.get("find_rare_gene_modules", {}),
         )
 

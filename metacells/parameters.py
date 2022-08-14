@@ -961,10 +961,10 @@ min_entry_project_fold_factor: float = significant_gene_fold_factor - 1.0
 #: :py:func:`metacells.tools.quality.compute_outliers_matches`.
 outliers_fold_normalization: float = 1e-5
 
-#: Whether to ignore the forbidden genes of the atlas when computing projections. See
+#: Whether to ignore the lateral genes of the atlas when computing projections. See
 #: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
 #: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
-ignore_atlas_forbidden_genes: bool = True
+ignore_atlas_lateral_genes: bool = True
 
 #: Whether to ignore the insignificant genes of the atlas when computing projections. See
 #: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
@@ -976,10 +976,10 @@ ignore_atlas_insignificant_genes: bool = True
 #: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
 ignore_query_insignificant_genes: bool = False
 
-#: Whether to ignore the forbidden genes of the query when computing projections. See
+#: Whether to ignore the lateral genes of the query when computing projections. See
 #: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
 #: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
-ignore_query_forbidden_genes: bool = False
+ignore_query_lateral_genes: bool = False
 
 #: The minimal fraction of metacells where a gene has a high projection fold factor to mark the gene as "misfit".
 #: See :py:func:`metacells.tools.project.find_misfit_genes`,

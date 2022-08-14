@@ -37,7 +37,7 @@ def find_named_genes(
 
     If ``to`` (default: {to}) is specified, this is stored as a per-variable (gene) annotation with
     that name, and returns ``None``. This is useful to fill gene masks such as ``excluded_genes``
-    (genes which should be excluded from the rest of the processing) and ``forbidden_genes`` (genes
+    (genes which should be excluded from the rest of the processing) and ``lateral_genes`` (genes
     which must not be chosen as feature genes).
 
     Otherwise, it returns it as a pandas series (indexed by the variable, that is gene, names).

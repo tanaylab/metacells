@@ -343,8 +343,8 @@ data we’ll be analyzing.
     set PBMC.clean.var[full_gene_index]: 22617 int64s
 
 
-Initial forbidden genes
-~~~~~~~~~~~~~~~~~~~~~~~
+Initial lateral genes
+~~~~~~~~~~~~~~~~~~~~~
 
 Some of the genes that are included in the clean data are “lateral”,
 that is, indicate some real biolgical behavior such as cell cycle, but
@@ -357,10 +357,10 @@ algorithm to create metacells based on these genes (e.g., creating a
 metacell with a strong consistent S-state signature, but mixing up
 weakly different cell behaviors which we are trying to isolate).
 
-To ensure this, we can specify (again by name or by pattern) “forbidden
+To ensure this, we can specify (again by name or by pattern) “lateral
 genes”, that is, genes which must not be used as “feature genes”. Coming
-up with the list of forbidden genes for a new data set is not trivial,
-and in general may require an iterative approach, where we generate
+up with the list of lateral genes for a new data set is not trivial, and
+in general may require an iterative approach, where we generate
 metacells, understand their behavior, identify additional lateral gene
 modules we’d like to add to the list, and then recompute the metacells.
 
@@ -489,26 +489,26 @@ similarity between them:
 .. image:: Metacells_Vignette_34_11.svg
 
 
-We can now extend the list of forbidden genes to include additional
-genes using these modules. Note we’d rather err on the side of caution
-and not forbid genes needlessly, since we expect the metacell analysis
-to help us expose any remaining genes we have missed. That said, thiw
-will require us to regenerate the metacells with the expanded forbidden
-genes list.
+We can now extend the list of lateral genes to include additional genes
+using these modules. Note we’d rather err on the side of caution and not
+forbid genes needlessly, since we expect the metacell analysis to help
+us expose any remaining genes we have missed. That said, this will
+require us to regenerate the metacells with the expanded lateral genes
+list.
 
 For simplicity, we’ll simply forbid all the original suspect genes as
 well as all the genes in the strong modules 4, 5, 47, 52 and 68. This
-gives us a total of 106 initially forbidden genes:
+gives us a total of 106 initially lateral genes:
 
 .. code:: python
 
-    forbidden_genes_mask = suspect_genes_mask
+    lateral_genes_mask = suspect_genes_mask
     for gene_module in [4, 5, 47, 52]:
         module_genes_mask = module_of_genes == gene_module
-        forbidden_genes_mask |= module_genes_mask
-    forbidden_gene_names = sorted(clean.var_names[forbidden_genes_mask])
-    print(len(forbidden_gene_names))
-    print(' '.join(forbidden_gene_names))
+        lateral_genes_mask |= module_genes_mask
+    lateral_gene_names = sorted(clean.var_names[lateral_genes_mask])
+    print(len(lateral_gene_names))
+    print(' '.join(lateral_gene_names))
 
 
 .. code::
@@ -526,8 +526,8 @@ the metacells.
 Main parameters
 ~~~~~~~~~~~~~~~
 
-There are many parameters other than the forbidden genes list that we
-can tweak (see ``mc.pl.divide_and_conquer_pipeline``). Here we’ll just
+There are many parameters other than the lateral genes list that we can
+tweak (see ``mc.pl.divide_and_conquer_pipeline``). Here we’ll just
 discuss controlling the main ones.
 
 Reproducibility
@@ -621,7 +621,7 @@ with a progress bar, as demonstrated below.
 
     with mc.ut.progress_bar():
         mc.pl.divide_and_conquer_pipeline(clean,
-                                          forbidden_gene_names=forbidden_gene_names,
+                                          lateral_gene_names=lateral_gene_names,
                                           #target_metacell_size=...,
                                           random_seed=123456)
 
@@ -630,7 +630,7 @@ with a progress bar, as demonstrated below.
 
     Compute metacells for rare gene modules...
     Compute common metacells...
-    100%|█████████▉[01:51]
+    100%|█████████▉[01:56]
 
 
 This has written many annotations for each cell (observation), the most
@@ -649,7 +649,7 @@ observation is a metacell:
 
     set PBMC.metacells.var[excluded_gene]: 0 true (0%) out of 22617 bools
     set PBMC.metacells.var[clean_gene]: 22617 true (100%) out of 22617 bools
-    set PBMC.metacells.var[forbidden_gene]: 106 true (0.4687%) out of 22617 bools
+    set PBMC.metacells.var[lateral_gene]: 106 true (0.4687%) out of 22617 bools
     set PBMC.metacells.var[pre_feature_gene]: 462 positive (2.043%) out of 22617 int32s
     set PBMC.metacells.var[feature_gene]: 715 positive (3.161%) out of 22617 int32s
     set PBMC.metacells.obs[pile]: 1549 int32s
