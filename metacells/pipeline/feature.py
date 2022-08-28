@@ -37,6 +37,8 @@ def extract_feature_data(
     forced_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     lateral_gene_names: Optional[Collection[str]] = None,
     lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    bystander_gene_names: Optional[Collection[str]] = None,
+    bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     random_seed: int = 0,
     top_level: bool = True,
 ) -> Optional[AnnData]:
@@ -74,6 +76,10 @@ def extract_feature_data(
             A boolean mask of genes which are lateral from being chosen as "feature" genes based
             on their name.
 
+        ``bystander_gene``
+            A boolean mask of genes which are not only lateral, but are also ignored when computing
+            deviant (outlier) cells. This is ``False`` for non-"clean" genes.
+
         ``forced_gene``
             A boolean mask of the "forced" genes.
 
@@ -89,7 +95,7 @@ def extract_feature_data(
        {downsample_max_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
 
     2. Invoke :py:func:`metacells.tools.named.find_named_genes` to force genes as being used as
-       features based on their name, using ``forced_gene_names`` and ``lateral_gene_patterns``.
+       features based on their name, using ``forced_gene_names`` and ``forced_gene_patterns``.
 
     3. Invoke :py:func:`metacells.tools.high.find_high_total_genes` to select high-expression
        feature genes (based on the downsampled data), using ``min_gene_total``.
@@ -103,7 +109,12 @@ def extract_feature_data(
        {lateral_gene_names}) and ``lateral_gene_patterns`` (default: {lateral_gene_patterns}).
        This is stored in an intermediate per-variable (gene) ``lateral_genes`` boolean mask.
 
-    6. Invoke :py:func:`metacells.tools.filter.filter_data` to slice just the selected
+    6. Invoke :py:func:`metacells.tools.named.find_named_genes` to forbid genes from being used as
+       feature genes, based on their name, using the ``bystander_gene_names`` (default:
+       {bystander_gene_names}) and ``bystander_gene_patterns`` (default: {bystander_gene_patterns}).
+       This is stored in an intermediate per-variable (gene) ``bystander_genes`` boolean mask.
+
+    7. Invoke :py:func:`metacells.tools.filter.filter_data` to slice just the selected
        "feature" genes using the ``name`` (default: {name}).
     """
     tl.downsample_cells(
@@ -138,6 +149,10 @@ def extract_feature_data(
     if lateral_gene_names is not None or lateral_gene_patterns is not None:
         var_masks.append("~lateral_gene")
         tl.find_named_genes(adata, to="lateral_gene", names=lateral_gene_names, patterns=lateral_gene_patterns)
+
+    if bystander_gene_names is not None or bystander_gene_patterns is not None:
+        var_masks.append("~bystander_gene")
+        tl.find_named_genes(adata, to="bystander_gene", names=bystander_gene_names, patterns=bystander_gene_patterns)
 
     results = tl.filter_data(
         adata, name=name, top_level=top_level, track_var="full_gene_index", mask_var="feature_gene", var_masks=var_masks

@@ -295,8 +295,10 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
         min_gene_top3=feature_min_gene_top3,
         forced_gene_names=feature_gene_names,
         forced_gene_patterns=feature_gene_patterns,
-        lateral_gene_names=list(lateral_gene_names or []) + list(bystander_gene_names or []),
-        lateral_gene_patterns=list(lateral_gene_patterns or []) + list(bystander_gene_patterns or []),
+        lateral_gene_names=lateral_gene_names,
+        lateral_gene_patterns=lateral_gene_patterns,
+        bystander_gene_names=bystander_gene_names,
+        bystander_gene_patterns=bystander_gene_patterns,
         random_seed=random_seed,
     )
 

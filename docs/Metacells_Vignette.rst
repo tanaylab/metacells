@@ -630,7 +630,7 @@ with a progress bar, as demonstrated below.
 
     Compute metacells for rare gene modules...
     Compute common metacells...
-    100%|█████████▉[01:56]
+    100%|█████████▉[02:20]
 
 
 This has written many annotations for each cell (observation), the most
@@ -650,6 +650,7 @@ observation is a metacell:
     set PBMC.metacells.var[excluded_gene]: 0 true (0%) out of 22617 bools
     set PBMC.metacells.var[clean_gene]: 22617 true (100%) out of 22617 bools
     set PBMC.metacells.var[lateral_gene]: 106 true (0.4687%) out of 22617 bools
+    set PBMC.metacells.var[bystander_gene]: 0 true (0%) out of 22617 bools
     set PBMC.metacells.var[pre_feature_gene]: 462 positive (2.043%) out of 22617 int32s
     set PBMC.metacells.var[feature_gene]: 715 positive (3.161%) out of 22617 int32s
     set PBMC.metacells.obs[pile]: 1549 int32s

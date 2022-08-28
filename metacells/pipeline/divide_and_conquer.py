@@ -157,6 +157,7 @@ GENE_ANNOTATIONS = [
     ResultAnnotation(name="pre_high_relative_variance_gene", default=0, dtype="int32", formatter=ut.mask_description),
     ResultAnnotation(name="high_relative_variance_gene", default=0, dtype="int32", formatter=ut.mask_description),
     ResultAnnotation(name="lateral_gene", default=False, dtype="bool", formatter=None),
+    ResultAnnotation(name="bystander_gene", default=False, dtype="bool", formatter=None),
     ResultAnnotation(name="pre_feature_gene", default=0, dtype="int32", formatter=ut.mask_description),
     ResultAnnotation(name="feature_gene", default=0, dtype="int32", formatter=ut.mask_description),
     ResultAnnotation(name="pre_gene_deviant_votes", default=0, dtype="int32", formatter=ut.mask_description),
@@ -237,7 +238,7 @@ class SubsetResults:
         #:
         #: This must cover all the genes of the "complete" (clean) data. It must contain a
         #: ``feature_gene`` column, and optionally the ``high_total_gene``,
-        #: ``high_relative_variance_gene``, ``lateral_gene`` and ``gene_deviant_votes`` columns.
+        #: ``high_relative_variance_gene``, ``lateral_gene``, ``bystander_gene`` and ``gene_deviant_votes`` columns.
         self.genes_frame = ut.to_pandas_frame(index=range(adata.n_vars))
 
         for gene_annotation in GENE_ANNOTATIONS:
@@ -300,7 +301,10 @@ class SubsetResults:
                 target_name = gene_annotation.name
 
             else:
-                if self.final_target == "preliminary" and gene_annotation.name != "lateral_gene":
+                if self.final_target == "preliminary" and gene_annotation.name not in (
+                    "lateral_gene",
+                    "bystander_gene",
+                ):
                     target_name = "pre_" + gene_annotation.name
                 else:
                     target_name = gene_annotation.name
@@ -668,6 +672,10 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
             A boolean mask of genes which are lateral from being chosen as "feature" genes based
             on their name. This is ``False`` for non-"clean" genes.
 
+        ``bystander_gene``
+            A boolean mask of genes which are not only lateral, but are also ignored when computing
+            deviant (outlier) cells. This is ``False`` for non-"clean" genes.
+
         ``pre_feature_gene``, ``feature_gene``
             The number of times the gene was used as a feature when computing the preliminary and
             final metacells. If we end up directly computing the metacells, the preliminary value
@@ -798,8 +806,10 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
             tl.find_rare_gene_modules(
                 adata,
                 what,
-                lateral_gene_names=list(lateral_gene_names or []) + list(bystander_gene_names or []),
-                lateral_gene_patterns=list(lateral_gene_patterns or []) + list(bystander_gene_patterns or []),
+                lateral_gene_names=lateral_gene_names,
+                lateral_gene_patterns=lateral_gene_patterns,
+                bystander_gene_names=bystander_gene_names,
+                bystander_gene_patterns=bystander_gene_patterns,
                 max_genes=rare_max_genes,
                 max_gene_cell_fraction=rare_max_gene_cell_fraction,
                 min_gene_maximum=rare_min_gene_maximum,
@@ -1101,6 +1111,10 @@ def compute_divide_and_conquer_metacells(
         ``lateral_gene``
             A boolean mask of genes which are lateral from being chosen as "feature" genes based
             on their name. This is ``False`` for non-"clean" genes.
+
+        ``bystander_gene``
+            A boolean mask of genes which are not only lateral, but are also ignored when computing
+            deviant (outlier) cells. This is ``False`` for non-"clean" genes.
 
         ``pre_feature_gene``, ``feature_gene``
             The number of times the gene was used as a feature when computing the preliminary and

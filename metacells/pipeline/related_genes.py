@@ -44,6 +44,8 @@ def relate_genes(
     min_gene_top3: int = pr.related_min_gene_top3,
     lateral_gene_names: Optional[Collection[str]] = None,
     lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    bystander_gene_names: Optional[Collection[str]] = None,
+    bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     genes_similarity_method: str = pr.related_genes_similarity_method,
     genes_cluster_method: str = pr.related_genes_cluster_method,
     min_genes_of_modules: int = pr.related_min_genes_of_modules,
@@ -107,6 +109,8 @@ def relate_genes(
         min_gene_top3=min_gene_top3,
         lateral_gene_names=lateral_gene_names,
         lateral_gene_patterns=lateral_gene_patterns,
+        bystander_gene_names=bystander_gene_names,
+        bystander_gene_patterns=bystander_gene_patterns,
         random_seed=random_seed,
     )
     assert fdata is not None
