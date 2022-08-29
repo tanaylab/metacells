@@ -503,7 +503,10 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
     if isinstance(value, dict):
         return str(value) + checksum
 
-    raise RuntimeError(f"unknown parameter type: {value.__class__} value: {value}")  #
+    if name == "self":
+        return f"{value.__class__}#{id(value)}"
+
+    raise RuntimeError(f"unknown parameter type: {value.__class__} value: {value} name: {name}")  #
 
 
 def top_level(adata: AnnData) -> None:

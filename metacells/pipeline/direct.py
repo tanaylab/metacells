@@ -428,9 +428,9 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
             min_metacell_cells=dissolve_min_metacell_cells,
         )
 
-        metacell_of_cells = ut.get_o_numpy(adata, "metacell", formatter=ut.groups_description)
+    metacell_of_cells = ut.get_o_numpy(adata, "metacell", formatter=ut.groups_description)
 
-        outlier_of_cells = metacell_of_cells < 0
-        ut.set_o_data(adata, "outlier", outlier_of_cells, formatter=ut.mask_description)
+    outlier_of_cells = metacell_of_cells < 0
+    ut.set_o_data(adata, "outlier", outlier_of_cells, formatter=ut.mask_description)
 
     return fdata
