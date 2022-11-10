@@ -490,34 +490,37 @@ def _common_data(
     ut.set_v_data(common_qdata, "correction_factor", np.full(common_qdata.n_vars, 1.0, dtype="float32"))
     ut.set_v_data(common_qdata, "atlas_gene", np.full(common_qdata.n_vars, True))
 
-    if ignore_atlas_insignificant_genes:
+    if ignore_atlas_insignificant_genes and ut.has_data(common_adata, "significant_gene"):
         atlas_significant_mask = ut.get_v_numpy(common_adata, "significant_gene")
         ut.set_v_data(common_qdata, "atlas_significant_gene", atlas_significant_mask)
 
-    if ignore_atlas_lateral_genes:
+    if ignore_atlas_lateral_genes and ut.has_data(common_adata, "lateral_gene"):
         atlas_lateral_mask = ut.get_v_numpy(common_adata, "lateral_gene")
         ut.set_v_data(common_qdata, "atlas_lateral_gene", atlas_lateral_mask)
 
-    if ignore_atlas_bystander_genes:
+    if ignore_atlas_bystander_genes and ut.has_data(common_adata, "bystander_gene"):
         atlas_bystander_mask = ut.get_v_numpy(common_adata, "bystander_gene")
         ut.set_v_data(common_qdata, "atlas_bystander_gene", atlas_bystander_mask)
 
     min_essential_genes_of_type: Optional[Dict[str, Optional[float]]] = None
     if project_min_similar_essential_genes_fraction is not None:
-        min_essential_genes_of_type = {}
-        for essential_genes_name in common_adata.var.keys():
-            if not essential_genes_name.startswith("essential_gene_of_"):
-                continue
-            essential_genes_mask = ut.get_v_numpy(common_adata, essential_genes_name)
-            ut.set_v_data(common_qdata, essential_genes_name, essential_genes_mask)
-            essential_genes_mask = ut.get_v_numpy(adata, essential_genes_name)
-            min_essential_genes_count = project_min_similar_essential_genes_fraction * np.sum(essential_genes_mask)
-            min_essential_genes_of_type[essential_genes_name[18:]] = min_essential_genes_count
-        for type_name in np.unique(ut.get_o_numpy(common_adata, atlas_type_property_name)):
-            if type_name == "Outliers" and type_name not in min_essential_genes_of_type:
+        type_names = np.unique(ut.get_o_numpy(common_adata, atlas_type_property_name))
+        for type_name in type_names:
+            if type_name != "Outliers" and ut.has_data(common_adata, f"essential_gene_of_{type_name}"):
+                min_essential_genes_of_type = {}
+                break
+
+    if min_essential_genes_of_type is not None:
+        for type_name in type_names:
+            if type_name == "Outliers":
                 min_essential_genes_of_type[type_name] = None
-            elif min_essential_genes_of_type[type_name] is not None:
-                assert min_essential_genes_of_type[type_name] > 0  # type: ignore
+            else:
+                essential_genes_name = f"essential_gene_of_{type_name}"
+                essential_genes_mask = ut.get_v_numpy(common_adata, essential_genes_name)
+                ut.set_v_data(common_qdata, essential_genes_name, essential_genes_mask)
+                min_essential_genes_count = project_min_similar_essential_genes_fraction * np.sum(essential_genes_mask)
+                assert min_essential_genes_count > 0
+                min_essential_genes_of_type[type_name] = min_essential_genes_count
 
     return common_adata, common_qdata, min_essential_genes_of_type
 
@@ -846,22 +849,22 @@ def _included_global_data(
     ignored_mask_names = ["|manually_ignored_gene?"]
 
     if ignore_atlas_insignificant_genes:
-        ignored_mask_names.append("|~atlas_significant_gene")
+        ignored_mask_names.append("|~atlas_significant_gene?")
 
     if ignore_query_insignificant_genes:
-        ignored_mask_names.append("|~significant_gene")
+        ignored_mask_names.append("|~significant_gene?")
 
     if ignore_atlas_lateral_genes:
-        ignored_mask_names.append("|atlas_lateral_gene")
+        ignored_mask_names.append("|atlas_lateral_gene?")
 
     if ignore_atlas_bystander_genes:
-        ignored_mask_names.append("|atlas_bystander_gene")
+        ignored_mask_names.append("|atlas_bystander_gene?")
 
     if ignore_query_lateral_genes:
-        ignored_mask_names.append("|lateral_gene")
+        ignored_mask_names.append("|lateral_gene?")
 
     if ignore_query_bystander_genes:
-        ignored_mask_names.append("|bystander_gene")
+        ignored_mask_names.append("|bystander_gene?")
 
     tl.combine_masks(common_qdata, ignored_mask_names, to="ignored_gene")
     included_genes_mask = ~ut.get_v_numpy(common_qdata, "ignored_gene")

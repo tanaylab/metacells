@@ -151,12 +151,6 @@ def compute_var_var_knn_graph(
        each edge to be high-balanced-rank, the geomean of its outgoing rank has to be high in both
        nodes it connects.
 
-       .. note::
-
-            This can drastically reduce the degree of the nodes, since to survive an edge needs to
-            have been in the top ranks for both its nodes (as multiplying with zero drops the edge).
-            This is why the ``balanced_ranks_factor`` needs to be large-ish.
-
     3. Keeping only balanced ranks of up to ``k * k * balanced_ranks_factor`` (default:
        {balanced_ranks_factor}). This does a preliminary pruning of low-quality edges.
 

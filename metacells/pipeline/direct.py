@@ -16,7 +16,6 @@ import metacells.parameters as pr
 import metacells.tools as tl
 import metacells.utilities as ut
 
-from .collect import compute_effective_cell_sizes
 from .feature import extract_feature_data
 
 __all__ = [
@@ -101,7 +100,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     candidates_cooldown_phase: float = pr.cooldown_phase,
     candidates_min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
     candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
-    candidates_min_metacell_cells: Optional[int] = pr.min_metacell_cells,
+    candidates_min_metacell_cells: Optional[int] = pr.candidates_min_metacell_cells,
     candidates_max_split_min_cut_strength: Optional[float] = pr.max_split_min_cut_strength,
     candidates_min_cut_seed_cells: Optional[int] = pr.min_cut_seed_cells,
     must_complete_cover: bool = False,
@@ -230,12 +229,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        similarity between each pair of cells, using the
        ``cells_similarity_method`` (default: {cells_similarity_method}).
 
-    6. Invoke :py:func:`metacells.pipeline.collect.compute_effective_cell_sizes` using
-       ``max_cell_size`` (default: {max_cell_size}), ``max_cell_size_factor`` (default:
-       {max_cell_size_factor}) and ``cell_sizes`` (default: {cell_sizes}) to get the effective cell
-       sizes to use.
-
-    7. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a
+    6. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a
        K-Nearest-Neighbors graph, using the
        ``knn_balanced_ranks_factor`` (default: {knn_balanced_ranks_factor}),
        ``knn_incoming_degree_factor`` (default: {knn_incoming_degree_factor})
@@ -245,9 +239,11 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        chosen to be the median number of cells required to reach the target metacell size,
        but at least ``min_knn_k`` (default: {min_knn_k}).
 
-    8. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
+    7. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
        the candidate metacells, using the
        ``candidates_cell_seeds`` (default: {candidates_cell_seeds}),
+       ``max_cell_size`` (default: {max_cell_size}),
+       ``max_cell_size_factor`` (default: {max_cell_size_factor}),
        ``min_seed_size_quantile`` (default: {min_seed_size_quantile}),
        ``max_seed_size_quantile`` (default: {max_seed_size_quantile}),
        ``candidates_cooldown_pass`` (default: {candidates_cooldown_pass}),
@@ -262,7 +258,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        ``target_metacell_size`` (default: {target_metacell_size})
        using the effective cell sizes.
 
-    9. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
+    8. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
        :py:func:`metacells.tools.deviants.find_deviant_cells` to remove deviants from the candidate
        metacells, using the
        ``deviants_min_gene_fold_factor`` (default: {deviants_min_gene_fold_factor}),
@@ -271,7 +267,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        and
        ``deviants_max_cell_fraction`` (default: {deviants_max_cell_fraction}).
 
-    10. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
+    9. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
        :py:func:`metacells.tools.dissolve.dissolve_metacells` to dissolve small unconvincing
        metacells, using the same
        ``target_metacell_size`` (default: {target_metacell_size}),
@@ -305,20 +301,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     if fdata is None:
         raise ValueError("Empty feature data, giving up")
 
-    effective_cell_sizes, max_cell_size, _cell_scale_factors = compute_effective_cell_sizes(
-        adata, max_cell_size=max_cell_size, max_cell_size_factor=max_cell_size_factor, cell_sizes=cell_sizes
-    )
-    ut.log_calc("effective_cell_sizes", effective_cell_sizes, formatter=ut.sizes_description)
-
-    if max_cell_size is not None:
-        if candidates_min_metacell_cells is not None:
-            target_metacell_size = max(target_metacell_size, max_cell_size * candidates_min_metacell_cells)
-
-        if dissolve_min_metacell_cells is not None:
-            target_metacell_size = max(target_metacell_size, max_cell_size * dissolve_min_metacell_cells)
-
-        if candidates_min_metacell_cells is not None or dissolve_min_metacell_cells is not None:
-            ut.log_calc("target_metacell_size", target_metacell_size)
+    cell_sizes = ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
 
     data = ut.get_vo_proper(fdata, "downsampled", layout="row_major")
     data = ut.to_numpy_matrix(data, copy=True)
@@ -333,10 +316,10 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
         data = ut.log_data(data, base=2)
 
     if knn_k is None:
-        if effective_cell_sizes is None:
+        if cell_sizes is None:
             median_cell_size = 1.0
         else:
-            median_cell_size = float(np.median(effective_cell_sizes))
+            median_cell_size = float(np.median(cell_sizes))
         knn_k = int(round(target_metacell_size / median_cell_size))
         if min_knn_k is not None:
             knn_k = max(knn_k, min_knn_k)
@@ -364,8 +347,10 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
         tl.compute_candidate_metacells(
             fdata,
             target_metacell_size=target_metacell_size,
-            cell_sizes=effective_cell_sizes,
+            cell_sizes=cell_sizes,
             cell_seeds=candidates_cell_seeds,
+            max_cell_size=max_cell_size,
+            max_cell_size_factor=max_cell_size_factor,
             min_seed_size_quantile=min_seed_size_quantile,
             max_seed_size_quantile=max_seed_size_quantile,
             cooldown_pass=candidates_cooldown_pass,
@@ -421,7 +406,9 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
             adata,
             candidates=candidate_of_cells,
             target_metacell_size=target_metacell_size,
-            cell_sizes=effective_cell_sizes,
+            cell_sizes=cell_sizes,
+            max_cell_size=max_cell_size,
+            max_cell_size_factor=max_cell_size_factor,
             min_robust_size_factor=dissolve_min_robust_size_factor,
             min_convincing_size_factor=dissolve_min_convincing_size_factor,
             min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,

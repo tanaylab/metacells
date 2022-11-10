@@ -630,7 +630,7 @@ with a progress bar, as demonstrated below.
 
     Compute metacells for rare gene modules...
     Compute common metacells...
-    100%|█████████▉[02:20]
+    100%|█████████▉[02:11]
 
 
 This has written many annotations for each cell (observation), the most
@@ -651,10 +651,10 @@ observation is a metacell:
     set PBMC.metacells.var[clean_gene]: 22617 true (100%) out of 22617 bools
     set PBMC.metacells.var[lateral_gene]: 106 true (0.4687%) out of 22617 bools
     set PBMC.metacells.var[bystander_gene]: 0 true (0%) out of 22617 bools
-    set PBMC.metacells.var[pre_feature_gene]: 462 positive (2.043%) out of 22617 int32s
-    set PBMC.metacells.var[feature_gene]: 715 positive (3.161%) out of 22617 int32s
-    set PBMC.metacells.obs[pile]: 1549 int32s
-    set PBMC.metacells.obs[candidate]: 1549 int32s
+    set PBMC.metacells.var[pre_feature_gene]: 467 positive (2.065%) out of 22617 int32s
+    set PBMC.metacells.var[feature_gene]: 729 positive (3.223%) out of 22617 int32s
+    set PBMC.metacells.obs[pile]: 1606 int32s
+    set PBMC.metacells.obs[candidate]: 1606 int32s
 
 
 Visualizing the Metacells
@@ -676,17 +676,17 @@ single-threaded implementation.
 
 .. code::
 
-    set PBMC.metacells.var[top_feature_gene]: 715 true (3.161%) out of 22617 bools
-    set PBMC.metacells.obsp[obs_balanced_ranks]: 18762 nonzero (0.7819%) out of 2399401 elements
-    set PBMC.metacells.obsp[obs_pruned_ranks]: 6218 nonzero (0.2591%) out of 2399401 elements
-    set PBMC.metacells.obsp[obs_outgoing_weights]: 6218 nonzero (0.2591%) out of 2399401 elements
-    set PBMC.metacells.obsp[umap_distances]: csr_matrix 1549 X 1549 float32s (2397852 > 0)
+    set PBMC.metacells.var[top_feature_gene]: 729 true (3.223%) out of 22617 bools
+    set PBMC.metacells.obsp[obs_balanced_ranks]: 19428 nonzero (0.7532%) out of 2579236 elements
+    set PBMC.metacells.obsp[obs_pruned_ranks]: 6446 nonzero (0.2499%) out of 2579236 elements
+    set PBMC.metacells.obsp[obs_outgoing_weights]: 6446 nonzero (0.2499%) out of 2579236 elements
+    set PBMC.metacells.obsp[umap_distances]: csr_matrix 1606 X 1606 float32s (2577630 > 0)
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1356: RuntimeWarning: divide by zero encountered in power
       return 1.0 / (1.0 + a * x ** (2 * b))
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1780: UserWarning: using precomputed metric; inverse_transform will be unavailable
       warn("using precomputed metric; inverse_transform will be unavailable")
-    set PBMC.metacells.obs[umap_x]: 1549 float32s
-    set PBMC.metacells.obs[umap_y]: 1549 float32s
+    set PBMC.metacells.obs[umap_x]: 1606 float32s
+    set PBMC.metacells.obs[umap_y]: 1606 float32s
 
 
 This filled in ``umap_x`` and ``umap_y`` per-metacell (observation)
@@ -778,9 +778,7 @@ separate further data analysis pipeline:
 One option is to feed the metacells to
 `Seurat <https://satijalab.org/seurat/index.html>`__ for further
 analysis there, as demonstrated in the `seurat analysis
-vignette <Seurat_Analysis.html>`__. Note that to import the data into
-Seurat, we first need to delete the special ``__name__`` property, since
-for some reason it breaks the Seurat importer.
+vignette <Seurat_Analysis.html>`__.
 
 Another option is to compute additional metadata to prepare the data for
 analysis in `MCView <https://tanaylab.github.io/MCView>`__. This
@@ -796,10 +794,6 @@ Finally, one can feed the data to any other scRNA analysis pipeline.
 
 .. code:: python
 
-    name = metacells.uns['__name__']
-    del metacells.uns['__name__']
-    metacells.write('for_seurat.h5ad')
-    metacells.uns['__name__'] = name
     outliers = mc.pl.compute_for_mcview(adata=clean, gdata=metacells, random_seed=123456, compute_var_var_similarity=dict(top=50, bottom=50))
     outliers.write('outliers.h5ad')
     clean.write('cells.h5ad')
@@ -809,29 +803,29 @@ Finally, one can feed the data to any other scRNA analysis pipeline.
 
 .. code::
 
-    set PBMC.metacells.var[significant_gene]: 5226 true (23.11%) out of 22617 bools
-    set PBMC.metacells.var[top_feature_gene]: 713 true (3.152%) out of 22617 bools
-    set PBMC.metacells.obsp[obs_balanced_ranks]: 18924 nonzero (0.7887%) out of 2399401 elements
-    set PBMC.metacells.obsp[obs_pruned_ranks]: 6197 nonzero (0.2583%) out of 2399401 elements
-    set PBMC.metacells.obsp[obs_outgoing_weights]: 6197 nonzero (0.2583%) out of 2399401 elements
-    set PBMC.metacells.obsp[umap_distances]: csr_matrix 1549 X 1549 float32s (2397852 > 0)
+    set PBMC.metacells.var[significant_gene]: 5427 true (24%) out of 22617 bools
+    set PBMC.metacells.var[top_feature_gene]: 726 true (3.21%) out of 22617 bools
+    set PBMC.metacells.obsp[obs_balanced_ranks]: 19406 nonzero (0.7524%) out of 2579236 elements
+    set PBMC.metacells.obsp[obs_pruned_ranks]: 6419 nonzero (0.2489%) out of 2579236 elements
+    set PBMC.metacells.obsp[obs_outgoing_weights]: 6419 nonzero (0.2489%) out of 2579236 elements
+    set PBMC.metacells.obsp[umap_distances]: csr_matrix 1606 X 1606 float32s (2577630 > 0)
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1780: UserWarning: using precomputed metric; inverse_transform will be unavailable
       warn("using precomputed metric; inverse_transform will be unavailable")
-    set PBMC.metacells.obs[umap_x]: 1549 float32s
-    set PBMC.metacells.obs[umap_y]: 1549 float32s
-    set PBMC.metacells.var[top_feature_gene]: 713 true (3.152%) out of 22617 bools
-    set PBMC.metacells.obsp[obs_balanced_ranks]: 18924 nonzero (0.7887%) out of 2399401 elements
-    set PBMC.metacells.obsp[obs_pruned_ranks]: 6197 nonzero (0.2583%) out of 2399401 elements
-    set PBMC.metacells.obsp[obs_outgoing_weights]: 6197 nonzero (0.2583%) out of 2399401 elements
-    set PBMC.metacells.obsp[umap_distances]: csr_matrix 1549 X 1549 float32s (2397852 > 0)
+    set PBMC.metacells.obs[umap_x]: 1606 float32s
+    set PBMC.metacells.obs[umap_y]: 1606 float32s
+    set PBMC.metacells.var[top_feature_gene]: 726 true (3.21%) out of 22617 bools
+    set PBMC.metacells.obsp[obs_balanced_ranks]: 19406 nonzero (0.7524%) out of 2579236 elements
+    set PBMC.metacells.obsp[obs_pruned_ranks]: 6419 nonzero (0.2489%) out of 2579236 elements
+    set PBMC.metacells.obsp[obs_outgoing_weights]: 6419 nonzero (0.2489%) out of 2579236 elements
+    set PBMC.metacells.obsp[umap_distances]: csr_matrix 1606 X 1606 float32s (2577630 > 0)
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1780: UserWarning: using precomputed metric; inverse_transform will be unavailable
       warn("using precomputed metric; inverse_transform will be unavailable")
-    set PBMC.metacells.obs[umap_u]: 1549 float32s
-    set PBMC.metacells.obs[umap_v]: 1549 float32s
-    set PBMC.metacells.obs[umap_w]: 1549 float32s
+    set PBMC.metacells.obs[umap_u]: 1606 float32s
+    set PBMC.metacells.obs[umap_v]: 1606 float32s
+    set PBMC.metacells.obs[umap_w]: 1606 float32s
     set PBMC.clean.obs[most_similar]: 149825 int32s
-    set PBMC.metacells.layers[inner_fold]: csr_matrix 1549 X 22617 float32s (72784 > 0)
-    set PBMC.clean.layers[deviant_folds]: csr_matrix 149825 X 22617 float32s (6460 > 0)
-    set PBMC.metacells.varp[var_similarity]: csr_matrix 22617 X 22617 float32s (2242593 > 0)
-    set PBMC.clean.outliers.layers[most_similar_fold]: csr_matrix 1535 X 22617 float32s (3417132 > 0)
+    set PBMC.metacells.layers[inner_fold]: csr_matrix 1606 X 22617 float32s (74156 > 0)
+    set PBMC.clean.layers[deviant_folds]: csr_matrix 149825 X 22617 float32s (6533 > 0)
+    set PBMC.metacells.varp[var_similarity]: csr_matrix 22617 X 22617 float32s (2242989 > 0)
+    set PBMC.clean.outliers.layers[most_similar_fold]: csr_matrix 2227 X 22617 float32s (5024088 > 0)
 

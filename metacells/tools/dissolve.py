@@ -28,6 +28,8 @@ def dissolve_metacells(
     deviants: Optional[Union[str, ut.Vector]] = "cell_deviant_votes",
     target_metacell_size: float = pr.target_metacell_size,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.dissolve_cell_sizes,
+    max_cell_size: Optional[float] = pr.max_cell_size,
+    max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     min_metacell_cells: int = pr.dissolve_min_metacell_cells,
     min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
     min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
@@ -59,6 +61,10 @@ def dissolve_metacells(
     ``None``. Otherwise this is returned as a pandas data frame (indexed by the observation names).
 
     **Computation Parameters**
+
+    (For the step below, when computing a metacell size, use the results of
+    :py:func:`metacells.utilities.computation.capped_sizes` of the sizes of the cells in the metacell, using
+    ``max_cell_size`` (default: {max_cell_size}) and ``max_cell_size_factor`` (default: {max_cell_size_factor}).
 
     1. Mark all cells with non-zero ``deviants`` (default: {deviants}) as "outliers". This can be
        the name of a per-observation (cell) annotation, or an explicit boolean mask of cells, or a
@@ -122,6 +128,8 @@ def dissolve_metacells(
             candidate_index,
             data=data,
             cell_sizes=cell_sizes,
+            max_cell_size=max_cell_size,
+            max_cell_size_factor=max_cell_size_factor,
             fraction_of_genes=fraction_of_genes,
             min_metacell_cells=min_metacell_cells,
             min_robust_size=min_robust_size,
@@ -161,6 +169,8 @@ def _keep_candidate(  # pylint: disable=too-many-branches
     *,
     data: ut.ProperMatrix,
     cell_sizes: Optional[ut.NumpyVector],
+    max_cell_size: Optional[float],
+    max_cell_size_factor: Optional[float],
     fraction_of_genes: ut.NumpyVector,
     min_metacell_cells: int,
     min_robust_size: Optional[float],
@@ -175,7 +185,11 @@ def _keep_candidate(  # pylint: disable=too-many-branches
     if cell_sizes is None:
         candidate_total_size = candidate_cell_indices.size
     else:
-        candidate_total_size = np.sum(cell_sizes[candidate_cell_indices])
+        candidate_total_size = np.sum(
+            ut.capped_sizes(
+                max_size=max_cell_size, max_size_factor=max_cell_size_factor, sizes=cell_sizes[candidate_cell_indices]
+            )
+        )
 
     if candidate_cell_indices.size < min_metacell_cells:
         if ut.logging_calc():

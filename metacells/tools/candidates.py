@@ -36,6 +36,8 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many
     what: Union[str, ut.Matrix] = "obs_outgoing_weights",
     *,
     target_metacell_size: float,
+    max_cell_size: Optional[float] = pr.max_cell_size,
+    max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.candidates_cell_sizes,
     cell_seeds: Optional[Union[str, ut.Vector]] = None,
     min_seed_size_quantile: float = pr.min_seed_size_quantile,
@@ -78,6 +80,10 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many
 
     **Computation Parameters**
 
+    (For steps 4 and 6 below, when computing a community size, use the results of
+    :py:func:`metacells.utilities.computation.capped_sizes` of the sizes of the cells in the community, using
+    ``max_cell_size`` (default: {max_cell_size}) and ``max_cell_size_factor`` (default: {max_cell_size_factor}).
+
     1. We are trying to build metacells of ``target_metacell_size``, using the ``cell_sizes``
        (default: {cell_sizes}) to assign a size for each node (cell). This can be a string name of a
        per-observation annotation or a vector of values.
@@ -105,13 +111,13 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many
        smaller than ``min_cut_seed_cells``, then mark the cells in it as outliers, or if
        ``must_complete_cover`` is ``True``, skip the cut altogether.
 
-    5. If ``max_merge_size_factor`` (default: {max_merge_size_factor}) or ``min_metacell_cells``
+    6. If ``max_merge_size_factor`` (default: {max_merge_size_factor}) or ``min_metacell_cells``
        (default: {min_metacell_cells}) are specified, make outliers of cells of a community whose
        size is at most ``target_metacell_size * max_merge_size_factor`` or contains less cells and
        re-optimize, which will assign these cells to other metacells (resulting on one less
        metacell). We again apply the ``cooldown_phase`` every time we re-optimize.
 
-    6. Repeat the above steps until all metacells candidates are in the acceptable size range.
+    7. Repeat the above steps until all metacells candidates are in the acceptable size range.
     """
     edge_weights = ut.get_oo_proper(adata, what, layout="row_major")
     assert edge_weights.shape[0] == edge_weights.shape[1]
@@ -205,7 +211,10 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many
             incoming_edge_weights=incoming_edge_weights,
             community_of_nodes=community_of_nodes,
             node_sizes=node_sizes,
+            max_cell_size=max_cell_size,
+            max_cell_size_factor=max_cell_size_factor,
             target_metacell_size=target_metacell_size,
+            min_metacell_cells=min_metacell_cells,
             max_metacell_size=max_metacell_size,
             max_split_min_cut_strength=max_split_min_cut_strength,
             min_cut_seed_cells=min_cut_seed_cells,
@@ -224,6 +233,8 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many
         small_communities, small_nodes_count = _find_small_communities(
             community_of_nodes=community_of_nodes,
             node_sizes=node_sizes,
+            max_cell_size=max_cell_size,
+            max_cell_size_factor=max_cell_size_factor,
             min_metacell_size=min_metacell_size,
             min_metacell_cells=min_metacell_cells,
         )
@@ -277,6 +288,9 @@ def _optimize_split_communities(
     community_of_nodes: ut.NumpyVector,
     node_sizes: ut.NumpyVector,
     target_metacell_size: float,
+    max_cell_size: Optional[float],
+    max_cell_size_factor: Optional[float],
+    min_metacell_cells: Optional[int],
     max_metacell_size: Optional[float],
     max_split_min_cut_strength: Optional[float],
     min_cut_seed_cells: Optional[int],
@@ -311,7 +325,10 @@ def _optimize_split_communities(
             outgoing_edge_weights=outgoing_edge_weights,
             community_of_nodes=community_of_nodes,
             node_sizes=node_sizes,
+            max_cell_size=max_cell_size,
+            max_cell_size_factor=max_cell_size_factor,
             target_metacell_size=target_metacell_size,
+            min_metacell_cells=min_metacell_cells,
             max_metacell_size=max_metacell_size,
             max_split_min_cut_strength=max_split_min_cut_strength,
             min_cut_seed_cells=min_cut_seed_cells,
@@ -340,7 +357,10 @@ def _split_communities(
     outgoing_edge_weights: ut.CompressedMatrix,
     community_of_nodes: ut.NumpyVector,
     node_sizes: ut.NumpyVector,
+    max_cell_size: Optional[float],
+    max_cell_size_factor: Optional[float],
     target_metacell_size: float,
+    min_metacell_cells: Optional[int],
     max_metacell_size: Optional[float],
     max_split_min_cut_strength: Optional[float],
     min_cut_seed_cells: Optional[int],
@@ -363,9 +383,17 @@ def _split_communities(
     did_not_add = False
     for community_index in range(communities_count):
         community_mask = community_of_nodes == community_index
-        community_size = np.sum(node_sizes[community_mask])
+        community_size = np.sum(
+            ut.capped_sizes(
+                max_size=max_cell_size, max_size_factor=max_cell_size_factor, sizes=node_sizes[community_mask]
+            )
+        )
 
-        if max_metacell_size is not None and community_size > max_metacell_size:
+        if (
+            max_metacell_size is not None
+            and community_size > max_metacell_size
+            and (min_metacell_cells is None or np.sum(community_mask) >= 2 * min_metacell_cells)
+        ):
             ut.logger().debug(
                 "community: %s nodes: %s size: %s is too large", community_index, np.sum(community_mask), community_size
             )
@@ -400,7 +428,7 @@ def _split_communities(
                 "community: %s nodes: %s size: %s is too divided",
                 community_index,
                 np.sum(community_mask),
-                np.sum(node_sizes[community_mask]),
+                community_size,
             )
             if did_split:
                 split_communities_count += 1
@@ -467,7 +495,7 @@ def _min_cut_community(
 
     community_indices = np.where(community_mask)[0]
 
-    if min_cut_seed_cells is not None:
+    if cut_strength > 0 and min_cut_seed_cells is not None:
         if len(cut.partition[0]) < len(cut.partition[1]):
             small_partition = 0
         else:
@@ -490,6 +518,8 @@ def _find_small_communities(
     *,
     community_of_nodes: ut.NumpyVector,
     node_sizes: ut.NumpyVector,
+    max_cell_size: Optional[float],
+    max_cell_size_factor: Optional[float],
     min_metacell_size: Optional[float],
     min_metacell_cells: Optional[int],
 ) -> Tuple[Set[int], int]:
@@ -506,7 +536,11 @@ def _find_small_communities(
     for community_index in range(communities_count):
         community_mask = community_of_nodes == community_index
         community_nodes_count = np.sum(community_mask)
-        community_size = np.sum(node_sizes[community_mask])
+        community_size = np.sum(
+            ut.capped_sizes(
+                max_size=max_cell_size, max_size_factor=max_cell_size_factor, sizes=node_sizes[community_mask]
+            )
+        )
 
         if min_metacell_cells is not None and community_nodes_count < min_metacell_cells:
             ut.logger().debug("community: %s nodes: %s is too few", community_index, community_nodes_count)
