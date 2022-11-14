@@ -190,7 +190,7 @@ def analyze_clean_cells(
         if excluded_genes is not None:
             excluded_adata = excluded_genes[0]
 
-    if excluded_genes is None:
+    if excluded_adata is None:
         max_excluded_genes_fraction = None
     else:
         max_excluded_genes_fraction = properly_sampled_max_excluded_genes_fraction
