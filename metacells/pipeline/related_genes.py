@@ -54,7 +54,7 @@ def relate_genes(
     """
     Detect coarse relations between genes based on ``what`` (default: {what}) data.
 
-    This is a quick-and-dirty way to group genes together and shouldn't only be used as a starting
+    This is a quick-and-dirty way to group genes together and should only be used as a starting
     point for more precise forms of gene relationship analysis.
 
     **Input**
