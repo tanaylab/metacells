@@ -274,9 +274,9 @@ related_genes_similarity_method: str = "repeated_pearson"
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
 related_genes_cluster_method: str = "ward"
 
-#: The minimal number of genes in a related gene module. See
+#: The target number of genes in a related gene module. See
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
-related_min_genes_of_modules: int = 16
+related_target_genes_of_modules: int = 16
 
 #: The minimal samples to use for downsampling the cells for computing related genes. See
 #: :py:const:`downsample_min_samples`,

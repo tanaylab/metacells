@@ -28,6 +28,7 @@ def collect_metacells(
     max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     name: str = "metacells",
+    prefix: Optional[str] = "M",
     top_level: bool = True,
 ) -> AnnData:
     """
@@ -97,6 +98,9 @@ def collect_metacells(
        metacells.
 
     4. Pass all relevant per-gene and per-cell annotations to the result.
+
+    5. Set the ``metacell_name`` property of each cell in ``adata`` to the name of the group (metacell) it belongs to.
+       Cells which do not belong to any metacell are assigned the metacell name ``Outliers``.
     """
     cell_sizes = ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
     cell_scale_factors = _cell_scale_factors(
@@ -107,10 +111,17 @@ def collect_metacells(
         data = ut.get_vo_proper(adata, what, layout="row_major")
         what = ut.scale_by(data, cell_scale_factors, by="row")
 
-    mdata = tl.group_obs_data(adata, what, groups="metacell", name=name)
+    mdata = tl.group_obs_data(adata, what, groups="metacell", name=name, prefix=prefix)
     assert mdata is not None
     if top_level:
         ut.top_level(mdata)
+
+    metacell_names = np.array(["Outliers"] + list(mdata.obs_names), dtype="str")
+    metacell_of_cells = ut.get_o_numpy(adata, "metacell").copy()
+    metacell_of_cells[metacell_of_cells < 0] = -1
+    metacell_of_cells += 1
+    metacell_name_of_cells = metacell_names[metacell_of_cells]
+    ut.set_o_data(adata, "metacell_name", metacell_name_of_cells)
 
     for annotation_name in (
         "excluded_gene",

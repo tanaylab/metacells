@@ -209,6 +209,7 @@ def _compute_elements_similarity(  # pylint: disable=too-many-branches
 
     if top is not None:
         if bottom is not None:
+            assert top + bottom <= similarity.shape[0]
             similarity = top_similarity + bottom_similarity  # type: ignore
         else:
             similarity = top_similarity

@@ -4,7 +4,6 @@ Group
 """
 
 from hashlib import shake_128
-from textwrap import wrap
 from typing import Any
 from typing import Callable
 from typing import List
@@ -30,6 +29,7 @@ def group_obs_data(
     *,
     groups: Union[str, ut.Vector],
     name: Optional[str] = None,
+    prefix: Optional[str] = None,
 ) -> Optional[AnnData]:
     """
     Compute new data which has the ``what`` (default: {what}) sum of the observations (cells) for
@@ -57,8 +57,9 @@ def group_obs_data(
 
     The new data will contain only:
 
-    * A single observation for each group. The name of each observation will be 128 bit of the ``shake_128`` hash of the
-      names of the grouped members, in upper case hexadecimal (32 characters).
+    * A single observation for each group. The name of each observation will be the optional ``prefix``
+      (default: {prefix}), followed by the group's index, followed by ``.`` and a 2-digit checksum of
+      the grouped members.
 
     * An ``X`` member holding the summed-per-group data.
 
@@ -78,7 +79,7 @@ def group_obs_data(
 
     gdata = AnnData(summed_data)
     gdata.var_names = adata.var_names
-    gdata.obs_names = _obs_names(ut.to_numpy_vector(adata.obs_names), group_of_cells)
+    gdata.obs_names = _obs_names(prefix or "", ut.to_numpy_vector(adata.obs_names), group_of_cells)
 
     ut.set_name(gdata, ut.get_name(adata))
     ut.set_name(gdata, name)
@@ -88,16 +89,18 @@ def group_obs_data(
     return gdata
 
 
-def _obs_names(name_of_members: ut.NumpyVector, group_of_members: ut.NumpyVector) -> List[str]:
+def _obs_names(prefix: str, name_of_members: ut.NumpyVector, group_of_members: ut.NumpyVector) -> List[str]:
     groups_count = np.max(group_of_members) + 1
     name_of_groups: List[str] = []
+    prefix = prefix or ""
     for group_index in range(groups_count):
         groups_mask = group_of_members == group_index
         assert np.any(groups_mask)
         hasher = shake_128()
         for member_name in name_of_members[groups_mask]:
             hasher.update(member_name.encode("utf8"))
-        name_of_groups.append(".".join(wrap(hasher.hexdigest(16).upper(), 4)))  # pylint: disable=too-many-function-args
+        checksum = int(hasher.hexdigest(16), 16) % 10  # pylint: disable=too-many-function-args
+        name_of_groups.append(f"{prefix}{group_index}.{checksum:02d}")
     return name_of_groups
 
 

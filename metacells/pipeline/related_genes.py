@@ -48,7 +48,7 @@ def relate_genes(
     bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     genes_similarity_method: str = pr.related_genes_similarity_method,
     genes_cluster_method: str = pr.related_genes_cluster_method,
-    min_genes_of_modules: int = pr.related_min_genes_of_modules,
+    target_genes_of_modules: int = pr.related_target_genes_of_modules,
     random_seed: int = 0,
 ) -> None:
     """
@@ -87,8 +87,9 @@ def relate_genes(
     4. Create a hierarchical clustering of the candidate genes using the ``genes_cluster_method``
        (default: {genes_cluster_method}).
 
-    5. Identify gene modules in the hierarchical clustering which contain at least
-       ``min_genes_of_modules`` genes.
+    5. Identify gene modules in the hierarchical clustering by bottom-up combining genes until
+       we have at least ``target_genes_of_modules`` (default: {target_genes_of_modules}). Note
+       that this may leave modules with a smaller number of genes.
     """
     if max_sampled_cells < adata.n_obs:
         np.random.seed(random_seed)
@@ -122,7 +123,7 @@ def relate_genes(
     similarity = ut.to_layout(ut.to_numpy_matrix(frame), layout="row_major")
 
     linkage = _cluster_genes(similarity, genes_cluster_method)
-    clusters = _linkage_to_clusters(linkage, min_genes_of_modules, fdata.n_vars)
+    clusters = _linkage_to_clusters(linkage, target_genes_of_modules, fdata.n_vars)
 
     cluster_of_genes = pd.Series(np.full(adata.n_vars, -1, dtype="int32"), index=adata.var_names)
     for cluster_index, gene_indices in enumerate(clusters):
@@ -173,10 +174,10 @@ def _linkage_to_clusters(
         left_entries = entries_of_cluster.get(left_index)
         right_entries = entries_of_cluster.get(right_index)
 
-        if left_entries is None or len(left_entries) > min_entries_of_modules:
+        if left_entries is None or len(left_entries) >= min_entries_of_modules:
             continue
 
-        if right_entries is None or len(right_entries) > min_entries_of_modules:
+        if right_entries is None or len(right_entries) >= min_entries_of_modules:
             continue
 
         entries_of_cluster[link_index] = sorted(left_entries + right_entries)

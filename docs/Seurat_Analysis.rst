@@ -89,7 +89,7 @@ unstructured annotations).
 .. code::
 
     An object of class Seurat
-    22617 features across 1606 samples within 1 assay
+    22617 features across 1622 samples within 1 assay
     Active assay: RNA (22617 features, 0 variable features)
 
 

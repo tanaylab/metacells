@@ -396,7 +396,7 @@ to matter.
 
 .. code::
 
-    set PBMC.clean.var[related_genes_module]: 21549 outliers (95.28%) out of 22617 int32 elements with 73 groups with mean size 14.63
+    set PBMC.clean.var[related_genes_module]: 21549 outliers (95.28%) out of 22617 int32 elements with 78 groups with mean size 13.69
     set PBMC.clean.varp[related_genes_similarity]: csr_matrix 22617 X 22617 float32s (1140624 > 0)
 
 
@@ -418,7 +418,7 @@ at the modules containing already suspect genes:
 
 .. code::
 
-    [ 4  5 14 19 21 35 42 47 52 54 65 68]
+    [ 6  7 18 26 28 40 47 52 56 58 59 71]
 
 
 For each such module, let us look at the genes it contains and the
@@ -513,8 +513,8 @@ gives us a total of 106 initially lateral genes:
 
 .. code::
 
-    106
-    AGPAT2 C19orf38 CALM2 CAMK1 CD68 CEBPB CFD CFP CLIC1 COTL1 CPPED1 CSF3R CTSS DYNLL1 FCER1A FCN1 FOS GPX1 GSN GSTO1 GSTP1 H1FX HCK HIST1H1C HIST1H1D HIST1H4C HSP90AB1 HSPA1A ICAM4 IFI16 IFI27 IFI27L1 IFI27L2 IFI30 IFI35 IFI44 IFI44L IFI6 IFIH1 IFIT1 IFIT1B IFIT2 IFIT3 IFIT5 IFITM1 IFITM10 IFITM2 IFITM3 IFITM5 IGSF6 ISG15 JUN LGALS3 LGALS9 LILRB2 LRRC25 LXN MCM10 MCM2 MCM3 MCM3AP MCM3AP-AS1 MCM4 MCM5 MCM6 MCM7 MCM8 MCM9 MKI67 MS4A7 MTPN NCF2 PCNA PHTF1 PILRA PLAUR PSAP RGS2 RP11-290F20.3 RPL39 RPS27 S100A11 SAT1 SERPINA1 SERPINB1 SLC16A3 SMC1A SMC1B SMC2 SMC3 SMC4 SMC5 SMC5-AS1 SMC6 SMCO4 STMN1 STXBP2 TESC TMEM176A TMEM176B TOP2A TSPAN2 TYMP VIM WARS ZNF593
+    88
+    BBIP1 BEND5 C19orf38 CD200 CEP135 CFP COTL1 CTSS CUL2 DAAM1 ENDOD1 FAM50B FBXL3 FOS HCK HIST1H1D HSP90AB1 HSPA1A IFI16 IFI27 IFI27L1 IFI27L2 IFI30 IFI35 IFI44 IFI44L IFI6 IFIH1 IFIT1 IFIT1B IFIT2 IFIT3 IFIT5 IFITM1 IFITM10 IFITM2 IFITM3 IFITM5 IGJ IGSF6 INO80D ISG15 JUN LARP4 MCM10 MCM2 MCM3 MCM3AP MCM3AP-AS1 MCM4 MCM5 MCM6 MCM7 MCM8 MCM9 MKI67 MZB1 NCF2 PCF11 PCNA PDE7A PSAP RGS2 RP1-313I6.12 RPA1 SAT1 SLC16A3 SMC1A SMC1B SMC2 SMC3 SMC4 SMC5 SMC5-AS1 SMC6 SMCO4 STXBP2 SYNJ2BP TAF9B TESC TFB1M TMEM156 TOP2A TYMP UBE2Z WARS ZBTB24 ZNF680
 
 
 Computing the metacells
@@ -630,7 +630,7 @@ with a progress bar, as demonstrated below.
 
     Compute metacells for rare gene modules...
     Compute common metacells...
-    100%|█████████▉[02:11]
+    100%|██████████[02:21]
 
 
 This has written many annotations for each cell (observation), the most
@@ -647,14 +647,15 @@ observation is a metacell:
 
 .. code::
 
+    set PBMC.clean.obs[metacell_name]: 149825 <U8s
     set PBMC.metacells.var[excluded_gene]: 0 true (0%) out of 22617 bools
     set PBMC.metacells.var[clean_gene]: 22617 true (100%) out of 22617 bools
-    set PBMC.metacells.var[lateral_gene]: 106 true (0.4687%) out of 22617 bools
+    set PBMC.metacells.var[lateral_gene]: 88 true (0.3891%) out of 22617 bools
     set PBMC.metacells.var[bystander_gene]: 0 true (0%) out of 22617 bools
-    set PBMC.metacells.var[pre_feature_gene]: 467 positive (2.065%) out of 22617 int32s
-    set PBMC.metacells.var[feature_gene]: 729 positive (3.223%) out of 22617 int32s
-    set PBMC.metacells.obs[pile]: 1606 int32s
-    set PBMC.metacells.obs[candidate]: 1606 int32s
+    set PBMC.metacells.var[pre_feature_gene]: 471 positive (2.083%) out of 22617 int32s
+    set PBMC.metacells.var[feature_gene]: 719 positive (3.179%) out of 22617 int32s
+    set PBMC.metacells.obs[pile]: 1622 int32s
+    set PBMC.metacells.obs[candidate]: 1622 int32s
 
 
 Visualizing the Metacells
@@ -676,17 +677,17 @@ single-threaded implementation.
 
 .. code::
 
-    set PBMC.metacells.var[top_feature_gene]: 729 true (3.223%) out of 22617 bools
-    set PBMC.metacells.obsp[obs_balanced_ranks]: 19428 nonzero (0.7532%) out of 2579236 elements
-    set PBMC.metacells.obsp[obs_pruned_ranks]: 6446 nonzero (0.2499%) out of 2579236 elements
-    set PBMC.metacells.obsp[obs_outgoing_weights]: 6446 nonzero (0.2499%) out of 2579236 elements
-    set PBMC.metacells.obsp[umap_distances]: csr_matrix 1606 X 1606 float32s (2577630 > 0)
+    set PBMC.metacells.var[top_feature_gene]: 719 true (3.179%) out of 22617 bools
+    set PBMC.metacells.obsp[obs_balanced_ranks]: 19575 nonzero (0.744%) out of 2630884 elements
+    set PBMC.metacells.obsp[obs_pruned_ranks]: 6500 nonzero (0.2471%) out of 2630884 elements
+    set PBMC.metacells.obsp[obs_outgoing_weights]: 6500 nonzero (0.2471%) out of 2630884 elements
+    set PBMC.metacells.obsp[umap_distances]: csr_matrix 1622 X 1622 float32s (2629262 > 0)
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1356: RuntimeWarning: divide by zero encountered in power
       return 1.0 / (1.0 + a * x ** (2 * b))
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1780: UserWarning: using precomputed metric; inverse_transform will be unavailable
       warn("using precomputed metric; inverse_transform will be unavailable")
-    set PBMC.metacells.obs[umap_x]: 1606 float32s
-    set PBMC.metacells.obs[umap_y]: 1606 float32s
+    set PBMC.metacells.obs[umap_x]: 1622 float32s
+    set PBMC.metacells.obs[umap_y]: 1622 float32s
 
 
 This filled in ``umap_x`` and ``umap_y`` per-metacell (observation)
@@ -803,29 +804,29 @@ Finally, one can feed the data to any other scRNA analysis pipeline.
 
 .. code::
 
-    set PBMC.metacells.var[significant_gene]: 5427 true (24%) out of 22617 bools
-    set PBMC.metacells.var[top_feature_gene]: 726 true (3.21%) out of 22617 bools
-    set PBMC.metacells.obsp[obs_balanced_ranks]: 19406 nonzero (0.7524%) out of 2579236 elements
-    set PBMC.metacells.obsp[obs_pruned_ranks]: 6419 nonzero (0.2489%) out of 2579236 elements
-    set PBMC.metacells.obsp[obs_outgoing_weights]: 6419 nonzero (0.2489%) out of 2579236 elements
-    set PBMC.metacells.obsp[umap_distances]: csr_matrix 1606 X 1606 float32s (2577630 > 0)
+    set PBMC.metacells.var[significant_gene]: 5459 true (24.14%) out of 22617 bools
+    set PBMC.metacells.var[top_feature_gene]: 716 true (3.166%) out of 22617 bools
+    set PBMC.metacells.obsp[obs_balanced_ranks]: 19537 nonzero (0.7426%) out of 2630884 elements
+    set PBMC.metacells.obsp[obs_pruned_ranks]: 6505 nonzero (0.2473%) out of 2630884 elements
+    set PBMC.metacells.obsp[obs_outgoing_weights]: 6505 nonzero (0.2473%) out of 2630884 elements
+    set PBMC.metacells.obsp[umap_distances]: csr_matrix 1622 X 1622 float32s (2629262 > 0)
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1780: UserWarning: using precomputed metric; inverse_transform will be unavailable
       warn("using precomputed metric; inverse_transform will be unavailable")
-    set PBMC.metacells.obs[umap_x]: 1606 float32s
-    set PBMC.metacells.obs[umap_y]: 1606 float32s
-    set PBMC.metacells.var[top_feature_gene]: 726 true (3.21%) out of 22617 bools
-    set PBMC.metacells.obsp[obs_balanced_ranks]: 19406 nonzero (0.7524%) out of 2579236 elements
-    set PBMC.metacells.obsp[obs_pruned_ranks]: 6419 nonzero (0.2489%) out of 2579236 elements
-    set PBMC.metacells.obsp[obs_outgoing_weights]: 6419 nonzero (0.2489%) out of 2579236 elements
-    set PBMC.metacells.obsp[umap_distances]: csr_matrix 1606 X 1606 float32s (2577630 > 0)
+    set PBMC.metacells.obs[umap_x]: 1622 float32s
+    set PBMC.metacells.obs[umap_y]: 1622 float32s
+    set PBMC.metacells.var[top_feature_gene]: 716 true (3.166%) out of 22617 bools
+    set PBMC.metacells.obsp[obs_balanced_ranks]: 19537 nonzero (0.7426%) out of 2630884 elements
+    set PBMC.metacells.obsp[obs_pruned_ranks]: 6505 nonzero (0.2473%) out of 2630884 elements
+    set PBMC.metacells.obsp[obs_outgoing_weights]: 6505 nonzero (0.2473%) out of 2630884 elements
+    set PBMC.metacells.obsp[umap_distances]: csr_matrix 1622 X 1622 float32s (2629262 > 0)
     /home/obk/anaconda3/envs/py3.7/lib/python3.7/site-packages/umap/umap_.py:1780: UserWarning: using precomputed metric; inverse_transform will be unavailable
       warn("using precomputed metric; inverse_transform will be unavailable")
-    set PBMC.metacells.obs[umap_u]: 1606 float32s
-    set PBMC.metacells.obs[umap_v]: 1606 float32s
-    set PBMC.metacells.obs[umap_w]: 1606 float32s
+    set PBMC.metacells.obs[umap_u]: 1622 float32s
+    set PBMC.metacells.obs[umap_v]: 1622 float32s
+    set PBMC.metacells.obs[umap_w]: 1622 float32s
     set PBMC.clean.obs[most_similar]: 149825 int32s
-    set PBMC.metacells.layers[inner_fold]: csr_matrix 1606 X 22617 float32s (74156 > 0)
-    set PBMC.clean.layers[deviant_folds]: csr_matrix 149825 X 22617 float32s (6533 > 0)
-    set PBMC.metacells.varp[var_similarity]: csr_matrix 22617 X 22617 float32s (2242989 > 0)
-    set PBMC.clean.outliers.layers[most_similar_fold]: csr_matrix 2227 X 22617 float32s (5024088 > 0)
+    set PBMC.metacells.layers[inner_fold]: csr_matrix 1622 X 22617 float32s (77052 > 0)
+    set PBMC.clean.layers[deviant_folds]: csr_matrix 149825 X 22617 float32s (6288 > 0)
+    set PBMC.metacells.varp[var_similarity]: csr_matrix 22617 X 22617 float32s (2242791 > 0)
+    set PBMC.clean.outliers.layers[most_similar_fold]: csr_matrix 1813 X 22617 float32s (4179783 > 0)
 
