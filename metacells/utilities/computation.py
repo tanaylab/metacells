@@ -92,6 +92,7 @@ __all__ = [
     "bincount_vector",
     "most_frequent",
     "highest_weight",
+    "weighted_mean",
     "fraction_of_grouped",
     "downsample_matrix",
     "downsample_vector",
@@ -1621,6 +1622,8 @@ def bincount_vector(
 def most_frequent(vector: utt.Vector) -> Any:
     """
     Return the most frequent value in a ``vector``.
+
+    This is useful for :py:func:`metacells.tools.project.convey_obs_to_group`.
     """
     unique, positions = np.unique(utt.to_numpy_vector(vector), return_inverse=True)
     counts = np.bincount(positions)
@@ -1631,12 +1634,24 @@ def most_frequent(vector: utt.Vector) -> Any:
 @utm.timed_call()
 def highest_weight(weights: utt.Vector, vector: utt.Vector) -> Any:
     """
-    Return the value with the highest total ``weight`` in a ``vector``.
+    Return the value with the highest total ``weights`` in a ``vector``.
+
+    This is useful for :py:func:`metacells.tools.project.project_atlas_to_query`.
     """
     unique, positions = np.unique(utt.to_numpy_vector(vector), return_inverse=True)
     counts = np.bincount(positions, weights=weights)
     maxpos = np.argmax(counts)
     return unique[maxpos]
+
+
+@utm.timed_call()
+def weighted_mean(weights: utt.Vector, vector: utt.Vector) -> Any:
+    """
+    Return the weighted mean (using the ``weights`` and the values in the ``vector``).
+
+    This is useful for :py:func:`metacells.tools.project.project_atlas_to_query`.
+    """
+    return np.average(vector, weights=weights)
 
 
 @utm.timed_call()
