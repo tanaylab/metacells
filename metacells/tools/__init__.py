@@ -13,6 +13,7 @@ All the functions included here are exported under ``metacells.tl``.
 """
 
 from .apply import *
+from .bursty_lonely import *
 from .candidates import *
 from .convey import *
 from .deviants import *
@@ -26,7 +27,6 @@ from .knn_graph import *
 from .layout import *
 from .mask import *
 from .named import *
-from .noisy_lonely import *
 from .project import *
 from .properly_sampled import *
 from .quality import *

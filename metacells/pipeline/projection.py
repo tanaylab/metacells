@@ -673,7 +673,7 @@ def _renormalize_query(
         gene_deviant_votes=0,
         high_relative_variance_gene=False,
         high_total_gene=False,
-        noisy_lonely_gene=False,
+        bursty_lonely_gene=False,
         pre_feature_gene=False,
         pre_gene_deviant_votes=0,
         pre_high_relative_variance_gene=False,

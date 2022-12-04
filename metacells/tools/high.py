@@ -265,7 +265,7 @@ def find_high_normalized_variance_genes(
     The normalized variance measures the variance / mean of each gene. See
     :py:func:`metacells.utilities.computation.normalized_variance_per` for details.
 
-    Genes with a high normalized variance are "noisy", that is, have significantly different
+    Genes with a high normalized variance are "bursty", that is, have significantly different
     expression level in different cells.
 
     **Input**

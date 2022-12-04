@@ -32,7 +32,7 @@ significant_gene_normalized_variance: float = 2 ** 2.5
 significant_gene_relative_variance: float = 0.1
 
 #: The generic minimal "significant" gene similarity. See
-#: :py:const:`noisy_lonely_max_gene_similarity`
+#: :py:const:`bursty_lonely_max_gene_similarity`
 #: and
 #: :py:const:`rare_min_module_correlation`.
 significant_gene_similarity: float = 0.1
@@ -61,7 +61,7 @@ abs_folds: bool = True
 significant_value: int = 7
 
 #: The generic minimal samples to use for downsampling the cells for some purpose. See
-#: :py:const:`noisy_lonely_downsample_min_samples`,
+#: :py:const:`bursty_lonely_downsample_min_samples`,
 #: :py:const:`feature_downsample_min_samples`,
 #: and
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
@@ -69,7 +69,7 @@ downsample_min_samples: int = 750
 
 #: The generic minimal quantile of the cells total size to use for downsampling the cells for some
 #: purpose. See
-#: :py:const:`noisy_lonely_downsample_min_cell_quantile`,
+#: :py:const:`bursty_lonely_downsample_min_cell_quantile`,
 #: :py:const:`feature_downsample_min_cell_quantile`,
 #: and
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
@@ -77,7 +77,7 @@ downsample_min_cell_quantile: float = 0.05
 
 #: The generic maximal quantile of the cells total size to use for downsampling the cells for some
 #: purpose. See
-#: :py:const:`noisy_lonely_downsample_max_cell_quantile`,
+#: :py:const:`bursty_lonely_downsample_max_cell_quantile`,
 #: :py:const:`feature_downsample_max_cell_quantile`,
 #: and
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
@@ -325,54 +325,54 @@ related_min_gene_total: int = 50
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
 related_min_gene_top3: int = 1
 
-#: The number of randomly selected cells to use for computing "noisy lonely" genes. See
-#: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes`
+#: The number of randomly selected cells to use for computing "bursty lonely" genes. See
+#: :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes`
 #: and
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
-noisy_lonely_max_sampled_cells: int = 10000
+bursty_lonely_max_sampled_cells: int = 10000
 
-#: The minimal samples to use for downsampling the cells for computing "noisy lonely" genes. See
+#: The minimal samples to use for downsampling the cells for computing "bursty lonely" genes. See
 #: :py:const:`downsample_min_cell_quantile`,
-#: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes`,
+#: :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes`,
 #: and
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
-noisy_lonely_downsample_min_samples: int = downsample_min_samples
+bursty_lonely_downsample_min_samples: int = downsample_min_samples
 
 #: The minimal quantile of the cells total size to use for downsampling the cells for computing
-#: "noisy lonely" genes. See
+#: "bursty lonely" genes. See
 #: :py:const:`downsample_min_cell_quantile`,
-#: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes`,
+#: :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes`,
 #: and
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
-noisy_lonely_downsample_min_cell_quantile: float = downsample_min_cell_quantile
+bursty_lonely_downsample_min_cell_quantile: float = downsample_min_cell_quantile
 
 #: The maximal quantile of the cells total size to use for downsampling the cells for computing
-#: "noisy lonely" genes. See
+#: "bursty lonely" genes. See
 #: :py:const:`downsample_min_cell_quantile`,
-#: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes`,
+#: :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes`,
 #: and
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
-noisy_lonely_downsample_max_cell_quantile: float = downsample_max_cell_quantile
+bursty_lonely_downsample_max_cell_quantile: float = downsample_max_cell_quantile
 
 #: The minimal total UMIs in the downsamples selected cells of a gene to be considered when
 #: computing "lonely" genes. See
-#: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes` and
+#: :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes` and
 #: :py:func:`metacells.tools.high.find_high_total_genes`.
-noisy_lonely_min_gene_total: int = 100
+bursty_lonely_min_gene_total: int = 100
 
-#: The minimal normalized variance of a gene to be considered "noisy". See
+#: The minimal normalized variance of a gene to be considered "bursty". See
 #: :py:const:`significant_gene_normalized_variance`,
-#: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes`
+#: :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes`
 #: and
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
-noisy_lonely_min_gene_normalized_variance: float = significant_gene_normalized_variance
+bursty_lonely_min_gene_normalized_variance: float = significant_gene_normalized_variance
 
 #: The maximal similarity between a gene and another gene to be considered "lonely". See
 #: :py:const:`significant_gene_similarity`,
-#: :py:func:`metacells.tools.noisy_lonely.find_noisy_lonely_genes`
+#: :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes`
 #: and
 #: :py:func:`metacells.pipeline.clean.extract_clean_data`.
-noisy_lonely_max_gene_similarity: float = significant_gene_similarity
+bursty_lonely_max_gene_similarity: float = significant_gene_similarity
 
 #: The maximal number of candidate rare genes. See
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`

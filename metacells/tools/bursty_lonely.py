@@ -18,32 +18,32 @@ from metacells.tools.high import find_high_total_genes
 from metacells.tools.similarity import compute_var_var_similarity
 
 __all__ = [
-    "find_noisy_lonely_genes",
+    "find_bursty_lonely_genes",
 ]
 
 
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
+def find_bursty_lonely_genes(  # pylint: disable=too-many-statements
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
     excluded_genes_mask: Optional[str] = None,
-    max_sampled_cells: int = pr.noisy_lonely_max_sampled_cells,
-    downsample_min_samples: int = pr.noisy_lonely_downsample_min_samples,
-    downsample_min_cell_quantile: float = pr.noisy_lonely_downsample_max_cell_quantile,
-    downsample_max_cell_quantile: float = pr.noisy_lonely_downsample_min_cell_quantile,
-    min_gene_total: int = pr.noisy_lonely_min_gene_total,
-    min_gene_normalized_variance: float = pr.noisy_lonely_min_gene_normalized_variance,
-    max_gene_similarity: float = pr.noisy_lonely_max_gene_similarity,
+    max_sampled_cells: int = pr.bursty_lonely_max_sampled_cells,
+    downsample_min_samples: int = pr.bursty_lonely_downsample_min_samples,
+    downsample_min_cell_quantile: float = pr.bursty_lonely_downsample_max_cell_quantile,
+    downsample_max_cell_quantile: float = pr.bursty_lonely_downsample_min_cell_quantile,
+    min_gene_total: int = pr.bursty_lonely_min_gene_total,
+    min_gene_normalized_variance: float = pr.bursty_lonely_min_gene_normalized_variance,
+    max_gene_similarity: float = pr.bursty_lonely_max_gene_similarity,
     random_seed: int = pr.random_seed,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     """
-    Detect "noisy lonely" genes based on ``what`` (default: {what}) data.
+    Detect "bursty lonely" genes based on ``what`` (default: {what}) data.
 
-    Return the indices of genes which are "noisy" (have high variance compared to their mean) and
+    Return the indices of genes which are "bursty" (have high variance compared to their mean) and
     also "lonely" (have low correlation with all other genes). Such genes should be excluded since
     they will never meaningfully help us compute groups, and will actively cause profiles to be
     considered "deviants".
@@ -51,7 +51,7 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
     Noisy genes have high expression and variance. Lonely genes have no (or low) correlations with
     any other gene. Noisy lonely genes tend to throw off clustering algorithms. In general, such
     algorithms try to group together cells with the same overall biological state. Since the genes
-    are lonely, they don't contribute towards this goal. Since they are noisy, they actively hamper
+    are lonely, they don't contribute towards this goal. Since they are bursty, they actively hamper
     this, because they make cells which are otherwise similar appear different (just for this lonely
     gene).
 
@@ -67,8 +67,8 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
     **Returns**
 
     Variable (Gene) Annotations
-        ``noisy_lonely_genes``
-            A boolean mask indicating whether each gene was found to be a "noisy lonely" gene.
+        ``bursty_lonely_genes``
+            A boolean mask indicating whether each gene was found to be a "bursty lonely" gene.
 
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
@@ -87,13 +87,13 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
        {downsample_min_cell_quantile}), ``downsample_max_cell_quantile`` (default:
        {downsample_max_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
 
-    4. Find "noisy" genes which have a total number of UMIs of at least ``min_gene_total`` (default:
+    4. Find "bursty" genes which have a total number of UMIs of at least ``min_gene_total`` (default:
        {min_gene_total}) and a normalized variance of at least ``min_gene_normalized_variance``
        (default: ``min_gene_normalized_variance``).
 
-    5. Cross-correlate the noisy genes.
+    5. Cross-correlate the bursty genes.
 
-    6. Find the noisy "lonely" genes whose maximal correlation is at most
+    6. Find the bursty "lonely" genes whose maximal correlation is at most
        ``max_gene_similarity`` (default: {max_gene_similarity}) with all other genes.
     """
     if max_sampled_cells < adata.n_obs:
@@ -134,7 +134,7 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
     assert results is not None
     ht_data = results[0]
 
-    noisy_lonely_genes_mask = np.full(adata.n_vars, False)
+    bursty_lonely_genes_mask = np.full(adata.n_vars, False)
 
     if ht_data is not None:
         ht_genes_count = ht_data.shape[1]
@@ -167,14 +167,14 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
             max_similarity_of_htv_genes = ut.max_per(htv_gene_ht_gene_similarity_matrix, per="row")
             htvl_mask = max_similarity_of_htv_genes <= max_gene_similarity
             htvl_genes_count = np.sum(htvl_mask)
-            ut.log_calc("noisy_lonely_genes_count", htvl_genes_count)
+            ut.log_calc("bursty_lonely_genes_count", htvl_genes_count)
 
             if htvl_genes_count > 0:
                 base_index_of_ht_genes = ut.get_v_numpy(ht_data, "sampled_gene_index")
                 base_index_of_htv_genes = base_index_of_ht_genes[htv_mask]
                 base_index_of_htvl_genes = base_index_of_htv_genes[htvl_mask]
 
-                noisy_lonely_genes_mask[base_index_of_htvl_genes] = True
+                bursty_lonely_genes_mask[base_index_of_htvl_genes] = True
 
                 htvl_gene_ht_gene_similarity_matrix = htv_gene_ht_gene_similarity_matrix[htvl_mask, :]
                 htvl_gene_ht_gene_similarity_matrix = ut.to_layout(
@@ -213,11 +213,11 @@ def find_noisy_lonely_genes(  # pylint: disable=too-many-statements
                         )
 
     if ut.logging_calc():
-        ut.log_calc("noisy_lonely_gene_names", sorted(list(adata.var_names[noisy_lonely_genes_mask])))
+        ut.log_calc("bursty_lonely_gene_names", sorted(list(adata.var_names[bursty_lonely_genes_mask])))
 
     if inplace:
-        ut.set_v_data(adata, "noisy_lonely_gene", noisy_lonely_genes_mask)
+        ut.set_v_data(adata, "bursty_lonely_gene", bursty_lonely_genes_mask)
         return None
 
-    ut.log_return("noisy_lonely_genes", noisy_lonely_genes_mask)
-    return ut.to_pandas_series(noisy_lonely_genes_mask, index=adata.var_names)
+    ut.log_return("bursty_lonely_genes", bursty_lonely_genes_mask)
+    return ut.to_pandas_series(bursty_lonely_genes_mask, index=adata.var_names)
