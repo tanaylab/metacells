@@ -3,10 +3,7 @@ Related Genes
 -------------
 """
 
-from re import Pattern
-from typing import Collection
 from typing import List
-from typing import Optional
 from typing import Tuple
 from typing import Union
 
@@ -42,10 +39,6 @@ def relate_genes(
     min_gene_relative_variance: float = pr.related_min_gene_relative_variance,
     min_gene_total: int = pr.related_min_gene_total,
     min_gene_top3: int = pr.related_min_gene_top3,
-    lateral_gene_names: Optional[Collection[str]] = None,
-    lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    bystander_gene_names: Optional[Collection[str]] = None,
-    bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     genes_similarity_method: str = pr.related_genes_similarity_method,
     genes_cluster_method: str = pr.related_genes_cluster_method,
     target_genes_of_modules: int = pr.related_target_genes_of_modules,
@@ -78,7 +71,8 @@ def relate_genes(
     1. If we have more than ``max_sampled_cells`` (default: {max_sampled_cells}), pick this number
        of random cells from the data using the ``random_seed``.
 
-    2. Pick candidate genes using :py:func:`metacells.pipeline.feature.extract_feature_data`.
+    2. Pick candidate genes using :py:func:`metacells.pipeline.feature.extract_feature_data`. You may want to call
+       :py:func:`metacells.pipeline.mark.mark_lateral_genes` first.
 
     3. Compute the similarity between the feature genes using
        :py:func:`metacells.tools.similarity.compute_var_var_similarity` using the
@@ -108,10 +102,6 @@ def relate_genes(
         min_gene_relative_variance=min_gene_relative_variance,
         min_gene_total=min_gene_total,
         min_gene_top3=min_gene_top3,
-        lateral_gene_names=lateral_gene_names,
-        lateral_gene_patterns=lateral_gene_patterns,
-        bystander_gene_names=bystander_gene_names,
-        bystander_gene_patterns=bystander_gene_patterns,
         random_seed=random_seed,
     )
     assert fdata is not None

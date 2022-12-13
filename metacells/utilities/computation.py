@@ -1623,7 +1623,7 @@ def most_frequent(vector: utt.Vector) -> Any:
     """
     Return the most frequent value in a ``vector``.
 
-    This is useful for :py:func:`metacells.tools.project.convey_obs_to_group`.
+    This is useful for :py:func:`metacells.tools.convey.convey_obs_to_group`.
     """
     unique, positions = np.unique(utt.to_numpy_vector(vector), return_inverse=True)
     counts = np.bincount(positions)

@@ -3,10 +3,13 @@ Pipeline
 
 .. automodule:: metacells.pipeline
 
-.. automodule:: metacells.pipeline.clean
+.. automodule:: metacells.pipeline.related_genes
     :members:
 
-.. automodule:: metacells.pipeline.related_genes
+.. automodule:: metacells.pipeline.exclude
+    :members:
+
+.. automodule:: metacells.pipeline.mark
     :members:
 
 .. automodule:: metacells.pipeline.feature
@@ -25,6 +28,9 @@ Pipeline
     :members:
 
 .. automodule:: metacells.pipeline.consistency
+    :members:
+
+.. automodule:: metacells.pipeline.projection
     :members:
 
 .. automodule:: metacells.pipeline.mcview

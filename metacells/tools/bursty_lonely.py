@@ -29,7 +29,6 @@ def find_bursty_lonely_genes(  # pylint: disable=too-many-statements
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
-    excluded_genes_mask: Optional[str] = None,
     max_sampled_cells: int = pr.bursty_lonely_max_sampled_cells,
     downsample_min_samples: int = pr.bursty_lonely_downsample_min_samples,
     downsample_min_cell_quantile: float = pr.bursty_lonely_downsample_max_cell_quantile,
@@ -78,46 +77,32 @@ def find_bursty_lonely_genes(  # pylint: disable=too-many-statements
     1. If we have more than ``max_sampled_cells`` (default: {max_sampled_cells}), pick this number
        of random cells from the data using the ``random_seed``.
 
-    2. If we were specified an ``excluded_genes_mask``, this is the name of a per-variable (gene)
-       annotation containing a mask of excluded genes. Get rid of all these excluded genes.
-
-    3. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the cells to the
+    2. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the cells to the
        same total number of UMIs, using the ``downsample_min_samples`` (default:
        {downsample_min_samples}), ``downsample_min_cell_quantile`` (default:
        {downsample_min_cell_quantile}), ``downsample_max_cell_quantile`` (default:
        {downsample_max_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
 
-    4. Find "bursty" genes which have a total number of UMIs of at least ``min_gene_total`` (default:
+    3. Find "bursty" genes which have a total number of UMIs of at least ``min_gene_total`` (default:
        {min_gene_total}) and a normalized variance of at least ``min_gene_normalized_variance``
        (default: ``min_gene_normalized_variance``).
 
-    5. Cross-correlate the bursty genes.
+    4. Cross-correlate the bursty genes.
 
-    6. Find the bursty "lonely" genes whose maximal correlation is at most
+    5. Find the bursty "lonely" genes whose maximal correlation is at most
        ``max_gene_similarity`` (default: {max_gene_similarity}) with all other genes.
     """
     if max_sampled_cells < adata.n_obs:
         np.random.seed(random_seed)
         cell_indices = np.random.choice(np.arange(adata.n_obs), size=max_sampled_cells, replace=False)
-        s_data = ut.slice(adata, obs=cell_indices, name=".sampled", top_level=False)
+        sdata = ut.slice(adata, obs=cell_indices, name=".sampled", top_level=False)
     else:
-        s_data = ut.copy_adata(adata, top_level=False)
+        sdata = ut.copy_adata(adata, top_level=False)
 
     track_var: Optional[str] = "sampled_gene_index"
 
-    if excluded_genes_mask is not None:
-        results = filter_data(
-            s_data, name="included", top_level=False, track_var=track_var, var_masks=[f"~{excluded_genes_mask}"]
-        )
-        track_var = None
-        assert results is not None
-        i_data = results[0]
-        assert i_data is not None
-    else:
-        i_data = s_data
-
     downsample_cells(
-        i_data,
+        sdata,
         what,
         downsample_min_samples=downsample_min_samples,
         downsample_min_cell_quantile=downsample_min_cell_quantile,
@@ -125,11 +110,9 @@ def find_bursty_lonely_genes(  # pylint: disable=too-many-statements
         random_seed=random_seed,
     )
 
-    find_high_total_genes(i_data, "downsampled", min_gene_total=min_gene_total)
+    find_high_total_genes(sdata, "downsampled", min_gene_total=min_gene_total)
 
-    results = filter_data(
-        i_data, name="high_total", top_level=False, track_var=track_var, var_masks=["high_total_gene"]
-    )
+    results = filter_data(sdata, name="high_total", top_level=False, track_var=track_var, var_masks=["high_total_gene"])
     track_var = None
     assert results is not None
     ht_data = results[0]
@@ -183,8 +166,8 @@ def find_bursty_lonely_genes(  # pylint: disable=too-many-statements
                 assert htvl_gene_ht_gene_similarity_matrix.shape == (htvl_genes_count, ht_genes_count)
 
                 if ut.logging_calc():
-                    i_gene_totals = ut.get_v_numpy(i_data, "downsampled", sum=True)
-                    ht_mask = ut.get_v_numpy(i_data, "high_total_gene")
+                    i_gene_totals = ut.get_v_numpy(sdata, "downsampled", sum=True)
+                    ht_mask = ut.get_v_numpy(sdata, "high_total_gene")
                     i_total = np.sum(i_gene_totals)
                     htvl_gene_totals = i_gene_totals[ht_mask][htv_mask][htvl_mask]
                     top_similarity_of_htvl_genes = ut.top_per(htvl_gene_ht_gene_similarity_matrix, 10, per="row")

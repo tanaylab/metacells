@@ -1,5 +1,5 @@
 Metacells 0.9.0-dev.1 Documentation
-=============================
+===================================
 
 .. toctree::
   :titlesonly:
@@ -11,12 +11,10 @@ Metacells 0.9.0-dev.1 Documentation
 Vignettes
 =========
 
-.. toctree::
-  :maxdepth: 1
+.. note::
 
-  Metacells_Vignette
-  Manual_Analysis
-  Seurat_Analysis
+    The vigettes have been temporarily removed, to be replaced with a dedicated vignette and example scripts, in a
+    separate repository which will be linked to from here.
 
 API
 ===

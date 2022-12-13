@@ -228,7 +228,7 @@ pile_max_merge_size_factor: float = max_merge_size_factor
 #: The minimal total value for a cell to be considered "properly sampled". See
 #: :py:func:`metacells.tools.properly_sampled.find_properly_sampled_cells`
 #: and
-#: :py:func:`metacells.pipeline.clean.extract_clean_data`.
+#: :py:func:`metacells.pipeline.exclude.extract_clean_data`.
 #:
 #: .. note::
 #:
@@ -238,7 +238,7 @@ properly_sampled_min_cell_total: Optional[int] = None
 #: The maximal total value for a cell to be considered "properly sampled". See
 #: :py:func:`metacells.tools.properly_sampled.find_properly_sampled_cells`
 #: and
-#: :py:func:`metacells.pipeline.clean.extract_clean_data`.
+#: :py:func:`metacells.pipeline.exclude.extract_clean_data`.
 #:
 #: .. note::
 #:
@@ -248,14 +248,14 @@ properly_sampled_max_cell_total: Optional[int] = None
 #: The minimal total value for a gene to be considered "properly sampled". See
 #: :py:func:`metacells.tools.properly_sampled.find_properly_sampled_genes`
 #: and
-#: :py:func:`metacells.pipeline.clean.extract_clean_data`.
+#: :py:func:`metacells.pipeline.exclude.extract_clean_data`.
 properly_sampled_min_gene_total: int = 1
 
 #: The maximal fraction of excluded gene UMIs from a cell for it to be considered
 #: "properly_sampled". See
 #: :py:func:`metacells.tools.properly_sampled.find_properly_sampled_cells`
 #: and
-#: :py:func:`metacells.pipeline.clean.extract_clean_data`.
+#: :py:func:`metacells.pipeline.exclude.extract_clean_data`.
 #:
 #: .. note::
 #:
@@ -328,14 +328,14 @@ related_min_gene_top3: int = 1
 #: The number of randomly selected cells to use for computing "bursty lonely" genes. See
 #: :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes`
 #: and
-#: :py:func:`metacells.pipeline.clean.extract_clean_data`.
+#: :py:func:`metacells.pipeline.exclude.extract_clean_data`.
 bursty_lonely_max_sampled_cells: int = 10000
 
 #: The minimal samples to use for downsampling the cells for computing "bursty lonely" genes. See
 #: :py:const:`downsample_min_cell_quantile`,
 #: :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes`,
 #: and
-#: :py:func:`metacells.pipeline.clean.extract_clean_data`.
+#: :py:func:`metacells.pipeline.exclude.extract_clean_data`.
 bursty_lonely_downsample_min_samples: int = downsample_min_samples
 
 #: The minimal quantile of the cells total size to use for downsampling the cells for computing
@@ -343,7 +343,7 @@ bursty_lonely_downsample_min_samples: int = downsample_min_samples
 #: :py:const:`downsample_min_cell_quantile`,
 #: :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes`,
 #: and
-#: :py:func:`metacells.pipeline.clean.extract_clean_data`.
+#: :py:func:`metacells.pipeline.exclude.extract_clean_data`.
 bursty_lonely_downsample_min_cell_quantile: float = downsample_min_cell_quantile
 
 #: The maximal quantile of the cells total size to use for downsampling the cells for computing
@@ -351,7 +351,7 @@ bursty_lonely_downsample_min_cell_quantile: float = downsample_min_cell_quantile
 #: :py:const:`downsample_min_cell_quantile`,
 #: :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes`,
 #: and
-#: :py:func:`metacells.pipeline.clean.extract_clean_data`.
+#: :py:func:`metacells.pipeline.exclude.extract_clean_data`.
 bursty_lonely_downsample_max_cell_quantile: float = downsample_max_cell_quantile
 
 #: The minimal total UMIs in the downsamples selected cells of a gene to be considered when
@@ -364,14 +364,14 @@ bursty_lonely_min_gene_total: int = 100
 #: :py:const:`significant_gene_normalized_variance`,
 #: :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes`
 #: and
-#: :py:func:`metacells.pipeline.clean.extract_clean_data`.
+#: :py:func:`metacells.pipeline.exclude.extract_clean_data`.
 bursty_lonely_min_gene_normalized_variance: float = significant_gene_normalized_variance
 
 #: The maximal similarity between a gene and another gene to be considered "lonely". See
 #: :py:const:`significant_gene_similarity`,
 #: :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes`
 #: and
-#: :py:func:`metacells.pipeline.clean.extract_clean_data`.
+#: :py:func:`metacells.pipeline.exclude.extract_clean_data`.
 bursty_lonely_max_gene_similarity: float = significant_gene_similarity
 
 #: The maximal number of candidate rare genes. See
@@ -724,7 +724,7 @@ final_max_outliers_levels: Optional[int] = 1
 deviants_min_gene_fold_factor: float = significant_gene_fold_factor
 
 #: Whether to consider the absolute fold factor when computing deviant cells. See
-#: :py:func:`metacells.tools.distinct.find_deviant_cells`.
+#: :py:func:`metacells.tools.deviants.find_deviant_cells`.
 deviants_abs_folds: bool = False
 
 #: The maximal fraction of genes to use to indicate cell are "deviants". See
@@ -807,7 +807,7 @@ rare_dissolve_min_convincing_size_factor: Optional[float] = None
 dissolve_min_convincing_gene_fold_factor: float = significant_gene_fold_factor
 
 #: Whether to consider the absolute fold factor when dissolving metacells. See
-#: :py:func:`metacells.tools.distinct.dissolve_metacells`.
+#: :py:func:`metacells.tools.dissolve.dissolve_metacells`.
 dissolve_abs_folds: bool = False
 
 #: The number of most-distinct genes to collect for each cell. See
@@ -930,31 +930,31 @@ project_abs_folds: bool = abs_folds
 project_max_consistency_fold_factor: float = significant_gene_fold_factor - 1.0
 
 #: The minimal fold factor for a gene to be significant for metacell quality. See
-#: :py:func:`metacell.tools.compute_inner_fold_factors`.
+#: :py:func:`metacells.tools.quality.compute_inner_fold_factors`.
 min_gene_inner_fold_factor: float = significant_gene_fold_factor
 
 #: The minimal fold factor for a gene entry in a metacell to be significant for metacell quality. See
-#: :py:func:`metacell.tools.compute_inner_fold_factors`.
+#: :py:func:`metacells.tools.quality.compute_inner_fold_factors`.
 min_entry_inner_fold_factor: float = significant_gene_fold_factor - 1.0
 
 #: Whether to consider the absolute fold factor when evaluating the inner folds. See
-#: :py:func:`metacells.tools.distinct.compute_inner_fold_factors`.
+#: :py:func:`metacells.tools.quality.compute_inner_fold_factors`.
 inner_abs_folds: bool = abs_folds
 
 #: The minimal fold factor for a gene to be significant for outliers. See
-#: :py:func:`metacell.tools.compute_outliers_fold_factors`.
+#: :py:func:`metacells.tools.quality.compute_outliers_fold_factors`.
 min_gene_outliers_fold_factor: float = significant_gene_fold_factor
 
 #: The minimal fold factor for a gene entry in a metacell to be significant for outliers. See
-#: :py:func:`metacell.tools.compute_outliers_fold_factors`.
+#: :py:func:`metacells.tools.quality.compute_outliers_fold_factors`.
 min_entry_outliers_fold_factor: float = significant_gene_fold_factor - 1.0
 
 #: Whether to consider the absolute fold factor when evaluating the outliers folds. See
-#: :py:func:`metacells.tools.distinct.compute_outliers_fold_factors`.
+#: :py:func:`metacells.tools.quality.compute_outliers_fold_factors`.
 outliers_abs_folds: bool = abs_folds
 
 #: The minimal fold factor for a gene entry in a metacell to be significant for metacell projection quality. See
-#: :py:func:`metacell.tools.compute_project_fold_factors`.
+#: :py:func:`metacells.tools.quality.compute_projected_fold_factors`.
 min_entry_project_fold_factor: float = significant_gene_fold_factor - 1.0
 
 #: The normalization factor to use when computing log of fractions for finding the most similar group for outliers. See
@@ -962,57 +962,49 @@ min_entry_project_fold_factor: float = significant_gene_fold_factor - 1.0
 outliers_fold_normalization: float = 1e-5
 
 #: Whether to ignore the lateral genes of the atlas when computing projections. See
-#: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
-#: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
+#: :py:func:`metacells.pipeline.projection.projection_pipeline`.
 ignore_atlas_lateral_genes: bool = True
 
 #: Whether to ignore the bystander genes of the atlas when computing projections. See
-#: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
-#: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
+#: :py:func:`metacells.pipeline.projection.projection_pipeline`.
 ignore_atlas_bystander_genes: bool = True
 
 #: Whether to ignore the insignificant genes of the atlas when computing projections. See
-#: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
-#: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
+#: :py:func:`metacells.pipeline.projection.projection_pipeline`.
 ignore_atlas_insignificant_genes: bool = True
 
 #: Whether to ignore the insignificant genes of the query when computing projections. See
-#: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
-#: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
+#: :py:func:`metacells.pipeline.projection.projection_pipeline`.
 ignore_query_insignificant_genes: bool = False
 
 #: Whether to ignore the lateral genes of the query when computing projections. See
-#: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
-#: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
+#: :py:func:`metacells.pipeline.projection.projection_pipeline`.
 ignore_query_lateral_genes: bool = False
 
 #: Whether to ignore the bystander genes of the query when computing projections. See
-#: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
-#: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
+#: :py:func:`metacells.pipeline.projection.projection_pipeline`.
 ignore_query_bystander_genes: bool = False
 
 #: The minimal fraction of metacells where a gene has a high projection fold factor to mark the gene as "misfit".
 #: See :py:func:`metacells.tools.project.find_misfit_genes`,
-#: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
-#: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
+#: :py:func:`metacells.pipeline.projection.projection_pipeline`.
 misfit_min_metacells_fraction: float = 0.5
 
 #: The minimal fold between the maximal and minimal gene expression in metacells to be significant.
-#: See :py:func:`metacells.tools.high.find_significant_metacells_genes`.
+#: See :py:func:`metacells.tools.high.find_metacells_significant_genes`.
 min_significant_metacells_gene_range_fold_factor: float = 2.0
 
 #: The normalization factor to use after computing the fractions of the data for
 #: computing metacell gene range folds. See
-#: :py:func:`metacells.tools.high.find_significant_metacells_genes`.
+#: :py:func:`metacells.tools.high.find_metacells_significant_genes`.
 metacells_gene_range_normalization: float = 1e-5
 
 #: The minimal maximal gene expression in metacells to be significant.
-#: See :py:func:`metacells.tools.high.find_significant_metacells_genes`.
+#: See :py:func:`metacells.tools.high.find_metacells_significant_genes`.
 min_significant_metacells_gene_fraction: float = 1e-4
 
 #: Whether to renormalize the query to account for missing atlas genes when computing projections.
-#: See :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
-#: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
+#: :py:func:`metacells.pipeline.projection.projection_pipeline`.
 project_renormalize_query: bool = False
 
 #: Whether to compute linear corrections for genes between the query and the atlas.
@@ -1038,7 +1030,7 @@ project_max_dissimilar_genes: int = 3
 renormalize_query_by_atlas: bool = True
 
 #: The quantile of each gene's normalized variance across the metacells to use for the overall gene's variability.
-#: See :py:func:`metacells.tools.quality.compute_type_gene_normalized_variance`.
+#: See :py:func:`metacells.tools.quality.compute_type_genes_normalized_variances`.
 type_gene_normalized_variance_quantile: float = 0.95
 
 #: Minimal fraction of atlas essential genes which must be similar for a projection to be valid.

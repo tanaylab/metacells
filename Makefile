@@ -4,11 +4,7 @@ MAX_LINE_LENGTH = 120
 
 ALL_SOURCE_FILES = $(shell git ls-files)
 
-ALL_PACKAGE_FILES = $(filter-out vignettes/%, $(filter-out docs/%, $(ALL_SOURCE_FILES)))
-
 PY_SOURCE_FILES = $(filter %.py, $(ALL_SOURCE_FILES))
-
-PY_PACKAGE_FILES = $(filter-out vignettes/%, $(filter-out docs/%, $(PY_SOURCE_FILES)))
 
 RST_SOURCE_FILES = $(filter %.rst, $(ALL_SOURCE_FILES))
 
@@ -34,7 +30,7 @@ export PRINT_HELP_PYSCRIPT
 help:
 	@python -c "$$PRINT_HELP_PYSCRIPT" < $(MAKEFILE_LIST)
 
-clean: clean-make clean-build clean-pyc clean-test clean-vignettes clean-docs  ## remove all build, test, coverage and Python artifacts
+clean: clean-make clean-build clean-pyc clean-test clean-docs  ## remove all build, test, coverage and Python artifacts
 
 clean-make:
 	rm -fr .make.*
@@ -59,11 +55,6 @@ clean-test:
 	rm -f .coverage
 	rm -fr htmlcov/
 	rm -fr .pytest_cache
-
-clean-vignettes:
-	rm -f vignettes/*.rst
-	rm -fr vignettes/*_files
-	rm -f vignettes/Manual_Analysis.ipynb vignettes/Seurat_Analysis.ipynb
 
 clean-docs:
 	rm -fr docs/_build
@@ -99,11 +90,7 @@ trailingspaces: .make.trailingspaces  ## check for trailing spaces
 REAL_SOURCE_FILES = \
     $(filter-out %.png, \
     $(filter-out %.svg, \
-    $(filter-out vignettes/%.rst, \
-    $(filter-out docs/Manual_Analysis.rst, \
-    $(filter-out docs/Metacells_Vignette.rst, \
-    $(filter-out docs/Seurat_Analysis.rst, \
-    $(ALL_SOURCE_FILES)))))))
+    $(ALL_SOURCE_FILES)))
 
 # TODO: Remove setup.cfg exception when bumpversion is fixed.
 SP_SOURCE_FILES = $(filter-out setup.cfg, $(REAL_SOURCE_FILES))
@@ -131,16 +118,10 @@ linebreaks: .make.linebreaks  ## check line breaks in Python code
 
 backticks: .make.backticks  ## check usage of backticks in documentation
 
-BT_SOURCE_FILES = \
-    $(filter-out docs/Metacells_Vignette.rst, \
-    $(filter-out docs/Manual_Analysis.rst, \
-    $(filter-out docs/Seurat_Analysis.rst, \
-    $(RST_SOURCE_FILES))))
-
-.make.backticks: $(PY_SOURCE_FILES) $(BT_SOURCE_FILES)
+.make.backticks: $(PY_SOURCE_FILES) $(RST_SOURCE_FILES)
 	@echo "backticks"
 	@OK=true; \
-	for FILE in $(PY_SOURCE_FILES) $(BT_SOURCE_FILES); \
+	for FILE in $(PY_SOURCE_FILES) $(RST_SOURCE_FILES); \
 	do \
 	    if sed 's/``\([^`]*\)``/\1/g;s/:`\([^`]*\)`/:\1/g;s/`\([^`]*\)`_/\1_/g' "$$FILE" \
 	    | grep --label "$$FILE" -n -H '`' \
@@ -250,20 +231,16 @@ pytest: .make.pytest  ## run tests on the active Python with pytest
 
 tox: .make.tox  ## run tests on a clean Python version with tox
 
-.make.tox: $(PY_PACKAGE_FILES) $(H_SOURCE_FILES) $(CPP_SOURCE_FILES) tox.ini
+.make.tox: $(PY_SOURCE_FILES) $(H_SOURCE_FILES) $(CPP_SOURCE_FILES) tox.ini
 	tox
 	touch $@
 
 .PHONY: docs
 docs: .make.docs  ## generate HTML documentation
 
-RST_GENERATED_FILES = \
-    docs/Metacells_Vignette.rst \
-    docs/Manual_Analysis.rst \
-    docs/Seurat_Analysis.rst \
-    docs/timing_script.rst
+RST_GENERATED_FILES = docs/timing_script.rst
 
-.make.docs: $(DOCS_SOURCE_FILES) $(PY_PACKAGE_FILES) $(RST_SOURCE_FILES) $(RST_GENERATED_FILES)
+.make.docs: $(DOCS_SOURCE_FILES) $(PY_SOURCE_FILES) $(RST_SOURCE_FILES) $(RST_GENERATED_FILES)
 	$(MAKE) -C docs clean
 	$(MAKE) -C docs html
 	@echo "Results in docs/_build/html/index.html"
@@ -271,7 +248,7 @@ RST_GENERATED_FILES = \
 
 build: .make.build  ## build the C++ extensions
 
-.make.build: $(PY_PACKAGE_FILES) $(H_SOURCE_FILES) $(CPP_SOURCE_FILES)
+.make.build: $(PY_SOURCE_FILES) $(H_SOURCE_FILES) $(CPP_SOURCE_FILES)
 	python setup.py build_ext --inplace
 	python setup.py build
 	touch $@
@@ -298,38 +275,6 @@ docs/timing_script.rst: \
 	) > $@
 
 
-docs/Metacells_Vignette.rst: vignettes/Metacells_Vignette.rst
-	sed 's/ [ ]*$$//;s/parsed-literal::/code::/;s:Metacells_Vignette_files/::;s/:: ipython3/:: python/;' \
-	    vignettes/Metacells_Vignette.rst > docs/Metacells_Vignette.rst
-	cp vignettes/Metacells_Vignette_files/*.svg docs
-
-docs/Manual_Analysis.rst: vignettes/Manual_Analysis.rst
-	sed 's/ [ ]*$$//;s/parsed-literal::/code::/;s:Manual_Analysis_files/::;s/:: ipython3/:: python/;' \
-	    vignettes/Manual_Analysis.rst > docs/Manual_Analysis.rst
-	cp vignettes/Manual_Analysis_files/*.svg docs
-
-docs/Seurat_Analysis.rst: vignettes/Seurat_Analysis.rst
-	sed 's/ [ ]*$$//;s/parsed-literal::/code::/;s:Seurat_Analysis_files/::;s/:: ipython3/:: python/;' \
-	    vignettes/Seurat_Analysis.rst > docs/Seurat_Analysis.rst
-	cp vignettes/Seurat_Analysis_files/*.svg docs
-
-vignettes/Metacells_Vignette.rst: .make.build vignettes/Metacells_Vignette.ipynb vignettes/pbmc163k.h5ad
-	rm -rf vignettes/Metacells_Vignette_files
-	export PYTHONPATH=$$PWD && cd vignettes && jupyter nbconvert --execute --to=rst Metacells_Vignette.ipynb
-
-vignettes/Manual_Analysis.rst: .make.build vignettes/Manual_Analysis.png.ipynb vignettes/Metacells_Vignette.rst
-	rm -rf vignettes/Manual_Analysis_files
-	sed 's:image/png:image/svg+xml:' vignettes/Manual_Analysis.png.ipynb > vignettes/Manual_Analysis.ipynb
-	export PYTHONPATH=$$PWD && cd vignettes && jupyter nbconvert --execute --to=rst Manual_Analysis.ipynb
-
-vignettes/Seurat_Analysis.rst: .make.build vignettes/Seurat_Analysis.png.ipynb vignettes/Metacells_Vignette.rst
-	rm -rf vignettes/Seurat_Analysis_files
-	sed 's:image/png:image/svg+xml:' vignettes/Seurat_Analysis.png.ipynb > vignettes/Seurat_Analysis.ipynb
-	export PYTHONPATH=$$PWD && cd vignettes && jupyter nbconvert --execute --to=rst Seurat_Analysis.ipynb
-
-vignettes/pbmc163k.h5ad:
-	curl https://www.wisdom.weizmann.ac.il/~atanay/metac_data/pbmc163k.h5ad.gz | gunzip -c > vignettes/pbmc163k.h5ad
-
 committed:  staged ## check everything is committed in git
 	@if [ -z "$$(git status --short)" ]; \
 	then true; \
@@ -344,7 +289,7 @@ install: committed clean  ## install the package into the active Python
 
 dist: .make.dist  ## builds the release distribution package
 
-.make.dist: staged $(ALL_PACKAGE_FILES)
+.make.dist: staged $(ALL_SOURCE_FILES)
 	rm -fr dist/
 	python setup.py sdist
 	twine check dist/*
@@ -436,8 +381,8 @@ is_dev:
 	    false; \
 	fi
 
-tags: $(PY_PACKAGE_FILES)  ## generate a tags file for vi
-	ctags $(PY_PACKAGE_FILES)
+tags: $(PY_SOURCE_FILES)  ## generate a tags file for vi
+	ctags $(PY_SOURCE_FILES)
 
 flame: flame.html  ## generate a flame graph from a timing.csv file
 

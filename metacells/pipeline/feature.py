@@ -3,8 +3,6 @@ Feature
 -------
 """
 
-from re import Pattern
-from typing import Collection
 from typing import Optional
 from typing import Union
 
@@ -33,12 +31,6 @@ def extract_feature_data(
     min_gene_relative_variance: Optional[float] = pr.feature_min_gene_relative_variance,
     min_gene_total: Optional[int] = pr.feature_min_gene_total,
     min_gene_top3: Optional[int] = pr.feature_min_gene_top3,
-    forced_gene_names: Optional[Collection[str]] = None,
-    forced_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    lateral_gene_names: Optional[Collection[str]] = None,
-    lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    bystander_gene_names: Optional[Collection[str]] = None,
-    bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     random_seed: int = 0,
     top_level: bool = True,
 ) -> Optional[AnnData]:
@@ -57,6 +49,21 @@ def extract_feature_data(
     genes, where ``what`` is a per-variable-per-observation matrix or the name of a
     per-variable-per-observation annotation containing such a matrix.
 
+    Will obey the following annotations in the full ``adata``, if they exist:
+
+    Variable (Gene) Annotations
+
+        ``feature_gene``
+            If exists, force a mask of genes to use as "feature" genes, ignoring everything else.
+
+        ``lateral_gene``
+            A boolean mask of genes which are lateral from being chosen as "feature" genes based
+            on their name.
+
+        ``noisy_gene``
+            A boolean mask of genes which are not only lateral, but are also ignored when computing
+            deviant (outlier) cells.
+
     **Returns**
 
     Returns annotated sliced data containing the "feature" subset of the original data. By default,
@@ -64,99 +71,80 @@ def extract_feature_data(
 
     Also sets the following annotations in the full ``adata``:
 
+    Unstructured Annotations
+        ``downsample_samples``
+            The target total number of samples in each downsampled cell.
+
+    Observation-Variable (Cell-Gene) Annotations:
+        ``downsampled``
+            The downsampled data where the total number of samples in each cell is at most ``downsample_samples``.
+
     Variable (Gene) Annotations
         ``high_total_gene``
-            A boolean mask of genes with "high" expression level.
+            A boolean mask of genes with "high" expression level (unless a ``feature_gene`` mask exists).
 
         ``high_relative_variance_gene``
-            A boolean mask of genes with "high" normalized variance, relative to other genes with a
-            similar expression level.
-
-        ``lateral_gene``
-            A boolean mask of genes which are lateral from being chosen as "feature" genes based
-            on their name.
-
-        ``bystander_gene``
-            A boolean mask of genes which are not only lateral, but are also ignored when computing
-            deviant (outlier) cells. This is ``False`` for non-"clean" genes.
-
-        ``forced_gene``
-            A boolean mask of the "forced" genes.
+            A boolean mask of genes with "high" normalized variance, relative to other genes with a similar expression
+            level (unless a ``feature_gene`` mask exists).
 
         ``feature_gene``
             A boolean mask of the "feature" genes.
 
     **Computation Parameters**
 
-    1. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the cells to the
-       same total number of UMIs, using the ``downsample_min_samples`` (default:
-       {downsample_min_samples}), ``downsample_min_cell_quantile`` (default:
-       {downsample_min_cell_quantile}), ``downsample_max_cell_quantile`` (default:
+    1. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the cells to the same total number of
+       UMIs, using the ``downsample_min_samples`` (default: {downsample_min_samples}), ``downsample_min_cell_quantile``
+       (default: {downsample_min_cell_quantile}), ``downsample_max_cell_quantile`` (default:
        {downsample_max_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
 
-    2. Invoke :py:func:`metacells.tools.named.find_named_genes` to force genes as being used as
-       features based on their name, using ``forced_gene_names`` and ``forced_gene_patterns``.
+    2. Invoke :py:func:`metacells.tools.high.find_high_total_genes` to select high-expression feature genes (based on
+       the downsampled data), using ``min_gene_total``.
 
-    3. Invoke :py:func:`metacells.tools.high.find_high_total_genes` to select high-expression
-       feature genes (based on the downsampled data), using ``min_gene_total``.
+    3. Invoke :py:func:`metacells.tools.high.find_high_relative_variance_genes` to select high-variance feature genes
+       (based on the downsampled data), using ``min_gene_relative_variance``.
 
-    4. Invoke :py:func:`metacells.tools.high.find_high_relative_variance_genes` to select
-       high-variance feature genes (based on the downsampled data), using
-       ``min_gene_relative_variance``.
-
-    5. Invoke :py:func:`metacells.tools.named.find_named_genes` to forbid genes from being used as
-       feature genes, based on their name, using the ``lateral_gene_names`` (default:
-       {lateral_gene_names}) and ``lateral_gene_patterns`` (default: {lateral_gene_patterns}).
-       This is stored in an intermediate per-variable (gene) ``lateral_genes`` boolean mask.
-
-    6. Invoke :py:func:`metacells.tools.named.find_named_genes` to forbid genes from being used as
-       feature genes, based on their name, using the ``bystander_gene_names`` (default:
-       {bystander_gene_names}) and ``bystander_gene_patterns`` (default: {bystander_gene_patterns}).
-       This is stored in an intermediate per-variable (gene) ``bystander_genes`` boolean mask.
-
-    7. Invoke :py:func:`metacells.tools.filter.filter_data` to slice just the selected
-       "feature" genes using the ``name`` (default: {name}).
+    4. Invoke :py:func:`metacells.tools.filter.filter_data` to slice just the selected "feature" genes using the
+       ``name`` (default: {name}).
     """
-    tl.downsample_cells(
-        adata,
-        what,
-        downsample_min_samples=downsample_min_samples,
-        downsample_min_cell_quantile=downsample_min_cell_quantile,
-        downsample_max_cell_quantile=downsample_max_cell_quantile,
-        random_seed=random_seed,
-    )
-
-    var_masks = []
-
-    if forced_gene_names is not None or forced_gene_patterns is not None:
-        var_masks.append("|forced_gene")
-        tl.find_named_genes(adata, to="forced_gene", names=forced_gene_names, patterns=forced_gene_patterns)
-
-    if min_gene_top3 is not None:
-        var_masks.append("high_top3_gene")
-        tl.find_high_topN_genes(adata, "downsampled", topN=3, min_gene_topN=min_gene_top3)
-
-    if min_gene_total is not None:
-        var_masks.append("high_total_gene")
-        tl.find_high_total_genes(adata, "downsampled", min_gene_total=min_gene_total)
-
-    if min_gene_relative_variance is not None:
-        var_masks.append("high_relative_variance_gene")
-        tl.find_high_relative_variance_genes(
-            adata, "downsampled", min_gene_relative_variance=min_gene_relative_variance
+    if ut.has_data(adata, "feature_gene"):
+        results = tl.filter_data(
+            adata, name=name, top_level=top_level, track_var="full_gene_index", var_masks=["feature_gene"]
         )
 
-    if lateral_gene_names is not None or lateral_gene_patterns is not None:
-        var_masks.append("~lateral_gene")
-        tl.find_named_genes(adata, to="lateral_gene", names=lateral_gene_names, patterns=lateral_gene_patterns)
+    else:
+        var_masks = ["&~lateral_gene?", "&~noisy_gene?"]
 
-    if bystander_gene_names is not None or bystander_gene_patterns is not None:
-        var_masks.append("~bystander_gene")
-        tl.find_named_genes(adata, to="bystander_gene", names=bystander_gene_names, patterns=bystander_gene_patterns)
+        tl.downsample_cells(
+            adata,
+            what,
+            downsample_min_samples=downsample_min_samples,
+            downsample_min_cell_quantile=downsample_min_cell_quantile,
+            downsample_max_cell_quantile=downsample_max_cell_quantile,
+            random_seed=random_seed,
+        )
 
-    results = tl.filter_data(
-        adata, name=name, top_level=top_level, track_var="full_gene_index", mask_var="feature_gene", var_masks=var_masks
-    )
+        if min_gene_top3 is not None:
+            var_masks.append("&high_top3_gene")
+            tl.find_high_topN_genes(adata, "downsampled", topN=3, min_gene_topN=min_gene_top3)
+
+        if min_gene_total is not None:
+            var_masks.append("&high_total_gene")
+            tl.find_high_total_genes(adata, "downsampled", min_gene_total=min_gene_total)
+
+        if min_gene_relative_variance is not None:
+            var_masks.append("&high_relative_variance_gene")
+            tl.find_high_relative_variance_genes(
+                adata, "downsampled", min_gene_relative_variance=min_gene_relative_variance
+            )
+
+        results = tl.filter_data(
+            adata,
+            name=name,
+            top_level=top_level,
+            track_var="full_gene_index",
+            mask_var="feature_gene",
+            var_masks=var_masks,
+        )
 
     if results is None:
         raise ValueError("Empty feature data, giving up")

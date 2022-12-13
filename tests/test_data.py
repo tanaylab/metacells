@@ -43,9 +43,9 @@ def test_find_rare_gene_modules() -> None:
     for path in glob("../metacells-test-data/*.h5ad"):
         adata, expected = _load(path)
 
+        mc.pl.mark_lateral_genes(adata, **expected.get("mark_lateral_genes", {}))
         mc.tl.find_rare_gene_modules(  #
             adata,
-            lateral_gene_names=expected["compute_direct_metacells"]["lateral_gene_names"],
             **expected.get("find_rare_gene_modules", {}),
         )
 
@@ -67,12 +67,13 @@ def test_direct_pipeline() -> None:
         mc.ut.log_calc("path", path)
         pdata = adata[range(6000), :].copy()
 
-        mc.pl.analyze_clean_genes(pdata, random_seed=123456, **expected.get("analyze_clean_genes", {}))
-        mc.pl.pick_clean_genes(pdata)
-        mc.pl.analyze_clean_cells(pdata, **expected.get("analyze_clean_cells", {}))
-        mc.pl.pick_clean_cells(pdata)
+        mc.pl.exclude_genes(pdata, **expected.get("exclude_genes", {}))
+        mc.pl.exclude_cells(pdata, **expected.get("exclude_cells", {}))
         cdata = mc.pl.extract_clean_data(pdata)
         assert cdata is not None
+
+        mc.pl.mark_lateral_genes(pdata, **expected.get("mark_lateral_genes", {}))
+        mc.pl.mark_noisy_genes(pdata, random_seed=123456, **expected.get("mark_noisy", {}))
 
         mc.pl.compute_direct_metacells(cdata, random_seed=123456, **expected.get("compute_direct_metacells", {}))
 

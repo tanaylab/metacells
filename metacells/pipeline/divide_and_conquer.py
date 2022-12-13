@@ -7,10 +7,8 @@ import gc
 import logging
 import os
 from math import ceil
-from re import Pattern
 from typing import Any
 from typing import Callable
-from typing import Collection
 from typing import Dict
 from typing import List
 from typing import NamedTuple
@@ -88,9 +86,8 @@ def guess_max_parallel_piles(
     {percent}% of all the machine has - if zero or negative, is relative to the machines memory).
 
     The amount of memory used depends on the target pile size, so give this function the same parameters as for
-    :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline` or
-    :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer` so it will use the same automatically adjusted
-    target pile size.
+    :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline` so it will use the same automatically
+    adjusted target pile size.
 
     .. note::
 
@@ -156,8 +153,9 @@ GENE_ANNOTATIONS = [
     ResultAnnotation(name="high_total_gene", default=0, dtype="int32", formatter=ut.mask_description),
     ResultAnnotation(name="pre_high_relative_variance_gene", default=0, dtype="int32", formatter=ut.mask_description),
     ResultAnnotation(name="high_relative_variance_gene", default=0, dtype="int32", formatter=ut.mask_description),
+    ResultAnnotation(name="feature_gene", default=False, dtype="bool", formatter=None),
     ResultAnnotation(name="lateral_gene", default=False, dtype="bool", formatter=None),
-    ResultAnnotation(name="bystander_gene", default=False, dtype="bool", formatter=None),
+    ResultAnnotation(name="noisy_gene", default=False, dtype="bool", formatter=None),
     ResultAnnotation(name="pre_feature_gene", default=0, dtype="int32", formatter=ut.mask_description),
     ResultAnnotation(name="feature_gene", default=0, dtype="int32", formatter=ut.mask_description),
     ResultAnnotation(name="pre_gene_deviant_votes", default=0, dtype="int32", formatter=ut.mask_description),
@@ -236,9 +234,9 @@ class SubsetResults:
 
         #: The per-gene data.
         #:
-        #: This must cover all the genes of the "complete" (clean) data. It must contain a
-        #: ``feature_gene`` column, and optionally the ``high_total_gene``,
-        #: ``high_relative_variance_gene``, ``lateral_gene``, ``bystander_gene`` and ``gene_deviant_votes`` columns.
+        #: This must cover all the genes of the "complete" (clean) data. It must contain a ``feature_gene`` column, and
+        #: optionally the ``high_total_gene``, ``high_relative_variance_gene``, ``feature_gene``, ``lateral_gene``,
+        #: ``noisy_gene`` and ``gene_deviant_votes`` columns.
         self.genes_frame = ut.to_pandas_frame(index=range(adata.n_vars))
 
         for gene_annotation in GENE_ANNOTATIONS:
@@ -302,8 +300,9 @@ class SubsetResults:
 
             else:
                 if self.final_target == "preliminary" and gene_annotation.name not in (
+                    "feature_gene",
                     "lateral_gene",
-                    "bystander_gene",
+                    "noisy_gene",
                 ):
                     target_name = "pre_" + gene_annotation.name
                 else:
@@ -567,12 +566,6 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
     feature_min_gene_total: Optional[int] = pr.feature_min_gene_total,
     feature_min_gene_top3: Optional[int] = pr.feature_min_gene_top3,
     feature_min_gene_relative_variance: Optional[float] = pr.feature_min_gene_relative_variance,
-    feature_gene_names: Optional[Collection[str]] = None,
-    feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    lateral_gene_names: Optional[Collection[str]] = None,
-    lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    bystander_gene_names: Optional[Collection[str]] = None,
-    bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     feature_correction: Optional[FeatureCorrection] = None,
     cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
@@ -668,14 +661,6 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
             other genes with a similar expression level when when computing the preliminary and
             final metacells. This is zero for non-"clean" genes.
 
-        ``lateral_gene``
-            A boolean mask of genes which are lateral from being chosen as "feature" genes based
-            on their name. This is ``False`` for non-"clean" genes.
-
-        ``bystander_gene``
-            A boolean mask of genes which are not only lateral, but are also ignored when computing
-            deviant (outlier) cells. This is ``False`` for non-"clean" genes.
-
         ``pre_feature_gene``, ``feature_gene``
             The number of times the gene was used as a feature when computing the preliminary and
             final metacells. If we end up directly computing the metacells, the preliminary value
@@ -741,8 +726,6 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
 
     1. Invoke :py:func:`metacells.tools.rare.find_rare_gene_modules` to isolate cells expressing
        rare gene modules, using the
-       ``lateral_gene_names``, ``lateral_gene_patterns``,
-       ``bystander_gene_names``, ``bystander_gene_patterns``,
        ``rare_max_genes`` (default: {rare_max_genes}),
        ``rare_max_gene_cell_fraction`` (default: {rare_max_gene_cell_fraction}),
        ``rare_min_gene_maximum`` (default: {rare_min_gene_maximum}),
@@ -806,10 +789,6 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
             tl.find_rare_gene_modules(
                 adata,
                 what,
-                lateral_gene_names=lateral_gene_names,
-                lateral_gene_patterns=lateral_gene_patterns,
-                bystander_gene_names=bystander_gene_names,
-                bystander_gene_patterns=bystander_gene_patterns,
                 max_genes=rare_max_genes,
                 max_gene_cell_fraction=rare_max_gene_cell_fraction,
                 min_gene_maximum=rare_min_gene_maximum,
@@ -843,12 +822,6 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
                     feature_min_gene_total=feature_min_gene_total,
                     feature_min_gene_top3=feature_min_gene_top3,
                     feature_min_gene_relative_variance=feature_min_gene_relative_variance,
-                    feature_gene_names=feature_gene_names,
-                    feature_gene_patterns=feature_gene_patterns,
-                    lateral_gene_names=lateral_gene_names,
-                    lateral_gene_patterns=lateral_gene_patterns,
-                    bystander_gene_names=bystander_gene_names,
-                    bystander_gene_patterns=bystander_gene_patterns,
                     feature_correction=feature_correction,
                     cells_similarity_value_normalization=cells_similarity_value_normalization,
                     cells_similarity_log_data=cells_similarity_log_data,
@@ -932,12 +905,6 @@ def divide_and_conquer_pipeline(  # pylint: disable=too-many-branches,too-many-s
             feature_min_gene_total=feature_min_gene_total,
             feature_min_gene_top3=feature_min_gene_top3,
             feature_min_gene_relative_variance=feature_min_gene_relative_variance,
-            feature_gene_names=feature_gene_names,
-            feature_gene_patterns=feature_gene_patterns,
-            lateral_gene_names=lateral_gene_names,
-            lateral_gene_patterns=lateral_gene_patterns,
-            bystander_gene_names=bystander_gene_names,
-            bystander_gene_patterns=bystander_gene_patterns,
             feature_correction=feature_correction,
             cells_similarity_value_normalization=cells_similarity_value_normalization,
             cells_similarity_log_data=cells_similarity_log_data,
@@ -1010,12 +977,6 @@ def compute_divide_and_conquer_metacells(
     feature_min_gene_total: Optional[int] = pr.feature_min_gene_total,
     feature_min_gene_top3: Optional[int] = pr.feature_min_gene_top3,
     feature_min_gene_relative_variance: Optional[float] = pr.feature_min_gene_relative_variance,
-    feature_gene_names: Optional[Collection[str]] = None,
-    feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    lateral_gene_names: Optional[Collection[str]] = None,
-    lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    bystander_gene_names: Optional[Collection[str]] = None,
-    bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     feature_correction: Optional[FeatureCorrection] = None,
     cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
@@ -1107,14 +1068,6 @@ def compute_divide_and_conquer_metacells(
             The number of times the gene was marked as having a high normalized variance relative to
             other genes with a similar expression level when when computing the preliminary and
             final metacells. This is zero for non-"clean" genes.
-
-        ``lateral_gene``
-            A boolean mask of genes which are lateral from being chosen as "feature" genes based
-            on their name. This is ``False`` for non-"clean" genes.
-
-        ``bystander_gene``
-            A boolean mask of genes which are not only lateral, but are also ignored when computing
-            deviant (outlier) cells. This is ``False`` for non-"clean" genes.
 
         ``pre_feature_gene``, ``feature_gene``
             The number of times the gene was used as a feature when computing the preliminary and
@@ -1225,12 +1178,6 @@ def compute_divide_and_conquer_metacells(
                 feature_min_gene_total=feature_min_gene_total,
                 feature_min_gene_top3=feature_min_gene_top3,
                 feature_min_gene_relative_variance=feature_min_gene_relative_variance,
-                feature_gene_names=feature_gene_names,
-                feature_gene_patterns=feature_gene_patterns,
-                lateral_gene_names=lateral_gene_names,
-                lateral_gene_patterns=lateral_gene_patterns,
-                bystander_gene_names=bystander_gene_names,
-                bystander_gene_patterns=bystander_gene_patterns,
                 feature_correction=feature_correction,
                 cells_similarity_value_normalization=cells_similarity_value_normalization,
                 cells_similarity_log_data=cells_similarity_log_data,
@@ -1299,12 +1246,6 @@ def compute_divide_and_conquer_metacells(
                     feature_min_gene_total=feature_min_gene_total,
                     feature_min_gene_top3=feature_min_gene_top3,
                     feature_min_gene_relative_variance=feature_min_gene_relative_variance,
-                    feature_gene_names=feature_gene_names,
-                    feature_gene_patterns=feature_gene_patterns,
-                    lateral_gene_names=lateral_gene_names,
-                    lateral_gene_patterns=lateral_gene_patterns,
-                    bystander_gene_names=bystander_gene_names,
-                    bystander_gene_patterns=bystander_gene_patterns,
                     feature_correction=feature_correction,
                     cells_similarity_value_normalization=cells_similarity_value_normalization,
                     cells_similarity_log_data=cells_similarity_log_data,
@@ -1364,12 +1305,6 @@ def compute_divide_and_conquer_metacells(
                     feature_min_gene_total=feature_min_gene_total,
                     feature_min_gene_top3=feature_min_gene_top3,
                     feature_min_gene_relative_variance=feature_min_gene_relative_variance,
-                    feature_gene_names=feature_gene_names,
-                    feature_gene_patterns=feature_gene_patterns,
-                    lateral_gene_names=lateral_gene_names,
-                    lateral_gene_patterns=lateral_gene_patterns,
-                    bystander_gene_names=bystander_gene_names,
-                    bystander_gene_patterns=bystander_gene_patterns,
                     feature_correction=None,
                     cells_similarity_value_normalization=cells_similarity_value_normalization,
                     cells_similarity_log_data=groups_similarity_log_data,
@@ -1432,12 +1367,6 @@ def compute_divide_and_conquer_metacells(
                     feature_min_gene_total=feature_min_gene_total,
                     feature_min_gene_top3=feature_min_gene_top3,
                     feature_min_gene_relative_variance=feature_min_gene_relative_variance,
-                    feature_gene_names=feature_gene_names,
-                    feature_gene_patterns=feature_gene_patterns,
-                    lateral_gene_names=lateral_gene_names,
-                    lateral_gene_patterns=lateral_gene_patterns,
-                    bystander_gene_names=bystander_gene_names,
-                    bystander_gene_patterns=bystander_gene_patterns,
                     feature_correction=feature_correction,
                     cells_similarity_value_normalization=cells_similarity_value_normalization,
                     cells_similarity_log_data=cells_similarity_log_data,
@@ -1502,12 +1431,6 @@ def compute_piled_metacells(
     feature_min_gene_total: Optional[int],
     feature_min_gene_top3: Optional[int],
     feature_min_gene_relative_variance: Optional[float],
-    feature_gene_names: Optional[Collection[str]] = None,
-    feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    lateral_gene_names: Optional[Collection[str]],
-    lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]],
-    bystander_gene_names: Optional[Collection[str]] = None,
-    bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     feature_correction: Optional[FeatureCorrection],
     cells_similarity_value_normalization: float,
     cells_similarity_log_data: bool,
@@ -1585,12 +1508,6 @@ def compute_piled_metacells(
             feature_min_gene_total=feature_min_gene_total,
             feature_min_gene_top3=feature_min_gene_top3,
             feature_min_gene_relative_variance=feature_min_gene_relative_variance,
-            feature_gene_names=feature_gene_names,
-            feature_gene_patterns=feature_gene_patterns,
-            lateral_gene_names=lateral_gene_names,
-            lateral_gene_patterns=lateral_gene_patterns,
-            bystander_gene_names=bystander_gene_names,
-            bystander_gene_patterns=bystander_gene_patterns,
             feature_correction=feature_correction,
             cells_similarity_value_normalization=cells_similarity_value_normalization,
             cells_similarity_log_data=cells_similarity_log_data,
@@ -1672,12 +1589,6 @@ def compute_piled_metacells(
                 feature_min_gene_total=feature_min_gene_total,
                 feature_min_gene_top3=feature_min_gene_top3,
                 feature_min_gene_relative_variance=feature_min_gene_relative_variance,
-                feature_gene_names=feature_gene_names,
-                feature_gene_patterns=feature_gene_patterns,
-                lateral_gene_names=lateral_gene_names,
-                lateral_gene_patterns=lateral_gene_patterns,
-                bystander_gene_names=bystander_gene_names,
-                bystander_gene_patterns=bystander_gene_patterns,
                 feature_correction=feature_correction,
                 cells_similarity_value_normalization=cells_similarity_value_normalization,
                 cells_similarity_log_data=cells_similarity_log_data,
@@ -1742,12 +1653,6 @@ def _run_parallel_piles(
     feature_min_gene_total: Optional[int],
     feature_min_gene_top3: Optional[int],
     feature_min_gene_relative_variance: Optional[float],
-    feature_gene_names: Optional[Collection[str]] = None,
-    feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    lateral_gene_names: Optional[Collection[str]],
-    lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]],
-    bystander_gene_names: Optional[Collection[str]] = None,
-    bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     feature_correction: Optional[FeatureCorrection],
     cells_similarity_value_normalization: float,
     cells_similarity_log_data: bool,
@@ -1797,12 +1702,6 @@ def _run_parallel_piles(
             feature_min_gene_total=feature_min_gene_total,
             feature_min_gene_top3=feature_min_gene_top3,
             feature_min_gene_relative_variance=feature_min_gene_relative_variance,
-            feature_gene_names=feature_gene_names,
-            feature_gene_patterns=feature_gene_patterns,
-            lateral_gene_names=lateral_gene_names,
-            lateral_gene_patterns=lateral_gene_patterns,
-            bystander_gene_names=bystander_gene_names,
-            bystander_gene_patterns=bystander_gene_patterns,
             feature_correction=feature_correction,
             cells_similarity_value_normalization=cells_similarity_value_normalization,
             cells_similarity_log_data=cells_similarity_log_data,

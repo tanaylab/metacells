@@ -4,8 +4,6 @@ Deviants
 """
 
 import sys
-from re import Pattern
-from typing import Collection
 from typing import List
 from typing import Optional
 from typing import Tuple
@@ -18,8 +16,6 @@ from scipy import stats
 
 import metacells.parameters as pr
 import metacells.utilities as ut
-
-from .named import find_named_genes
 
 if "sphinx" not in sys.argv[0]:
     import metacells.extensions as xt  # type: ignore
@@ -41,8 +37,6 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
     abs_folds: bool = pr.deviants_abs_folds,
     max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
-    bystander_gene_names: Optional[Collection[str]] = None,
-    bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     inplace: bool = True,
 ) -> Optional[Tuple[ut.PandasSeries, ut.PandasSeries]]:
     """
@@ -54,6 +48,8 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
     Annotated ``adata``, where the observations are cells and the variables are genes, where
     ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
     annotation containing such a matrix.
+
+    Obeys (ignores the genes of) the ``noisy_gene`` per-gene (variable) annotation, if any.
 
     **Returns**
 
@@ -86,8 +82,7 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
        Compute the fold factor log2((actual UMIs + 1) / (expected UMIs + 1)) for each gene for each
        cell.
 
-    2. If ``bystander_gene_names`` (default: {bystander_gene_names}) and/or ``bystander_gene_patterns`` (default:
-       {bystander_gene_patterns}) were specified, then ignore all the matching genes.
+    2. If a ``noisy_gene`` mask exists, then ignore all the genes it contains.
 
     3. Ignore all fold factors less than the ``min_gene_fold_factor`` (default: {min_gene_fold_factor}). If
        ``abs_folds`` (default: {abs_folds}), consider the absolute fold factors. Count the number of genes which have a
@@ -130,8 +125,9 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
     totals_of_cells = ut.get_o_numpy(adata, what, sum=True)
     assert totals_of_cells.size == cells_count
 
-    find_named_genes(adata, names=bystander_gene_names, patterns=bystander_gene_patterns, to="bystander_gene")
-    bystander_genes_mask = ut.get_v_numpy(adata, "bystander_gene")
+    noisy_genes_mask: Optional[ut.NumpyVector] = None
+    if ut.has_data(adata, "noisy_gene"):
+        noisy_genes_mask = ut.get_v_numpy(adata, "noisy_gene")
 
     data = ut.get_vo_proper(adata, what, layout="row_major")
 
@@ -150,7 +146,7 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
             min_gene_fold_factor=min_gene_fold_factor,
             abs_folds=abs_folds,
             acceptable_cells_mask=acceptable_cells_mask,
-            bystander_genes_mask=bystander_genes_mask,
+            noisy_genes_mask=noisy_genes_mask,
         )
 
         fold_factors = _construct_fold_factors(cells_count, list_of_fold_factors, list_of_cell_index_of_rows)
@@ -225,7 +221,7 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
     min_gene_fold_factor: float,
     abs_folds: bool,
     acceptable_cells_mask: ut.NumpyVector,
-    bystander_genes_mask: ut.NumpyVector,
+    noisy_genes_mask: Optional[ut.NumpyVector],
 ) -> Tuple[List[ut.CompressedMatrix], List[ut.NumpyVector]]:
     list_of_fold_factors: List[ut.CompressedMatrix] = []
     list_of_cell_index_of_rows: List[ut.NumpyVector] = []
@@ -291,7 +287,8 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
                     fractions_of_candidate_genes,
                 )
 
-            compressed[:, bystander_genes_mask] = 0.0
+            if noisy_genes_mask is not None:
+                compressed[:, noisy_genes_mask] = 0.0
             ut.eliminate_zeros(compressed)
 
         else:
@@ -309,7 +306,8 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
                     fractions_of_candidate_genes,
                 )
 
-            dense[:, bystander_genes_mask] = 0.0
+            if noisy_genes_mask is not None:
+                dense[:, noisy_genes_mask] = 0.0
             compressed = sparse.csr_matrix(dense)
             assert compressed.has_sorted_indices
             assert compressed.has_canonical_format

@@ -3,9 +3,7 @@ Direct
 ------
 """
 
-from re import Pattern
 from typing import Callable
-from typing import Collection
 from typing import Optional
 from typing import Union
 
@@ -73,12 +71,6 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     feature_min_gene_total: Optional[int] = pr.feature_min_gene_total,
     feature_min_gene_top3: Optional[int] = pr.feature_min_gene_top3,
     feature_min_gene_relative_variance: Optional[float] = pr.feature_min_gene_relative_variance,
-    feature_gene_names: Optional[Collection[str]] = None,
-    feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    lateral_gene_names: Optional[Collection[str]] = None,
-    lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    bystander_gene_names: Optional[Collection[str]] = None,
-    bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     feature_correction: Optional[FeatureCorrection] = None,
     cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
@@ -161,14 +153,6 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
             A boolean mask of genes with "high" normalized variance, relative to other genes with a
             similar expression level.
 
-        ``lateral_gene``
-            A boolean mask of genes which are lateral from being chosen as "feature" genes based
-            on their name.
-
-        ``bystander_gene``
-            A boolean mask of genes which are not only lateral from being chosen as "feature" genes, but also are
-            ignored when computing deviant (outlier) cells, based on their name.
-
         ``feature_gene``
             A boolean mask of the "feature" genes.
 
@@ -207,13 +191,10 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        ``feature_downsample_min_samples`` (default: {feature_downsample_min_samples}),
        ``feature_downsample_min_cell_quantile`` (default: {feature_downsample_min_cell_quantile}),
        ``feature_downsample_max_cell_quantile`` (default: {feature_downsample_max_cell_quantile}),
-       ``feature_min_gene_total`` (default: {feature_min_gene_total}), ``feature_min_gene_top3``
-       (default: {feature_min_gene_top3}), ``feature_min_gene_relative_variance`` (default:
-       {feature_min_gene_relative_variance}), ``feature_gene_names`` (default:
-       {feature_gene_names}), ``feature_gene_patterns`` (default: {feature_gene_patterns}), ``lateral_gene_names``
-       (default: {lateral_gene_names}), ``lateral_gene_patterns`` (default: {lateral_gene_patterns})
-       ``bystander_gene_names`` (default: {bystander_gene_names}), ``bystander_gene_patterns`` (default:
-       {bystander_gene_patterns}) and ``random_seed`` (default: {random_seed}) to make this replicable.
+       ``feature_min_gene_total`` (default: {feature_min_gene_total}),
+       ``feature_min_gene_top3`` (default: {feature_min_gene_top3}),
+       ``feature_min_gene_relative_variance`` (default: {feature_min_gene_relative_variance}) and
+       ``random_seed`` (default: {random_seed}) to make this replicable.
 
     2. Apply the ``feature_correction`` function, if any, to modify the downsampled features data.
 
@@ -289,12 +270,6 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
         min_gene_relative_variance=feature_min_gene_relative_variance,
         min_gene_total=feature_min_gene_total,
         min_gene_top3=feature_min_gene_top3,
-        forced_gene_names=feature_gene_names,
-        forced_gene_patterns=feature_gene_patterns,
-        lateral_gene_names=lateral_gene_names,
-        lateral_gene_patterns=lateral_gene_patterns,
-        bystander_gene_names=bystander_gene_names,
-        bystander_gene_patterns=bystander_gene_patterns,
         random_seed=random_seed,
     )
 
@@ -384,7 +359,6 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
         deviant_votes_of_cells = np.zeros(adata.n_obs, dtype="float32")
         dissolved_of_cells = np.zeros(adata.n_obs, dtype="bool")
 
-        tl.find_named_genes(adata, names=bystander_gene_names, patterns=bystander_gene_patterns, to="bystander_gene")
         ut.set_v_data(adata, "gene_deviant_votes", deviant_votes_of_genes, formatter=ut.mask_description)
         ut.set_o_data(adata, "cell_deviant_votes", deviant_votes_of_cells, formatter=ut.mask_description)
         ut.set_o_data(adata, "dissolved", dissolved_of_cells, formatter=ut.mask_description)
@@ -398,8 +372,6 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
             abs_folds=deviants_abs_folds,
             max_gene_fraction=deviants_max_gene_fraction,
             max_cell_fraction=deviants_max_cell_fraction,
-            bystander_gene_names=bystander_gene_names,
-            bystander_gene_patterns=bystander_gene_patterns,
         )
 
         tl.dissolve_metacells(

@@ -30,7 +30,7 @@ Filtering the Data
 .. automodule:: metacells.tools.high
     :members:
 
-.. automodule:: metacells.tools.noisy_lonely
+.. automodule:: metacells.tools.bursty_lonely
     :members:
 
 .. automodule:: metacells.tools.rare

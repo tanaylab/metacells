@@ -11,6 +11,7 @@ from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
 import metacells.utilities as ut
+from metacells.tools.filter import filter_data
 
 __all__ = [
     "find_properly_sampled_cells",
@@ -27,7 +28,6 @@ def find_properly_sampled_cells(
     *,
     min_cell_total: Optional[int],
     max_cell_total: Optional[int],
-    excluded_adata: Optional[AnnData] = None,
     max_excluded_genes_fraction: Optional[float],
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -62,13 +62,9 @@ def find_properly_sampled_cells(
     2. Exclude all cells whose total data is more than the ``max_cell_total`` (no default), unless
        it is ``None``.
 
-    3. If ``max_excluded_genes_fraction`` (no default) is not ``None``, then ``excluded_adata`` must
-       not be ``None`` and should contain just the excluded genes data for each cell. Exclude all
-       cells whose sum of the excluded data divided by the total data is more than the specified
-       threshold.
+    3. If ``max_excluded_genes_fraction`` (no default) is not ``None``, then exclude all cells whose sum of the excluded
+       data (as defined by the ``excluded_gene`` mask) divided by the total data is more than the specified threshold.
     """
-    assert (max_excluded_genes_fraction is None) == (excluded_adata is None)
-
     total_of_cells = ut.get_o_numpy(adata, what, sum=True)
 
     cells_mask = np.full(adata.n_obs, True, dtype="bool")
@@ -79,15 +75,20 @@ def find_properly_sampled_cells(
     if max_cell_total is not None:
         cells_mask = cells_mask & (total_of_cells <= max_cell_total)
 
-    if excluded_adata is not None:
-        assert max_excluded_genes_fraction is not None
-        excluded_data = ut.get_vo_proper(excluded_adata, layout="row_major")
-        excluded_of_cells = ut.sum_per(excluded_data, per="row")
-        if np.min(total_of_cells) == 0:
-            total_of_cells = np.copy(total_of_cells)
-            total_of_cells[total_of_cells == 0] = 1
-        excluded_fraction = excluded_of_cells / total_of_cells
-        cells_mask = cells_mask & (excluded_fraction <= max_excluded_genes_fraction)
+    if max_excluded_genes_fraction is not None:
+        excluded_results = filter_data(
+            adata,
+            name=".excluded",
+            var_masks=["excluded_gene?"],
+        )
+        if excluded_results is not None:
+            excluded_data = ut.get_vo_proper(excluded_results[0], layout="row_major")
+            excluded_of_cells = ut.sum_per(excluded_data, per="row")
+            if np.min(total_of_cells) == 0:
+                total_of_cells = np.copy(total_of_cells)
+                total_of_cells[total_of_cells == 0] = 1
+            excluded_fraction = excluded_of_cells / total_of_cells
+            cells_mask = cells_mask & (excluded_fraction <= max_excluded_genes_fraction)
 
     if inplace:
         ut.set_o_data(adata, "properly_sampled_cell", cells_mask)

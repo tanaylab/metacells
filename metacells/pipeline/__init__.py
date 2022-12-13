@@ -11,12 +11,13 @@ implementation here as a starting point.
 All the functions included here are exported under ``metacells.pl``.
 """
 
-from .clean import *
 from .collect import *
 from .consistency import *
 from .direct import *
 from .divide_and_conquer import *
+from .exclude import *
 from .feature import *
+from .mark import *
 from .mcview import *
 from .projection import *
 from .related_genes import *

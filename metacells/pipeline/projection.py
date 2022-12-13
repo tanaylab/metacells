@@ -215,7 +215,7 @@ def projection_pipeline(
        ``project_candidates_count`` (default: {project_candidates_count}), ``project_min_usage_weight`` (default:
        {project_min_usage_weight}), ``project_abs_folds`` (default: {project_abs_folds}) and ``reproducible``.
 
-    3. Invoke :py:func:`metacells.tools.project.compute_projected_fold_factors` to compute the significant
+    3. Invoke :py:func:`metacells.tools.quality.compute_projected_fold_factors` to compute the significant
        fold factors between the query and its projection, using the ``project_fold_normalization`` (default:
        {project_fold_normalization}), ``project_min_significant_gene_value`` (default:
        {project_min_significant_gene_value}) and ``project_abs_folds`` (default: {project_abs_folds}).
@@ -247,7 +247,7 @@ def projection_pipeline(
        metacells of any type.
 
     8. Invoke :py:func:`metacells.tools.project.compute_query_projection` and
-       :py:func:`metacells.tools.project.compute_projected_fold_factors` to compute the significant fold factors between
+       :py:func:`metacells.tools.quality.compute_projected_fold_factors` to compute the significant fold factors between
        the query and its projection.
 
     9. Invoke :py:func:`metacells.tools.project.find_misfit_genes` to identify type-specific misfit genes. If any such
@@ -278,7 +278,7 @@ def projection_pipeline(
         will will always do them twice as the 1st run will generate some non-empty secondary type).
 
     15. Invoke :py:func:`metacells.tools.project.compute_query_projection`,
-        :py:func:`metacells.tools.project.compute_projected_fold_factors` and
+        :py:func:`metacells.tools.quality.compute_projected_fold_factors` and
         :py:func:`metacells.tools.quality.compute_similar_query_metacells` to update the projection and evaluation of
         the query metacell. If it is now similar, mark it as a doublet or a mixture depending on whether the primary and
         the secondary types are different or identical.
@@ -292,10 +292,9 @@ def projection_pipeline(
         between the projected and the corrected UMIs of each query metacell.
 
     18. If ``renormalize_query_by_atlas`` (default: {renormalize_query_by_atlas}), then invoke
-       :py:func:`metacells.tools.project.renormalize_query_by_atlas` using the ``renormalize_var_annotations``,
-       ``renormalize_layers`` and ``renormalize_varp_annotations``, if any, to add an ``ATLASNORM`` pseudo-gene so that
-       the fraction out of the total UMIs in the query of the genes common to the atlas would be the same on average as
-       their fraction out of the total UMIs in the atlas.
+        :py:func:`metacells.tools.project.renormalize_query_by_atlas` using the ``renormalize_var_annotations``,
+        ``renormalize_layers`` and ``renormalize_varp_annotations``, if any, to add an ``ATLASNORM`` pseudo-gene so that
+        the fraction out of the total UMIs in the query of the genes common to the atlas would be the same on average as
     """
     assert project_min_corrected_gene_factor >= 0
 

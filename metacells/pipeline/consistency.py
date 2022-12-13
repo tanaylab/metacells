@@ -3,8 +3,6 @@ Split
 -----
 """
 
-from re import Pattern
-from typing import Collection
 from typing import Optional
 from typing import Tuple
 from typing import Union
@@ -38,10 +36,6 @@ def split_groups(
     feature_min_gene_total: Optional[int] = None,
     feature_min_gene_top3: Optional[int] = None,
     feature_min_gene_relative_variance: Optional[float] = pr.feature_min_gene_relative_variance,
-    lateral_gene_names: Optional[Collection[str]] = None,
-    lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    bystander_gene_names: Optional[Collection[str]] = None,
-    bystander_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_method: str = pr.cells_similarity_method,
@@ -107,10 +101,6 @@ def split_groups(
             feature_min_gene_total=feature_min_gene_total,
             feature_min_gene_top3=feature_min_gene_top3,
             feature_min_gene_relative_variance=feature_min_gene_relative_variance,
-            lateral_gene_names=lateral_gene_names,
-            lateral_gene_patterns=lateral_gene_patterns,
-            bystander_gene_names=bystander_gene_names,
-            bystander_gene_patterns=bystander_gene_patterns,
             cells_similarity_value_normalization=cells_similarity_value_normalization,
             cells_similarity_log_data=cells_similarity_log_data,
             cells_similarity_method=cells_similarity_method,

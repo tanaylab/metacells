@@ -616,7 +616,7 @@ def compute_similar_query_metacells(
     Annotated query ``adata``, where the observations are metacells and the variables are genes.
 
     The data should contain per-observation-per-variable annotations ``projected_fold`` with the significant projection
-    folds factors, as computed by :py:func:`compute_significant_projected_fold_factors`. If
+    folds factors, as computed by :py:func:`compute_projected_fold_factors`. If
     ``min_essential_significant_genes_fraction``, and ``essential_genes_property`` are specified, then the data may
     contain additional per-observation (gene) mask(s) denoting the essential genes.
 

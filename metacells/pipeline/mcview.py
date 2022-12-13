@@ -76,29 +76,29 @@ def compute_for_mcview(
        {random_seed}) and the ``reproducible`` flag derived from it (true if the seed is not zero) are automatically
        passed to all relevant tools.
 
-    1. Computes UMAP projections by invoking :py:func:`metacells.pipeline.compute_umap_by_features`. This is done twice,
-       once with ``dimensions=2`` for visualization and once with ``dimensions=3`` to capture more of the manifold
-       structure (used to automatically generate cluster colors). Therefore in this case there are two dictionary
-       parameters ``compute_umap_by_features_2`` and ``compute_umap_by_features_3``.
+    1. Computes UMAP projections by invoking :py:func:`metacells.pipeline.umap.compute_umap_by_features`. This is done
+       twice, once with ``dimensions=2`` for visualization and once with ``dimensions=3`` to capture more of the
+       manifold structure (used to automatically generate cluster colors). Therefore in this case there are two
+       dictionary parameters ``compute_umap_by_features_2`` and ``compute_umap_by_features_3``.
 
     2. Compute for each gene and for each metacell the fold factor between the metacell cells using
-       :py:func:`metacells.tools.compute_inner_fold_factors`.
+       :py:func:`metacells.tools.quality.compute_inner_fold_factors`.
 
     3. Compute for each outlier cell the "most similar" metacecell for it using
-       :py:func:`metacells.tools.compute_outliers_matches`.
+       :py:func:`metacells.tools.quality.compute_outliers_matches`.
 
     4. Compute for each metacell the fold factor between the metacell and the outliers most similar to it using
-       :py:func:`metacells.tools.compute_deviant_fold_factors`.
+       :py:func:`metacells.tools.quality.compute_deviant_fold_factors`.
 
     5. Compute the gene-gene (variable-variable) similarity matrix. Note by default this will use
        {compute_var_var_similarity} which aren't the normal defaults for ``compute_var_var_similarity``, in order to
        keep just the top correlated genes and bottom (anti-)correlated genes for each gene. Otherwise you will get a
        dense matrix of ~X0K by ~X0K entries, which typically isn't what you want.
 
-    6. Compute the significant metacell genes using :py:func:`metacells.tools.find_metacells_significant_genes`.
+    6. Compute the significant metacell genes using :py:func:`metacells.tools.high.find_metacells_significant_genes`.
 
     7. Compute for each gene and for each outlier cell the fold factor between the cell and the most similar
-       metacell using :py:func:`metacells.tools.compute_outliers_fold_factors`.
+       metacell using :py:func:`metacells.tools.quality.compute_outliers_fold_factors`.
     """
     reproducible = random_seed != 0
     if find_metacells_significant_genes is not None:
