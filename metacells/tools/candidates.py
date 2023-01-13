@@ -31,7 +31,7 @@ __all__ = [
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many-branches
+def compute_candidate_metacells(  # pylint: disable=too-many-statements
     adata: AnnData,
     what: Union[str, ut.Matrix] = "obs_outgoing_weights",
     *,
@@ -39,17 +39,16 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many
     max_cell_size: Optional[float] = pr.max_cell_size,
     max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.candidates_cell_sizes,
-    cell_seeds: Optional[Union[str, ut.Vector]] = None,
     min_seed_size_quantile: float = pr.min_seed_size_quantile,
     max_seed_size_quantile: float = pr.max_seed_size_quantile,
     cooldown_pass: float = pr.cooldown_pass,
     cooldown_node: float = pr.cooldown_node,
     cooldown_phase: float = pr.cooldown_phase,
-    min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
-    max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
+    min_split_size_factor: float = pr.candidates_min_split_size_factor,
+    max_merge_size_factor: float = pr.candidates_max_merge_size_factor,
     min_metacell_cells: Optional[int] = pr.candidates_min_metacell_cells,
     max_split_min_cut_strength: Optional[float] = pr.max_split_min_cut_strength,
-    min_cut_seed_cells: Optional[int] = pr.min_cut_seed_cells,
+    min_cut_seed_cells: int = pr.min_cut_seed_cells,
     must_complete_cover: bool = False,
     random_seed: int = 0,
     inplace: bool = True,
@@ -88,11 +87,9 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many
        (default: {cell_sizes}) to assign a size for each node (cell). This can be a string name of a
        per-observation annotation or a vector of values.
 
-    2. We start with some an assignment of cells to ``cell_seeds`` (default: {cell_seeds}). If no
-       seeds are provided, we use :py:func:`choose_seeds` using ``min_seed_size_quantile`` (default:
-       {min_seed_size_quantile}) and ``max_seed_size_quantile`` (default: {max_seed_size_quantile})
-       to compute them, picking a number of seeds such that the average metacell size would match
-       the target.
+    2. We start with some an assignment of cells to seeds using :py:func:`choose_seeds` using ``min_seed_size_quantile``
+       (default: {min_seed_size_quantile}) and ``max_seed_size_quantile`` (default: {max_seed_size_quantile}) to compute
+       them, picking a number of seeds such that the average metacell size would match the target.
 
     3. We optimize the seeds using :py:func:`optimize_partitions` to obtain initial communities by
        maximizing the "stability" of the solution (probability of starting at a random node and
@@ -119,12 +116,14 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many
 
     7. Repeat the above steps until all metacells candidates are in the acceptable size range.
     """
-    edge_weights = ut.get_oo_proper(adata, what, layout="row_major")
-    assert edge_weights.shape[0] == edge_weights.shape[1]
+    assert 0.0 < max_merge_size_factor < min_split_size_factor
+    assert target_metacell_size > 0
     assert 0.0 < cooldown_pass < 1.0
     assert 0.0 <= cooldown_node <= 1.0
     assert 0.0 < cooldown_phase <= 1.0
 
+    edge_weights = ut.get_oo_proper(adata, what, layout="row_major")
+    assert edge_weights.shape[0] == edge_weights.shape[1]
     size = edge_weights.shape[0]
 
     outgoing_edge_weights = ut.mustbe_compressed_matrix(edge_weights)
@@ -140,26 +139,20 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many
     assert incoming_edge_weights.indices.dtype == "int32"
     assert incoming_edge_weights.indptr.dtype == "int32"
 
-    node_sizes = ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
-    if node_sizes is None:
+    cell_sizes = ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
+    if cell_sizes is None:
         node_sizes = np.full(size, 1.0, dtype="float32")
     else:
-        node_sizes = node_sizes.astype("float32")
+        node_sizes = cell_sizes.astype("float32")
     ut.log_calc("node_sizes", node_sizes, formatter=ut.sizes_description)
 
-    assert target_metacell_size > 0
-    max_metacell_size = None
-    min_metacell_size = None
-
-    if min_split_size_factor is not None:
-        assert min_split_size_factor > 0
-        max_metacell_size = ceil(target_metacell_size * min_split_size_factor) - 1
-    ut.log_calc("max_metacell_size", max_metacell_size)
-
-    if max_merge_size_factor is not None:
-        assert max_merge_size_factor > 0
-        min_metacell_size = floor(target_metacell_size * max_merge_size_factor) + 1
+    min_metacell_size = floor(target_metacell_size * max_merge_size_factor) + 1
     ut.log_calc("min_metacell_size", min_metacell_size)
+
+    max_metacell_size = ceil(target_metacell_size * min_split_size_factor) - 1
+    ut.log_calc("max_metacell_size", max_metacell_size)
+    if max_metacell_size == min_metacell_size:
+        max_metacell_size += 1
 
     target_metacell_cells = max(
         1.0 if min_metacell_cells is None else float(min_metacell_cells),
@@ -167,30 +160,19 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many
     )
     ut.log_calc("target_metacell_cells", target_metacell_cells)
 
-    if min_split_size_factor is not None and max_merge_size_factor is not None:
-        assert max_merge_size_factor < min_split_size_factor
-        assert min_metacell_size is not None
-        assert max_metacell_size is not None
-        assert min_metacell_size <= max_metacell_size
+    initial_seeds_count = ceil(size / target_metacell_cells)
+    ut.log_calc("initial_seeds_count", initial_seeds_count)
 
-    community_of_nodes = ut.maybe_o_numpy(adata, cell_seeds, formatter=ut.groups_description)
-
-    if community_of_nodes is not None:
-        assert community_of_nodes.dtype == "int32"
-    else:
-        target_seeds_count = ceil(size / target_metacell_cells)
-        ut.log_calc("target_seeds_count", target_seeds_count)
-
-        community_of_nodes = np.full(size, -1, dtype="int32")
-        _choose_seeds(
-            outgoing_edge_weights=outgoing_edge_weights,
-            incoming_edge_weights=incoming_edge_weights,
-            seed_of_cells=community_of_nodes,
-            max_seeds_count=target_seeds_count,
-            min_seed_size_quantile=min_seed_size_quantile,
-            max_seed_size_quantile=max_seed_size_quantile,
-            random_seed=random_seed,
-        )
+    community_of_nodes = np.full(size, -1, dtype="int32")
+    _choose_seeds(
+        outgoing_edge_weights=outgoing_edge_weights,
+        incoming_edge_weights=incoming_edge_weights,
+        seed_of_cells=community_of_nodes,
+        max_seeds_count=initial_seeds_count,
+        min_seed_size_quantile=min_seed_size_quantile,
+        max_seed_size_quantile=max_seed_size_quantile,
+        random_seed=random_seed,
+    )
 
     ut.set_o_data(adata, "seed", community_of_nodes, formatter=ut.groups_description)
     community_of_nodes = community_of_nodes.copy()
@@ -206,7 +188,7 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many
     kept_communities_count = 0
 
     while True:
-        cold_temperature, score = _optimize_split_communities(  #
+        cold_temperature, score = _reduce_communities(
             outgoing_edge_weights=outgoing_edge_weights,
             incoming_edge_weights=incoming_edge_weights,
             community_of_nodes=community_of_nodes,
@@ -215,6 +197,7 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many
             max_cell_size_factor=max_cell_size_factor,
             target_metacell_size=target_metacell_size,
             min_metacell_cells=min_metacell_cells,
+            min_metacell_size=min_metacell_size,
             max_metacell_size=max_metacell_size,
             max_split_min_cut_strength=max_split_min_cut_strength,
             min_cut_seed_cells=min_cut_seed_cells,
@@ -238,6 +221,8 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many
             min_metacell_size=min_metacell_size,
             min_metacell_cells=min_metacell_cells,
         )
+
+        ut.log_calc("small communities", len(small_communities))
 
         small_communities_count = len(small_communities)
         if small_communities_count < 2:
@@ -269,20 +254,17 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements,too-many
             random_seed=random_seed,
         )
 
+    assert np.all(community_of_nodes >= 0)
+
     if inplace:
         ut.set_o_data(adata, "candidate", community_of_nodes, formatter=ut.groups_description)
         return None
-
-    if must_complete_cover:
-        assert np.min(community_of_nodes) == 0
-    else:
-        community_of_nodes[community_of_nodes < 0] = -1
 
     ut.log_return("candidate", community_of_nodes, formatter=ut.groups_description)
     return ut.to_pandas_series(community_of_nodes, index=adata.obs_names)
 
 
-def _optimize_split_communities(
+def _reduce_communities(
     outgoing_edge_weights: ut.CompressedMatrix,
     incoming_edge_weights: ut.CompressedMatrix,
     community_of_nodes: ut.NumpyVector,
@@ -291,9 +273,10 @@ def _optimize_split_communities(
     max_cell_size: Optional[float],
     max_cell_size_factor: Optional[float],
     min_metacell_cells: Optional[int],
-    max_metacell_size: Optional[float],
+    min_metacell_size: float,
+    max_metacell_size: float,
     max_split_min_cut_strength: Optional[float],
-    min_cut_seed_cells: Optional[int],
+    min_cut_seed_cells: int,
     must_complete_cover: bool,
     min_seed_size_quantile: float,
     max_seed_size_quantile: float,
@@ -305,12 +288,17 @@ def _optimize_split_communities(
     cold_temperature: float,
     atomic_candidates: Set[Tuple[int, ...]],
 ) -> Tuple[float, float]:
+    np.random.seed(random_seed)
     while True:
         ut.log_calc("cold_temperature", cold_temperature)
         score = _optimize_partitions(
             outgoing_edge_weights=outgoing_edge_weights,
             incoming_edge_weights=incoming_edge_weights,
             community_of_nodes=community_of_nodes,
+            low_partition_size=min_metacell_size,
+            target_partition_size=target_metacell_size,
+            high_partition_size=max_metacell_size,
+            node_sizes=node_sizes,
             random_seed=random_seed,
             cooldown_pass=cooldown_pass,
             cooldown_node=cooldown_node,
@@ -321,13 +309,12 @@ def _optimize_split_communities(
         cold_temperature = cold_temperature * (1 - cooldown_phase)
         ut.log_calc("communities", community_of_nodes, formatter=ut.groups_description)
 
-        modified_communities_count, new_communities_count, kept_communities_count = _split_communities(
+        split_communities_count, cut_communities_count = _cut_split_communities(
             outgoing_edge_weights=outgoing_edge_weights,
             community_of_nodes=community_of_nodes,
             node_sizes=node_sizes,
             max_cell_size=max_cell_size,
             max_cell_size_factor=max_cell_size_factor,
-            target_metacell_size=target_metacell_size,
             min_metacell_cells=min_metacell_cells,
             max_metacell_size=max_metacell_size,
             max_split_min_cut_strength=max_split_min_cut_strength,
@@ -336,51 +323,48 @@ def _optimize_split_communities(
             atomic_candidates=atomic_candidates,
         )
 
-        if new_communities_count > 0:
-            assert modified_communities_count > 0
+        if split_communities_count + cut_communities_count == 0:
+            return cold_temperature, score
+
+        kept_communities_count = np.max(community_of_nodes) + 1
+
+        if cut_communities_count > 0:
             _choose_seeds(
                 outgoing_edge_weights=outgoing_edge_weights,
                 incoming_edge_weights=incoming_edge_weights,
                 seed_of_cells=community_of_nodes,
-                max_seeds_count=kept_communities_count + new_communities_count,
+                max_seeds_count=np.max(community_of_nodes) + 2,
                 min_seed_size_quantile=min_seed_size_quantile,
                 max_seed_size_quantile=max_seed_size_quantile,
                 random_seed=random_seed,
             )
 
-        if modified_communities_count == 0:
-            return cold_temperature, score
 
-
-def _split_communities(
+def _cut_split_communities(
     *,
     outgoing_edge_weights: ut.CompressedMatrix,
     community_of_nodes: ut.NumpyVector,
     node_sizes: ut.NumpyVector,
     max_cell_size: Optional[float],
     max_cell_size_factor: Optional[float],
-    target_metacell_size: float,
     min_metacell_cells: Optional[int],
     max_metacell_size: Optional[float],
     max_split_min_cut_strength: Optional[float],
-    min_cut_seed_cells: Optional[int],
+    min_cut_seed_cells: int,
     must_complete_cover: bool,
     atomic_candidates: Set[Tuple[int, ...]],
-) -> Tuple[int, int, int]:
+) -> Tuple[int, int]:
     communities_count = np.max(community_of_nodes) + 1
     assert communities_count > 0
 
     if max_metacell_size is None and max_split_min_cut_strength is None:
         ut.logger().debug("no communities need to be split")
-        return (0, 0, communities_count)
+        return (False, False)
 
-    cancelled_communities: Set[int] = set()
     split_communities_count = 0
     cut_communities_count = 0
     next_new_community_index = communities_count
-    cancelled_total_size = 0
 
-    did_not_add = False
     for community_index in range(communities_count):
         community_mask = community_of_nodes == community_index
         community_size = np.sum(
@@ -397,11 +381,14 @@ def _split_communities(
             ut.logger().debug(
                 "community: %s nodes: %s size: %s is too large", community_index, np.sum(community_mask), community_size
             )
-            cancelled_total_size += community_size
-            cancelled_communities.add(community_index)
+            community_indices = np.where(community_mask)[0]
+            second_partition_indices = community_indices[np.random.choice([False, True], size=len(community_indices))]
+            community_of_nodes[second_partition_indices] = next_new_community_index
+            next_new_community_index += 1
+            split_communities_count += 1
             continue
 
-    if len(cancelled_communities) == 0 and max_split_min_cut_strength is not None:
+    if split_communities_count == 0 and max_split_min_cut_strength is not None:
         for community_index in range(communities_count):
             community_mask = community_of_nodes == community_index
 
@@ -409,7 +396,7 @@ def _split_communities(
             if community_indices in atomic_candidates:
                 continue
 
-            did_cut, did_split = _min_cut_community(
+            action = _min_cut_community(
                 outgoing_edge_weights=outgoing_edge_weights,
                 community_of_nodes=community_of_nodes,
                 cut_community_index=community_index,
@@ -419,47 +406,32 @@ def _split_communities(
                 new_community_index=next_new_community_index,
             )
 
-            if not did_cut:
+            if action == "unchanged":
                 atomic_candidates.add(community_indices)
                 continue
 
-            cut_communities_count += 1
             ut.logger().debug(
-                "community: %s nodes: %s size: %s is too divided",
+                "community: %s nodes: %s size: %s was %s",
                 community_index,
                 np.sum(community_mask),
                 community_size,
+                action,
             )
-            if did_split:
+            if action == "split":
                 split_communities_count += 1
                 next_new_community_index += 1
+            else:
+                cut_communities_count += 1
 
-    cancelled_communities_count = len(cancelled_communities)
-    modified_communities_count = cut_communities_count + cancelled_communities_count
-    if modified_communities_count == 0:
-        ut.logger().debug("no communities were modified")
-        return (0, 0, communities_count)
-
-    ut.logger().debug("all communities: %s", communities_count)
-    ut.logger().debug("cut communities: %s", cut_communities_count)
-    ut.logger().debug("split communities: %s", split_communities_count)
-    ut.logger().debug("cancelled communities: %s", cancelled_communities_count)
-
-    if cancelled_communities_count > 0:
-        new_communities_count = max(ceil(cancelled_total_size / target_metacell_size), cancelled_communities_count + 1)
+    if split_communities_count + cut_communities_count > 0:
+        ut.logger().debug("old communities: %s", communities_count)
+        ut.logger().debug("cut communities: %s", cut_communities_count)
+        ut.logger().debug("split communities: %s", split_communities_count)
+        ut.logger().debug("total communities: %s", communities_count + split_communities_count)
     else:
-        new_communities_count = 0
+        ut.logger().debug("no communities were cut or split")
 
-    if did_not_add and new_communities_count == 0:
-        new_communities_count = 1
-
-    ut.logger().debug("reclaimed communities: %s", new_communities_count)
-
-    kept_communities_count = _cancel_communities(community_of_nodes, cancelled_communities)
-    ut.logger().debug("kept communities: %s", kept_communities_count)
-    assert kept_communities_count == communities_count + split_communities_count - cancelled_communities_count
-
-    return (modified_communities_count, new_communities_count, kept_communities_count)
+    return (split_communities_count, cut_communities_count)
 
 
 def _min_cut_community(
@@ -467,19 +439,30 @@ def _min_cut_community(
     community_of_nodes: ut.NumpyVector,
     cut_community_index: int,
     max_split_min_cut_strength: float,
-    min_cut_seed_cells: Optional[int],
+    min_cut_seed_cells: int,
     must_complete_cover: bool,
     new_community_index: int,
-) -> Tuple[bool, bool]:
+) -> str:
     community_mask = community_of_nodes == cut_community_index
     if np.sum(community_mask) < 2:
-        return (False, False)
+        return "unchanged"
     community_edge_weights = outgoing_edge_weights[community_mask, :][:, community_mask]
     community_edge_weights += community_edge_weights.T
 
     cut, cut_strength = ut.min_cut(community_edge_weights)
     if cut_strength is None:
-        return (False, False)
+        return "unchanged"
+
+    if cut_strength == 0:
+        community_indices = np.where(community_mask)[0]
+        if len(cut.partition[0]) < len(cut.partition[1]):
+            small_partition = 0
+        else:
+            small_partition = 1
+        small_community_indices = community_indices[cut.partition[small_partition]]
+
+    if cut_strength > max_split_min_cut_strength:
+        return "unchanged"
 
     ut.logger().debug(
         "min cut community: %s partitions: %s + %s = %s strength: %s",
@@ -490,28 +473,24 @@ def _min_cut_community(
         cut_strength,
     )
 
-    if cut_strength > max_split_min_cut_strength:
-        return (False, False)
-
     community_indices = np.where(community_mask)[0]
+    if len(cut.partition[0]) < len(cut.partition[1]):
+        small_partition = 0
+    else:
+        small_partition = 1
 
-    if cut_strength > 0 and min_cut_seed_cells is not None:
-        if len(cut.partition[0]) < len(cut.partition[1]):
-            small_partition = 0
-        else:
-            small_partition = 1
+    if len(cut.partition[small_partition]) >= min_cut_seed_cells:
+        second_partition_indices = community_indices[cut.partition[1]]
+        community_of_nodes[second_partition_indices] = new_community_index
+        return "split"
 
-        if len(cut.partition[small_partition]) < min_cut_seed_cells:
-            if must_complete_cover:
-                return (False, False)
-            small_community_indices = community_indices[cut.partition[small_partition]]
-            community_of_nodes[small_community_indices] = -2
-            ut.logger().debug("give up on small cut: %s", len(cut.partition[small_partition]))
-            return (True, False)
+    if must_complete_cover and cut_strength > 0:
+        ut.logger().debug("give up on small cut: %s", len(cut.partition[small_partition]))
+        return "unchanged"
 
-    second_partition_indices = community_indices[cut.partition[1]]
-    community_of_nodes[second_partition_indices] = new_community_index
-    return (True, True)
+    small_community_indices = community_indices[cut.partition[small_partition]]
+    community_of_nodes[small_community_indices] = -1
+    return "cut"
 
 
 def _find_small_communities(
@@ -527,7 +506,7 @@ def _find_small_communities(
     assert communities_count > 0
 
     if min_metacell_size is None and min_metacell_cells is None:
-        ut.logger().debug("all communities are not too small")
+        ut.logger().debug("no communities are too small")
         return (set(), communities_count)
 
     small_communities: Set[int] = set()
@@ -628,7 +607,7 @@ def choose_seeds(
 
     assert outgoing_edge_weights.shape == incoming_edge_weights.shape == (len(seed_of_cells), len(seed_of_cells))
 
-    return _choose_seeds(
+    _choose_seeds(
         outgoing_edge_weights=outgoing_edge_weights,
         incoming_edge_weights=incoming_edge_weights,
         seed_of_cells=seed_of_cells,
@@ -638,7 +617,10 @@ def choose_seeds(
         random_seed=random_seed,
     )
 
+    return seed_of_cells
 
+
+@ut.logged()
 @ut.timed_call()
 def _choose_seeds(
     *,
@@ -649,7 +631,9 @@ def _choose_seeds(
     min_seed_size_quantile: float,
     max_seed_size_quantile: float,
     random_seed: int,
-) -> ut.NumpyVector:
+) -> None:
+    ut.log_calc("partial seeds", seed_of_cells, formatter=ut.groups_description)
+
     xt.choose_seeds(
         outgoing_edge_weights.data,
         outgoing_edge_weights.indices,
@@ -664,8 +648,34 @@ def _choose_seeds(
         seed_of_cells,
     )
 
-    ut.log_calc("seeds", seed_of_cells, formatter=ut.groups_description)
-    return seed_of_cells
+    ut.log_calc("chosen seeds", seed_of_cells, formatter=ut.groups_description)
+    assert np.min(seed_of_cells) == 0
+
+
+@ut.logged()
+@ut.timed_call()
+def _complete_seeds(
+    *,
+    outgoing_edge_weights: ut.CompressedMatrix,
+    incoming_edge_weights: ut.CompressedMatrix,
+    seed_of_cells: ut.NumpyVector,
+    seeds_count: int,
+) -> None:
+    ut.log_calc("incomplete seeds", seed_of_cells, formatter=ut.groups_description)
+
+    xt.complete_seeds(
+        outgoing_edge_weights.data,
+        outgoing_edge_weights.indices,
+        outgoing_edge_weights.indptr,
+        incoming_edge_weights.data,
+        incoming_edge_weights.indices,
+        incoming_edge_weights.indptr,
+        seeds_count,
+        seed_of_cells,
+    )
+
+    ut.log_calc("completed seeds", seed_of_cells, formatter=ut.groups_description)
+    assert np.min(seed_of_cells) == 0
 
 
 @ut.logged()
@@ -674,6 +684,10 @@ def optimize_partitions(
     *,
     edge_weights: ut.CompressedMatrix,
     community_of_nodes: ut.NumpyVector,
+    low_partition_size: float,
+    target_partition_size: float,
+    high_partition_size: float,
+    node_sizes: ut.NumpyVector,
     cooldown_pass: float = pr.cooldown_pass,
     cooldown_node: float = pr.cooldown_node,
     random_seed: int,
@@ -712,6 +726,7 @@ def optimize_partitions(
     """
     outgoing_edge_weights = ut.mustbe_compressed_matrix(edge_weights)
     assert ut.is_layout(outgoing_edge_weights, "row_major")
+    assert 0 < low_partition_size < target_partition_size < high_partition_size
 
     incoming_edge_weights = ut.mustbe_compressed_matrix(ut.to_layout(outgoing_edge_weights, layout="column_major"))
     assert ut.is_layout(incoming_edge_weights, "column_major")
@@ -719,6 +734,10 @@ def optimize_partitions(
         outgoing_edge_weights=outgoing_edge_weights,
         incoming_edge_weights=incoming_edge_weights,
         random_seed=random_seed,
+        low_partition_size=low_partition_size,
+        target_partition_size=target_partition_size,
+        high_partition_size=high_partition_size,
+        node_sizes=node_sizes,
         cooldown_pass=cooldown_pass,
         cooldown_node=cooldown_node,
         community_of_nodes=community_of_nodes,
@@ -727,12 +746,17 @@ def optimize_partitions(
     )
 
 
+@ut.logged()
 @ut.timed_call()
 def _optimize_partitions(
     *,
     outgoing_edge_weights: ut.CompressedMatrix,
     incoming_edge_weights: ut.CompressedMatrix,
     community_of_nodes: ut.NumpyVector,
+    low_partition_size: float,
+    target_partition_size: float,
+    high_partition_size: float,
+    node_sizes: ut.NumpyVector,
     cooldown_pass: float,
     cooldown_node: float,
     cold_communities_count: int,
@@ -740,6 +764,7 @@ def _optimize_partitions(
     random_seed: int,
 ) -> float:
     assert community_of_nodes.dtype == "int32"
+    assert node_sizes.dtype == "float32"
     score = xt.optimize_partitions(
         outgoing_edge_weights.data,
         outgoing_edge_weights.indices,
@@ -748,6 +773,10 @@ def _optimize_partitions(
         incoming_edge_weights.indices,
         incoming_edge_weights.indptr,
         random_seed,
+        low_partition_size,
+        target_partition_size,
+        high_partition_size,
+        node_sizes,
         cooldown_pass,
         cooldown_node,
         community_of_nodes,
@@ -755,6 +784,8 @@ def _optimize_partitions(
         cold_temperature,
     )
     ut.log_calc("score", score)
+    ut.log_calc("partitions", community_of_nodes, formatter=ut.groups_description)
+    assert np.min(community_of_nodes) == 0
     return score
 
 
@@ -762,6 +793,10 @@ def _optimize_partitions(
 @ut.timed_call()
 def score_partitions(
     *,
+    low_partition_size: float,
+    target_partition_size: float,
+    high_partition_size: float,
+    node_sizes: ut.NumpyVector,
     edge_weights: ut.CompressedMatrix,
     partition_of_nodes: ut.NumpyVector,
     with_orphans: bool = True,
@@ -778,7 +813,8 @@ def score_partitions(
     for efficient computation; thus orphans are given a very small (non-zero) weight so the overall
     score is not zeroed even when including them.
     """
-    assert str(partition_of_nodes.dtype) == "int32"
+    assert partition_of_nodes.dtype == "int32"
+    assert node_sizes.dtype == "float32"
     outgoing_edge_weights = ut.mustbe_compressed_matrix(edge_weights)
     assert ut.is_layout(outgoing_edge_weights, "row_major")
 
@@ -794,6 +830,10 @@ def score_partitions(
                 incoming_edge_weights.data,
                 incoming_edge_weights.indices,
                 incoming_edge_weights.indptr,
+                low_partition_size,
+                target_partition_size,
+                high_partition_size,
+                node_sizes,
                 partition_of_nodes,
                 with_orphans,
             )

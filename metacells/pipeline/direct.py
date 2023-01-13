@@ -61,7 +61,7 @@ except ModuleNotFoundError:
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-branches
+def compute_direct_metacells(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
@@ -80,21 +80,22 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     knn_k: Optional[int] = pr.knn_k,
+    knn_k_size_factor: float = pr.candidates_knn_k_size_factor,
+    knn_k_size_quantile: float = pr.knn_k_size_quantile,
     min_knn_k: Optional[int] = pr.min_knn_k,
     knn_balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     knn_incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     knn_outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
-    candidates_cell_seeds: Optional[Union[str, ut.Vector]] = None,
     min_seed_size_quantile: float = pr.min_seed_size_quantile,
     max_seed_size_quantile: float = pr.max_seed_size_quantile,
     candidates_cooldown_pass: float = pr.cooldown_pass,
     candidates_cooldown_node: float = pr.cooldown_node,
     candidates_cooldown_phase: float = pr.cooldown_phase,
-    candidates_min_split_size_factor: Optional[float] = pr.candidates_min_split_size_factor,
-    candidates_max_merge_size_factor: Optional[float] = pr.candidates_max_merge_size_factor,
+    candidates_min_split_size_factor: float = pr.candidates_min_split_size_factor,
+    candidates_max_merge_size_factor: float = pr.candidates_max_merge_size_factor,
     candidates_min_metacell_cells: Optional[int] = pr.candidates_min_metacell_cells,
     candidates_max_split_min_cut_strength: Optional[float] = pr.max_split_min_cut_strength,
-    candidates_min_cut_seed_cells: Optional[int] = pr.min_cut_seed_cells,
+    candidates_min_cut_seed_cells: int = pr.min_cut_seed_cells,
     must_complete_cover: bool = False,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     deviants_abs_folds: bool = pr.deviants_abs_folds,
@@ -105,7 +106,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
     dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
     random_seed: int = pr.random_seed,
-) -> AnnData:
+) -> None:
     """
     Directly compute metacells using ``what`` (default: {what}) data.
 
@@ -145,44 +146,30 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
 
     Sets the following annotations in ``adata``:
 
+    Unstructured Annotations
+        ``downsample_samples``
+            The target total number of samples in each downsampled cell.
+
+    Observation-Variable (Cell-Gene) Annotations:
+        ``downsampled``
+            The downsampled data where the total number of samples in each cell is at most ``downsample_samples``.
+
     Variable (Gene) Annotations
         ``high_total_gene``
-            A boolean mask of genes with "high" expression level.
+            A boolean mask of genes with "high" expression level (unless a ``feature_gene`` mask exists).
 
         ``high_relative_variance_gene``
-            A boolean mask of genes with "high" normalized variance, relative to other genes with a
-            similar expression level.
+            A boolean mask of genes with "high" normalized variance, relative to other genes with a similar expression
+            level (unless a ``feature_gene`` mask exists).
 
         ``feature_gene``
             A boolean mask of the "feature" genes.
 
-        ``gene_deviant_votes``
-            The number of cells each gene marked as deviant (if zero, the gene did not mark any cell
-            as deviant). This will be zero for non-"feature" genes.
-
     Observation (Cell) Annotations
-        ``seed``
-            The index of the seed metacell each cell was assigned to to. This is ``-1`` for
-            non-"clean" cells.
-
-        ``candidate``
-            The index of the candidate metacell each cell was assigned to to. This is ``-1`` for
-            non-"clean" cells.
-
-        ``cell_deviant_votes``
-            The number of genes that were the reason the cell was marked as deviant (if zero, the
-            cell is not deviant).
-
-        ``dissolved``
-            A boolean mask of the cells contained in a dissolved metacell.
-
         ``metacell``
             The integer index of the metacell each cell belongs to. The metacells are in no
             particular order. Cells with no metacell assignment ("outliers") are given a metacell
             index of ``-1``.
-
-        ``outlier``
-            A boolean mask of the cells contained in no metacell.
 
     **Computation Parameters**
 
@@ -210,19 +197,16 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
        similarity between each pair of cells, using the
        ``cells_similarity_method`` (default: {cells_similarity_method}).
 
-    6. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a
-       K-Nearest-Neighbors graph, using the
-       ``knn_balanced_ranks_factor`` (default: {knn_balanced_ranks_factor}),
-       ``knn_incoming_degree_factor`` (default: {knn_incoming_degree_factor})
-       and
-       ``knn_outgoing_degree_factor`` (default: {knn_outgoing_degree_factor}).
-       If ``knn_k`` (default: {knn_k}) is not specified, then it is
-       chosen to be the median number of cells required to reach the target metacell size,
-       but at least ``min_knn_k`` (default: {min_knn_k}).
+    6. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a K-Nearest-Neighbors graph,
+       using the ``knn_balanced_ranks_factor`` (default: {knn_balanced_ranks_factor}), ``knn_incoming_degree_factor``
+       (default: {knn_incoming_degree_factor}) and ``knn_outgoing_degree_factor`` (default:
+       {knn_outgoing_degree_factor}). If ``knn_k`` (default: {knn_k}) is not specified, then it is chosen to be the
+       ``knn_k_size_factor`` (default: {knn_k_size_factor} times the median number of cells required to reach the target
+       metacell size, or the ``knn_k_size_quantile`` (default: {knn_k_size_quantile}) the number of cells required, or
+       ``min_knn_k`` (default: {min_knn_k}), whichever is largest.
 
     7. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
        the candidate metacells, using the
-       ``candidates_cell_seeds`` (default: {candidates_cell_seeds}),
        ``max_cell_size`` (default: {max_cell_size}),
        ``max_cell_size_factor`` (default: {max_cell_size_factor}),
        ``min_seed_size_quantile`` (default: {min_seed_size_quantile}),
@@ -273,9 +257,6 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
         random_seed=random_seed,
     )
 
-    if fdata is None:
-        raise ValueError("Empty feature data, giving up")
-
     cell_sizes = ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
 
     data = ut.get_vo_proper(fdata, "downsampled", layout="row_major")
@@ -293,17 +274,28 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
     if knn_k is None:
         if cell_sizes is None:
             median_cell_size = 1.0
+            quantile_cell_size = 1.0
         else:
             median_cell_size = float(np.median(cell_sizes))
-        knn_k = int(round(target_metacell_size / median_cell_size))
-        if min_knn_k is not None:
-            knn_k = max(knn_k, min_knn_k)
+            quantile_cell_size = np.quantile(cell_sizes, knn_k_size_quantile)
+        knn_k_of_median = int(round(target_metacell_size / median_cell_size))
+        knn_k_median = int(round(knn_k_size_factor * target_metacell_size / median_cell_size))
+        knn_k_quantile = int(round(target_metacell_size / quantile_cell_size))
+        ut.log_calc("median_cell_size", median_cell_size)
+        ut.log_calc("knn_k by median_cell_size", knn_k_median)
+        ut.log_calc("quantile_cell_size", quantile_cell_size)
+        ut.log_calc("knn_k by quantile_cell_size", knn_k_quantile)
+        knn_k = max(
+            int(round(knn_k_size_factor * target_metacell_size / median_cell_size)),
+            int(round(target_metacell_size / quantile_cell_size)),
+            min_knn_k or 0,
+        )
 
     if knn_k == 0:
-        ut.log_calc("knn_k: 0 (too small, try single metacell)")
+        ut.log_calc("knn_k: 0 (too small, trying a single metacell)")
         ut.set_o_data(fdata, "candidate", np.full(fdata.n_obs, 0, dtype="int32"), formatter=lambda _: "* <- 0")
-    elif knn_k >= fdata.n_obs:
-        ut.log_calc(f"knn_k: {knn_k} (too large, try single metacell)")
+    elif knn_k_of_median >= fdata.n_obs:
+        ut.log_calc(f"knn_k of median: {knn_k_of_median} (too large, trying a single metacell)")
         ut.set_o_data(fdata, "candidate", np.full(fdata.n_obs, 0, dtype="int32"), formatter=lambda _: "* <- 0")
 
     else:
@@ -323,7 +315,6 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
             fdata,
             target_metacell_size=target_metacell_size,
             cell_sizes=cell_sizes,
-            cell_seeds=candidates_cell_seeds,
             max_cell_size=max_cell_size,
             max_cell_size_factor=max_cell_size_factor,
             min_seed_size_quantile=min_seed_size_quantile,
@@ -340,32 +331,14 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
             random_seed=random_seed,
         )
 
-        ut.set_oo_data(adata, "obs_similarity", ut.get_oo_proper(fdata, "obs_similarity"))
-
-        ut.set_oo_data(adata, "obs_outgoing_weights", ut.get_oo_proper(fdata, "obs_outgoing_weights"))
-
-        seed_of_cells = ut.get_o_numpy(fdata, "seed", formatter=ut.groups_description)
-
-        ut.set_o_data(adata, "seed", seed_of_cells, formatter=ut.groups_description)
-
     candidate_of_cells = ut.get_o_numpy(fdata, "candidate", formatter=ut.groups_description)
-
-    ut.set_o_data(adata, "candidate", candidate_of_cells, formatter=ut.groups_description)
 
     if must_complete_cover:
         assert np.min(candidate_of_cells) == 0
-
-        deviant_votes_of_genes = np.zeros(adata.n_vars, dtype="float32")
-        deviant_votes_of_cells = np.zeros(adata.n_obs, dtype="float32")
-        dissolved_of_cells = np.zeros(adata.n_obs, dtype="bool")
-
-        ut.set_v_data(adata, "gene_deviant_votes", deviant_votes_of_genes, formatter=ut.mask_description)
-        ut.set_o_data(adata, "cell_deviant_votes", deviant_votes_of_cells, formatter=ut.mask_description)
-        ut.set_o_data(adata, "dissolved", dissolved_of_cells, formatter=ut.mask_description)
         ut.set_o_data(adata, "metacell", candidate_of_cells, formatter=ut.groups_description)
 
     else:
-        tl.find_deviant_cells(
+        deviants = tl.find_deviant_cells(
             adata,
             candidates=candidate_of_cells,
             min_gene_fold_factor=deviants_min_gene_fold_factor,
@@ -377,6 +350,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
         tl.dissolve_metacells(
             adata,
             candidates=candidate_of_cells,
+            deviants=deviants,
             target_metacell_size=target_metacell_size,
             cell_sizes=cell_sizes,
             max_cell_size=max_cell_size,
@@ -386,10 +360,3 @@ def compute_direct_metacells(  # pylint: disable=too-many-statements,too-many-br
             min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
             min_metacell_cells=dissolve_min_metacell_cells,
         )
-
-    metacell_of_cells = ut.get_o_numpy(adata, "metacell", formatter=ut.groups_description)
-
-    outlier_of_cells = metacell_of_cells < 0
-    ut.set_o_data(adata, "outlier", outlier_of_cells, formatter=ut.mask_description)
-
-    return fdata

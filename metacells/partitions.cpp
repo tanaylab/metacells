@@ -2,6 +2,39 @@
 
 namespace metacells {
 
+static float64_t
+mass_factor(float64_t mass, float64_t low_mass, float64_t target_mass, float64_t high_mass) {
+    const float64_t inner_slope = 0.02;
+    const float64_t outer_slope = 0.5;
+    if (mass < low_mass) {
+        return log2((1 - inner_slope) * low_mass / (low_mass + (1 / (1 - outer_slope) - 1) * (low_mass - mass)));
+    }
+    if (mass < target_mass) {
+        return log2(1 - inner_slope * (target_mass - mass) / (target_mass - low_mass));
+    }
+    if (mass < high_mass) {
+        return log2(1 - inner_slope * (mass - target_mass) / (high_mass - target_mass));
+    }
+    return log2((1 - inner_slope) * low_mass / (low_mass + (1 / (1 - outer_slope) - 1) * (mass - high_mass)));
+}
+
+struct CandidatePartitions {
+    std::vector<size_t>& connectivity_partitions;
+    std::vector<size_t>& goal_partitions;
+    std::vector<size_t>& both_partitions;
+
+    CandidatePartitions(TmpVectorSizeT& raii, size_t partitions_count)
+      : connectivity_partitions(raii.vector(partitions_count))
+      , goal_partitions(raii.vector(partitions_count))
+      , both_partitions(raii.vector(partitions_count)) {}
+
+    void clear() {
+        connectivity_partitions.clear();
+        goal_partitions.clear();
+        both_partitions.clear();
+    }
+};
+
 // Score information for one node for one partition.
 struct NodeScore {
 private:
@@ -26,6 +59,8 @@ public:
         m_score = NaN;
     }
 
+    int connectivity() const { return int(m_total_outgoing_weights > EPSILON) + int(m_total_incoming_weights > 0); }
+
     float64_t total_outgoing_weights() const { return m_total_outgoing_weights; }
 
     float64_t total_incoming_weights() const { return m_total_incoming_weights; }
@@ -37,7 +72,7 @@ public:
 
     float64_t rescore() {
         SlowAssertCompare(m_total_outgoing_weights, >=, 0);
-        SlowAssertCompare(m_total_outgoing_weights, <=, 1 + EPSILON);
+        SlowAssertCompare(m_total_outgoing_weights, <, 1 + EPSILON);
         SlowAssertCompare(m_total_incoming_weights, >=, 0);
         m_score = log2(EPSILON + m_total_outgoing_weights * m_total_incoming_weights) / 2.0;
         return m_score;
@@ -55,9 +90,7 @@ initial_size_of_partitions(ConstArraySlice<int32_t> partitions_of_nodes) {
     std::vector<size_t> size_of_partitions;
 
     for (int32_t partition_index : partitions_of_nodes) {
-        if (partition_index < 0) {
-            continue;
-        }
+        FastAssertCompare(partition_index, >=, 0);
         if (size_t(partition_index) >= size_of_partitions.size()) {
             size_of_partitions.resize(partition_index + 1);
         }
@@ -138,19 +171,15 @@ initial_score_of_nodes_of_partitions(ConstCompressedMatrix<float32_t, int32_t, i
                 << " edge weight: " << edge_weight                   //
                 << std::endl;
 
-            if (other_partition_index >= 0) {
-                score_of_nodes_of_partitions[other_partition_index][node_index].update_outgoing(+1, edge_weight);
-                score_of_nodes_of_partitions[other_partition_index][node_index].rescore();
-            }
+            score_of_nodes_of_partitions[other_partition_index][node_index].update_outgoing(+1, edge_weight);
+            score_of_nodes_of_partitions[other_partition_index][node_index].rescore();
 
-            if (partition_index >= 0) {
-                score_of_nodes_of_partitions[partition_index][other_node_index].update_incoming(+1, edge_weight);
-                score_of_nodes_of_partitions[partition_index][other_node_index].rescore();
-            }
+            score_of_nodes_of_partitions[partition_index][other_node_index].update_incoming(+1, edge_weight);
+            score_of_nodes_of_partitions[partition_index][other_node_index].rescore();
         }
 
 #if ASSERT_LEVEL > 0
-        FastAssertCompare(total_outgoing_weights, >, 1 - EPSILON);
+        FastAssertCompare(total_outgoing_weights, >=, 1 - EPSILON);
         FastAssertCompare(total_outgoing_weights, <, 1 + EPSILON);
 #endif
     }
@@ -185,12 +214,25 @@ initial_score_of_partitions(size_t nodes_count,
 
     for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
         const int partition_index = partitions_of_nodes[node_index];
-        if (partition_index >= 0) {
-            score_of_partitions[partition_index] += score_of_nodes_of_partitions[partition_index][node_index].score();
-        }
+        score_of_partitions[partition_index] += score_of_nodes_of_partitions[partition_index][node_index].score();
     }
 
     return score_of_partitions;
+}
+
+static std::vector<float64_t>
+initial_mass_of_partitions(size_t nodes_count,
+                           ConstArraySlice<int32_t> partitions_of_nodes,
+                           const size_t partitions_count,
+                           ConstArraySlice<float32_t> mass_of_nodes) {
+    std::vector<float64_t> mass_of_partitions(partitions_count, 0);
+
+    for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
+        const int partition_index = partitions_of_nodes[node_index];
+        mass_of_partitions[partition_index] += mass_of_nodes[node_index];
+    }
+
+    return mass_of_partitions;
 }
 
 #if ASSERT_LEVEL > 0
@@ -202,12 +244,17 @@ struct OptimizePartitions {
     ConstCompressedMatrix<float32_t, int32_t, int32_t> outgoing_weights;
     ConstCompressedMatrix<float32_t, int32_t, int32_t> incoming_weights;
     const size_t nodes_count;
+    float64_t low_mass;
+    float64_t target_mass;
+    float64_t high_mass;
+    ConstArraySlice<float32_t> mass_of_nodes;
     ArraySlice<int32_t> partition_of_nodes;
     std::vector<float64_t> temperature_of_nodes;
     std::vector<size_t> size_of_partitions;
     const size_t partitions_count;
     float64_t incoming_scale;
     std::vector<std::vector<NodeScore>> score_of_nodes_of_partitions;
+    std::vector<float64_t> mass_of_partitions;
     std::vector<float64_t> score_of_partitions;
 
     OptimizePartitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
@@ -216,6 +263,10 @@ struct OptimizePartitions {
                        const pybind11::array_t<float32_t>& incoming_weights_array,
                        const pybind11::array_t<int32_t>& incoming_indices_array,
                        const pybind11::array_t<int32_t>& incoming_indptr_array,
+                       const float64_t low_mass,
+                       const float64_t target_mass,
+                       const float64_t high_mass,
+                       const pybind11::array_t<float32_t>& mass_of_nodes_array,
                        pybind11::array_t<int32_t>& partition_of_nodes_array)
       : outgoing_weights(ConstCompressedMatrix<float32_t, int32_t, int32_t>(
           ConstArraySlice<float32_t>(outgoing_weights_array, "outgoing_weights_array"),
@@ -230,6 +281,10 @@ struct OptimizePartitions {
             int32_t(incoming_indptr_array.size() - 1),
             "incoming_weights"))
       , nodes_count(outgoing_weights.bands_count())
+      , low_mass(low_mass)
+      , target_mass(target_mass)
+      , high_mass(high_mass)
+      , mass_of_nodes(mass_of_nodes_array, "mass_of_nodes")
       , partition_of_nodes(partition_of_nodes_array, "partition_of_nodes")
       , temperature_of_nodes(nodes_count, 1.0)
       , size_of_partitions(initial_size_of_partitions(partition_of_nodes))
@@ -239,37 +294,25 @@ struct OptimizePartitions {
                                                                           incoming_weights,
                                                                           partition_of_nodes,
                                                                           partitions_count))
+      , mass_of_partitions(initial_mass_of_partitions(nodes_count, partition_of_nodes, partitions_count, mass_of_nodes))
       , score_of_partitions(initial_score_of_partitions(nodes_count,
                                                         partition_of_nodes,
                                                         partitions_count,
-                                                        score_of_nodes_of_partitions)) {}
+                                                        score_of_nodes_of_partitions)) {
+        FastAssertCompare(0.0, <, low_mass);
+        FastAssertCompare(low_mass, <, target_mass);
+        FastAssertCompare(target_mass, <, high_mass);
+    }
 
     float64_t score(bool with_orphans = true) const {
-        /*
-        if (!with_orphans) {
-            std::cerr << "node,partition,total_outgoing,total_incoming" << std::endl;
-            for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
-                for (size_t partition_index = 0; partition_index < partitions_count;
-                     ++partition_index) {
-                    std::cerr << node_index << ","       //
-                              << partition_index << ","  //
-                              << score_of_nodes_of_partitions[partition_index][node_index]
-                                     .total_outgoing_weights()
-                              << ","  //
-                              << score_of_nodes_of_partitions[partition_index][node_index]
-                                     .total_incoming_weights()  //
-                              << std::endl;
-                }
-            }
-        }
-        */
-
         float64_t total_score = nodes_count * log2(float64_t(nodes_count)) - incoming_scale;
         size_t orphans_count = nodes_count;
         for (size_t partition_index = 0; partition_index < partitions_count; ++partition_index) {
             const float64_t score_of_partition = score_of_partitions[partition_index];
+            const float64_t mass_of_partition = mass_of_partitions[partition_index];
             const size_t size_of_partition = size_of_partitions[partition_index];
             total_score += score_of_partition - size_of_partition * log2(float64_t(size_of_partition));
+            total_score += size_of_partition * mass_factor(mass_of_partition, low_mass, target_mass, high_mass);
             orphans_count -= size_of_partition;
         }
         if (with_orphans) {
@@ -285,8 +328,7 @@ struct OptimizePartitions {
 #    define ASSERT_SAME(CONTEXT, FIELD, EPSILON)                                                                 \
         if (fabs(double(this_##FIELD) - double(other_##FIELD)) > EPSILON) {                                      \
             std::cerr << "OOPS! " << #CONTEXT << ": " << CONTEXT << " actual " << #FIELD << ": " << this_##FIELD \
-                      << ": "                                                                                    \
-                      << " computed " << #FIELD << ": " << other_##FIELD << ": " << std::endl;                   \
+                      << " != computed " << #FIELD << ": " << other_##FIELD << ": " << std::endl;                \
             assert(false);                                                                                       \
         } else
 
@@ -303,9 +345,9 @@ struct OptimizePartitions {
                 const auto& other_score_of_node = other.score_of_nodes_of_partitions[partition_index][node_index];
 
 #    define ASSERT_SCORE_FIELD(FIELD)                                                                                \
-        if (fabs(this_score_of_node.FIELD() - other_score_of_node.FIELD()) >= EPSILON) {                             \
+        if (fabs(this_score_of_node.FIELD() - other_score_of_node.FIELD()) > EPSILON) {                              \
             std::cerr << "OOPS! partition_index: " << partition_index << " node_index: " << node_index << " actual " \
-                      << #FIELD << ": " << this_score_of_node.FIELD() << " computed " << #FIELD << " : "             \
+                      << #FIELD << ": " << this_score_of_node.FIELD() << " != computed " << #FIELD << " : "          \
                       << other_score_of_node.FIELD() << std::endl;                                                   \
             assert(false);                                                                                           \
         } else
@@ -315,15 +357,16 @@ struct OptimizePartitions {
                 ASSERT_SCORE_FIELD(score);
             }
 
-            auto this_partition_score = score_of_partitions[partition_index];
-            auto other_partition_score = other.score_of_partitions[partition_index];
+            const float64_t this_partition_score = score_of_partitions[partition_index];
+            const float64_t other_partition_score = other.score_of_partitions[partition_index];
             ASSERT_SAME(partition_index, partition_score, 1e-3);
+
+            const float64_t this_partition_mass = mass_of_partitions[partition_index];
+            const float64_t other_partition_mass = other.mass_of_partitions[partition_index];
+            ASSERT_SAME(partition_index, partition_mass, 1e-3);
         }
 
-        auto this_score = score();
-        auto other_score = other.score();
-        LOCATED_LOG(false) << " score: " << this_score << " ~ " << other_score << std::endl;
-        assert(fabs(this_score - other_score) < 1e-3);
+        assert(fabs(score() - other.score()) < 1e-3);
     }
 #endif
 
@@ -354,19 +397,22 @@ struct OptimizePartitions {
                 frozen_nodes[node_index] = 0;
             }
             LOCATED_LOG(false)                                           //
-                << " node: " << node_index                               //
+                << " node_index: " << node_index                         //
                 << " temperature: " << temperature_of_nodes[node_index]  //
                 << std::endl;
         }
 
-        TmpVectorSizeT partitions_raii;
-        auto tmp_partitions = partitions_raii.vector(partitions_count);
+        TmpVectorSizeT size_t_raii;
+        CandidatePartitions tmp_candidate_partitions(size_t_raii, partitions_count);
 
         TmpVectorFloat64 partition_cold_diffs_raii;
         auto tmp_partition_cold_diffs = partition_cold_diffs_raii.vector(partitions_count);
 
         TmpVectorFloat64 partition_hot_diffs_raii;
         auto tmp_partition_hot_diffs = partition_hot_diffs_raii.vector(partitions_count);
+
+        TmpVectorFloat64 partition_connectivity_diffs_raii;
+        auto tmp_partition_connectivity_diffs = partition_connectivity_diffs_raii.vector(partitions_count);
 
         FastAssertCompare(cooldown_node, >=, 0.0);
         FastAssertCompare(cooldown_node, <=, 1.0);
@@ -379,9 +425,9 @@ struct OptimizePartitions {
 
         bool did_improve = true;
         bool did_skip = false;
+        size_t total_unimproved = 0;
         size_t total_skipped = 0;
         size_t total_improved = 0;
-        size_t total_unimproved = 0;
         while (temperature > 0 || did_improve) {
             LOCATED_LOG(false)                          //
                 << " temperature: " << temperature      //
@@ -390,6 +436,7 @@ struct OptimizePartitions {
                 << " did_improve: " << did_improve      //
                 << " did_skip: " << did_skip            //
                 << std::endl;
+
             if (did_improve) {
                 did_improve = false;
                 did_skip = false;
@@ -415,37 +462,34 @@ struct OptimizePartitions {
             size_t improved = 0;
             size_t unimproved = 0;
             for (size_t node_index : tmp_indices) {
-                auto partition_index = partition_of_nodes[node_index];
-                if (partition_index < -1) {
-                    continue;
-                }
                 temperature *= cooldown_rate;
                 LOCATED_LOG(false)                                           //
                     << " cooldown_rate: " << cooldown_rate                   //
                     << " temperature: " << temperature                       //
-                    << " node: " << node_index                               //
+                    << " node_index: " << node_index                         //
                     << " temperature: " << temperature_of_nodes[node_index]  //
                     << std::endl;
                 if (temperature_of_nodes[node_index] < temperature) {
                     did_skip = true;
                     ++skipped;
-                    LOCATED_LOG(false)              //
-                        << " node: " << node_index  //
-                        << " skipped"               //
+                    LOCATED_LOG(false)                    //
+                        << " node_index: " << node_index  //
+                        << " skipped"                     //
                         << std::endl;
                 } else if (improve_node(node_index,
-                                        tmp_partitions,
+                                        tmp_candidate_partitions,
                                         tmp_partition_cold_diffs,
                                         tmp_partition_hot_diffs,
+                                        tmp_partition_connectivity_diffs,
                                         random,
                                         temperature)) {
                     frozen_count -= frozen_nodes[node_index];
                     frozen_nodes[node_index] = uint8_t(0);
                     did_improve = true;
                     ++improved;
-                    LOCATED_LOG(false)              //
-                        << " node: " << node_index  //
-                        << " improved"              //
+                    LOCATED_LOG(false)                    //
+                        << " node_index: " << node_index  //
+                        << " improved"                    //
                         << std::endl;
                 } else {
                     frozen_count -= frozen_nodes[node_index];
@@ -453,7 +497,7 @@ struct OptimizePartitions {
                     temperature_of_nodes[node_index] = temperature * (1 - cooldown_node);
                     ++unimproved;
                     LOCATED_LOG(false)                                           //
-                        << " node: " << node_index                               //
+                        << " node_index: " << node_index                         //
                         << " unimproved"                                         //
                         << " temperature: " << temperature_of_nodes[node_index]  //
                         << std::endl;
@@ -465,6 +509,7 @@ struct OptimizePartitions {
                 << " skipped: " << skipped                          //
                 << " total: " << (improved + unimproved + skipped)  //
                 << " frozen: " << frozen_count                      //
+                << " out of: " << nodes_count                       //
                 << std::endl;
             total_improved += improved;
             total_skipped += skipped;
@@ -477,6 +522,7 @@ struct OptimizePartitions {
             << " skipped: " << total_skipped                                      //
             << " total: " << (total_improved + total_unimproved + total_skipped)  //
             << " frozen: " << frozen_count                                        //
+            << " out of: " << nodes_count                                         //
             << std::endl;
         LOCATED_LOG(false)                          //
             << " temperature: " << temperature      //
@@ -486,19 +532,20 @@ struct OptimizePartitions {
     }
 
     bool improve_node(size_t node_index,
-                      std::vector<size_t>& tmp_partitions,
+                      CandidatePartitions& tmp_candidate_partitions,
                       std::vector<float64_t>& tmp_partition_cold_diffs,
                       std::vector<float64_t>& tmp_partition_hot_diffs,
+                      std::vector<float64_t>& tmp_partition_connectivity_diffs,
                       std::minstd_rand& random,
                       const float64_t temperature) {
         const auto current_partition_index = partition_of_nodes[node_index];
-        LOCATED_LOG(false)                                                                                   //
-            << " node: " << node_index                                                                       //
-            << " current_partition_index: " << current_partition_index                                       //
-            << " size: " << (current_partition_index < 0 ? 0 : size_of_partitions[current_partition_index])  //
+        LOCATED_LOG(false)                                               //
+            << " node_index: " << node_index                             //
+            << " current_partition_index: " << current_partition_index   //
+            << " size: " << size_of_partitions[current_partition_index]  //
             << std::endl;
 
-        if (current_partition_index >= 0 && size_of_partitions[current_partition_index] < 2) {
+        if (size_of_partitions[current_partition_index] < 2) {
             return false;
         }
 
@@ -507,15 +554,28 @@ struct OptimizePartitions {
                                         tmp_partition_cold_diffs,
                                         tmp_partition_hot_diffs);
 
-        collect_cold_partition_diffs(node_index, current_partition_index, tmp_partition_cold_diffs);
+        collect_cold_partition_diffs(node_index,
+                                     current_partition_index,
+                                     tmp_partition_cold_diffs,
+                                     tmp_partition_connectivity_diffs);
 
-        const float64_t current_cold_diff = collect_candidate_partitions(current_partition_index,
+        LOCATED_LOG(false)                                                //
+            << " node_index: " << node_index                              //
+            << " current_partition_index: " << current_partition_index    //
+            << " connectivity_diff: "                                     //
+            << tmp_partition_connectivity_diffs[current_partition_index]  //
+            << std::endl;
+
+        const float64_t current_cold_diff = collect_candidate_partitions(node_index,
+                                                                         current_partition_index,
                                                                          tmp_partition_cold_diffs,
                                                                          tmp_partition_hot_diffs,
+                                                                         tmp_partition_connectivity_diffs,
                                                                          temperature,
-                                                                         tmp_partitions);
+                                                                         tmp_candidate_partitions);
 
-        const int32_t chosen_partition_index = choose_target_partition(current_partition_index, random, tmp_partitions);
+        const int32_t chosen_partition_index =
+            choose_target_partition(current_partition_index, random, tmp_candidate_partitions);
         if (chosen_partition_index < 0) {
             return false;
         }
@@ -536,6 +596,8 @@ struct OptimizePartitions {
                                    chosen_partition_index,
                                    chosen_cold_diff);
 
+        update_masses_of_partition(node_index, current_partition_index, chosen_partition_index);
+
 #if ASSERT_LEVEL > 0
         if (g_verify) {
             g_verify();
@@ -554,18 +616,18 @@ struct OptimizePartitions {
             const auto score = direction * score_of_nodes_of_partitions[partition_index][node_index].score();
             tmp_partition_cold_diffs[partition_index] = score;
             tmp_partition_hot_diffs[partition_index] = score;
-            LOCATED_LOG(false)                                                  //
-                << " node_index: " << node_index                                //
-                << " partition_index: " << partition_index                      //
-                << " cold_diff: " << tmp_partition_cold_diffs[partition_index]  //
-                << " hot_diff: " << tmp_partition_hot_diffs[partition_index]    //
+            LOCATED_LOG(false)                              //
+                << " node_index: " << node_index            //
+                << " partition_index: " << partition_index  //
+                << " initial_diff: " << score               //
                 << std::endl;
         }
     }
 
     void collect_cold_partition_diffs(const size_t node_index,
                                       const int32_t current_partition_index,
-                                      std::vector<float64_t>& tmp_partition_cold_diffs) {
+                                      std::vector<float64_t>& tmp_partition_cold_diffs,
+                                      std::vector<float64_t>& tmp_partition_connectivity_diffs) {
         const auto& node_outgoing_indices = outgoing_weights.get_band_indices(node_index);
         const auto& node_incoming_indices = incoming_weights.get_band_indices(node_index);
 
@@ -587,6 +649,33 @@ struct OptimizePartitions {
         auto outgoing_edge_weight = node_outgoing_weights[outgoing_position];
         auto incoming_edge_weight = node_incoming_weights[incoming_position];
 
+        const auto& current_score = score_of_nodes_of_partitions[current_partition_index][node_index];
+        const float64_t current_connectivity = current_score.connectivity();
+
+        LOCATED_LOG(false)                                              //
+            << " node_index: " << node_index                            //
+            << " current_partition_index: " << current_partition_index  //
+            << " current_connectivity" << current_connectivity          //
+            << std::endl;
+
+        for (size_t partition_index = 0; partition_index < partitions_count; ++partition_index) {
+            if (partition_index == size_t(current_partition_index)) {
+                tmp_partition_connectivity_diffs[partition_index] = 0.0;
+                continue;
+            }
+
+            const auto& partition_score = score_of_nodes_of_partitions[partition_index][node_index];
+            const float64_t partition_connectivity = partition_score.connectivity();
+
+            LOCATED_LOG(false)                                      //
+                << " node_index: " << node_index                    //
+                << " other_partition_index: " << partition_index    //
+                << " other_connectivity" << partition_connectivity  //
+                << std::endl;
+
+            tmp_partition_connectivity_diffs[partition_index] = partition_connectivity - current_connectivity;
+        }
+
         while (outgoing_position < outgoing_count || incoming_position < incoming_count) {
             const auto other_node_index = std::min(outgoing_node_index, incoming_node_index);
             const auto other_partition_index = partition_of_nodes[other_node_index];
@@ -599,41 +688,45 @@ struct OptimizePartitions {
                 << " other_partition_index: " << other_partition_index  //
                 << std::endl;
 
-            if (other_partition_index >= 0) {
-                NodeScore other_score = score_of_nodes_of_partitions[other_partition_index][other_node_index];
-                const float64_t old_score = other_score.score();
+            NodeScore other_score = score_of_nodes_of_partitions[other_partition_index][other_node_index];
+            const float64_t old_score = other_score.score();
+            const float64_t old_connectivity = other_score.connectivity();
 
-                LOCATED_LOG(false)                                          //
-                    << " other_node_index: " << other_node_index            //
-                    << " other_partition_index: " << other_partition_index  //
-                    << " old score: " << other_score                        //
-                    << std::endl;
+            LOCATED_LOG(false)                                          //
+                << " other_node_index: " << other_node_index            //
+                << " other_partition_index: " << other_partition_index  //
+                << " old score: " << other_score                        //
+                << " old connectivity: " << old_connectivity            //
+                << std::endl;
 
-                const int direction = 1 - 2 * (other_partition_index == current_partition_index);
+            const int direction = 1 - 2 * (other_partition_index == current_partition_index);
 
-                other_score.update_incoming(direction * is_outgoing, outgoing_edge_weight);
-                LOCATED_LOG(false && is_outgoing)                         //
-                    << " other_node_index: " << other_node_index          //
-                    << " direction: " << direction                        //
-                    << " outgoing_edge_weight: " << outgoing_edge_weight  //
-                    << std::endl;
+            other_score.update_incoming(direction * is_outgoing, outgoing_edge_weight);
+            LOCATED_LOG(false && is_outgoing)                         //
+                << " other_node_index: " << other_node_index          //
+                << " direction: " << direction                        //
+                << " outgoing_edge_weight: " << outgoing_edge_weight  //
+                << std::endl;
 
-                other_score.update_outgoing(direction * is_incoming, incoming_edge_weight);
-                LOCATED_LOG(false && is_incoming)                         //
-                    << " other_node_index: " << other_node_index          //
-                    << " direction: " << direction                        //
-                    << " incoming_edge_weight: " << incoming_edge_weight  //
-                    << std::endl;
+            other_score.update_outgoing(direction * is_incoming, incoming_edge_weight);
+            LOCATED_LOG(false && is_incoming)                         //
+                << " other_node_index: " << other_node_index          //
+                << " direction: " << direction                        //
+                << " incoming_edge_weight: " << incoming_edge_weight  //
+                << std::endl;
 
-                const float64_t new_score = other_score.rescore();
-                LOCATED_LOG(false)                                          //
-                    << " other_node_index: " << other_node_index            //
-                    << " other_partition_index: " << other_partition_index  //
-                    << " new score: " << other_score                        //
-                    << std::endl;
+            const float64_t new_score = other_score.rescore();
+            const int new_connectivity = other_score.connectivity();
 
-                tmp_partition_cold_diffs[other_partition_index] += new_score - old_score;
-            }
+            LOCATED_LOG(false)                                          //
+                << " other_node_index: " << other_node_index            //
+                << " other_partition_index: " << other_partition_index  //
+                << " new score: " << other_score                        //
+                << " new connectivity: " << new_connectivity            //
+                << std::endl;
+
+            tmp_partition_cold_diffs[other_partition_index] += new_score - old_score;
+            tmp_partition_connectivity_diffs[other_partition_index] += new_connectivity - old_connectivity;
 
             outgoing_position += is_outgoing;
             incoming_position += is_incoming;
@@ -656,73 +749,133 @@ struct OptimizePartitions {
         }
     }
 
-    float64_t collect_candidate_partitions(const int32_t current_partition_index,
+    float64_t collect_candidate_partitions(const size_t node_index,
+                                           const int32_t current_partition_index,
                                            const std::vector<float64_t>& tmp_partition_cold_diffs,
                                            const std::vector<float64_t>& tmp_partition_hot_diffs,
+                                           const std::vector<float64_t>& tmp_partition_connectivity_diffs,
                                            const float64_t temperature,
-                                           std::vector<size_t>& tmp_partitions) {
-        float64_t current_hot_diff = 0;
-        float64_t current_cold_diff = 0;
-        float64_t current_adjusted_cold_diff = 0;
+                                           CandidatePartitions& tmp_candidate_partitions) {
+        float32_t node_mass = mass_of_nodes[node_index];
 
-        if (current_partition_index >= 0) {
-            const float64_t hot_diff = tmp_partition_hot_diffs[current_partition_index];
-            const size_t old_size = size_of_partitions[current_partition_index];
-            const size_t new_size = old_size - 1;
-            const float64_t old_score = score_of_partitions[current_partition_index];
-            const float64_t old_adjusted_score = old_score - old_size * log2(float64_t(old_size));
-            const float64_t cold_diff = tmp_partition_cold_diffs[current_partition_index];
-            const float64_t new_score = old_score + cold_diff;
-            const float64_t new_adjusted_score = new_score - new_size * log2(float64_t(new_size));
-            const float64_t adjusted_cold_diff = new_adjusted_score - old_adjusted_score;
-            LOCATED_LOG(false)                                              //
-                << " current_partition_index: " << current_partition_index  //
-                << " hot_diff: " << hot_diff                                //
-                << " old_score: " << old_score                              //
-                << " new_score: " << new_score                              //
-                << " cold_diff: " << cold_diff                              //
-                << " old_size: " << old_size                                //
-                << " new_size: " << new_size                                //
-                << " old_adjusted_score: " << old_adjusted_score            //
-                << " new_adjusted_score: " << new_adjusted_score            //
-                << " adjusted_cold_diff: " << adjusted_cold_diff            //
-                << std::endl;
-            current_cold_diff = cold_diff;
-            current_hot_diff = hot_diff;
-            current_adjusted_cold_diff = adjusted_cold_diff;
-        }
+        const float64_t current_hot_diff = tmp_partition_hot_diffs[current_partition_index];
+        const float64_t current_cold_diff = tmp_partition_cold_diffs[current_partition_index];
 
-        tmp_partitions.clear();
+        const size_t old_size = size_of_partitions[current_partition_index];
+        const float64_t old_mass = mass_of_partitions[current_partition_index];
+        const float64_t old_mass_factor = mass_factor(old_mass, low_mass, target_mass, high_mass);
+        const float64_t old_score = score_of_partitions[current_partition_index];
+        float64_t old_adjusted_score = old_score - old_size * log2(float64_t(old_size));
+        old_adjusted_score += old_size * old_mass_factor;
+
+        LOCATED_LOG(false)                                              //
+            << " current_partition_index: " << current_partition_index  //
+            << " old_size: " << old_size                                //
+            << " old_mass: " << old_mass                                //
+            << " old_mass_factor: " << old_mass_factor                  //
+            << " old_score: " << old_score                              //
+            << " old_adjusted_score: " << old_adjusted_score            //
+            << std::endl;
+
+        const size_t new_size = old_size - 1;
+        const float64_t new_mass = old_mass - node_mass;
+        const float64_t new_mass_factor = mass_factor(new_mass, low_mass, target_mass, high_mass);
+        const float64_t new_score = old_score + current_cold_diff;
+        float64_t new_adjusted_score = new_score - new_size * log2(float64_t(new_size));
+        new_adjusted_score += new_size * new_mass_factor;
+
+        LOCATED_LOG(false)                                              //
+            << " current_partition_index: " << current_partition_index  //
+            << " new_size: " << new_size                                //
+            << " new_mass: " << new_mass                                //
+            << " new_mass_factor: " << new_mass_factor                  //
+            << " new_score: " << new_score                              //
+            << " new_adjusted_score: " << new_adjusted_score            //
+            << std::endl;
+
+        const float64_t current_adjusted_cold_diff = new_adjusted_score - old_adjusted_score;
+        const float64_t current_connectivity_diff = tmp_partition_connectivity_diffs[current_partition_index];
+
+        LOCATED_LOG(false)                                              //
+            << " current_partition_index: " << current_partition_index  //
+            << " hot_diff: " << current_hot_diff                        //
+            << " cold_diff: " << current_cold_diff                      //
+            << " adjusted_cold_diff: " << current_adjusted_cold_diff    //
+            << " connectivity_diff: " << current_connectivity_diff      //
+            << std::endl;
+
+        tmp_candidate_partitions.clear();
         for (size_t partition_index = 0; partition_index < partitions_count; ++partition_index) {
             if (int32_t(partition_index) == current_partition_index) {
                 continue;
             }
+
+            const float64_t partition_connectivity_diff = tmp_partition_connectivity_diffs[partition_index];
+            const float64_t adjusted_connectivity_diff = partition_connectivity_diff + current_connectivity_diff;
+            LOCATED_LOG(false)                                                    //
+                << " partition_index: " << partition_index                        //
+                << " connectivity_diff: " << partition_connectivity_diff          //
+                << " adjusted_connectivity_diff: " << adjusted_connectivity_diff  //
+                << std::endl;
+
+            if (adjusted_connectivity_diff < 0) {
+                continue;
+            }
+
             const float64_t hot_diff = tmp_partition_hot_diffs[partition_index];
-            const size_t old_size = size_of_partitions[partition_index];
-            const size_t new_size = old_size + 1;
-            const float64_t old_score = score_of_partitions[partition_index];
             const float64_t cold_diff = tmp_partition_cold_diffs[partition_index];
+            const size_t old_size = size_of_partitions[partition_index];
+            const float64_t old_mass = mass_of_partitions[partition_index];
+            const float64_t old_mass_factor = mass_factor(old_mass, low_mass, target_mass, high_mass);
+            const float64_t old_score = score_of_partitions[partition_index];
+            float64_t old_adjusted_score = old_score - old_size * log2(float64_t(old_size));
+            old_adjusted_score += old_size * old_mass_factor;
+
+            LOCATED_LOG(false)                                    //
+                << " partition_index: " << partition_index        //
+                << " old_size: " << old_size                      //
+                << " old_mass: " << old_mass                      //
+                << " old_score: " << old_score                    //
+                << " old_mass_factor: " << old_mass_factor        //
+                << " old_adjusted_score: " << old_adjusted_score  //
+                << std::endl;
+
+            const size_t new_size = old_size + 1;
+            const float64_t new_mass = old_mass + node_mass;
+            const float64_t new_mass_factor = mass_factor(new_mass, low_mass, target_mass, high_mass);
             const float64_t new_score = old_score + cold_diff;
-            const float64_t old_adjusted_score = old_score - old_size * log2(float64_t(old_size));
-            const float64_t new_adjusted_score = new_score - new_size * log2(float64_t(new_size));
+            float64_t new_adjusted_score = new_score - new_size * log2(float64_t(new_size));
+            new_adjusted_score += new_size * new_mass_factor;
+
+            LOCATED_LOG(false)                                    //
+                << " partition_index: " << partition_index        //
+                << " new_size: " << new_size                      //
+                << " new_mass: " << new_mass                      //
+                << " new_score: " << new_score                    //
+                << " new_mass_factor: " << new_mass_factor        //
+                << " new_adjusted_score: " << new_adjusted_score  //
+                << std::endl;
+
             const float64_t adjusted_cold_diff = new_adjusted_score - old_adjusted_score;
             const float64_t total_diff = (current_hot_diff + hot_diff) * temperature
                                          + (current_adjusted_cold_diff + adjusted_cold_diff) * (1.0 - temperature);
+
             LOCATED_LOG(false)                                    //
                 << " partition_index: " << partition_index        //
-                << " old_score: " << old_score                    //
-                << " new_score: " << new_score                    //
                 << " hot_diff: " << hot_diff                      //
                 << " cold_diff: " << cold_diff                    //
-                << " old_size: " << old_size                      //
-                << " new_size: " << new_size                      //
-                << " old_adjusted_score: " << old_adjusted_score  //
-                << " new_adjusted_score: " << new_adjusted_score  //
                 << " adjusted_cold_diff: " << adjusted_cold_diff  //
                 << " total_diff: " << total_diff                  //
                 << std::endl;
-            if (total_diff > EPSILON) {
-                tmp_partitions.push_back(partition_index);
+
+            if (adjusted_connectivity_diff > 0) {
+                if (total_diff >= EPSILON) {
+                    tmp_candidate_partitions.both_partitions.push_back(partition_index);
+                } else {
+                    tmp_candidate_partitions.connectivity_partitions.push_back(partition_index);
+                }
+            } else if (total_diff >= EPSILON) {
+                tmp_candidate_partitions.goal_partitions.push_back(partition_index);
             }
         }
 
@@ -731,20 +884,29 @@ struct OptimizePartitions {
 
     int32_t choose_target_partition(const int32_t current_partition_index,
                                     std::minstd_rand& random,
-                                    const std::vector<size_t>& tmp_partitions) {
+                                    const CandidatePartitions& tmp_candidate_partitions) {
         int32_t chosen_partition_index = -1;
-        if (tmp_partitions.size() == 0) {
-            if (current_partition_index >= 0) {
-                return -1;
-            }
-            chosen_partition_index = random() % partitions_count;
-        } else {
-            chosen_partition_index = int32_t(tmp_partitions[random() % tmp_partitions.size()]);
-        }
 
-        LOCATED_LOG(false)                                            //
-            << " chosen_partition_index: " << chosen_partition_index  //
-            << std::endl;
+        if (tmp_candidate_partitions.both_partitions.size() > 0) {
+            chosen_partition_index = int32_t(
+                tmp_candidate_partitions.both_partitions[random() % tmp_candidate_partitions.both_partitions.size()]);
+            LOCATED_LOG(false)                                                 //
+                << " chosen both partition_index: " << chosen_partition_index  //
+                << std::endl;
+        } else if (tmp_candidate_partitions.connectivity_partitions.size() > 0) {
+            chosen_partition_index = int32_t(
+                tmp_candidate_partitions
+                    .connectivity_partitions[random() % tmp_candidate_partitions.connectivity_partitions.size()]);
+            LOCATED_LOG(false)                                                         //
+                << " chosen connectivity partition_index: " << chosen_partition_index  //
+                << std::endl;
+        } else if (tmp_candidate_partitions.goal_partitions.size() > 0) {
+            chosen_partition_index = int32_t(
+                tmp_candidate_partitions.goal_partitions[random() % tmp_candidate_partitions.goal_partitions.size()]);
+            LOCATED_LOG(false)                                                 //
+                << " chosen goal partition_index: " << chosen_partition_index  //
+                << std::endl;
+        }
 
         return chosen_partition_index;
     }
@@ -752,8 +914,7 @@ struct OptimizePartitions {
     void update_scores_of_nodes(const size_t node_index,
                                 const int32_t from_partition_index,
                                 const int32_t to_partition_index) {
-        auto score_of_nodes_of_from_partition =
-            from_partition_index < 0 ? nullptr : &score_of_nodes_of_partitions[from_partition_index];
+        auto& score_of_nodes_of_from_partition = score_of_nodes_of_partitions[from_partition_index];
         auto& score_of_nodes_of_to_partition = score_of_nodes_of_partitions[to_partition_index];
 
         const auto& node_outgoing_indices = outgoing_weights.get_band_indices(node_index);
@@ -783,24 +944,22 @@ struct OptimizePartitions {
             const int is_outgoing = int(outgoing_node_index == other_node_index);
             const int is_incoming = int(incoming_node_index == other_node_index);
 
-            if (score_of_nodes_of_from_partition) {
-                auto& other_node_from_score = (*score_of_nodes_of_from_partition)[other_node_index];
-                LOCATED_LOG(false)                                        //
-                    << " other_node_index: " << other_node_index          //
-                    << " from_partition_index: " << from_partition_index  //
-                    << " old score: " << other_node_from_score            //
-                    << std::endl;
+            auto& other_node_from_score = score_of_nodes_of_from_partition[other_node_index];
+            LOCATED_LOG(false)                                        //
+                << " other_node_index: " << other_node_index          //
+                << " from_partition_index: " << from_partition_index  //
+                << " old score: " << other_node_from_score            //
+                << std::endl;
 
-                other_node_from_score.update_incoming(-is_outgoing, outgoing_edge_weight);
-                other_node_from_score.update_outgoing(-is_incoming, incoming_edge_weight);
-                other_node_from_score.rescore();
+            other_node_from_score.update_incoming(-is_outgoing, outgoing_edge_weight);
+            other_node_from_score.update_outgoing(-is_incoming, incoming_edge_weight);
+            other_node_from_score.rescore();
 
-                LOCATED_LOG(false)                                        //
-                    << " other_node_index: " << other_node_index          //
-                    << " from_partition_index: " << from_partition_index  //
-                    << " new score: " << other_node_from_score            //
-                    << std::endl;
-            }
+            LOCATED_LOG(false)                                        //
+                << " other_node_index: " << other_node_index          //
+                << " from_partition_index: " << from_partition_index  //
+                << " new score: " << other_node_from_score            //
+                << std::endl;
 
             auto& other_node_to_score = score_of_nodes_of_to_partition[other_node_index];
             LOCATED_LOG(false)                                    //
@@ -853,30 +1012,25 @@ struct OptimizePartitions {
     }
 
     void update_sizes_of_partitions(const int32_t from_partition_index, const int32_t to_partition_index) {
-        if (from_partition_index >= 0) {
-            SlowAssertCompare(size_of_partitions[from_partition_index], >, 1);
-            size_of_partitions[from_partition_index] -= 1;
-        }
-
+        SlowAssertCompare(size_of_partitions[from_partition_index], >, 1);
+        size_of_partitions[from_partition_index] -= 1;
         ++size_of_partitions[to_partition_index];
     }
 
-    void update_scores_of_partition(size_t current_partition_index,
-                                    float64_t current_cold_diff,
-                                    size_t chosen_partition_index,
-                                    float64_t chosen_cold_diff) {
-        if (current_partition_index >= 0) {
-            LOCATED_LOG(false)                                                     //
-                << " from_partition_index: " << current_partition_index            //
-                << " old score: " << score_of_partitions[current_partition_index]  //
-                << " from_cold_diff: " << current_cold_diff                        //
-                << std::endl;
-            score_of_partitions[current_partition_index] += current_cold_diff;
-            LOCATED_LOG(false)                                                     //
-                << " from_partition_index: " << current_partition_index            //
-                << " new score: " << score_of_partitions[current_partition_index]  //
-                << std::endl;
-        }
+    void update_scores_of_partition(const int32_t current_partition_index,
+                                    const float64_t current_cold_diff,
+                                    const int32_t chosen_partition_index,
+                                    const float64_t chosen_cold_diff) {
+        LOCATED_LOG(false)                                                     //
+            << " from_partition_index: " << current_partition_index            //
+            << " old score: " << score_of_partitions[current_partition_index]  //
+            << " from_cold_diff: " << current_cold_diff                        //
+            << std::endl;
+        score_of_partitions[current_partition_index] += current_cold_diff;
+        LOCATED_LOG(false)                                                     //
+            << " from_partition_index: " << current_partition_index            //
+            << " new score: " << score_of_partitions[current_partition_index]  //
+            << std::endl;
 
         LOCATED_LOG(false)                                                    //
             << " to_partition_index: " << chosen_partition_index              //
@@ -889,6 +1043,32 @@ struct OptimizePartitions {
             << " new score: " << score_of_partitions[chosen_partition_index]  //
             << std::endl;
     }
+
+    void update_masses_of_partition(const size_t node_index,
+                                    const int32_t current_partition_index,
+                                    const int32_t chosen_partition_index) {
+        const float32_t node_mass = mass_of_nodes[node_index];
+
+        LOCATED_LOG(false)                                                   //
+            << " from_partition_index: " << current_partition_index          //
+            << " old mass: " << mass_of_partitions[current_partition_index]  //
+            << std::endl;
+        mass_of_partitions[current_partition_index] -= node_mass;
+        LOCATED_LOG(false)                                                   //
+            << " from_partition_index: " << current_partition_index          //
+            << " new mass: " << mass_of_partitions[current_partition_index]  //
+            << std::endl;
+
+        LOCATED_LOG(false)                                                  //
+            << " to_partition_index: " << chosen_partition_index            //
+            << " old mass: " << mass_of_partitions[chosen_partition_index]  //
+            << std::endl;
+        mass_of_partitions[chosen_partition_index] += node_mass;
+        LOCATED_LOG(false)                                                  //
+            << " to_partition_index: " << chosen_partition_index            //
+            << " new mass: " << mass_of_partitions[chosen_partition_index]  //
+            << std::endl;
+    }
 };
 
 static float64_t
@@ -899,6 +1079,10 @@ optimize_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                     const pybind11::array_t<int32_t>& incoming_indices_array,
                     const pybind11::array_t<int32_t>& incoming_indptr_array,
                     const unsigned int random_seed,
+                    float64_t low_mass,
+                    float64_t target_mass,
+                    float64_t high_mass,
+                    const pybind11::array_t<float32_t>& mass_of_nodes_array,
                     float64_t cooldown_pass,
                     float64_t cooldown_node,
                     pybind11::array_t<int32_t>& partition_of_nodes_array,
@@ -911,6 +1095,10 @@ optimize_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                                  incoming_weights_array,
                                  incoming_indices_array,
                                  incoming_indptr_array,
+                                 low_mass,
+                                 target_mass,
+                                 high_mass,
+                                 mass_of_nodes_array,
                                  partition_of_nodes_array);
 
 #if ASSERT_LEVEL > 1
@@ -922,6 +1110,10 @@ optimize_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                                     incoming_weights_array,
                                     incoming_indices_array,
                                     incoming_indptr_array,
+                                    low_mass,
+                                    target_mass,
+                                    high_mass,
+                                    mass_of_nodes_array,
                                     partition_of_nodes_array);
         LOCATED_LOG(false) << " COMPARE" << std::endl;
         verifier.verify(optimizer);
@@ -934,6 +1126,7 @@ optimize_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
     optimizer.optimize(random_seed, cooldown_pass, cooldown_node, cold_partitions, cold_temperature);
 
     float64_t score = optimizer.score();
+    LOCATED_LOG(false) << " SCORE: " << score << std::endl;
     return score;
 }
 
@@ -944,6 +1137,10 @@ score_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                  const pybind11::array_t<float32_t>& incoming_weights_array,
                  const pybind11::array_t<int32_t>& incoming_indices_array,
                  const pybind11::array_t<int32_t>& incoming_indptr_array,
+                 const float64_t low_mass,
+                 const float64_t target_mass,
+                 const float64_t high_mass,
+                 const pybind11::array_t<float32_t>& mass_of_nodes_array,
                  pybind11::array_t<int32_t>& partition_of_nodes_array,
                  bool with_orphans) {
     WithoutGil without_gil{};
@@ -953,6 +1150,10 @@ score_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                                  incoming_weights_array,
                                  incoming_indices_array,
                                  incoming_indptr_array,
+                                 low_mass,
+                                 target_mass,
+                                 high_mass,
+                                 mass_of_nodes_array,
                                  partition_of_nodes_array);
     return optimizer.score(with_orphans);
 }

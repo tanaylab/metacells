@@ -25,7 +25,7 @@ def dissolve_metacells(
     what: Union[str, ut.Matrix] = "__x__",
     *,
     candidates: Union[str, ut.Vector] = "candidate",
-    deviants: Optional[Union[str, ut.Vector]] = "cell_deviant_votes",
+    deviants: ut.Vector,
     target_metacell_size: float = pr.target_metacell_size,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.dissolve_cell_sizes,
     max_cell_size: Optional[float] = pr.max_cell_size,
@@ -35,8 +35,7 @@ def dissolve_metacells(
     min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
     abs_folds: bool = pr.dissolve_abs_folds,
-    inplace: bool = True,
-) -> Optional[ut.PandasFrame]:
+) -> None:
     """
     Dissolve too-small metacells based on ``what`` (default: {what}) data.
 
@@ -48,6 +47,8 @@ def dissolve_metacells(
 
     **Returns**
 
+    Sets the following in ``adata``:
+
     Observation (Cell) Annotations
         ``metacell``
             The integer index of the metacell each cell belongs to. The metacells are in no
@@ -55,10 +56,7 @@ def dissolve_metacells(
             ``-1``.
 
         ``dissolved``
-            A boolean mask of the cells which were in a dissolved metacell.
-
-    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
-    ``None``. Otherwise this is returned as a pandas data frame (indexed by the observation names).
+           A boolean mask of the cells which were in a dissolved metacell.
 
     **Computation Parameters**
 
@@ -66,9 +64,8 @@ def dissolve_metacells(
     :py:func:`metacells.utilities.computation.capped_sizes` of the sizes of the cells in the metacell, using
     ``max_cell_size`` (default: {max_cell_size}) and ``max_cell_size_factor`` (default: {max_cell_size_factor}).
 
-    1. Mark all cells with non-zero ``deviants`` (default: {deviants}) as "outliers". This can be
-       the name of a per-observation (cell) annotation, or an explicit boolean mask of cells, or a
-       or ``None`` if there are no deviant cells to mark.
+    1. Mark all ``deviants`` cells "outliers". This can be the name of a per-observation (cell) annotation, or an
+       explicit boolean mask of cells, or a or ``None`` if there are no deviant cells to mark.
 
     2. Any metacell which has less cells than the ``min_metacell_cells`` is dissolved.
 
@@ -124,7 +121,6 @@ def dissolve_metacells(
     for candidate_index in range(candidates_count):
         candidate_cell_indices = np.where(candidate_of_cells == candidate_index)[0]
         if not _keep_candidate(
-            adata,
             candidate_index,
             data=data,
             cell_sizes=cell_sizes,
@@ -148,23 +144,11 @@ def dissolve_metacells(
     else:
         metacell_of_cells = candidate_of_cells
 
-    if inplace:
-        ut.set_o_data(adata, "dissolved", dissolved_of_cells, formatter=ut.mask_description)
-
-        ut.set_o_data(adata, "metacell", metacell_of_cells, formatter=ut.groups_description)
-        return None
-
-    ut.log_return("dissolved", dissolved_of_cells)
-    ut.log_return("metacell", metacell_of_cells, formatter=ut.groups_description)
-
-    obs_frame = ut.to_pandas_frame(index=adata.obs_names)
-    obs_frame["dissolved"] = dissolved_of_cells
-    obs_frame["metacell"] = metacell_of_cells
-    return obs_frame
+    ut.set_o_data(adata, "dissolved", dissolved_of_cells)
+    ut.set_o_data(adata, "metacell", metacell_of_cells, formatter=ut.groups_description)
 
 
 def _keep_candidate(  # pylint: disable=too-many-branches
-    adata: AnnData,
     candidate_index: int,
     *,
     data: ut.ProperMatrix,
@@ -247,18 +231,13 @@ def _keep_candidate(  # pylint: disable=too-many-branches
     keep_candidate = bool(np.any(convincing_genes_mask))
 
     if ut.logging_calc():
-        convincing_gene_indices = np.where(convincing_genes_mask)[0]
         if keep_candidate:
             ut.log_calc(
                 f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
                 f"cells: {candidate_cell_indices.size} "
                 f"size: {candidate_total_size:g} "
-                f"is: convincing because:"
+                f"is: convincing"
             )
-            for fold_factor, name in reversed(
-                sorted(zip(candidate_data_of_genes[convincing_gene_indices], adata.var_names[convincing_gene_indices]))
-            ):
-                ut.log_calc(f"    {name}: {ut.fold_description(fold_factor)}")
         else:
             ut.log_calc(
                 f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '

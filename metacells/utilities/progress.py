@@ -114,10 +114,9 @@ def progress_bar_slice(fraction: Optional[float]) -> Any:
     This can be nested to split the overall progress bar into smaller and smaller parts to represent a tree of
     computations.
 
-    If ``fraction`` is None and there is no active progress bar, simply runs the code.
+    If ``fraction`` is None, or there is no active progress bar, simply runs the code.
     """
     _show_progress_bar()
-    assert (fraction is not None) == has_progress_bar()
     if fraction is None:
         result = yield None
         return result

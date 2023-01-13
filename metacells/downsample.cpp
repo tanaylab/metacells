@@ -80,11 +80,10 @@ random_sample(ArraySlice<size_t> tree, ssize_t random) {
 
 template<typename D, typename O>
 static void
-downsample_slice(ConstArraySlice<D> input, ArraySlice<O> output, const size_t samples, const size_t random_seed) {
-    FastAssertCompare(samples, >=, 0);
+downsample_slice(ConstArraySlice<D> input, ArraySlice<O> output, const int32_t samples, const size_t random_seed) {
     FastAssertCompare(output.size(), ==, input.size());
 
-    if (input.size() == 0) {
+    if (samples < 0 || input.size() == 0) {
         return;
     }
 
@@ -98,7 +97,7 @@ downsample_slice(ConstArraySlice<D> input, ArraySlice<O> output, const size_t sa
     initialize_tree(input, tree);
     size_t& total = tree[tree.size() - 1];
 
-    if (total <= samples) {
+    if (total <= size_t(samples)) {
         if (static_cast<const void*>(output.begin()) != static_cast<const void*>(input.begin())) {
             std::copy(input.begin(), input.end(), output.begin());
         }
@@ -108,7 +107,7 @@ downsample_slice(ConstArraySlice<D> input, ArraySlice<O> output, const size_t sa
     std::fill(output.begin(), output.end(), O(0));
 
     std::minstd_rand random(random_seed);
-    for (size_t index = 0; index < samples; ++index) {
+    for (size_t index = 0; index < size_t(samples); ++index) {
         ++output[random_sample(tree, random() % total)];
     }
 }
@@ -118,7 +117,7 @@ template<typename D, typename O>
 static void
 downsample_array(const pybind11::array_t<D>& input_array,
                  pybind11::array_t<O>& output_array,
-                 const size_t samples,
+                 const int32_t samples,
                  const size_t random_seed) {
     WithoutGil without_gil{};
 
@@ -133,16 +132,21 @@ template<typename D, typename O>
 static void
 downsample_dense(const pybind11::array_t<D>& input_matrix,
                  pybind11::array_t<O>& output_array,
-                 const size_t samples,
+                 const pybind11::array_t<int32_t>& samples_array,
                  const size_t random_seed) {
     WithoutGil without_gil{};
 
     ConstMatrixSlice<D> input{ input_matrix, "input_matrix" };
     MatrixSlice<O> output{ output_array, "output_array" };
+    ConstArraySlice<int32_t> samples{ samples_array, "samples_array" };
+
+    FastAssertCompare(output.columns_count(), ==, input.columns_count());
+    FastAssertCompare(output.rows_count(), ==, input.rows_count());
+    FastAssertCompare(samples.size(), ==, input.rows_count());
 
     parallel_loop(input.rows_count(), [&](const size_t row_index) {
         size_t slice_seed = random_seed == 0 ? 0 : random_seed + row_index * 997;
-        downsample_slice(input.get_row(row_index), output.get_row(row_index), samples, slice_seed);
+        downsample_slice(input.get_row(row_index), output.get_row(row_index), samples[row_index], slice_seed);
     });
 }
 
@@ -152,7 +156,7 @@ downsample_band(const size_t band_index,
                 ConstArraySlice<D> input_data,
                 ConstArraySlice<P> input_indptr,
                 ArraySlice<O> output,
-                const size_t samples,
+                const int32_t samples,
                 const size_t random_seed) {
     auto start_element_offset = input_indptr[band_index];
     auto stop_element_offset = input_indptr[band_index + 1];
@@ -169,17 +173,21 @@ static void
 downsample_compressed(const pybind11::array_t<D>& input_data_array,
                       const pybind11::array_t<P>& input_indptr_array,
                       pybind11::array_t<O>& output_array,
-                      const size_t samples,
+                      const pybind11::array_t<int32_t>& samples_array,
                       const size_t random_seed) {
     WithoutGil without_gil{};
 
     ConstArraySlice<D> input_data{ input_data_array, "input_data_array" };
     ConstArraySlice<P> input_indptr{ input_indptr_array, "input_indptr_array" };
     ArraySlice<O> output{ output_array, "output_array" };
+    ConstArraySlice<int32_t> samples{ samples_array, "samples_array" };
+
+    FastAssertCompare(output.size(), ==, input_data.size());
+    FastAssertCompare(samples.size(), ==, input_indptr.size() - 1);
 
     parallel_loop(input_indptr.size() - 1, [&](size_t band_index) {
         size_t band_seed = random_seed == 0 ? 0 : random_seed + band_index * 997;
-        downsample_band(band_index, input_data, input_indptr, output, samples, band_seed);
+        downsample_band(band_index, input_data, input_indptr, output, samples[band_index], band_seed);
     });
 }
 

@@ -168,7 +168,8 @@ def group_obs_annotation(
 
     if method == "unique":
         with ut.timed_step(".unique"):
-            value_of_groups[group_of_cells] = values_of_cells
+            grouped_mask = group_of_cells >= 0
+            value_of_groups[group_of_cells[grouped_mask]] = values_of_cells[grouped_mask]
 
     else:
         assert method == "majority"

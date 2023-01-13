@@ -37,8 +37,7 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
     abs_folds: bool = pr.deviants_abs_folds,
     max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
-    inplace: bool = True,
-) -> Optional[Tuple[ut.PandasSeries, ut.PandasSeries]]:
+) -> ut.Vector:
     """
     Find cells which are have significantly different gene expression from the metacells they are
     belong to based on ``what`` (default: {what}) data.
@@ -53,22 +52,7 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
 
     **Returns**
 
-    Observation (Cell) Annotations
-        ``cell_deviant_votes``
-            The number of genes that were the reason the cell was marked as deviant (if zero, the
-            cell is not deviant).
-
-    Variable (Gene) Annotations
-        ``bystander_gene``
-            A boolean mask of genes which are ignored when computing deviant (outlier) cells, based on their name.
-
-        ``gene_deviant_votes``
-            The number of cells each gene marked as deviant (if zero, the gene did not mark any cell
-            as deviant).
-
-    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
-    ``None``. Otherwise this is returned as two pandas series (indexed by the observation and
-    variable names).
+    A boolean mask of all the cells which should be considered "deviant".
 
     **Computation Parameters**
 
@@ -198,18 +182,9 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
         full_indices_of_remaining_cells = full_indices_of_remaining_cells[remaining_cells_mask]
         cells_count = len(full_indices_of_remaining_cells)
 
-    if inplace:
-        ut.set_v_data(adata, "gene_deviant_votes", votes_of_deviant_genes, formatter=ut.mask_description)
-        ut.set_o_data(adata, "cell_deviant_votes", full_votes_of_deviant_cells, formatter=ut.mask_description)
-        return None
-
-    ut.log_return("gene_deviant_votes", votes_of_deviant_genes, formatter=ut.mask_description)
-    ut.log_return("cell_deviant_votes", full_votes_of_deviant_cells, formatter=ut.mask_description)
-
-    return (
-        ut.to_pandas_series(votes_of_deviant_cells, index=adata.obs_names),
-        ut.to_pandas_series(votes_of_deviant_genes, index=adata.var_names),
-    )
+    deviant_cells_mask = full_votes_of_deviant_cells > 0
+    ut.log_return("deviant_cells", deviant_cells_mask)
+    return deviant_cells_mask
 
 
 @ut.timed_call()

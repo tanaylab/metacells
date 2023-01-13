@@ -107,7 +107,6 @@ __all__ = [
     "cover_diameter",
     "cover_coordinates",
     "random_piles",
-    "group_piles",
     "represent",
     "min_cut",
     "sparsify_matrix",
@@ -194,11 +193,12 @@ def to_layout(matrix: utt.Matrix, layout: str, *, symmetric: bool = False) -> ut
     result: utt.ProperMatrix
 
     if dense is not None:
-        utm.timed_parameters(method="reshape")
-        order = utt.DENSE_FAST_FLAG[layout][0]
-        with utm.timed_step("numpy.ravel"):
-            utm.timed_parameters(rows=dense.shape[0], columns=dense.shape[1])
-            result = np.reshape(np.ravel(dense, order=order), dense.shape, order=order)  # type: ignore
+        #       utm.timed_parameters(method="reshape")
+        #       order = utt.DENSE_FAST_FLAG[layout][0]
+        #       with utm.timed_step("numpy.ravel"):
+        #           utm.timed_parameters(rows=dense.shape[0], columns=dense.shape[1])
+        #           result = np.reshape(np.ravel(dense, order=order), dense.shape, order=order)  # type: ignore
+        result = _relayout_dense(dense, layout, 1024 * 1024)
 
     else:
         utm.timed_parameters(method="compressed")
@@ -214,6 +214,33 @@ def to_layout(matrix: utt.Matrix, layout: str, *, symmetric: bool = False) -> ut
         utt.freeze(result)
 
     assert result.shape == matrix.shape
+    return result
+
+
+@utm.timed_call()
+def _relayout_dense(dense: utt.NumpyMatrix, layout: str, block_size: int) -> utt.NumpyMatrix:
+    """
+    Efficient serial layout conversion of a ``dense`` matrix.
+    """
+    block_elements = int(sqrt(block_size / dense.dtype.itemsize))
+
+    row_elements = dense.shape[0]
+    column_elements = dense.shape[1]
+
+    row_blocks = int(ceil(row_elements / block_elements))
+    column_blocks = int(ceil(column_elements / block_elements))
+
+    numpy_order = utt.DENSE_FAST_FLAG[layout][0]
+    result = np.empty(dense.shape, dtype=dense.dtype, order=numpy_order)  # type: ignore
+
+    for row_block in range(row_blocks):
+        start_row = int(round(row_block * row_elements / row_blocks))
+        stop_row = int(round((row_block + 1) * row_elements / row_blocks))
+        for column_block in range(column_blocks):
+            start_column = int(round(column_block * column_elements / column_blocks))
+            stop_column = int(round((column_block + 1) * column_elements / column_blocks))
+            result[start_row:stop_row, start_column:stop_column] = dense[start_row:stop_row, start_column:stop_column]
+
     return result
 
 
@@ -701,7 +728,7 @@ def downsample_matrix(
     matrix: utt.Matrix,
     *,
     per: str,
-    samples: int,
+    samples: Union[int, utt.Vector],
     eliminate_zeros: bool = True,
     inplace: bool = False,
     random_seed: int = 0,
@@ -721,7 +748,11 @@ def downsample_matrix(
     A non-zero ``random_seed`` (default: {random_seed}) will make the operation replicable.
     """
     assert per in ("row", "column")
-    assert samples > 0
+    if isinstance(samples, (int, float)):
+        samples = np.full(matrix.shape[0], samples, dtype="int32")
+    else:
+        assert len(samples) == matrix.shape[0]
+        samples = utt.to_numpy_vector(samples).astype("int32")
 
     _, dense, compressed = utt.to_proper_matrices(matrix)
 
@@ -733,7 +764,7 @@ def downsample_matrix(
 
 
 def _downsample_dense_matrix(
-    matrix: utt.NumpyMatrix, per: str, samples: int, inplace: bool, random_seed: int
+    matrix: utt.NumpyMatrix, per: str, samples: utt.NumpyVector, inplace: bool, random_seed: int
 ) -> utt.NumpyMatrix:
     if inplace:
         output = matrix
@@ -780,13 +811,13 @@ def _downsample_dense_matrix(
         extension_name = f"downsample_array_{input_array.dtype}_t_{output_array.dtype}_t"
         extension = getattr(xt, extension_name)
         with utm.timed_step("extensions.downsample_array"):
-            utm.timed_parameters(elements=input_array.size, samples=samples)
+            utm.timed_parameters(elements=input_array.size, samples=np.mean(samples))
             extension(input_array, output_array, samples, random_seed)
     else:
         extension_name = f"downsample_dense_{matrix.dtype}_t_{output.dtype}_t"
         extension = getattr(xt, extension_name)
         with utm.timed_step("extensions.downsample_dense_matrix"):
-            utm.timed_parameters(results=results_count, elements=elements_count, samples=samples)
+            utm.timed_parameters(results=results_count, elements=elements_count, samples=np.mean(samples))
             extension(matrix, output, samples, random_seed)
 
     if per == "column":
@@ -797,7 +828,12 @@ def _downsample_dense_matrix(
 
 
 def _downsample_compressed_matrix(
-    matrix: utt.CompressedMatrix, per: str, samples: int, eliminate_zeros: bool, inplace: bool, random_seed: int
+    matrix: utt.CompressedMatrix,
+    per: str,
+    samples: utt.NumpyVector,
+    eliminate_zeros: bool,
+    inplace: bool,
+    random_seed: int,
 ) -> utt.CompressedMatrix:
     axis = utt.PER_OF_AXIS.index(per)
     results_count = matrix.shape[axis]
@@ -831,7 +867,7 @@ def _downsample_compressed_matrix(
     assert results_count == matrix.indptr.size - 1
 
     with utm.timed_step("extensions.downsample_sparse_matrix"):
-        utm.timed_parameters(results=results_count, elements=elements_count, samples=samples)
+        utm.timed_parameters(results=results_count, elements=elements_count, samples=np.mean(samples))
         extension(matrix.data, matrix.indptr, output.data, samples, random_seed)
 
     if eliminate_zeros:
@@ -1791,9 +1827,10 @@ def compress_indices(indices: utt.Vector) -> utt.NumpyVector:
 
     If the group indices contain ``-1`` ("outliers"), then it is preserved as ``-1`` in the result.
     """
+    indices = utt.to_numpy_vector(indices)
     unique, consecutive = np.unique(indices, return_inverse=True)
     consecutive += min(unique[0], 0)
-    return consecutive
+    return consecutive.astype(indices.dtype)
 
 
 @utm.timed_call()
@@ -2154,29 +2191,6 @@ def random_piles(
 
     np.random.seed(random_seed)
     return np.random.permutation(pile_of_elements)
-
-
-@utm.timed_call()
-def group_piles(
-    group_of_elements: utt.NumpyVector,
-    group_of_groups: utt.NumpyVector,
-) -> utt.NumpyVector:
-    """
-    Group some elements into piles after first grouping them, and then grouping the groups.
-
-    Given the ``group_of_elements`` and for each such group, its larger ``group_of_groups``, compute
-    the pile index of each element to be the group of the group it belongs to, and return a vector
-    of the pile index of each element.
-
-    .. note::
-
-        Neither the ``group_of_elements`` nor the ``group_of_groups`` may contain "iutliers", that
-        is, they must assign an valid group index to each element and group.
-    """
-    assert np.min(group_of_elements) == 0
-    assert np.min(group_of_groups) == 0
-    group_of_group_of_elements = group_of_groups[group_of_elements]
-    return group_of_group_of_elements
 
 
 @utm.timed_call()

@@ -161,6 +161,79 @@ keep_large_candidates(std::vector<size_t>& tmp_candidates, const std::vector<std
     return tmp_candidates.size() > 0;
 }
 
+static bool
+connect_node(size_t node_index,
+             ArraySlice<int32_t> seed_of_nodes,
+             ConstCompressedMatrix<float32_t, int32_t, int32_t>& outgoing_weights,
+             ConstCompressedMatrix<float32_t, int32_t, int32_t>& incoming_weights,
+             std::vector<float32_t>& seed_weights) {
+    if (seed_of_nodes[node_index] >= 0) {
+        return true;
+    }
+
+    std::fill(seed_weights.begin(), seed_weights.end(), 0.0);
+
+    auto incoming_node_indices = incoming_weights.get_band_indices(node_index);
+    auto incoming_edge_weights = incoming_weights.get_band_data(node_index);
+    size_t incoming_nodes_count = incoming_node_indices.size();
+    for (size_t position = 0; position < incoming_nodes_count; ++position) {
+        auto other_node_index = incoming_node_indices[position];
+        auto other_node_seed = seed_of_nodes[other_node_index];
+        if (other_node_seed >= 0) {
+            seed_weights[other_node_seed] += incoming_edge_weights[position];
+        }
+    }
+
+    auto outgoing_node_indices = outgoing_weights.get_band_indices(node_index);
+    auto outgoing_edge_weights = outgoing_weights.get_band_data(node_index);
+    size_t outgoing_nodes_count = outgoing_node_indices.size();
+    for (size_t position = 0; position < outgoing_nodes_count; ++position) {
+        auto other_node_index = outgoing_node_indices[position];
+        auto other_node_seed = seed_of_nodes[other_node_index];
+        if (other_node_seed >= 0) {
+            seed_weights[other_node_seed] += outgoing_edge_weights[position];
+        }
+    }
+
+    auto max_seed_weight = std::max_element(seed_weights.begin(), seed_weights.end());
+    if (*max_seed_weight == 0.0) {
+        return false;
+    }
+
+    size_t max_seed_index = max_seed_weight - seed_weights.begin();
+    seed_of_nodes[node_index] = max_seed_index;
+    return true;
+}
+
+static void
+do_complete_seeds(ArraySlice<int32_t> seed_of_nodes,
+                  size_t seeds_count,
+                  ConstCompressedMatrix<float32_t, int32_t, int32_t>& outgoing_weights,
+                  ConstCompressedMatrix<float32_t, int32_t, int32_t>& incoming_weights) {
+    size_t nodes_count = seed_of_nodes.size();
+    std::vector<float32_t> seed_weights(seeds_count);
+
+    std::vector<size_t> old_disconnected_nodes;
+    std::vector<size_t> new_disconnected_nodes;
+
+    for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
+        if (!connect_node(node_index, seed_of_nodes, outgoing_weights, incoming_weights, seed_weights)) {
+            new_disconnected_nodes.push_back(node_index);
+        }
+    }
+
+    while (new_disconnected_nodes.size() > 0) {
+        std::swap(old_disconnected_nodes, new_disconnected_nodes);
+        new_disconnected_nodes.clear();
+        for (size_t node_index : old_disconnected_nodes) {
+            if (!connect_node(node_index, seed_of_nodes, outgoing_weights, incoming_weights, seed_weights)) {
+                new_disconnected_nodes.push_back(node_index);
+            }
+        }
+        FastAssertCompare(new_disconnected_nodes.size(), <, old_disconnected_nodes.size());
+    }
+}
+
 /// See the Python `metacell.tools.candidates._choose_seeds` function.
 void
 choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
@@ -233,9 +306,6 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
         ++seeds_count;
     }
 
-    size_t strong_seeds_count = seeds_count;
-    FastAssertCompare(strong_seeds_count, >, given_seeds_count);
-
     if (seeds_count < max_seeds_count) {
         tmp_candidates.clear();
         for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
@@ -263,11 +333,47 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
     }
 
     FastAssertCompare(seeds_count, ==, max_seeds_count);
+
+    do_complete_seeds(seed_of_nodes, seeds_count, outgoing_weights, incoming_weights);
+}
+
+static void
+complete_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
+               const pybind11::array_t<int32_t>& outgoing_weights_indices_array,
+               const pybind11::array_t<int32_t>& outgoing_weights_indptr_array,
+               const pybind11::array_t<float32_t>& incoming_weights_data_array,
+               const pybind11::array_t<int32_t>& incoming_weights_indices_array,
+               const pybind11::array_t<int32_t>& incoming_weights_indptr_array,
+               size_t seeds_count,
+               pybind11::array_t<int32_t>& seed_of_nodes_array) {
+    WithoutGil without_gil{};
+    ArraySlice<int32_t> seed_of_nodes = ArraySlice<int32_t>(seed_of_nodes_array, "seed_of_nodes");
+    size_t nodes_count = seed_of_nodes.size();
+    FastAssertCompare(nodes_count, >, 0);
+
+    ConstCompressedMatrix<float32_t, int32_t, int32_t>
+        outgoing_weights(ConstArraySlice<float32_t>(outgoing_weights_data_array, "outgoing_weights_data"),
+                         ConstArraySlice<int32_t>(outgoing_weights_indices_array, "outgoing_weights_indices"),
+                         ConstArraySlice<int32_t>(outgoing_weights_indptr_array, "outgoing_weights_indptr"),
+                         int32_t(nodes_count),
+                         "outgoing_weights");
+    FastAssertCompare(outgoing_weights.bands_count(), ==, nodes_count);
+
+    ConstCompressedMatrix<float32_t, int32_t, int32_t>
+        incoming_weights(ConstArraySlice<float32_t>(incoming_weights_data_array, "incoming_weights_data"),
+                         ConstArraySlice<int32_t>(incoming_weights_indices_array, "incoming_weights_indices"),
+                         ConstArraySlice<int32_t>(incoming_weights_indptr_array, "incoming_weights_indptr"),
+                         int32_t(nodes_count),
+                         "incoming_weights");
+    FastAssertCompare(incoming_weights.bands_count(), ==, nodes_count);
+
+    do_complete_seeds(seed_of_nodes, seeds_count, outgoing_weights, incoming_weights);
 }
 
 void
 register_choose_seeds(pybind11::module& module) {
     module.def("choose_seeds", &metacells::choose_seeds, "Choose seed partitions for computing metacells.");
+    module.def("complete_seeds", &metacells::complete_seeds, "Complete seed partitions for computing metacells.");
 }
 
 }

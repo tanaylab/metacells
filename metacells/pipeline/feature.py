@@ -33,7 +33,7 @@ def extract_feature_data(
     min_gene_top3: Optional[int] = pr.feature_min_gene_top3,
     random_seed: int = 0,
     top_level: bool = True,
-) -> Optional[AnnData]:
+) -> AnnData:
     """
     Extract a "feature" subset of ``what`` (default: {what} data, to compute metacells by.
 
@@ -106,6 +106,16 @@ def extract_feature_data(
     4. Invoke :py:func:`metacells.tools.filter.filter_data` to slice just the selected "feature" genes using the
        ``name`` (default: {name}).
     """
+
+    tl.downsample_cells(
+        adata,
+        what,
+        downsample_min_samples=downsample_min_samples,
+        downsample_min_cell_quantile=downsample_min_cell_quantile,
+        downsample_max_cell_quantile=downsample_max_cell_quantile,
+        random_seed=random_seed,
+    )
+
     if ut.has_data(adata, "feature_gene"):
         results = tl.filter_data(
             adata, name=name, top_level=top_level, track_var="full_gene_index", var_masks=["feature_gene"]
@@ -113,15 +123,6 @@ def extract_feature_data(
 
     else:
         var_masks = ["&~lateral_gene?", "&~noisy_gene?"]
-
-        tl.downsample_cells(
-            adata,
-            what,
-            downsample_min_samples=downsample_min_samples,
-            downsample_min_cell_quantile=downsample_min_cell_quantile,
-            downsample_max_cell_quantile=downsample_max_cell_quantile,
-            random_seed=random_seed,
-        )
 
         if min_gene_top3 is not None:
             var_masks.append("&high_top3_gene")

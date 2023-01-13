@@ -226,10 +226,10 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
         utl.log_calc(f'slice {get_name(adata, "unnamed")} into {get_name(bdata, "unnamed")} shape {bdata.shape}')  #
 
     if track_obs is not None:
-        set_o_data(bdata, track_obs, np.arange(adata.n_obs)[obs])
+        set_o_data(bdata, track_obs, np.arange(adata.n_obs, dtype="int32")[obs])
 
     if track_var is not None:
-        set_v_data(bdata, track_var, np.arange(adata.n_vars)[vars])
+        set_v_data(bdata, track_var, np.arange(adata.n_vars, dtype="int32")[vars])
 
     return bdata
 

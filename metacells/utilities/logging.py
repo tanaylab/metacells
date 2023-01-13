@@ -439,14 +439,14 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
             return None
 
     if isinstance(value, AnnData):
-        name = value.uns.get("__name__", "unnamed")
+        aname = value.uns.get("__name__", "unnamed")
 
         if hasattr(value.X, "dtype"):
             dtype = getattr(value.X, "dtype")
         else:
             dtype = "unknown"
 
-        return f"{name} annotated data with {value.shape[0]} X {value.shape[1]} {dtype}s" + checksum
+        return f"{aname} annotated data with {value.shape[0]} X {value.shape[1]} {dtype}s" + checksum
 
     if isinstance(value, (np.bool_, bool, str, None.__class__)):
         return str(value) + checksum
@@ -503,10 +503,7 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
     if isinstance(value, dict):
         return str(value) + checksum
 
-    if name == "self":
-        return f"{value.__class__}#{id(value)}"
-
-    raise RuntimeError(f"unknown parameter type: {value.__class__} value: {value} name: {name}")  #
+    return f"{value.__class__.__module__}.{value.__class__.__qualname__}#{id(value)}"
 
 
 def top_level(adata: AnnData) -> None:
@@ -644,7 +641,10 @@ def log_get(
     is_top_level = (
         hasattr(adata, "__is_top_level__")
         and getattr(adata, "__is_top_level__")
-        and (not hasattr(adata, "__incremental__") or name not in getattr(adata, "__incremental__"))
+        and (
+            not hasattr(adata, "__incremental__")
+            or (isinstance(name, str) and name not in getattr(adata, "__incremental__"))
+        )
     )
 
     adata_name = adata.uns.get("__name__", "unnamed")
@@ -734,9 +734,12 @@ def groups_description(groups: Union[utt.Vector, str]) -> str:
         assert outliers_count == len(groups)
         return f"{len(groups)} {groups.dtype} elements with all outliers (100%)"
 
-    mean = (len(groups) - outliers_count) / groups_count
+    grouped_count = len(groups) - outliers_count
+    mean = grouped_count / groups_count
     return (
-        ratio_description(len(groups), f"{groups.dtype} element", outliers_count, "outliers")
+        ratio_description(len(groups), f"{groups.dtype} element", outliers_count, "outliers", base=False)
+        + " and "
+        + ratio_description(len(groups), f"{groups.dtype} element", grouped_count, "grouped")
         + f" with {groups_count} groups with mean size {mean:.4g}"
     )
 
@@ -761,7 +764,7 @@ def mask_description(mask: Union[str, utt.Vector, utt.Matrix]) -> str:
     return ratio_description(mask.size, str(mask.dtype), np.sum(mask > 0), value)
 
 
-def ratio_description(denominator: float, element: str, numerator: float, condition: str) -> str:
+def ratio_description(denominator: float, element: str, numerator: float, condition: str, *, base: bool = True) -> str:
     """
     Return a string for describing a ratio (including a percent representation).
     """
@@ -774,7 +777,9 @@ def ratio_description(denominator: float, element: str, numerator: float, condit
         denominator = int(denominator)
 
     percent = (numerator * 100) / denominator
-    return f"{numerator} {condition} ({percent:.4g}%) out of {denominator} {element}s"
+    if base:
+        return f"{numerator} {condition} ({percent:.4g}%) out of {denominator} {element}s"
+    return f"{numerator} {condition} ({percent:.4g}%)"
 
 
 def progress_description(amount: int, index: int, element: str) -> str:

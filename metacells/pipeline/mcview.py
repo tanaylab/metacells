@@ -103,10 +103,10 @@ def compute_for_mcview(
     reproducible = random_seed != 0
     if find_metacells_significant_genes is not None:
         tl.find_metacells_significant_genes(gdata, what, **find_metacells_significant_genes)
-    if compute_umap_by_features_2 is not None:
-        compute_umap_by_features(gdata, what, dimensions=2, random_seed=random_seed, **compute_umap_by_features_2)
     if compute_umap_by_features_3 is not None:
         compute_umap_by_features(gdata, what, dimensions=3, random_seed=random_seed, **compute_umap_by_features_3)
+    if compute_umap_by_features_2 is not None:
+        compute_umap_by_features(gdata, what, dimensions=2, random_seed=random_seed, **compute_umap_by_features_2)
     if compute_outliers_matches is not None:
         tl.compute_outliers_matches(
             what, adata=adata, gdata=gdata, group=group, reproducible=reproducible, **compute_outliers_matches

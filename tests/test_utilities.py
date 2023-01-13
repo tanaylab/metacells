@@ -474,14 +474,6 @@ def test_random_piles() -> None:
     assert np.allclose(result, expected)
 
 
-def test_group_piles() -> None:
-    group_of_elements = np.array([0, 1, 2, 3, 0, 1, 2, 3, 0, 1])
-    group_of_groups = np.array([0, 1, 1, 0])
-    expected = np.array([0, 1, 1, 0, 0, 1, 1, 0, 0, 1])
-    result = ut.group_piles(group_of_elements, group_of_groups)
-    assert np.allclose(result, expected)
-
-
 def test_dense_per() -> None:
     matrix = np.array([[0, 1, 2], [3, 4, 5]], dtype="float")
     _test_per(matrix)
