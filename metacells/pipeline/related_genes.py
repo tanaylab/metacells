@@ -18,7 +18,7 @@ import metacells.parameters as pr
 import metacells.tools as tl
 import metacells.utilities as ut
 
-from .feature import extract_feature_data
+from .select import extract_selected_data
 
 __all__ = [
     "relate_genes",
@@ -71,10 +71,10 @@ def relate_genes(
     1. If we have more than ``max_sampled_cells`` (default: {max_sampled_cells}), pick this number
        of random cells from the data using the ``random_seed``.
 
-    2. Pick candidate genes using :py:func:`metacells.pipeline.feature.extract_feature_data`. You may want to call
+    2. Pick candidate genes using :py:func:`metacells.pipeline.select.extract_selected_data`. You may want to call
        :py:func:`metacells.pipeline.mark.mark_lateral_genes` first.
 
-    3. Compute the similarity between the feature genes using
+    3. Compute the similarity between the "select" genes using
        :py:func:`metacells.tools.similarity.compute_var_var_similarity` using the
        ``genes_similarity_method`` (default: {genes_similarity_method}).
 
@@ -92,7 +92,7 @@ def relate_genes(
     else:
         sdata = ut.copy_adata(adata, top_level=False)
 
-    fdata = extract_feature_data(
+    sdata = extract_selected_data(
         sdata,
         what,
         top_level=False,
@@ -104,27 +104,27 @@ def relate_genes(
         min_gene_top3=min_gene_top3,
         random_seed=random_seed,
     )
-    assert fdata is not None
+    assert sdata is not None
 
     frame = tl.compute_var_var_similarity(
-        fdata, what, method=genes_similarity_method, reproducible=(random_seed != 0), inplace=False
+        sdata, what, method=genes_similarity_method, reproducible=(random_seed != 0), inplace=False
     )
     assert frame is not None
     similarity = ut.to_layout(ut.to_numpy_matrix(frame), layout="row_major")
 
     linkage = _cluster_genes(similarity, genes_cluster_method)
-    clusters = _linkage_to_clusters(linkage, target_genes_of_modules, fdata.n_vars)
+    clusters = _linkage_to_clusters(linkage, target_genes_of_modules, sdata.n_vars)
 
     cluster_of_genes = pd.Series(np.full(adata.n_vars, -1, dtype="int32"), index=adata.var_names)
     for cluster_index, gene_indices in enumerate(clusters):
-        cluster_of_genes[fdata.var_names[gene_indices]] = cluster_index
+        cluster_of_genes[sdata.var_names[gene_indices]] = cluster_index
 
     ut.set_v_data(adata, "related_genes_module", cluster_of_genes, formatter=ut.groups_description)
 
-    feature_gene_indices = ut.get_v_numpy(fdata, "full_gene_index")
+    select_gene_indices = ut.get_v_numpy(sdata, "full_gene_index")
     data = similarity.flatten(order="C")
-    rows = np.repeat(feature_gene_indices, len(feature_gene_indices))
-    cols = np.tile(feature_gene_indices, len(feature_gene_indices))
+    rows = np.repeat(select_gene_indices, len(select_gene_indices))
+    cols = np.tile(select_gene_indices, len(select_gene_indices))
     full_similarity = sp.csr_matrix((data, (rows, cols)), shape=(adata.n_vars, adata.n_vars))
 
     ut.set_vv_data(adata, "related_genes_similarity", full_similarity)

@@ -197,13 +197,13 @@ class DirectParameters:  # pylint: disable=too-many-instance-attributes
     Parameters for direct computation of metacells in a single pile.
     """
 
-    feature_downsample_min_samples: int
-    feature_downsample_min_cell_quantile: float
-    feature_downsample_max_cell_quantile: float
-    feature_min_gene_total: Optional[int]
-    feature_min_gene_top3: Optional[int]
-    feature_min_gene_relative_variance: Optional[float]
-    feature_correction: Optional[FeatureCorrection]
+    select_downsample_min_samples: int
+    select_downsample_min_cell_quantile: float
+    select_downsample_max_cell_quantile: float
+    select_min_gene_total: Optional[int]
+    select_min_gene_top3: Optional[int]
+    select_min_gene_relative_variance: Optional[float]
+    select_correction: Optional[FeatureCorrection]
     cells_similarity_value_normalization: float
     cells_similarity_log_data: bool
     cells_similarity_method: str
@@ -373,13 +373,13 @@ def divide_and_conquer_pipeline(
     rare_dissolve_min_convincing_size_factor: Optional[float] = pr.rare_dissolve_min_convincing_size_factor,
     rare_dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
     quick_and_dirty: bool = pr.quick_and_dirty,
-    feature_downsample_min_samples: int = pr.feature_downsample_min_samples,
-    feature_downsample_min_cell_quantile: float = pr.feature_downsample_min_cell_quantile,
-    feature_downsample_max_cell_quantile: float = pr.feature_downsample_max_cell_quantile,
-    feature_min_gene_total: Optional[int] = pr.feature_min_gene_total,
-    feature_min_gene_top3: Optional[int] = pr.feature_min_gene_top3,
-    feature_min_gene_relative_variance: Optional[float] = pr.feature_min_gene_relative_variance,
-    feature_correction: Optional[FeatureCorrection] = None,
+    select_downsample_min_samples: int = pr.select_downsample_min_samples,
+    select_downsample_min_cell_quantile: float = pr.select_downsample_min_cell_quantile,
+    select_downsample_max_cell_quantile: float = pr.select_downsample_max_cell_quantile,
+    select_min_gene_total: Optional[int] = pr.select_min_gene_total,
+    select_min_gene_top3: Optional[int] = pr.select_min_gene_top3,
+    select_min_gene_relative_variance: Optional[float] = pr.select_min_gene_relative_variance,
+    select_correction: Optional[FeatureCorrection] = None,
     cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_method: str = pr.cells_similarity_method,
@@ -520,13 +520,13 @@ def divide_and_conquer_pipeline(
         piles_min_robust_size_factor=piles_min_robust_size_factor,
         piles_max_merge_size_factor=piles_max_merge_size_factor,
         direct_parameters=DirectParameters(
-            feature_downsample_min_samples=feature_downsample_min_samples,
-            feature_downsample_min_cell_quantile=feature_downsample_min_cell_quantile,
-            feature_downsample_max_cell_quantile=feature_downsample_max_cell_quantile,
-            feature_min_gene_total=feature_min_gene_total,
-            feature_min_gene_top3=feature_min_gene_top3,
-            feature_min_gene_relative_variance=feature_min_gene_relative_variance,
-            feature_correction=feature_correction,
+            select_downsample_min_samples=select_downsample_min_samples,
+            select_downsample_min_cell_quantile=select_downsample_min_cell_quantile,
+            select_downsample_max_cell_quantile=select_downsample_max_cell_quantile,
+            select_min_gene_total=select_min_gene_total,
+            select_min_gene_top3=select_min_gene_top3,
+            select_min_gene_relative_variance=select_min_gene_relative_variance,
+            select_correction=select_correction,
             cells_similarity_value_normalization=cells_similarity_value_normalization,
             cells_similarity_log_data=cells_similarity_log_data,
             cells_similarity_method=cells_similarity_method,
@@ -656,13 +656,13 @@ def compute_divide_and_conquer_metacells(
     what: str = "__x__",
     *,
     quick_and_dirty: bool = pr.quick_and_dirty,
-    feature_downsample_min_samples: int = pr.feature_downsample_min_samples,
-    feature_downsample_min_cell_quantile: float = pr.feature_downsample_min_cell_quantile,
-    feature_downsample_max_cell_quantile: float = pr.feature_downsample_max_cell_quantile,
-    feature_min_gene_total: Optional[int] = pr.feature_min_gene_total,
-    feature_min_gene_top3: Optional[int] = pr.feature_min_gene_top3,
-    feature_min_gene_relative_variance: Optional[float] = pr.feature_min_gene_relative_variance,
-    feature_correction: Optional[FeatureCorrection] = None,
+    select_downsample_min_samples: int = pr.select_downsample_min_samples,
+    select_downsample_min_cell_quantile: float = pr.select_downsample_min_cell_quantile,
+    select_downsample_max_cell_quantile: float = pr.select_downsample_max_cell_quantile,
+    select_min_gene_total: Optional[int] = pr.select_min_gene_total,
+    select_min_gene_top3: Optional[int] = pr.select_min_gene_top3,
+    select_min_gene_relative_variance: Optional[float] = pr.select_min_gene_relative_variance,
+    select_correction: Optional[FeatureCorrection] = None,
     cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_method: str = pr.cells_similarity_method,
@@ -819,13 +819,13 @@ def compute_divide_and_conquer_metacells(
         piles_min_robust_size_factor=piles_min_robust_size_factor,
         piles_max_merge_size_factor=piles_max_merge_size_factor,
         direct_parameters=DirectParameters(
-            feature_downsample_min_samples=feature_downsample_min_samples,
-            feature_downsample_min_cell_quantile=feature_downsample_min_cell_quantile,
-            feature_downsample_max_cell_quantile=feature_downsample_max_cell_quantile,
-            feature_min_gene_total=feature_min_gene_total,
-            feature_min_gene_top3=feature_min_gene_top3,
-            feature_min_gene_relative_variance=feature_min_gene_relative_variance,
-            feature_correction=feature_correction,
+            select_downsample_min_samples=select_downsample_min_samples,
+            select_downsample_min_cell_quantile=select_downsample_min_cell_quantile,
+            select_downsample_max_cell_quantile=select_downsample_max_cell_quantile,
+            select_min_gene_total=select_min_gene_total,
+            select_min_gene_top3=select_min_gene_top3,
+            select_min_gene_relative_variance=select_min_gene_relative_variance,
+            select_correction=select_correction,
             cells_similarity_value_normalization=cells_similarity_value_normalization,
             cells_similarity_log_data=cells_similarity_log_data,
             cells_similarity_method=cells_similarity_method,
@@ -1152,7 +1152,7 @@ def _compute_metacell_groups(
         direct_parameters=replace(
             dac_parameters.direct_parameters,
             target_metacell_size=dac_parameters.target_pile_size,
-            feature_correction=None,
+            select_correction=None,
             cell_sizes=metacell_sizes,
             max_cell_size=None,
             max_cell_size_factor=None,

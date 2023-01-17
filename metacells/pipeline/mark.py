@@ -3,8 +3,8 @@ Mark (Genes)
 ------------
 
 Even when working with "clean" data, computing metacells requires marking genes for special treatment, specifically
-"lateral" genes which should not be selected as feature genes and "noisy" genes which should be neither selected as
-feature genes not used to detect deviant (outlier) cells in the metacells.
+"lateral" genes which should not be selected for computing metacells and "noisy" genes which should be neither selected
+as nor be used to detect deviant (outlier) cells in the metacells.
 
 Proper choice of lateral and noisy genes is mandatory for high-quality metacells generation. However, this choice can't
 be fully automated, and therefore relies on the analyst to manually provide the list of genes.
@@ -24,7 +24,7 @@ import metacells.utilities as ut
 __all__ = [
     "mark_lateral_genes",
     "mark_noisy_genes",
-    "mark_feature_genes",
+    "mark_select_genes",
 ]
 
 
@@ -38,8 +38,7 @@ def mark_lateral_genes(
     lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
 ) -> None:
     """
-    Mark a subset of the genes as "lateral", that is, prevent them from being used as feature genes when computing
-    metacell.
+    Mark a subset of the genes as "lateral", that is, prevent them from being selected for computing metacells.
 
     Lateral genes are still used to detect outliers, that is, the cells in resulting metacells should still have
     similar expression level for such genes.
@@ -86,8 +85,8 @@ def mark_noisy_genes(
     random_seed: int = pr.random_seed,
 ) -> None:
     """
-    Mark a subset of the genes as "noisy", that is, prevent them from both being used as feature genes and for detecting
-    deviant (outlier) cells when computing metacell.
+    Mark a subset of the genes as "noisy", that is, prevent them from both being selected for computing metacells and
+    for detecting deviant (outlier) cells.
 
     You can also just manually set the ``noisy_gene`` mask, or further manipulate it after calling this function.
 
@@ -149,20 +148,20 @@ def mark_noisy_genes(
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def mark_feature_genes(
+def mark_select_genes(
     adata: AnnData,
     *,
-    feature_gene_names: Optional[Collection[str]] = None,
-    feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    select_gene_names: Optional[Collection[str]] = None,
+    select_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
 ) -> None:
     """
-    Mark a subset of the genes as "feature", that is, force them to be used as feature genes when computing metacell.
+    Mark a subset of the genes as "select", that is, force them to be used when computing metacell.
 
-    If this is done, then it overrides the default feature gene selection mechanism, forcing the algorithm to
-    use a fixed set of feature genes. In general, this will result in lower-quality metacells, especially when
-    using the divide-and-conquer algorithm, so **do not use this unless you really know what you are doing**.
+    If this is done, then it overrides the default gene selection mechanism, forcing the algorithm to use a fixed set of
+    genes. In general, this will result in lower-quality metacells, especially when using the divide-and-conquer
+    algorithm, so **do not use this unless you really know what you are doing**.
 
-    You can also just manually set the ``feature_gene`` mask, or further manipulate it after calling this function.
+    You can also just manually set the ``select_gene`` mask, or further manipulate it after calling this function.
 
     **Input**
 
@@ -173,13 +172,13 @@ def mark_feature_genes(
     Sets the following in the data:
 
     Variable (gene) annotations:
-        ``feature_gene``
-            A mask of the "feature" genes.
+        ``select_gene``
+            A mask of the "select" genes.
 
     **Computation Parameters**
 
-    1. Invoke :py:func:`metacells.tools.named.find_named_genes` to also mark feature genes based on their name, using
-       the ``feature_gene_names`` (default: {feature_gene_names}) and ``feature_gene_patterns`` (default:
-       {feature_gene_patterns}).
+    1. Invoke :py:func:`metacells.tools.named.find_named_genes` to also select genes based on their name, using
+       the ``select_gene_names`` (default: {select_gene_names}) and ``select_gene_patterns`` (default:
+       {select_gene_patterns}).
     """
-    tl.find_named_genes(adata, names=feature_gene_names, patterns=feature_gene_patterns, to="feature_gene")
+    tl.find_named_genes(adata, names=select_gene_names, patterns=select_gene_patterns, to="select_gene")

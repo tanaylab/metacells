@@ -35,7 +35,6 @@ def compute_knn_by_features(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
-    max_top_feature_genes: int = pr.max_top_feature_genes,
     feature_gene_names: Optional[Collection[str]] = None,
     feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     similarity_value_normalization: float = pr.umap_similarity_value_normalization,
@@ -57,9 +56,9 @@ def compute_knn_by_features(
 
     **Input**
 
-    Annotated ``adata`` where each observation is a metacells and the variables are genes,
-    are genes, where ``what`` is a per-variable-per-observation matrix or the name of a
-    per-variable-per-observation annotation containing such a matrix.
+    Annotated ``adata`` where each observation is a metacells and the variables are genes, are genes, where ``what`` is
+    a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
+    matrix. Should contain a ``feature_gene`` mask unless explicitly specifying the feature genes.
 
     **Returns**
 
@@ -75,14 +74,11 @@ def compute_knn_by_features(
 
     **Computation Parameters**
 
-    1. Invoke :py:func:`metacells.tools.high.find_top_feature_genes` using ``max_top_feature_genes``
-       (default: {max_top_feature_genes}) to pick the feature genes to use to compute similarities between the
-       metacells. If ``feature_gene_names`` and/or ``feature_gene_patterns`` were specified, this is replaced by calling
-       :py:func:`metacells.tools.named.find_named_genes` instead.
+    1. If ``feature_gene_names`` and/or ``feature_gene_patterns`` were specified, use the matching genes.
+       Otherwise, use the ``feature_gene`` mask.
 
-    2. Compute the fractions of each gene in each cell, and add the
-       ``similarity_value_normalization`` (default: {similarity_value_normalization}) to
-       it.
+    2. Compute the fractions of each ``feature_gene`` in each cell, and add the
+       ``similarity_value_normalization`` (default: {similarity_value_normalization}) to it.
 
     3. If ``similarity_log_data`` (default: {similarity_log_data}), invoke the
        :py:func:`metacells.utilities.computation.log_data` function to compute the log (base 2) of
@@ -100,16 +96,18 @@ def compute_knn_by_features(
        UMAP graph.
     """
     if feature_gene_names is None and feature_gene_patterns is None:
-        tl.find_top_feature_genes(adata, max_genes=max_top_feature_genes)
+        feature_genes = ut.get_v_numpy(adata, "feature_gene")
     else:
-        tl.find_named_genes(adata, to="top_feature_gene", names=feature_gene_names, patterns=feature_gene_patterns)
+        feature_genes_series = tl.find_named_genes(adata, names=feature_gene_names, patterns=feature_gene_patterns)
+        assert feature_genes_series is not None
+        feature_genes = ut.to_numpy_vector(feature_genes_series)
 
     all_data = ut.get_vo_proper(adata, what, layout="row_major")
     all_fractions = ut.fraction_by(all_data, by="row")
 
-    top_feature_genes_mask = ut.get_v_numpy(adata, "top_feature_gene")
+    feature_genes = ut.get_v_numpy(adata, "top_feature_gene")
 
-    top_feature_genes_fractions = all_fractions[:, top_feature_genes_mask]
+    top_feature_genes_fractions = all_fractions[:, feature_genes]
     top_feature_genes_fractions = ut.to_layout(top_feature_genes_fractions, layout="row_major")
     top_feature_genes_fractions = ut.to_numpy_matrix(top_feature_genes_fractions)
 
@@ -118,7 +116,7 @@ def compute_knn_by_features(
     if similarity_log_data:
         top_feature_genes_fractions = ut.log_data(top_feature_genes_fractions, base=2)
 
-    tdata = ut.slice(adata, vars=top_feature_genes_mask)
+    tdata = ut.slice(adata, vars=feature_genes)
     similarities = tl.compute_obs_obs_similarity(
         tdata,
         top_feature_genes_fractions,
@@ -149,7 +147,6 @@ def compute_umap_by_features(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
-    max_top_feature_genes: int = pr.max_top_feature_genes,
     feature_gene_names: Optional[Collection[str]] = None,
     feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     similarity_value_normalization: float = pr.umap_similarity_value_normalization,
@@ -196,7 +193,6 @@ def compute_umap_by_features(
     **Computation Parameters**
 
     1. Invoke :py:func:`metacells.pipeline.umap.compute_knn_by_features` using
-       ``max_top_feature_genes`` (default: {max_top_feature_genes}),
        ``feature_gene_names`` (default: {feature_gene_names}), ``feature_gene_patterns`` (default:
        {feature_gene_patterns}), ``similarity_value_normalization`` (default: {similarity_value_normalization}),
        ``similarity_log_data`` (default: {similarity_log_data}), ``similarity_method`` (default: {similarity_method}),
@@ -220,7 +216,6 @@ def compute_umap_by_features(
     similarities = compute_knn_by_features(
         adata,
         what,
-        max_top_feature_genes=max_top_feature_genes,
         feature_gene_names=feature_gene_names,
         feature_gene_patterns=feature_gene_patterns,
         similarity_value_normalization=similarity_value_normalization,

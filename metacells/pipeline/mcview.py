@@ -34,6 +34,7 @@ def compute_for_mcview(
     gdata: AnnData,
     group: Union[str, ut.Vector] = "metacell",
     random_seed: int = pr.random_seed,
+    find_metacells_feature_genes: Optional[Dict[str, Any]] = {},
     compute_umap_by_features_2: Optional[Dict[str, Any]] = {},
     compute_umap_by_features_3: Optional[Dict[str, Any]] = {},
     compute_inner_fold_factors: Optional[Dict[str, Any]] = {},
@@ -41,7 +42,6 @@ def compute_for_mcview(
     compute_outliers_fold_factors: Optional[Dict[str, Any]] = {},
     compute_deviant_fold_factors: Optional[Dict[str, Any]] = {},
     compute_var_var_similarity: Optional[Dict[str, Any]] = dict(top=50, bottom=50),
-    find_metacells_significant_genes: Optional[Dict[str, Any]] = {},
 ) -> Optional[AnnData]:
     """
     Compute metacell analysis in preparation for exporting the data to MCView.
@@ -76,33 +76,33 @@ def compute_for_mcview(
        {random_seed}) and the ``reproducible`` flag derived from it (true if the seed is not zero) are automatically
        passed to all relevant tools.
 
-    1. Computes UMAP projections by invoking :py:func:`metacells.pipeline.umap.compute_umap_by_features`. This is done
+    1. Compute the "feature" metacell genes using :py:func:`metacells.tools.high.find_metacells_feature_genes`.
+
+    2. Computes UMAP projections by invoking :py:func:`metacells.pipeline.umap.compute_umap_by_features`. This is done
        twice, once with ``dimensions=2`` for visualization and once with ``dimensions=3`` to capture more of the
        manifold structure (used to automatically generate cluster colors). Therefore in this case there are two
        dictionary parameters ``compute_umap_by_features_2`` and ``compute_umap_by_features_3``.
 
-    2. Compute for each gene and for each metacell the fold factor between the metacell cells using
+    3. Compute for each gene and for each metacell the fold factor between the metacell cells using
        :py:func:`metacells.tools.quality.compute_inner_fold_factors`.
 
-    3. Compute for each outlier cell the "most similar" metacecell for it using
+    4. Compute for each outlier cell the "most similar" metacecell for it using
        :py:func:`metacells.tools.quality.compute_outliers_matches`.
 
-    4. Compute for each metacell the fold factor between the metacell and the outliers most similar to it using
+    5. Compute for each metacell the fold factor between the metacell and the outliers most similar to it using
        :py:func:`metacells.tools.quality.compute_deviant_fold_factors`.
 
-    5. Compute the gene-gene (variable-variable) similarity matrix. Note by default this will use
+    6. Compute the gene-gene (variable-variable) similarity matrix. Note by default this will use
        {compute_var_var_similarity} which aren't the normal defaults for ``compute_var_var_similarity``, in order to
        keep just the top correlated genes and bottom (anti-)correlated genes for each gene. Otherwise you will get a
        dense matrix of ~X0K by ~X0K entries, which typically isn't what you want.
-
-    6. Compute the significant metacell genes using :py:func:`metacells.tools.high.find_metacells_significant_genes`.
 
     7. Compute for each gene and for each outlier cell the fold factor between the cell and the most similar
        metacell using :py:func:`metacells.tools.quality.compute_outliers_fold_factors`.
     """
     reproducible = random_seed != 0
-    if find_metacells_significant_genes is not None:
-        tl.find_metacells_significant_genes(gdata, what, **find_metacells_significant_genes)
+    if find_metacells_feature_genes is not None:
+        tl.find_metacells_feature_genes(gdata, what, **find_metacells_feature_genes)
     if compute_umap_by_features_3 is not None:
         compute_umap_by_features(gdata, what, dimensions=3, random_seed=random_seed, **compute_umap_by_features_3)
     if compute_umap_by_features_2 is not None:

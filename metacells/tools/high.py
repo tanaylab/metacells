@@ -13,79 +13,13 @@ import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
-    "find_top_feature_genes",
     "find_high_total_genes",
     "find_high_topN_genes",
     "find_high_fraction_genes",
     "find_high_normalized_variance_genes",
     "find_high_relative_variance_genes",
-    "find_metacells_significant_genes",
+    "find_metacells_feature_genes",
 ]
-
-
-@ut.logged()
-@ut.timed_call()
-@ut.expand_doc()
-def find_top_feature_genes(
-    adata: AnnData,
-    *,
-    max_genes: int = pr.max_top_feature_genes,
-    inplace: bool = True,
-) -> Optional[ut.PandasSeries]:
-    """
-    Find genes which have high ``feature_gene`` value.
-
-    This is applied after computing metacells to pick the "strongest" feature genes. If using the
-    direct algorithm (:py:func:`metacells.pipeline.direct.compute_direct_metacells`) then all
-    feature genes are equally "strong"; however, if using the divide-and-conquer algorithm
-    (:py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`,
-    :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`) then this
-    will pick the genes which were most commonly used as features across all the piles.
-
-    **Input**
-
-    Annotated ``adata``, where the observations are cells and the variables are genes, where
-    ``feature_gene`` is a per-variable (gene) annotation counting how many times each gene was used
-    as a feature.
-
-    **Returns**
-
-    Variable (Gene) Annotations
-        ``top_feature_gene``
-            A boolean mask indicating whether each gene was found to be a top feature gene.
-
-    If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
-    ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
-
-    **Computation Parameters**
-
-    1. Restrict the search just to genes included in the ``significant_gene`` mask, if it exists.
-
-    2. Look for the lowest positive ``feature_gene`` threshold such that at most ``max_genes`` are
-       picked as top feature genes. Note we may still pick more than ``max_genes``, for example when
-       using the direct algorithm, we always return all feature genes as there's no way to
-       distinguish between them using the ``feature_gene`` data.
-    """
-    feature_of_gene = ut.get_v_numpy(adata, "feature_gene", formatter=ut.mask_description).copy()
-    if ut.has_data(adata, "significant_gene"):
-        significant_gene = ut.get_v_numpy(adata, "significant_gene")
-        feature_of_gene[~significant_gene] = -1
-    max_threshold = np.max(feature_of_gene)
-    assert max_threshold > 0
-    threshold = 0
-    selected_count = max_genes + 1
-    while selected_count > max_genes and threshold < max_threshold:
-        threshold = threshold + 1
-        genes_mask = feature_of_gene >= threshold
-        selected_count = np.sum(genes_mask)
-        ut.log_calc(f"threshold: {threshold} selected: {selected_count}")
-
-    if inplace:
-        ut.set_v_data(adata, "top_feature_gene", genes_mask)
-        return None
-
-    ut.log_return("top_feature_gene", genes_mask)
-    return ut.to_pandas_series(genes_mask, index=adata.var_names)
 
 
 @ut.logged()
@@ -368,18 +302,18 @@ def find_high_relative_variance_genes(
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def find_metacells_significant_genes(
+def find_metacells_feature_genes(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
-    min_gene_range_fold: float = pr.min_significant_metacells_gene_range_fold_factor,
+    min_gene_range_fold: float = pr.min_feature_metacells_gene_range_fold_factor,
     normalization: float = pr.metacells_gene_range_normalization,
-    min_gene_fraction: float = pr.min_significant_metacells_gene_fraction,
+    min_gene_fraction: float = pr.min_feature_metacells_gene_fraction,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     """
-    Find genes which have a significant signal in metacells data. This computation is too unreliable to be used on
-    cells.
+    Find "feature" genes which have a significant signal in metacells data. This computation is too unreliable to be
+    used on cells.
 
     Find genes which have a high maximal expression in at least one metacell, and a wide range of expression across the
     metacells. Such genes are good candidates for being used as marker genes and/or to compute distances between
@@ -394,8 +328,8 @@ def find_metacells_significant_genes(
     **Returns**
 
     Variable (Gene) Annotations
-        ``significant_gene``
-            A boolean mask indicating whether each gene was found to be significant.
+        ``feature_gene``
+            A boolean mask indicating whether each gene is a "feature".
 
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
@@ -429,11 +363,11 @@ def find_metacells_significant_genes(
     high_range_genes_mask = range_fold_of_genes >= min_gene_range_fold
     ut.log_calc("high range genes", high_range_genes_mask)
 
-    significant_genes_mask = high_max_fraction_genes_mask & high_range_genes_mask
+    feature_genes_mask = high_max_fraction_genes_mask & high_range_genes_mask
 
     if inplace:
-        ut.set_v_data(adata, "significant_gene", significant_genes_mask)
+        ut.set_v_data(adata, "feature_gene", feature_genes_mask)
         return None
 
-    ut.log_return("significant_genes", significant_genes_mask)
-    return ut.to_pandas_series(significant_genes_mask, index=adata.var_names)
+    ut.log_return("feature_genes", feature_genes_mask)
+    return ut.to_pandas_series(feature_genes_mask, index=adata.var_names)

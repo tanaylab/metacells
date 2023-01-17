@@ -14,7 +14,7 @@ import metacells.parameters as pr
 import metacells.tools as tl
 import metacells.utilities as ut
 
-from .feature import extract_feature_data
+from .select import extract_selected_data
 
 __all__ = [
     "compute_direct_metacells",
@@ -23,17 +23,17 @@ __all__ = [
 try:
     from mypy_extensions import NamedArg
 
-    #: A function to correct the extracted feature values before computing cell-cell similarity.
+    #: A function to correct the extracted selected values before computing cell-cell similarity.
     #:
     #: This function takes the following named arguments:
     #:
     #: ``adata`` - The full annotated data of the cells.
     #:
-    #: ``fdata`` - The feature genes annotated data of the cells (a slice of ``adata``). This has a
+    #: ``sdata`` - The selected genes annotated data of the cells (a slice of ``adata``). This has a
     #: ``downsample_samples`` unstructured annotation with the target number of samples per cell.
     #:
-    #: ``downsampled`` - A dense matrix of the downsampled UMIs of the features of the cells (a copy of the
-    #: ``downsampled`` layer of ``fdata``).
+    #: ``downsampled`` - A dense matrix of the downsampled UMIs of the selected genes of the cells (a copy of the
+    #: ``downsampled`` layer of ``sdata``).
     #:
     #: The function is free to modify ``downsampled`` as it sees fit to perform any type of correction (typically, some
     #: form of batch correction). The data type of ``downsampled`` is ``float32`` so the corrected values need not be
@@ -48,7 +48,7 @@ try:
     FeatureCorrection = Callable[
         [
             NamedArg(AnnData, "adata"),  # noqa: F821
-            NamedArg(AnnData, "fdata"),  # noqa: F821
+            NamedArg(AnnData, "sdata"),  # noqa: F821
             NamedArg(ut.NumpyMatrix, "downsampled"),  # noqa: F821
         ],
         None,
@@ -65,13 +65,13 @@ def compute_direct_metacells(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
-    feature_downsample_min_samples: int = pr.feature_downsample_min_samples,
-    feature_downsample_min_cell_quantile: float = pr.feature_downsample_min_cell_quantile,
-    feature_downsample_max_cell_quantile: float = pr.feature_downsample_max_cell_quantile,
-    feature_min_gene_total: Optional[int] = pr.feature_min_gene_total,
-    feature_min_gene_top3: Optional[int] = pr.feature_min_gene_top3,
-    feature_min_gene_relative_variance: Optional[float] = pr.feature_min_gene_relative_variance,
-    feature_correction: Optional[FeatureCorrection] = None,
+    select_downsample_min_samples: int = pr.select_downsample_min_samples,
+    select_downsample_min_cell_quantile: float = pr.select_downsample_min_cell_quantile,
+    select_downsample_max_cell_quantile: float = pr.select_downsample_max_cell_quantile,
+    select_min_gene_total: Optional[int] = pr.select_min_gene_total,
+    select_min_gene_top3: Optional[int] = pr.select_min_gene_top3,
+    select_min_gene_relative_variance: Optional[float] = pr.select_min_gene_relative_variance,
+    select_correction: Optional[FeatureCorrection] = None,
     cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_method: str = pr.cells_similarity_method,
@@ -156,14 +156,14 @@ def compute_direct_metacells(
 
     Variable (Gene) Annotations
         ``high_total_gene``
-            A boolean mask of genes with "high" expression level (unless a ``feature_gene`` mask exists).
+            A boolean mask of genes with "high" expression level (unless a ``select_gene`` mask exists).
 
         ``high_relative_variance_gene``
             A boolean mask of genes with "high" normalized variance, relative to other genes with a similar expression
-            level (unless a ``feature_gene`` mask exists).
+            level (unless a ``select_gene`` mask exists).
 
-        ``feature_gene``
-            A boolean mask of the "feature" genes.
+        ``select_gene``
+            A boolean mask of the "select" genes.
 
     Observation (Cell) Annotations
         ``metacell``
@@ -173,17 +173,17 @@ def compute_direct_metacells(
 
     **Computation Parameters**
 
-    1. Invoke :py:func:`metacells.pipeline.feature.extract_feature_data` to extract "feature" data
+    1. Invoke :py:func:`metacells.pipeline.select.extract_selected_data` to extract "select" data
        from the clean data, using the
-       ``feature_downsample_min_samples`` (default: {feature_downsample_min_samples}),
-       ``feature_downsample_min_cell_quantile`` (default: {feature_downsample_min_cell_quantile}),
-       ``feature_downsample_max_cell_quantile`` (default: {feature_downsample_max_cell_quantile}),
-       ``feature_min_gene_total`` (default: {feature_min_gene_total}),
-       ``feature_min_gene_top3`` (default: {feature_min_gene_top3}),
-       ``feature_min_gene_relative_variance`` (default: {feature_min_gene_relative_variance}) and
+       ``select_downsample_min_samples`` (default: {select_downsample_min_samples}),
+       ``select_downsample_min_cell_quantile`` (default: {select_downsample_min_cell_quantile}),
+       ``select_downsample_max_cell_quantile`` (default: {select_downsample_max_cell_quantile}),
+       ``select_min_gene_total`` (default: {select_min_gene_total}),
+       ``select_min_gene_top3`` (default: {select_min_gene_top3}),
+       ``select_min_gene_relative_variance`` (default: {select_min_gene_relative_variance}) and
        ``random_seed`` (default: {random_seed}) to make this replicable.
 
-    2. Apply the ``feature_correction`` function, if any, to modify the downsampled features data.
+    2. Apply the ``select_correction`` function, if any, to modify the downsampled selects data.
 
     3. Compute the fractions of each variable in each cell, and add the
        ``cells_similarity_value_normalization`` (default: {cells_similarity_value_normalization}) to
@@ -244,26 +244,26 @@ def compute_direct_metacells(
        and
        ``dissolve_min_metacell_cells`` (default: ``dissolve_min_metacell_cells``).
     """
-    fdata = extract_feature_data(
+    sdata = extract_selected_data(
         adata,
         what,
         top_level=False,
-        downsample_min_samples=feature_downsample_min_samples,
-        downsample_min_cell_quantile=feature_downsample_min_cell_quantile,
-        downsample_max_cell_quantile=feature_downsample_max_cell_quantile,
-        min_gene_relative_variance=feature_min_gene_relative_variance,
-        min_gene_total=feature_min_gene_total,
-        min_gene_top3=feature_min_gene_top3,
+        downsample_min_samples=select_downsample_min_samples,
+        downsample_min_cell_quantile=select_downsample_min_cell_quantile,
+        downsample_max_cell_quantile=select_downsample_max_cell_quantile,
+        min_gene_relative_variance=select_min_gene_relative_variance,
+        min_gene_total=select_min_gene_total,
+        min_gene_top3=select_min_gene_top3,
         random_seed=random_seed,
     )
 
     cell_sizes = ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
 
-    data = ut.get_vo_proper(fdata, "downsampled", layout="row_major")
+    data = ut.get_vo_proper(sdata, "downsampled", layout="row_major")
     data = ut.to_numpy_matrix(data, copy=True)
 
-    if feature_correction is not None:
-        feature_correction(adata=adata, fdata=fdata, downsampled=data)
+    if select_correction is not None:
+        select_correction(adata=adata, sdata=sdata, downsampled=data)
 
     if cells_similarity_value_normalization > 0:
         data += cells_similarity_value_normalization
@@ -293,18 +293,18 @@ def compute_direct_metacells(
 
     if knn_k == 0:
         ut.log_calc("knn_k: 0 (too small, trying a single metacell)")
-        ut.set_o_data(fdata, "candidate", np.full(fdata.n_obs, 0, dtype="int32"), formatter=lambda _: "* <- 0")
-    elif knn_k_of_median >= fdata.n_obs:
+        ut.set_o_data(sdata, "candidate", np.full(sdata.n_obs, 0, dtype="int32"), formatter=lambda _: "* <- 0")
+    elif knn_k_of_median >= sdata.n_obs:
         ut.log_calc(f"knn_k of median: {knn_k_of_median} (too large, trying a single metacell)")
-        ut.set_o_data(fdata, "candidate", np.full(fdata.n_obs, 0, dtype="int32"), formatter=lambda _: "* <- 0")
+        ut.set_o_data(sdata, "candidate", np.full(sdata.n_obs, 0, dtype="int32"), formatter=lambda _: "* <- 0")
 
     else:
         ut.log_calc("knn_k", knn_k)
 
-        tl.compute_obs_obs_similarity(fdata, data, method=cells_similarity_method, reproducible=(random_seed != 0))
+        tl.compute_obs_obs_similarity(sdata, data, method=cells_similarity_method, reproducible=(random_seed != 0))
 
         tl.compute_obs_obs_knn_graph(
-            fdata,
+            sdata,
             k=knn_k,
             balanced_ranks_factor=knn_balanced_ranks_factor,
             incoming_degree_factor=knn_incoming_degree_factor,
@@ -312,7 +312,7 @@ def compute_direct_metacells(
         )
 
         tl.compute_candidate_metacells(
-            fdata,
+            sdata,
             target_metacell_size=target_metacell_size,
             cell_sizes=cell_sizes,
             max_cell_size=max_cell_size,
@@ -331,7 +331,7 @@ def compute_direct_metacells(
             random_seed=random_seed,
         )
 
-    candidate_of_cells = ut.get_o_numpy(fdata, "candidate", formatter=ut.groups_description)
+    candidate_of_cells = ut.get_o_numpy(sdata, "candidate", formatter=ut.groups_description)
 
     if must_complete_cover:
         assert np.min(candidate_of_cells) == 0

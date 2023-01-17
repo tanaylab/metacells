@@ -38,7 +38,7 @@ To improve the log messages, we allow each ``AnnData`` object to have an optiona
 (see :py:func:`metacells.utilities.annotation.set_name` and
 :py:func:`metacells.utilities.annotation.get_name`). Whenever a temporary ``AnnData`` data is
 created, its name is extended by some descriptive suffix, so we get names like
-``full.clean.feature`` to describe the feature data extracted out of the clean data extracted out of
+``full.clean.select`` to describe the data selected from the clean data extracted out of
 the full data.
 """
 

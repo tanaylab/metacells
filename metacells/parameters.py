@@ -62,7 +62,7 @@ significant_value: int = 7
 
 #: The generic minimal samples to use for downsampling the cells for some purpose. See
 #: :py:const:`bursty_lonely_downsample_min_samples`,
-#: :py:const:`feature_downsample_min_samples`,
+#: :py:const:`select_downsample_min_samples`,
 #: and
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
 downsample_min_samples: int = 750
@@ -70,7 +70,7 @@ downsample_min_samples: int = 750
 #: The generic minimal quantile of the cells total size to use for downsampling the cells for some
 #: purpose. See
 #: :py:const:`bursty_lonely_downsample_min_cell_quantile`,
-#: :py:const:`feature_downsample_min_cell_quantile`,
+#: :py:const:`select_downsample_min_cell_quantile`,
 #: and
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
 downsample_min_cell_quantile: float = 0.05
@@ -78,7 +78,7 @@ downsample_min_cell_quantile: float = 0.05
 #: The generic maximal quantile of the cells total size to use for downsampling the cells for some
 #: purpose. See
 #: :py:const:`bursty_lonely_downsample_max_cell_quantile`,
-#: :py:const:`feature_downsample_max_cell_quantile`,
+#: :py:const:`select_downsample_max_cell_quantile`,
 #: and
 #: :py:func:`metacells.tools.downsample.downsample_cells`.
 downsample_max_cell_quantile: float = 0.5
@@ -281,46 +281,46 @@ related_target_genes_of_modules: int = 16
 #: The minimal samples to use for downsampling the cells for computing related genes. See
 #: :py:const:`downsample_min_samples`,
 #: :py:func:`metacells.tools.downsample.downsample_cells`,
-#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.select.extract_selected_data`,
 #: and
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
 related_downsample_min_samples: int = downsample_min_samples
 
 #: The minimal quantile of the cells total size to use for downsampling the cells for computing
-#: "feature" genes. See
+#: "select" genes. See
 #: :py:const:`downsample_min_cell_quantile`,
 #: :py:func:`metacells.tools.downsample.downsample_cells`,
-#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.select.extract_select_data`,
 #: and
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
 related_downsample_min_cell_quantile: float = downsample_min_cell_quantile
 
 #: The maximal quantile of the cells total size to use for downsampling the cells for computing
-#: "feature" genes. See
+#: "select" genes. See
 #: :py:const:`downsample_max_cell_quantile`,
 #: :py:func:`metacells.tools.downsample.downsample_cells`,
-#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.select.extract_select_data`,
 #: and
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
 related_downsample_max_cell_quantile: float = downsample_max_cell_quantile
 
-#: The minimal relative variance of a gene to be considered a "feature". See
+#: The minimal relative variance of a gene to be considered a "select". See
 #: :py:func:`metacells.tools.high.find_high_relative_variance_genes`,
-#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.select.extract_select_data`,
 #: and
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
 related_min_gene_relative_variance: float = 0.1
 
-#: The minimal number of downsampled UMIs of a gene to be considered a "feature". See
+#: The minimal number of downsampled UMIs of a gene to be considered a "select". See
 #: :py:func:`metacells.tools.high.find_high_total_genes`,
-#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.select.extract_select_data`,
 #: and
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
 related_min_gene_total: int = 50
 
-#: The minimal number of the top-3rd downsampled UMIs of a gene to be considered a "feature". See
+#: The minimal number of the top-3rd downsampled UMIs of a gene to be considered a "select". See
 #: :py:func:`metacells.tools.high.find_high_topN_genes`,
-#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.select.extract_select_data`,
 #: and
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
 related_min_gene_top3: int = 1
@@ -469,64 +469,64 @@ rare_min_cell_module_total: int = int((significant_value + 1) / 2)
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 quick_and_dirty: bool = False
 
-#: The minimal samples to use for downsampling the cells for computing "feature" genes. See
+#: The minimal samples to use for downsampling the cells for computing "select" genes. See
 #: :py:const:`downsample_min_samples`,
 #: :py:func:`metacells.tools.downsample.downsample_cells`,
-#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.select.extract_select_data`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-feature_downsample_min_samples: int = downsample_min_samples
+select_downsample_min_samples: int = downsample_min_samples
 
 #: The minimal quantile of the cells total size to use for downsampling the cells for computing
-#: "feature" genes. See
+#: "select" genes. See
 #: :py:const:`downsample_min_cell_quantile`,
 #: :py:func:`metacells.tools.downsample.downsample_cells`,
-#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.select.extract_select_data`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-feature_downsample_min_cell_quantile: float = downsample_min_cell_quantile
+select_downsample_min_cell_quantile: float = downsample_min_cell_quantile
 
 #: The maximal quantile of the cells total size to use for downsampling the cells for computing
-#: "feature" genes. See
+#: "select" genes. See
 #: :py:const:`downsample_max_cell_quantile`,
 #: :py:func:`metacells.tools.downsample.downsample_cells`,
-#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.select.extract_select_data`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-feature_downsample_max_cell_quantile: float = downsample_max_cell_quantile
+select_downsample_max_cell_quantile: float = downsample_max_cell_quantile
 
-#: The minimal relative variance of a gene to be considered a "feature". See
+#: The minimal relative variance of a gene to be considered a "select". See
 #: :py:func:`metacells.tools.high.find_high_relative_variance_genes`,
-#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.select.extract_select_data`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-feature_min_gene_relative_variance: Optional[float] = 0.1
+select_min_gene_relative_variance: Optional[float] = 0.1
 
-#: The minimal number of downsampled UMIs of a gene to be considered a "feature". See
+#: The minimal number of downsampled UMIs of a gene to be "select". See
 #: :py:func:`metacells.tools.high.find_high_total_genes`,
-#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.select.extract_select_data`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-feature_min_gene_total: Optional[int] = 50
+select_min_gene_total: Optional[int] = 50
 
-#: The minimal number of the top-3rd downsampled UMIs of a gene to be considered a "feature". See
+#: The minimal number of the top-3rd downsampled UMIs of a gene to be "select". See
 #: :py:func:`metacells.tools.high.find_high_topN_genes`,
-#: :py:func:`metacells.pipeline.feature.extract_feature_data`,
+#: :py:func:`metacells.pipeline.select.extract_select_data`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-feature_min_gene_top3: Optional[int] = 4
+select_min_gene_top3: Optional[int] = 4
 
 #: Whether to compute cell-cell similarity using the log (base 2) of the data. See
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
@@ -884,12 +884,6 @@ umap_k: int = 15
 #: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
 skeleton_k: int = 4
 
-#: The maximal number of top feature genes to pick.
-#: See :py:func:`metacells.tools.high.find_top_feature_genes`
-#: and
-#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
-max_top_feature_genes: int = 1000
-
 #: The value to add to gene fractions before applying the log function. See
 #: See :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
 umap_fraction_normalization: float = 1e-5
@@ -988,43 +982,43 @@ outliers_fold_normalization: float = 1e-5
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
 ignore_atlas_lateral_genes: bool = True
 
-#: Whether to ignore the bystander genes of the atlas when computing projections. See
+#: Whether to ignore the noisy genes of the atlas when computing projections. See
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
-ignore_atlas_bystander_genes: bool = True
+ignore_atlas_noisy_genes: bool = True
 
-#: Whether to ignore the insignificant genes of the atlas when computing projections. See
+#: Whether to ignore the non-feature genes of the atlas when computing projections. See
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
-ignore_atlas_insignificant_genes: bool = True
+only_atlas_feature_genes: bool = True
 
-#: Whether to ignore the insignificant genes of the query when computing projections. See
+#: Whether to ignore the non-feature genes of the query when computing projections. See
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
-ignore_query_insignificant_genes: bool = False
+only_query_feature_genes: bool = False
 
 #: Whether to ignore the lateral genes of the query when computing projections. See
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
 ignore_query_lateral_genes: bool = False
 
-#: Whether to ignore the bystander genes of the query when computing projections. See
+#: Whether to ignore the noisy genes of the query when computing projections. See
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
-ignore_query_bystander_genes: bool = False
+ignore_query_noisy_genes: bool = False
 
 #: The minimal fraction of metacells where a gene has a high projection fold factor to mark the gene as "misfit".
 #: See :py:func:`metacells.tools.project.find_misfit_genes`,
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
 misfit_min_metacells_fraction: float = 0.5
 
-#: The minimal fold between the maximal and minimal gene expression in metacells to be significant.
-#: See :py:func:`metacells.tools.high.find_metacells_significant_genes`.
-min_significant_metacells_gene_range_fold_factor: float = 2.0
+#: The minimal fold between the maximal and minimal gene expression in metacells to be a "feature".
+#: See :py:func:`metacells.tools.high.find_metacells_feature_genes`.
+min_feature_metacells_gene_range_fold_factor: float = 2.0
 
 #: The normalization factor to use after computing the fractions of the data for
 #: computing metacell gene range folds. See
-#: :py:func:`metacells.tools.high.find_metacells_significant_genes`.
+#: :py:func:`metacells.tools.high.find_metacells_feature_genes`.
 metacells_gene_range_normalization: float = 1e-5
 
-#: The minimal maximal gene expression in metacells to be significant.
-#: See :py:func:`metacells.tools.high.find_metacells_significant_genes`.
-min_significant_metacells_gene_fraction: float = 1e-4
+#: The minimal maximal gene expression in metacells to be a "feature".
+#: See :py:func:`metacells.tools.high.find_metacells_feature_genes`.
+min_feature_metacells_gene_fraction: float = 1e-4
 
 #: Whether to renormalize the query to account for missing atlas genes when computing projections.
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.

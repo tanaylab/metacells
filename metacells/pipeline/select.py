@@ -1,6 +1,6 @@
 """
-Feature
--------
+Selection
+---------
 """
 
 from typing import Optional
@@ -13,35 +13,34 @@ import metacells.tools as tl
 import metacells.utilities as ut
 
 __all__ = [
-    "extract_feature_data",
+    "extract_selected_data",
 ]
 
 
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def extract_feature_data(
+def extract_selected_data(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
-    name: Optional[str] = ".feature",
-    downsample_min_samples: float = pr.feature_downsample_min_samples,
-    downsample_min_cell_quantile: float = pr.feature_downsample_min_cell_quantile,
-    downsample_max_cell_quantile: float = pr.feature_downsample_max_cell_quantile,
-    min_gene_relative_variance: Optional[float] = pr.feature_min_gene_relative_variance,
-    min_gene_total: Optional[int] = pr.feature_min_gene_total,
-    min_gene_top3: Optional[int] = pr.feature_min_gene_top3,
+    name: Optional[str] = ".select",
+    downsample_min_samples: float = pr.select_downsample_min_samples,
+    downsample_min_cell_quantile: float = pr.select_downsample_min_cell_quantile,
+    downsample_max_cell_quantile: float = pr.select_downsample_max_cell_quantile,
+    min_gene_relative_variance: Optional[float] = pr.select_min_gene_relative_variance,
+    min_gene_total: Optional[int] = pr.select_min_gene_total,
+    min_gene_top3: Optional[int] = pr.select_min_gene_top3,
     random_seed: int = 0,
     top_level: bool = True,
 ) -> AnnData:
     """
-    Extract a "feature" subset of ``what`` (default: {what} data, to compute metacells by.
+    Select a subset of ``what`` (default: {what} data, to compute metacells by.
 
-    When computing metacells (or clustering cells in general), it makes sense to use a subset of the
-    genes for computing cell-cell similarity, for both technical (e.g., too low an expression level)
-    and biological (e.g., ignoring bookkeeping and cell cycle genes) reasons. The steps provided
-    here are expected to be generically useful, but as always specific data sets may require custom
-    feature selection steps on a case-by-case basis.
+    When computing metacells (or clustering cells in general), it makes sense to use a subset of the genes for computing
+    cell-cell similarity, for both technical (e.g., too low an expression level) and biological (e.g., ignoring
+    bookkeeping and cell cycle genes) reasons. The steps provided here are expected to be generically useful, but as
+    always specific data sets may require custom gene selection steps on a case-by-case basis.
 
     **Input**
 
@@ -53,11 +52,11 @@ def extract_feature_data(
 
     Variable (Gene) Annotations
 
-        ``feature_gene``
-            If exists, force a mask of genes to use as "feature" genes, ignoring everything else.
+        ``select_gene``
+            If exists, force a mask of genes to use as "select" genes, ignoring everything else.
 
         ``lateral_gene``
-            A boolean mask of genes which are lateral from being chosen as "feature" genes based
+            A boolean mask of genes which are lateral from being chosen as "select" genes based
             on their name.
 
         ``noisy_gene``
@@ -66,8 +65,8 @@ def extract_feature_data(
 
     **Returns**
 
-    Returns annotated sliced data containing the "feature" subset of the original data. By default,
-    the ``name`` of this data is {name}. If no features were selected, return ``None``.
+    Returns annotated sliced data containing the "select" subset of the original data. By default,
+    the ``name`` of this data is {name}. If no selects were selected, return ``None``.
 
     Also sets the following annotations in the full ``adata``:
 
@@ -81,14 +80,14 @@ def extract_feature_data(
 
     Variable (Gene) Annotations
         ``high_total_gene``
-            A boolean mask of genes with "high" expression level (unless a ``feature_gene`` mask exists).
+            A boolean mask of genes with "high" expression level (unless a ``select_gene`` mask exists).
 
         ``high_relative_variance_gene``
             A boolean mask of genes with "high" normalized variance, relative to other genes with a similar expression
-            level (unless a ``feature_gene`` mask exists).
+            level (unless a ``select_gene`` mask exists).
 
-        ``feature_gene``
-            A boolean mask of the "feature" genes.
+        ``select_gene``
+            A boolean mask of the "select" genes.
 
     **Computation Parameters**
 
@@ -97,14 +96,14 @@ def extract_feature_data(
        (default: {downsample_min_cell_quantile}), ``downsample_max_cell_quantile`` (default:
        {downsample_max_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
 
-    2. Invoke :py:func:`metacells.tools.high.find_high_total_genes` to select high-expression feature genes (based on
-       the downsampled data), using ``min_gene_total``.
+    2. Invoke :py:func:`metacells.tools.high.find_high_total_genes` to select high-expression genes (based on the
+       downsampled data), using ``min_gene_total``.
 
-    3. Invoke :py:func:`metacells.tools.high.find_high_relative_variance_genes` to select high-variance feature genes
-       (based on the downsampled data), using ``min_gene_relative_variance``.
+    3. Invoke :py:func:`metacells.tools.high.find_high_relative_variance_genes` to select high-variance genes (based on
+       the downsampled data), using ``min_gene_relative_variance``.
 
-    4. Invoke :py:func:`metacells.tools.filter.filter_data` to slice just the selected "feature" genes using the
-       ``name`` (default: {name}).
+    4. Invoke :py:func:`metacells.tools.filter.filter_data` to slice just the selected genes using the ``name``
+       (default: {name}).
     """
 
     tl.downsample_cells(
@@ -116,9 +115,9 @@ def extract_feature_data(
         random_seed=random_seed,
     )
 
-    if ut.has_data(adata, "feature_gene"):
+    if ut.has_data(adata, "select_gene"):
         results = tl.filter_data(
-            adata, name=name, top_level=top_level, track_var="full_gene_index", var_masks=["feature_gene"]
+            adata, name=name, top_level=top_level, track_var="full_gene_index", var_masks=["select_gene"]
         )
 
     else:
@@ -143,11 +142,11 @@ def extract_feature_data(
             name=name,
             top_level=top_level,
             track_var="full_gene_index",
-            mask_var="feature_gene",
+            mask_var="select_gene",
             var_masks=var_masks,
         )
 
     if results is None:
-        raise ValueError("Empty feature data, giving up")
+        raise ValueError("Empty selected data, giving up")
 
     return results[0]

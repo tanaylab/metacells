@@ -32,14 +32,13 @@ def find_named_genes(
     """
     Find genes by their (case-insensitive) name.
 
-    This creates a mask of all the genes whose name appears in ``names`` or matches any of the
-    ``patterns``. If ``invert`` (default: {invert}), invert the resulting mask.
+    This creates a mask of all the genes whose name appears in ``names`` or matches any of the ``patterns``. If
+    ``invert`` (default: {invert}), invert the resulting mask.
 
-    If ``to`` (default: {to}) is specified, this is stored as a per-variable (gene) annotation with
-    that name, and returns ``None``. This is useful to fill gene masks such as ``excluded_genes``
-    (genes which should be excluded from the rest of the processing), ``lateral_genes`` (genes
-    which must not be chosen as feature genes) and ``bystander_genes`` (genes which are lateral
-    and are also ignored when computing deviant cells).
+    If ``to`` (default: {to}) is specified, this is stored as a per-variable (gene) annotation with that name, and
+    returns ``None``. This is useful to fill gene masks such as ``excluded_genes`` (genes which should be excluded from
+    the rest of the processing), ``lateral_genes`` (genes which must not be selected for metacell computation) and
+    ``noisy_genes`` (genes which are lateral and are also ignored when computing deviant cells).
 
     Otherwise, it returns it as a pandas series (indexed by the variable, that is gene, names).
     """

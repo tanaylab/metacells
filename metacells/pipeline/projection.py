@@ -37,12 +37,12 @@ def projection_pipeline(
     qdata: AnnData,
     ignored_gene_names: Optional[Collection[str]] = None,
     ignored_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    ignore_atlas_insignificant_genes: bool = pr.ignore_atlas_insignificant_genes,
-    ignore_query_insignificant_genes: bool = pr.ignore_query_insignificant_genes,
+    only_atlas_feature_genes: bool = pr.only_atlas_feature_genes,
+    only_query_feature_genes: bool = pr.only_query_feature_genes,
     ignore_atlas_lateral_genes: bool = pr.ignore_atlas_lateral_genes,
-    ignore_atlas_bystander_genes: bool = pr.ignore_atlas_bystander_genes,
+    ignore_atlas_noisy_genes: bool = pr.ignore_atlas_noisy_genes,
     ignore_query_lateral_genes: bool = pr.ignore_query_lateral_genes,
-    ignore_query_bystander_genes: bool = pr.ignore_query_bystander_genes,
+    ignore_query_noisy_genes: bool = pr.ignore_query_noisy_genes,
     misfit_min_metacells_fraction: float = pr.misfit_min_metacells_fraction,
     project_fold_normalization: float = pr.project_fold_normalization,
     project_candidates_count: int = pr.project_candidates_count,
@@ -111,16 +111,16 @@ def projection_pipeline(
         ``atlas_gene``
             A boolean mask indicating whether the gene exists in the atlas.
 
-        ``atlas_significant_gene`` (``ignore_atlas_insignificant_genes`` requires an atlas ``significant_gene`` mask)
-            A boolean mask indicating whether the gene is considered significant in the atlas.
+        ``atlas_feature_gene`` (``only_atlas_feature_genes`` requires an atlas ``feature_gene`` mask)
+            A boolean mask indicating whether the gene is considered a "feature" in the atlas.
 
-        ``atlas_lateral_gene`` (``ignore_atlas_lateral_genes`` requires an atlas has ``lateral_gene`` mask)
-            A boolean mask indicating whether the gene was forbidden from being a feature in the atlas (and hence
-            ignored).
+        ``atlas_lateral_gene`` (``ignore_atlas_lateral_genes`` requires an atlas has ``lateral_gene`` mask) A boolean
+            mask indicating whether the gene was forbidden from being selected when computing the atlas metacell (and
+            hence is ignored).
 
-        ``atlas_bystander_gene`` (``ignore_atlas_bystander_genes`` requires an atlas has ``bystander_gene`` mask)
-            A boolean mask indicating whether the gene was forbidden from being a feature in the atlas (and hence
-            ignored).
+        ``atlas_noisy_gene`` (``ignore_atlas_noisy_genes`` requires an atlas has ``noisy_gene`` mask) A
+            boolean mask indicating whether the gene was forbidden from being selected or used for detecting deviant
+            (outlier) cells when computing the atlas metacells (and hence is ignored).
 
         ``ignored_gene``
             A boolean mask indicating whether the gene was ignored by the projection (for any reason).
@@ -195,16 +195,16 @@ def projection_pipeline(
     Compute preliminary projection:
 
     1. Compute a mask of ignored genes, containing any genes named in ``ignored_gene_names`` or that match any of the
-       ``ignored_gene_patterns``. If ``ignore_atlas_insignificant_genes`` (default:
-       ``ignore_atlas_insignificant_genes``), ignore genes the atlas did not mark as significant (and store the
-       ``atlas_significant_gene`` mask). If ``ignore_query_insignificant_genes`` (default:
-       ``ignore_query_insignificant_genes``), ignore genes the query did not mark as significant. If
+       ``ignored_gene_patterns``. If ``only_atlas_feature_genes`` (default:
+       ``only_atlas_feature_genes``), ignore genes the atlas did not mark as "feature" (and store the
+       ``atlas_feature_gene`` mask). If ``only_query_feature_genes`` (default:
+       ``only_query_feature_genes``), ignore genes the query did not mark as "feature". If
        ``ignore_atlas_lateral_genes`` (default: {ignore_atlas_lateral_genes}), also ignore the ``lateral_gene`` of the
-       atlas (and store them as an ``atlas_lateral_gene`` mask). If ``ignore_atlas_bystander_genes`` (default:
-       {ignore_atlas_bystander_genes}), also ignore the ``bystander_gene`` of the atlas (and store them as an
-       ``atlas_bystander_gene`` mask). If ``ignore_query_lateral_genes`` (default: {ignore_query_lateral_genes}), also
-       ignore the ``lateral_gene`` of the query. If ``ignore_query_bystander_genes`` (default:
-       {ignore_query_bystander_genes}), also ignore the ``bystander_gene`` of the query. All these genes are ignored by
+       atlas (and store them as an ``atlas_lateral_gene`` mask). If ``ignore_atlas_noisy_genes`` (default:
+       {ignore_atlas_noisy_genes}), also ignore the ``noisy_gene`` of the atlas (and store them as an
+       ``atlas_noisy_gene`` mask). If ``ignore_query_lateral_genes`` (default: {ignore_query_lateral_genes}), also
+       ignore the ``lateral_gene`` of the query. If ``ignore_query_noisy_genes`` (default:
+       {ignore_query_noisy_genes}), also ignore the ``noisy_gene`` of the query. All these genes are ignored by
        the following code. In addition, ignore any genes marked in ``manually_ignored_gene``, if this annotation exists
        in the query.
 
@@ -314,9 +314,9 @@ def projection_pipeline(
         project_max_projection_fold_factor=project_max_projection_fold_factor,
         project_max_dissimilar_genes=project_max_dissimilar_genes,
         project_min_similar_essential_genes_fraction=project_min_similar_essential_genes_fraction,
-        ignore_atlas_insignificant_genes=ignore_atlas_insignificant_genes,
+        only_atlas_feature_genes=only_atlas_feature_genes,
         ignore_atlas_lateral_genes=ignore_atlas_lateral_genes,
-        ignore_atlas_bystander_genes=ignore_atlas_bystander_genes,
+        ignore_atlas_noisy_genes=ignore_atlas_noisy_genes,
         atlas_type_property_name=atlas_type_property_name,
     )
 
@@ -328,12 +328,12 @@ def projection_pipeline(
         common_adata=common_adata,
         common_qdata=common_qdata,
         atlas_total_common_umis=atlas_total_common_umis,
-        ignore_atlas_insignificant_genes=ignore_atlas_insignificant_genes,
-        ignore_query_insignificant_genes=ignore_query_insignificant_genes,
+        only_atlas_feature_genes=only_atlas_feature_genes,
+        only_query_feature_genes=only_query_feature_genes,
         ignore_atlas_lateral_genes=ignore_atlas_lateral_genes,
-        ignore_atlas_bystander_genes=ignore_atlas_bystander_genes,
+        ignore_atlas_noisy_genes=ignore_atlas_noisy_genes,
         ignore_query_lateral_genes=ignore_query_lateral_genes,
-        ignore_query_bystander_genes=ignore_query_bystander_genes,
+        ignore_query_noisy_genes=ignore_query_noisy_genes,
         project_fold_normalization=project_fold_normalization,
         project_min_significant_gene_value=project_min_significant_gene_value,
         project_max_consistency_fold_factor=project_max_consistency_fold_factor,
@@ -451,9 +451,9 @@ def _common_data(
     project_max_projection_fold_factor: float,
     project_max_dissimilar_genes: int,
     project_min_similar_essential_genes_fraction: Optional[float],
-    ignore_atlas_insignificant_genes: bool,
+    only_atlas_feature_genes: bool,
     ignore_atlas_lateral_genes: bool,
-    ignore_atlas_bystander_genes: bool,
+    ignore_atlas_noisy_genes: bool,
     atlas_type_property_name: str,
 ) -> Tuple[AnnData, AnnData, Optional[Dict[str, Optional[float]]]]:
     ut.set_m_data(qdata, "project_max_projection_fold_factor", project_max_projection_fold_factor)
@@ -489,17 +489,17 @@ def _common_data(
     ut.set_v_data(common_qdata, "correction_factor", np.full(common_qdata.n_vars, 1.0, dtype="float32"))
     ut.set_v_data(common_qdata, "atlas_gene", np.full(common_qdata.n_vars, True))
 
-    if ignore_atlas_insignificant_genes and ut.has_data(common_adata, "significant_gene"):
-        atlas_significant_mask = ut.get_v_numpy(common_adata, "significant_gene")
-        ut.set_v_data(common_qdata, "atlas_significant_gene", atlas_significant_mask)
+    if only_atlas_feature_genes and ut.has_data(common_adata, "feature_gene"):
+        atlas_feature_mask = ut.get_v_numpy(common_adata, "feature_gene")
+        ut.set_v_data(common_qdata, "atlas_feature_gene", atlas_feature_mask)
 
     if ignore_atlas_lateral_genes and ut.has_data(common_adata, "lateral_gene"):
         atlas_lateral_mask = ut.get_v_numpy(common_adata, "lateral_gene")
         ut.set_v_data(common_qdata, "atlas_lateral_gene", atlas_lateral_mask)
 
-    if ignore_atlas_bystander_genes and ut.has_data(common_adata, "bystander_gene"):
-        atlas_bystander_mask = ut.get_v_numpy(common_adata, "bystander_gene")
-        ut.set_v_data(common_qdata, "atlas_bystander_gene", atlas_bystander_mask)
+    if ignore_atlas_noisy_genes and ut.has_data(common_adata, "noisy_gene"):
+        atlas_noisy_mask = ut.get_v_numpy(common_adata, "noisy_gene")
+        ut.set_v_data(common_qdata, "atlas_noisy_gene", atlas_noisy_mask)
 
     min_essential_genes_of_type: Optional[Dict[str, Optional[float]]] = None
     if project_min_similar_essential_genes_fraction is not None:
@@ -604,8 +604,8 @@ def _convey_query_common_to_full_data(
     for (data_name, dtype, default) in [
         ("atlas_gene", "bool", False),
         ("atlas_lateral_gene", "bool", False),
-        ("atlas_bystander_gene", "bool", False),
-        ("atlas_significant_gene", "bool", False),
+        ("atlas_noisy_gene", "bool", False),
+        ("atlas_feature_gene", "bool", False),
         ("ignored_gene", "bool", True),
         ("correction_factor", "float32", 1.0),
     ]:
@@ -664,30 +664,23 @@ def _renormalize_query(
 
     var_annotations = dict(
         # Standard MC2 gene annotations.
-        clean_gene=False,
         excluded_gene=False,
-        feature_gene=False,
+        select_gene=False,
         lateral_gene=False,
-        bystander_gene=False,
-        gene_deviant_votes=0,
+        noisy_gene=False,
         high_relative_variance_gene=False,
         high_total_gene=False,
         bursty_lonely_gene=False,
-        pre_feature_gene=False,
-        pre_gene_deviant_votes=0,
-        pre_high_relative_variance_gene=False,
-        pre_high_total_gene=False,
         properly_sampled_gene=False,
         rare_gene=False,
         rare_gene_module=-1,
         related_genes_module=-1,
-        significant_gene=False,
-        top_feature_gene=False,
+        feature_gene=False,
         # Annotations added here (except for per-type).
-        atlas_lateral_gene=False,
-        atlas_bystander_gene=False,
+        atlas_feature_gene=False,
         atlas_gene=False,
-        atlas_significant_gene=False,
+        atlas_lateral_gene=False,
+        atlas_noisy_gene=False,
         essential_gene=False,
         correction_factor=1.0,
         correlated_gene=False,
@@ -739,12 +732,12 @@ def _compute_preliminary_projection(
     common_adata: AnnData,
     common_qdata: AnnData,
     atlas_total_common_umis: ut.NumpyVector,
-    ignore_atlas_insignificant_genes: bool,
-    ignore_query_insignificant_genes: bool,
+    only_atlas_feature_genes: bool,
+    only_query_feature_genes: bool,
     ignore_atlas_lateral_genes: bool,
-    ignore_atlas_bystander_genes: bool,
+    ignore_atlas_noisy_genes: bool,
     ignore_query_lateral_genes: bool,
-    ignore_query_bystander_genes: bool,
+    ignore_query_noisy_genes: bool,
     project_fold_normalization: float,
     project_min_significant_gene_value: float,
     project_max_consistency_fold_factor: float,
@@ -761,12 +754,12 @@ def _compute_preliminary_projection(
     included_adata, included_qdata = _included_global_data(
         common_adata=common_adata,
         common_qdata=common_qdata,
-        ignore_atlas_insignificant_genes=ignore_atlas_insignificant_genes,
-        ignore_query_insignificant_genes=ignore_query_insignificant_genes,
+        only_atlas_feature_genes=only_atlas_feature_genes,
+        only_query_feature_genes=only_query_feature_genes,
         ignore_atlas_lateral_genes=ignore_atlas_lateral_genes,
-        ignore_atlas_bystander_genes=ignore_atlas_bystander_genes,
+        ignore_atlas_noisy_genes=ignore_atlas_noisy_genes,
         ignore_query_lateral_genes=ignore_query_lateral_genes,
-        ignore_query_bystander_genes=ignore_query_bystander_genes,
+        ignore_query_noisy_genes=ignore_query_noisy_genes,
     )
 
     repeat = 0
@@ -838,32 +831,32 @@ def _included_global_data(
     *,
     common_adata: AnnData,
     common_qdata: AnnData,
-    ignore_atlas_insignificant_genes: bool,
-    ignore_query_insignificant_genes: bool,
+    only_atlas_feature_genes: bool,
+    only_query_feature_genes: bool,
     ignore_atlas_lateral_genes: bool,
-    ignore_atlas_bystander_genes: bool,
+    ignore_atlas_noisy_genes: bool,
     ignore_query_lateral_genes: bool,
-    ignore_query_bystander_genes: bool,
+    ignore_query_noisy_genes: bool,
 ) -> Tuple[AnnData, AnnData]:
     ignored_mask_names = ["|manually_ignored_gene?"]
 
-    if ignore_atlas_insignificant_genes:
-        ignored_mask_names.append("|~atlas_significant_gene?")
+    if only_atlas_feature_genes:
+        ignored_mask_names.append("|~atlas_feature_gene?")
 
-    if ignore_query_insignificant_genes:
+    if only_query_feature_genes:
         ignored_mask_names.append("|~significant_gene?")
 
     if ignore_atlas_lateral_genes:
         ignored_mask_names.append("|atlas_lateral_gene?")
 
-    if ignore_atlas_bystander_genes:
-        ignored_mask_names.append("|atlas_bystander_gene?")
+    if ignore_atlas_noisy_genes:
+        ignored_mask_names.append("|atlas_noisy_gene?")
 
     if ignore_query_lateral_genes:
         ignored_mask_names.append("|lateral_gene?")
 
-    if ignore_query_bystander_genes:
-        ignored_mask_names.append("|bystander_gene?")
+    if ignore_query_noisy_genes:
+        ignored_mask_names.append("|noisy_gene?")
 
     tl.combine_masks(common_qdata, ignored_mask_names, to="ignored_gene")
     included_genes_mask = ~ut.get_v_numpy(common_qdata, "ignored_gene")
@@ -1363,13 +1356,6 @@ def _correct_correlated_genes(
     correlated_included_genes_corrected_mask = (
         correlated_included_gene_correction_factors < (1.0 / (1 + project_min_corrected_gene_factor))
     ) | (correlated_included_gene_correction_factors > (1 + project_min_corrected_gene_factor))
-
-    if ut.has_data(included_qdata, "atlas_significant_gene"):
-        included_genes_atlas_significant_mask = ut.get_v_numpy(included_qdata, "atlas_significant_gene")
-        correlated_included_genes_atlas_significant_mask = included_genes_atlas_significant_mask[
-            correlated_included_gene_indices
-        ]
-        correlated_included_genes_corrected_mask &= correlated_included_genes_atlas_significant_mask
 
     ut.log_calc("correlated_included_genes_corrected_mask", correlated_included_genes_corrected_mask)
     if not np.any(correlated_included_genes_corrected_mask):

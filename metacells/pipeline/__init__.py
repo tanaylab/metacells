@@ -16,9 +16,9 @@ from .consistency import *
 from .direct import *
 from .divide_and_conquer import *
 from .exclude import *
-from .feature import *
 from .mark import *
 from .mcview import *
 from .projection import *
 from .related_genes import *
+from .select import *
 from .umap import *

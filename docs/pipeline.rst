@@ -12,7 +12,7 @@ Pipeline
 .. automodule:: metacells.pipeline.mark
     :members:
 
-.. automodule:: metacells.pipeline.feature
+.. automodule:: metacells.pipeline.select
     :members:
 
 .. automodule:: metacells.pipeline.direct

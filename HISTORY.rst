@@ -40,6 +40,9 @@ History
 
 * Improved and published projection algorithm.
 * Restrict number of rare gene candidates.
-* Rename forbidden genes to lateral genes.
-* Add bystander genes (lateral, but also ignored when computing deviant outlier cells).
-* Tighter cotrol over metacells size and internal quality.
+* Tighter control over metacells size and internal quality.
+* Improved divide-and-conquer strategy.
+* Terminology changes:
+  * Rename "forbidden" genes to "lateral" genes.
+  * Add "noisy" genes ("lateral", but also ignored when computing deviant outlier cells).
+  * Rename "feature" genes to "selected" genes.
