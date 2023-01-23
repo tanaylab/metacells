@@ -23,20 +23,20 @@ import metacells.tools as tl
 import metacells.utilities as ut
 
 __all__ = [
-    "compute_knn_by_features",
-    "compute_umap_by_features",
+    "compute_knn_by_markers",
+    "compute_umap_by_markers",
 ]
 
 
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def compute_knn_by_features(
+def compute_knn_by_markers(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
-    feature_gene_names: Optional[Collection[str]] = None,
-    feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    marker_gene_names: Optional[Collection[str]] = None,
+    marker_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     similarity_value_normalization: float = pr.umap_similarity_value_normalization,
     similarity_log_data: bool = pr.umap_similarity_log_data,
     similarity_method: str = pr.umap_similarity_method,
@@ -49,7 +49,7 @@ def compute_knn_by_features(
     reproducible: bool = pr.reproducible,
 ) -> ut.PandasFrame:
     """
-    Compute KNN graph between metacells based on feature genes.
+    Compute KNN graph between metacells based on marker genes.
 
     If ``reproducible`` (default: {reproducible}) is ``True``, a slower (still parallel) but
     reproducible algorithm will be used to compute pearson correlations.
@@ -58,7 +58,7 @@ def compute_knn_by_features(
 
     Annotated ``adata`` where each observation is a metacells and the variables are genes, are genes, where ``what`` is
     a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
-    matrix. Should contain a ``feature_gene`` mask unless explicitly specifying the feature genes.
+    matrix. Should contain a ``marker_gene`` mask unless explicitly specifying the marker genes.
 
     **Returns**
 
@@ -74,10 +74,10 @@ def compute_knn_by_features(
 
     **Computation Parameters**
 
-    1. If ``feature_gene_names`` and/or ``feature_gene_patterns`` were specified, use the matching genes.
-       Otherwise, use the ``feature_gene`` mask.
+    1. If ``marker_gene_names`` and/or ``marker_gene_patterns`` were specified, use the matching genes.
+       Otherwise, use the ``marker_gene`` mask.
 
-    2. Compute the fractions of each ``feature_gene`` in each cell, and add the
+    2. Compute the fractions of each ``marker_gene`` in each cell, and add the
        ``similarity_value_normalization`` (default: {similarity_value_normalization}) to it.
 
     3. If ``similarity_log_data`` (default: {similarity_log_data}), invoke the
@@ -95,31 +95,29 @@ def compute_knn_by_features(
        (default: {outgoing_degree_factor}) to compute a "skeleton" graph to overlay on top of the
        UMAP graph.
     """
-    if feature_gene_names is None and feature_gene_patterns is None:
-        feature_genes = ut.get_v_numpy(adata, "feature_gene")
+    if marker_gene_names is None and marker_gene_patterns is None:
+        marker_genes = ut.get_v_numpy(adata, "marker_gene")
     else:
-        feature_genes_series = tl.find_named_genes(adata, names=feature_gene_names, patterns=feature_gene_patterns)
-        assert feature_genes_series is not None
-        feature_genes = ut.to_numpy_vector(feature_genes_series)
+        marker_genes_series = tl.find_named_genes(adata, names=marker_gene_names, patterns=marker_gene_patterns)
+        assert marker_genes_series is not None
+        marker_genes = ut.to_numpy_vector(marker_genes_series)
 
     all_data = ut.get_vo_proper(adata, what, layout="row_major")
     all_fractions = ut.fraction_by(all_data, by="row")
 
-    feature_genes = ut.get_v_numpy(adata, "top_feature_gene")
+    marker_genes_fractions = all_fractions[:, marker_genes]
+    marker_genes_fractions = ut.to_layout(marker_genes_fractions, layout="row_major")
+    marker_genes_fractions = ut.to_numpy_matrix(marker_genes_fractions)
 
-    top_feature_genes_fractions = all_fractions[:, feature_genes]
-    top_feature_genes_fractions = ut.to_layout(top_feature_genes_fractions, layout="row_major")
-    top_feature_genes_fractions = ut.to_numpy_matrix(top_feature_genes_fractions)
-
-    top_feature_genes_fractions += similarity_value_normalization
+    marker_genes_fractions += similarity_value_normalization
 
     if similarity_log_data:
-        top_feature_genes_fractions = ut.log_data(top_feature_genes_fractions, base=2)
+        marker_genes_fractions = ut.log_data(marker_genes_fractions, base=2)
 
-    tdata = ut.slice(adata, vars=feature_genes)
+    tdata = ut.slice(adata, vars=marker_genes)
     similarities = tl.compute_obs_obs_similarity(
         tdata,
-        top_feature_genes_fractions,
+        marker_genes_fractions,
         method=similarity_method,
         reproducible=reproducible,
         logistics_location=logistics_location,
@@ -143,12 +141,12 @@ def compute_knn_by_features(
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def compute_umap_by_features(
+def compute_umap_by_markers(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
-    feature_gene_names: Optional[Collection[str]] = None,
-    feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    marker_gene_names: Optional[Collection[str]] = None,
+    marker_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     similarity_value_normalization: float = pr.umap_similarity_value_normalization,
     similarity_log_data: bool = pr.umap_similarity_log_data,
     similarity_method: str = pr.umap_similarity_method,
@@ -169,32 +167,30 @@ def compute_umap_by_features(
 
     **Input**
 
-    Annotated ``adata`` where each observation is a metacells and the variables are genes,
-    are genes, where ``what`` is a per-variable-per-observation matrix or the name of a
-    per-variable-per-observation annotation containing such a matrix.
+    Annotated ``adata`` where each observation is a metacells and the variables are genes, are genes, where ``what`` is
+    a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
+    matrix. Should contain a ``marker_gene`` mask unless explicitly specifying the marker genes.
 
     **Returns**
 
     Sets the following annotations in ``adata``:
-
-    Variable (Gene) Annotations
-        ``top_feature_gene``
-            A boolean mask of the top feature genes used to compute similarities between the
-            metacells.
 
     Observation-Observation (Metacell-Metacell) Annotations
         ``umap_distances``
             A sparse symmetric matrix of the graph of distances between the metacells.
 
     Observation (Metacell) Annotations
-        ``umap_x``, ``umap_y``
+        ``x``, ``y`` (if ``dimensions`` is 2)
             The X and Y coordinates of each metacell in the UMAP projection.
+
+        ``u``, ``v``, ``w`` (if ``dimensions`` is 3)
+            The U, V, W coordinates of each metacell in the UMAP projection.
 
     **Computation Parameters**
 
-    1. Invoke :py:func:`metacells.pipeline.umap.compute_knn_by_features` using
-       ``feature_gene_names`` (default: {feature_gene_names}), ``feature_gene_patterns`` (default:
-       {feature_gene_patterns}), ``similarity_value_normalization`` (default: {similarity_value_normalization}),
+    1. Invoke :py:func:`metacells.pipeline.umap.compute_knn_by_markers` using
+       ``marker_gene_names`` (default: {marker_gene_names}), ``marker_gene_patterns`` (default:
+       {marker_gene_patterns}), ``similarity_value_normalization`` (default: {similarity_value_normalization}),
        ``similarity_log_data`` (default: {similarity_log_data}), ``similarity_method`` (default: {similarity_method}),
        ``logistics_location`` (default: {logistics_location}), ``logistics_slope`` (default: {logistics_slope}),
        ``skeleton_k`` (default: {skeleton_k}), ``balanced_ranks_factor`` (default: {balanced_ranks_factor}),
@@ -213,11 +209,11 @@ def compute_umap_by_features(
         compatible with the structure used by UMAP, so it serves it purpose reasonably well. It would have been nice to
         make these compatible, but UMAP is not friendly towards dictating a KNN graph from the outside.
     """
-    similarities = compute_knn_by_features(
+    similarities = compute_knn_by_markers(
         adata,
         what,
-        feature_gene_names=feature_gene_names,
-        feature_gene_patterns=feature_gene_patterns,
+        marker_gene_names=marker_gene_names,
+        marker_gene_patterns=marker_gene_patterns,
         similarity_value_normalization=similarity_value_normalization,
         similarity_log_data=similarity_log_data,
         similarity_method=similarity_method,

@@ -27,7 +27,7 @@ def umap_by_distances(
     adata: AnnData,
     distances: Union[str, ut.ProperMatrix] = "umap_distances",
     *,
-    prefix: str = "umap",
+    prefix: str = "",
     k: int = pr.umap_k,
     dimensions: int = 2,
     min_dist: float = pr.umap_min_dist,
@@ -49,9 +49,9 @@ def umap_by_distances(
     Sets the following annotations in ``adata``:
 
     Observation (Cell) Annotations
-        ``<prefix>_x``, ``<prefix>_y``
+        ``<prefix>x``, ``<prefix>y``
             Coordinates for UMAP 2D projection of the observations (if ``dimensions`` is 2).
-        ``<prefix>_u``, ``<prefix>_v``, ``<prefix>_3``
+        ``<prefix>u``, ``<prefix>v``, ``<prefix>w``
             Coordinates for UMAP 3D projection of the observations (if ``dimensions`` is 3).
 
     **Computation Parameters**
@@ -120,7 +120,7 @@ def umap_by_distances(
 
     order = np.argsort(all_sizes)
     for axis, name in zip(order, all_names):
-        ut.set_o_data(adata, f"{prefix}_{name}", all_coordinates[axis])
+        ut.set_o_data(adata, f"{prefix}{name}", all_coordinates[axis])
 
 
 @ut.logged()
@@ -129,8 +129,8 @@ def umap_by_distances(
 def spread_coordinates(
     adata: AnnData,
     *,
-    prefix: str = "umap",
-    suffix: str = "spread",
+    prefix: str = "",
+    suffix: str = "_spread",
     cover_fraction: float = pr.cover_fraction,
     noise_fraction: float = pr.noise_fraction,
     random_seed: int = pr.random_seed,
@@ -141,14 +141,14 @@ def spread_coordinates(
     **Input**
 
     The input annotated ``adata`` is expected to contain the per-observation properties
-    ``<prefix>_x`` and ``<prefix>_y`` (default prefix: {prefix}) which contain the UMAP coordinates.
+    ``<prefix>x`` and ``<prefix>y`` (default prefix: {prefix}) which contain the UMAP coordinates.
 
     **Returns**
 
     Sets the following annotations in ``adata``:
 
     Observation (Cell) Annotations
-        ``<prefix>_x_<suffix>``, ``<prefix>_y_<suffix>`` (default suffix: {suffix})
+        ``<prefix>x<suffix>``, ``<prefix>y<suffix>`` (default suffix: {suffix})
             The new coordinates which will be spread out so the points do not overlap and
             cover some fraction of the total plot area.
 
@@ -156,14 +156,13 @@ def spread_coordinates(
 
     1. Move the points so they cover ``cover_fraction`` (default: {cover_fraction}) of the total
        plot area. Also add a noise of the ``noise_fraction`` (default: {noise_fraction}) of the
-       minimal distance between the
-       points, using the ``random_seed`` (default: {random_seed}).
+       minimal distance between the points, using the ``random_seed`` (default: {random_seed}).
     """
     assert 0 < cover_fraction < 1
     assert noise_fraction >= 0
 
-    x_coordinates = ut.get_o_numpy(adata, f"{prefix}_x")
-    y_coordinates = ut.get_o_numpy(adata, f"{prefix}_y")
+    x_coordinates = ut.get_o_numpy(adata, f"{prefix}x")
+    y_coordinates = ut.get_o_numpy(adata, f"{prefix}y")
 
     x_coordinates, y_coordinates = ut.cover_coordinates(
         x_coordinates,
@@ -173,5 +172,5 @@ def spread_coordinates(
         random_seed=random_seed,
     )
 
-    ut.set_o_data(adata, f"{prefix}_x_{suffix}", x_coordinates)
-    ut.set_o_data(adata, f"{prefix}_y_{suffix}", y_coordinates)
+    ut.set_o_data(adata, f"{prefix}x{suffix}", x_coordinates)
+    ut.set_o_data(adata, f"{prefix}y{suffix}", y_coordinates)

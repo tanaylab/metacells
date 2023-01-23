@@ -17,7 +17,7 @@ import metacells.parameters as pr
 import metacells.tools as tl
 import metacells.utilities as ut
 
-from .umap import compute_umap_by_features
+from .umap import compute_umap_by_markers
 
 __all__ = [
     "compute_for_mcview",
@@ -34,9 +34,9 @@ def compute_for_mcview(
     gdata: AnnData,
     group: Union[str, ut.Vector] = "metacell",
     random_seed: int = pr.random_seed,
-    find_metacells_feature_genes: Optional[Dict[str, Any]] = {},
-    compute_umap_by_features_2: Optional[Dict[str, Any]] = {},
-    compute_umap_by_features_3: Optional[Dict[str, Any]] = {},
+    find_metacells_marker_genes: Optional[Dict[str, Any]] = {},
+    compute_umap_by_markers_2: Optional[Dict[str, Any]] = {},
+    compute_umap_by_markers_3: Optional[Dict[str, Any]] = {},
     compute_inner_fold_factors: Optional[Dict[str, Any]] = {},
     compute_outliers_matches: Optional[Dict[str, Any]] = {},
     compute_outliers_fold_factors: Optional[Dict[str, Any]] = {},
@@ -51,7 +51,7 @@ def compute_for_mcview(
     the ``random_seed`` (default: {random_seed}) needed for reproducibility.
 
     If specific tool parameters need to be specified, you can pass them as a dictionary using the specific tool name
-    (e.g., ``compute_umap_by_features_2 = dict(spread = 0.5)``. If this parameter is set to ``None``, running the tool
+    (e.g., ``compute_umap_by_markers_2 = dict(spread = 0.5)``. If this parameter is set to ``None``, running the tool
     is skipped.
 
     **Input**
@@ -76,12 +76,12 @@ def compute_for_mcview(
        {random_seed}) and the ``reproducible`` flag derived from it (true if the seed is not zero) are automatically
        passed to all relevant tools.
 
-    1. Compute the "feature" metacell genes using :py:func:`metacells.tools.high.find_metacells_feature_genes`.
+    1. Compute the "marker" metacell genes using :py:func:`metacells.tools.high.find_metacells_marker_genes`.
 
-    2. Computes UMAP projections by invoking :py:func:`metacells.pipeline.umap.compute_umap_by_features`. This is done
+    2. Computes UMAP projections by invoking :py:func:`metacells.pipeline.umap.compute_umap_by_markers`. This is done
        twice, once with ``dimensions=2`` for visualization and once with ``dimensions=3`` to capture more of the
        manifold structure (used to automatically generate cluster colors). Therefore in this case there are two
-       dictionary parameters ``compute_umap_by_features_2`` and ``compute_umap_by_features_3``.
+       dictionary parameters ``compute_umap_by_markers_2`` and ``compute_umap_by_markers_3``.
 
     3. Compute for each gene and for each metacell the fold factor between the metacell cells using
        :py:func:`metacells.tools.quality.compute_inner_fold_factors`.
@@ -101,12 +101,12 @@ def compute_for_mcview(
        metacell using :py:func:`metacells.tools.quality.compute_outliers_fold_factors`.
     """
     reproducible = random_seed != 0
-    if find_metacells_feature_genes is not None:
-        tl.find_metacells_feature_genes(gdata, what, **find_metacells_feature_genes)
-    if compute_umap_by_features_3 is not None:
-        compute_umap_by_features(gdata, what, dimensions=3, random_seed=random_seed, **compute_umap_by_features_3)
-    if compute_umap_by_features_2 is not None:
-        compute_umap_by_features(gdata, what, dimensions=2, random_seed=random_seed, **compute_umap_by_features_2)
+    if find_metacells_marker_genes is not None:
+        tl.find_metacells_marker_genes(gdata, what, **find_metacells_marker_genes)
+    if compute_umap_by_markers_3 is not None:
+        compute_umap_by_markers(gdata, what, dimensions=3, random_seed=random_seed, **compute_umap_by_markers_3)
+    if compute_umap_by_markers_2 is not None:
+        compute_umap_by_markers(gdata, what, dimensions=2, random_seed=random_seed, **compute_umap_by_markers_2)
     if compute_outliers_matches is not None:
         tl.compute_outliers_matches(
             what, adata=adata, gdata=gdata, group=group, reproducible=reproducible, **compute_outliers_matches

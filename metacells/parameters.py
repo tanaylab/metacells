@@ -96,7 +96,7 @@ relative_variance_window_size: int = 100
 similarity_method: str = "pearson"
 
 #: The default location for the logistics function. See
-#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`,
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`,
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
 #: :py:func:`metacells.tools.similarity.compute_var_var_similarity`.
 #: and
@@ -104,7 +104,7 @@ similarity_method: str = "pearson"
 logistics_location: float = 0.8
 
 #: The default slope for the logistics function. See
-#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`,
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`,
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
 #: :py:func:`metacells.tools.similarity.compute_var_var_similarity`.
 #: and
@@ -290,7 +290,7 @@ related_downsample_min_samples: int = downsample_min_samples
 #: "select" genes. See
 #: :py:const:`downsample_min_cell_quantile`,
 #: :py:func:`metacells.tools.downsample.downsample_cells`,
-#: :py:func:`metacells.pipeline.select.extract_select_data`,
+#: :py:func:`metacells.pipeline.select.extract_selected_data`,
 #: and
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
 related_downsample_min_cell_quantile: float = downsample_min_cell_quantile
@@ -299,28 +299,28 @@ related_downsample_min_cell_quantile: float = downsample_min_cell_quantile
 #: "select" genes. See
 #: :py:const:`downsample_max_cell_quantile`,
 #: :py:func:`metacells.tools.downsample.downsample_cells`,
-#: :py:func:`metacells.pipeline.select.extract_select_data`,
+#: :py:func:`metacells.pipeline.select.extract_selected_data`,
 #: and
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
 related_downsample_max_cell_quantile: float = downsample_max_cell_quantile
 
 #: The minimal relative variance of a gene to be considered a "select". See
 #: :py:func:`metacells.tools.high.find_high_relative_variance_genes`,
-#: :py:func:`metacells.pipeline.select.extract_select_data`,
+#: :py:func:`metacells.pipeline.select.extract_selected_data`,
 #: and
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
 related_min_gene_relative_variance: float = 0.1
 
 #: The minimal number of downsampled UMIs of a gene to be considered a "select". See
 #: :py:func:`metacells.tools.high.find_high_total_genes`,
-#: :py:func:`metacells.pipeline.select.extract_select_data`,
+#: :py:func:`metacells.pipeline.select.extract_selected_data`,
 #: and
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
 related_min_gene_total: int = 50
 
 #: The minimal number of the top-3rd downsampled UMIs of a gene to be considered a "select". See
 #: :py:func:`metacells.tools.high.find_high_topN_genes`,
-#: :py:func:`metacells.pipeline.select.extract_select_data`,
+#: :py:func:`metacells.pipeline.select.extract_selected_data`,
 #: and
 #: :py:func:`metacells.pipeline.related_genes.relate_genes`.
 related_min_gene_top3: int = 1
@@ -472,7 +472,7 @@ quick_and_dirty: bool = False
 #: The minimal samples to use for downsampling the cells for computing "select" genes. See
 #: :py:const:`downsample_min_samples`,
 #: :py:func:`metacells.tools.downsample.downsample_cells`,
-#: :py:func:`metacells.pipeline.select.extract_select_data`,
+#: :py:func:`metacells.pipeline.select.extract_selected_data`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
@@ -483,7 +483,7 @@ select_downsample_min_samples: int = downsample_min_samples
 #: "select" genes. See
 #: :py:const:`downsample_min_cell_quantile`,
 #: :py:func:`metacells.tools.downsample.downsample_cells`,
-#: :py:func:`metacells.pipeline.select.extract_select_data`,
+#: :py:func:`metacells.pipeline.select.extract_selected_data`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
@@ -494,7 +494,7 @@ select_downsample_min_cell_quantile: float = downsample_min_cell_quantile
 #: "select" genes. See
 #: :py:const:`downsample_max_cell_quantile`,
 #: :py:func:`metacells.tools.downsample.downsample_cells`,
-#: :py:func:`metacells.pipeline.select.extract_select_data`,
+#: :py:func:`metacells.pipeline.select.extract_selected_data`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
@@ -503,7 +503,7 @@ select_downsample_max_cell_quantile: float = downsample_max_cell_quantile
 
 #: The minimal relative variance of a gene to be considered a "select". See
 #: :py:func:`metacells.tools.high.find_high_relative_variance_genes`,
-#: :py:func:`metacells.pipeline.select.extract_select_data`,
+#: :py:func:`metacells.pipeline.select.extract_selected_data`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
@@ -512,7 +512,7 @@ select_min_gene_relative_variance: Optional[float] = 0.1
 
 #: The minimal number of downsampled UMIs of a gene to be "select". See
 #: :py:func:`metacells.tools.high.find_high_total_genes`,
-#: :py:func:`metacells.pipeline.select.extract_select_data`,
+#: :py:func:`metacells.pipeline.select.extract_selected_data`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
@@ -521,7 +521,7 @@ select_min_gene_total: Optional[int] = 50
 
 #: The minimal number of the top-3rd downsampled UMIs of a gene to be "select". See
 #: :py:func:`metacells.tools.high.find_high_topN_genes`,
-#: :py:func:`metacells.pipeline.select.extract_select_data`,
+#: :py:func:`metacells.pipeline.select.extract_selected_data`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
@@ -628,7 +628,7 @@ min_knn_k: Optional[int] = 30
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
 #: and
-#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
 knn_balanced_ranks_factor: float = sqrt(10)
 
 #: The factor of K of edges to keep when pruning the incoming edges of the K-Nearest-Neighbors
@@ -639,7 +639,7 @@ knn_balanced_ranks_factor: float = sqrt(10)
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
 #: and
-#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
 knn_incoming_degree_factor: float = 3.0
 
 #: The factor of K of edges to keep when pruning the outgoing edges of the K-Nearest-Neighbors
@@ -650,7 +650,7 @@ knn_incoming_degree_factor: float = 3.0
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
 #: and
-#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
 knn_outgoing_degree_factor: float = 1.0
 
 #: The minimal quantile of a seed to be selected. See
@@ -845,47 +845,47 @@ distinct_abs_folds: bool = abs_folds
 #: See
 #: :py:const:`metacells.parameters.target_metacell_size`
 #: and
-#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
 umap_similarity_value_normalization: float = 1 / target_metacell_size
 
 #: Whether to compute metacell-metacell similarity using the log (base 2) of the data for UMAP. See
-#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
 umap_similarity_log_data: bool = True
 
 #: The method to use to compute similarities for UMAP. See
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
 #: :py:func:`metacells.tools.similarity.compute_var_var_similarity`,
 #: and
-#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
 umap_similarity_method: str = "logistics_pearson"
 
 #: The minimal UMAP point distance. See :py:const:`umap_spread` and
 #: :py:func:`metacells.tools.layout.umap_by_distances`
 #: and
-#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
 umap_min_dist: float = 0.5
 
 #: The minimal UMAP spread. This is automatically raised if the :py:const:`umap_min_dist` is higher.
 #: See :py:func:`metacells.tools.layout.umap_by_distances`
 #: and
-#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
 umap_spread: float = 1.0
 
 #: The UMAP KNN graph degree. See
 #: :py:func:`metacells.tools.layout.umap_by_distances`
 #: and
-#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
 umap_k: int = 15
 
 #: The UMAP KNN skeleton graph degree. See
 #: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
 #: :py:func:`metacells.tools.knn_graph.compute_var_var_knn_graph`,
 #: and
-#: :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
 skeleton_k: int = 4
 
 #: The value to add to gene fractions before applying the log function. See
-#: See :py:func:`metacells.pipeline.umap.compute_umap_by_features`.
+#: See :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
 umap_fraction_normalization: float = 1e-5
 
 #: The fraction of the UMAP plot area to cover with points. See
@@ -986,13 +986,13 @@ ignore_atlas_lateral_genes: bool = True
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
 ignore_atlas_noisy_genes: bool = True
 
-#: Whether to ignore the non-feature genes of the atlas when computing projections. See
+#: Whether to ignore the non-marker genes of the atlas when computing projections. See
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
-only_atlas_feature_genes: bool = True
+only_atlas_marker_genes: bool = True
 
-#: Whether to ignore the non-feature genes of the query when computing projections. See
+#: Whether to ignore the non-marker genes of the query when computing projections. See
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
-only_query_feature_genes: bool = False
+only_query_marker_genes: bool = False
 
 #: Whether to ignore the lateral genes of the query when computing projections. See
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
@@ -1007,18 +1007,18 @@ ignore_query_noisy_genes: bool = False
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
 misfit_min_metacells_fraction: float = 0.5
 
-#: The minimal fold between the maximal and minimal gene expression in metacells to be a "feature".
-#: See :py:func:`metacells.tools.high.find_metacells_feature_genes`.
-min_feature_metacells_gene_range_fold_factor: float = 2.0
+#: The minimal fold between the maximal and minimal gene expression in metacells to be a "marker".
+#: See :py:func:`metacells.tools.high.find_metacells_marker_genes`.
+min_marker_metacells_gene_range_fold_factor: float = 2.0
 
 #: The normalization factor to use after computing the fractions of the data for
 #: computing metacell gene range folds. See
-#: :py:func:`metacells.tools.high.find_metacells_feature_genes`.
+#: :py:func:`metacells.tools.high.find_metacells_marker_genes`.
 metacells_gene_range_normalization: float = 1e-5
 
-#: The minimal maximal gene expression in metacells to be a "feature".
-#: See :py:func:`metacells.tools.high.find_metacells_feature_genes`.
-min_feature_metacells_gene_fraction: float = 1e-4
+#: The minimal maximal gene expression in metacells to be a "marker".
+#: See :py:func:`metacells.tools.high.find_metacells_marker_genes`.
+min_marker_max_metacells_gene_fraction: float = 1e-4
 
 #: Whether to renormalize the query to account for missing atlas genes when computing projections.
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.

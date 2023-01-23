@@ -46,3 +46,4 @@ History
   * Rename "forbidden" genes to "lateral" genes.
   * Add "noisy" genes ("lateral", but also ignored when computing deviant outlier cells).
   * Rename "feature" genes to "selected" genes.
+  * Rename "significant" genes to "marker" genes.

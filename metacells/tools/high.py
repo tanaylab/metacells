@@ -18,7 +18,7 @@ __all__ = [
     "find_high_fraction_genes",
     "find_high_normalized_variance_genes",
     "find_high_relative_variance_genes",
-    "find_metacells_feature_genes",
+    "find_metacells_marker_genes",
 ]
 
 
@@ -257,7 +257,7 @@ def find_high_relative_variance_genes(
     a similar level of expression. See
     :py:func:`metacells.utilities.computation.relative_variance_per` for details.
 
-    Genes with a high relative variance are good candidates for being selected as "feature genes",
+    Genes with a high relative variance are good candidates for being selected as "marker genes",
     that is, be used to compute the similarity between cells. Using the relative variance
     compensates for the bias for selecting higher-expression genes, whose normalized variance can to
     be larger due to random noise alone.
@@ -302,17 +302,17 @@ def find_high_relative_variance_genes(
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def find_metacells_feature_genes(
+def find_metacells_marker_genes(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
-    min_gene_range_fold: float = pr.min_feature_metacells_gene_range_fold_factor,
+    min_gene_range_fold: float = pr.min_marker_metacells_gene_range_fold_factor,
     normalization: float = pr.metacells_gene_range_normalization,
-    min_gene_fraction: float = pr.min_feature_metacells_gene_fraction,
+    min_max_gene_fraction: float = pr.min_marker_max_metacells_gene_fraction,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     """
-    Find "feature" genes which have a significant signal in metacells data. This computation is too unreliable to be
+    Find "marker" genes which have a significant signal in metacells data. This computation is too unreliable to be
     used on cells.
 
     Find genes which have a high maximal expression in at least one metacell, and a wide range of expression across the
@@ -328,8 +328,8 @@ def find_metacells_feature_genes(
     **Returns**
 
     Variable (Gene) Annotations
-        ``feature_gene``
-            A boolean mask indicating whether each gene is a "feature".
+        ``marker_gene``
+            A boolean mask indicating whether each gene is a "marker".
 
     If ``inplace`` (default: {inplace}), this is written to the data, and the function returns
     ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
@@ -341,7 +341,8 @@ def find_metacells_feature_genes(
     2. Select the genes whose fold factor (log2 of maximal over minimal value, using the ``normalization``
        (default: {normalization}) is at least ``min_gene_range_fold`` (default: {min_gene_range_fold}).
 
-    3. Select the genes whose maximal expression is at least ``min_gene_fraction`` (default: {min_gene_fraction}).
+    3. Select the genes whose maximal expression is at least ``min_max_gene_fraction`` (default:
+       {min_max_gene_fraction}).
     """
     assert normalization >= 0
 
@@ -351,7 +352,7 @@ def find_metacells_feature_genes(
     min_fraction_of_genes = ut.min_per(fractions_of_genes, per="column")
     max_fraction_of_genes = ut.max_per(fractions_of_genes, per="column")
 
-    high_max_fraction_genes_mask = max_fraction_of_genes >= min_gene_fraction
+    high_max_fraction_genes_mask = max_fraction_of_genes >= min_max_gene_fraction
     ut.log_calc("high max fraction genes", high_max_fraction_genes_mask)
 
     min_fraction_of_genes += normalization
@@ -363,11 +364,11 @@ def find_metacells_feature_genes(
     high_range_genes_mask = range_fold_of_genes >= min_gene_range_fold
     ut.log_calc("high range genes", high_range_genes_mask)
 
-    feature_genes_mask = high_max_fraction_genes_mask & high_range_genes_mask
+    marker_genes_mask = high_max_fraction_genes_mask & high_range_genes_mask
 
     if inplace:
-        ut.set_v_data(adata, "feature_gene", feature_genes_mask)
+        ut.set_v_data(adata, "marker_gene", marker_genes_mask)
         return None
 
-    ut.log_return("feature_genes", feature_genes_mask)
-    return ut.to_pandas_series(feature_genes_mask, index=adata.var_names)
+    ut.log_return("marker_genes", marker_genes_mask)
+    return ut.to_pandas_series(marker_genes_mask, index=adata.var_names)

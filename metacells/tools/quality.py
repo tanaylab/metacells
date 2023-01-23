@@ -555,11 +555,11 @@ def compute_metacells_projection_correlation(
     *,
     gene_masks: Collection[str] = [
         "&atlas_gene?",
-        "&feature_gene?",
-        "&atlas_feature_gene?",
         "&~lateral_gene?",
-        "&~noisy_gene?",
         "&~atlas_lateral_gene?",
+        "&marker_gene?",
+        "&atlas_marker_gene?",
+        "&~noisy_gene?",
         "&~atlas_noisy_gene?",
     ],
     projected: Union[str, ut.Matrix] = "projected",
@@ -580,7 +580,7 @@ def compute_metacells_projection_correlation(
 
     Sets the ``projected_correlation`` per-observation annotation to the correlation between the corrected and the
     projected UMIs for each metacell. Correlation only looks at a subset of the genes specified by the
-    ``mask_names``; by default, it looks only at genes common to the atlas and the query, that were "feature" in
+    ``mask_names``; by default, it looks only at genes common to the atlas and the query, that were "marker" in
     both, and that were not lateral or by noisy (forbidden from being selected for computing metacells).
 
     If ``reproducible``, a slower (still parallel) but reproducible algorithm will be used.
@@ -899,7 +899,7 @@ def compute_outliers_fold_factors(
     matrix.
 
     In addition, ``gdata`` is assumed to have one observation for each group, and use the same genes as ``adata``.
-    It should have a ``feature_gene`` mask.
+    It should have a ``marker_gene`` mask.
 
     **Returns**
 
@@ -918,7 +918,7 @@ def compute_outliers_fold_factors(
        ``min_entry_outliers_fold_factor`` (default: {min_entry_outliers_fold_factor}), or if the gene doesn't
        have a fold factor of at least ``min_gene_outliers_fold_factor`` (default: {min_gene_outliers_fold_factor})
        in any outlier, this is set to zero to make the matrix sparse. Also, all columns for genes not listed
-       in the ``feature_gene`` mask are also set to zero.
+       in the ``marker_gene`` mask are also set to zero.
     """
     assert list(adata.var_names) == list(gdata.var_names)
 
@@ -940,8 +940,8 @@ def compute_outliers_fold_factors(
 
     fold_factors = ut.to_layout(outliers_log_fractions - most_similar_log_fractions, layout="column_major")
 
-    feature_gene_mask = ut.get_v_numpy(gdata, "feature_gene")
-    fold_factors[:, ~feature_gene_mask] = 0
+    marker_gene_mask = ut.get_v_numpy(gdata, "marker_gene")
+    fold_factors[:, ~marker_gene_mask] = 0
 
     sparse_folds = ut.sparsify_matrix(
         fold_factors,
