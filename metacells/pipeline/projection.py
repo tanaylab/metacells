@@ -228,7 +228,7 @@ def projection_pipeline(
        atlas. If any genes were ignored or corrected, then repeat steps 1-4. However, if not ``project_corrections``,
        only record the correction factor and proceed without actually performing the correction.
 
-    5. Invoke :py:func:`metacells.tools.project.project_atlas_to_query` to assign a projected type to each of the
+    5. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` to assign a projected type to each of the
        query metacells based on the ``atlas_type_property_name`` (default: {atlas_type_property_name}).
 
     Then, for each type of query metacells:
@@ -259,7 +259,7 @@ def projection_pipeline(
 
     And then:
 
-    11. Invoke :py:func:`metacells.tools.project.project_atlas_to_query` to assign an updated projected type to each of
+    11. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` to assign an updated projected type to each of
         the query metacells based on the ``atlas_type_property_name`` (default: {atlas_type_property_name}). If this
         changed the type assigned to any query metacell, repeat steps 6-10 (but do these steps no more than 3 times).
 
@@ -272,7 +272,7 @@ def projection_pipeline(
         projection to use a secondary location in the atlas based on the residuals of the atlas metacells relative to
         the primary query projection.
 
-    14. Invoke :py:func:`metacells.tools.project.project_atlas_to_query` twice, once for the weights of the primary
+    14. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` twice, once for the weights of the primary
         location and once for the weights of the secondary location, to obtain a primary and secondary type for
         the query metacell. If these have changed, repeat steps 12-14 (but do these steps no more than 3 times; note
         will will always do them twice as the 1st run will generate some non-empty secondary type).
@@ -811,7 +811,7 @@ def _compute_preliminary_projection(
 
         query_total_common_umis = ut.get_o_numpy(common_qdata, what, sum=True)
 
-    tl.project_atlas_to_query(
+    tl.convey_atlas_to_query(
         adata=included_adata,
         qdata=included_qdata,
         weights=weights,
@@ -1286,7 +1286,7 @@ def _changed_projected_types(
     for metacell_index, old_type in enumerate(old_type_of_query_metacells):
         taboo_types[metacell_index].add(old_type)
 
-    tl.project_atlas_to_query(
+    tl.convey_atlas_to_query(
         adata=common_adata,
         qdata=common_qdata,
         weights=weights,
@@ -1658,7 +1658,7 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
         else:
             second_anchor_weights = weights - first_anchor_weights  # type: ignore
 
-            tl.project_atlas_to_query(
+            tl.convey_atlas_to_query(
                 adata=included_adata,
                 qdata=metacell_included_qdata,
                 weights=second_anchor_weights,
@@ -1671,7 +1671,7 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
             new_primary_type = new_secondary_type
             new_secondary_type = ""
         else:
-            tl.project_atlas_to_query(
+            tl.convey_atlas_to_query(
                 adata=included_adata,
                 qdata=metacell_included_qdata,
                 weights=first_anchor_weights,

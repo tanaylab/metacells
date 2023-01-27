@@ -21,7 +21,7 @@ import metacells.utilities as ut
 __all__ = [
     "renormalize_query_by_atlas",
     "project_query_onto_atlas",
-    "project_atlas_to_query",
+    "convey_atlas_to_query",
     "find_misfit_genes",
     "compute_query_projection",
 ]
@@ -549,7 +549,7 @@ def _project_single_metacell(  # pylint: disable=too-many-statements,too-many-br
 
 @ut.logged()
 @ut.timed_call()
-def project_atlas_to_query(
+def convey_atlas_to_query(
     *,
     adata: AnnData,
     qdata: AnnData,
@@ -560,7 +560,7 @@ def project_atlas_to_query(
     method: Callable[[ut.Vector, ut.Vector], Any] = ut.highest_weight,
 ) -> None:
     """
-    Project the value of a property from per-observation atlas data to per-observation query data.
+    Convey the value of a property from per-observation atlas data to per-observation query data.
 
     The input annotated ``adata`` is expected to contain a per-observation (cell) annotation named ``property_name``.
     Given the ``weights`` matrix, where each row specifies the weights of the atlas metacells used to project a single

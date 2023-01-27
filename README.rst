@@ -117,7 +117,7 @@ terminology for these lists:
     function as a way to identify such troublesome genes. In version 0.8 this was called ``find_noisy_lonely_genes`` and
     the genes were excluded.
 
-Having determined the inputs and possibly tweaking the hyper-parameters (favorite ones are the ``target_metacell_size``
+Having determined the inputs and possibly tweaking the hyper-parameters (a favorite one is the ``target_metacell_size``,
 which by default is 160K UMIs; this may be reduced for small data sets and may be increased for larger data sets), one
 typically runs ``divide_and_conquer_pipeline`` to obtain the following:
 
@@ -127,9 +127,9 @@ typically runs ``divide_and_conquer_pipeline`` to obtain the following:
     metacell. This protects the analyst from mistakenly applying metadata assigned to metacells from an old computation
     to different newly computed metacells.
 
-    The provided functions for conveying annotations from per-cell to per-metacell all currently use the metacell
-    integer indices (this will change when we switch to ``daf``). The metacell string names are safer to use, especially
-    when slicing the data.
+    We provide functions (``convey_obs_to_group``, ``convey_group_to_obs``) for conveying between per-cell and
+    per-metacell annotations, which all currently use the metacell integer indices (this will change when we switch to
+    ``daf``). The metacell string names are safer to use, especially when slicing the data.
 
 Having computed the metacells, the next step is to run ``collect_metacells`` to create a new ``AnnData`` object for them
 (when using ``daf``, they will be created in the same dataset for easier analysis), which will contain all the per-gene
@@ -138,28 +138,39 @@ metadata, and also:
 ``X`` per gene per metacell
     Once the metacells have been computed (typically using ``divide_and_conquer_pipeline``), we can collect the gene
     expression levels profile for each one. The main motivation for computing metacells is that they allow for a robust
-    estimation of the gene expression level, and we therefore by default compute a matrix of gene fractions (which sum
+    estimation of the gene expression level, and therefore we by default compute a matrix of gene fractions (which sum
     to 1) in each metacell, rather than providing a UMIs count for each. This simplifies the further analysis of the
-    computed metacells.
+    computed metacells (this is known as ``e_gc`` in the old R metacells package).
 
     Note that the expression level of noisy genes is less reliable, as we do not guarantee the cells in each metacell
     have a consistent expression level for such genes. Our estimator therefore uses a normal weighted mean for most
-    genes and a normalized geometric mean for the noisy gene.
+    genes and a normalized geometric mean for the noisy gene. Since the sizes of the cells collected into the same
+    metacell may vary, our estimator also ensures one large cell doesn't dominate the results. That is, the computed
+    fractions are *not* simply "sum of the gene UMIs in all cells divided by the sum of all gene UMIs in all cells".
 
 ``total_umis`` per metacell
-    We still provide the effective total UMIs count for each metacell. This is important to ensure that analysis is
-    based on a sufficient number of UMIs. Specifically, comparing expression levels of lowly-expressed genes will yield
-    wildly inaccurate results unless a sufficient number of effective UMIs are involved. The functions provided here for
-    computing fold factors (log base 2 of the ratio) and related comparisons automatically ignore cases when the sum of
-    the effective UMIs of the compared values is below some threshold (by considering the effective fold factor to be
-    0).
+    We still provide the total UMIs count for each metacell (the sum of all the UMIs in all the genes in all the cells).
+    We call the "effective UMIs" of a specific gene in the metacell is this number time its fraction in the metacell
+    (from above). This need not be an integer number.
+
+    Tracking the effective UMIs are important to ensure that analysis is meaningful. For example, comparing expression
+    levels of lowly-expressed genes in two metacells will yield wildly inaccurate results unless a sufficient number of
+    UMIs were used (the sum of effective UMIs of the gene in both compared metacells). The functions provided here for
+    computing fold factors (log base 2 of the ratio) and related comparisons automatically ignore cases when this sum is
+    below some threshold (40) by considering the effective fold factor to be 0 (that is, "no difference").
+
+``metacell_level``
+    This is set to ``0`` for metacells computed for rare gene modules (see below), ``1`` for the metacells computed
+    directly from the 2nd phase piles, and ``2`` for the metacells computed for the outlier cells collected from these
+    piles. We provide this information more for our internal debugging of the algorithm than for downstream analysis.
 
 If using ``divide_and_conquer_pipeline``, the following are also computed (but not by the simple
 ``compute_divide_and_conquer_metacells``:
 
 ``rare_gene_module_<N>`` mask (for N = 0, ...)
     A mask of the genes combined into each of the detected "rare gene modules". This is done in (expensive)
-    pre-processing before the full divide-and-conquer algorithm to increase the sensitivity of the method.
+    pre-processing before the full divide-and-conquer algorithm to increase the sensitivity of the method, by creating
+    metacells computed only from cells that express each rare gene module.
 
 ``rare_gene`` mask
     A mask of all the genes in all the rare gene modules, for convenience.
@@ -168,7 +179,7 @@ If using ``divide_and_conquer_pipeline``, the following are also computed (but n
     The index of the rare gene module each cell or metacell expresses (or negative for the common case it expresses none
     of them).
 
-``rare_cell``, ``rare_metacell`` mask
+``rare_cell``, ``rare_metacell`` masks
     A mask of all the cells or metacells expressing any of the rare gene modules, for convenience.
 
 In theory one is free to go use the metacells for further analysis, but it is prudent to perform quality control first.
@@ -186,11 +197,11 @@ In addition, one should compute and look at the following (an easy way to comput
 
 ``most_similar``, ``most_similar_name`` per cell (computed by ``compute_outliers_most_similar``)
     For each outlier cell (whose metacell index is ``-1`` and metacell name is ``Outliers``), the index and name of the
-    metacell which is the "most similar" (has highest correlation) with the cell.
+    metacell which is the "most similar" to the cell (has highest correlation).
 
 ``most_similar_fold`` per gene per cell (computed by ``compute_outliers_fold_factors``)
     For each outlier cell, for each gene, hold the fold factor between the expression level of the gene in the cell and
-    in the most similar metacell to that cell. This uses the same (strong) normalization factor we use when computing
+    the most similar metacell to that cell. This uses the same (strong) normalization factor we use when computing
     deviant (outlier) cells, so you should see some (non-excluded, non-noisy) genes with a fold factor above 3 (8x)
     which justify why we haven't merged that cell into a metacell. If there is a large number of outlier cells and a few
     genes have a high fold factor for many of them, you should consider marking these genes as noisy and recomputing the
@@ -202,8 +213,9 @@ In addition, one should compute and look at the following (an easy way to comput
     identifying the "type" of the metacell (or, more generally, the "gene programs" that are active in each metacell).
 
     Typically analysis groups the marker genes into "gene modules" (or, more generally, "gene programs"), and then use
-    the notion of "type X expresses gene module/program Y". As of version 0.9, collecting such gene modules (or
-    programs) is left to the analyst with little or no direct support in this package.
+    the notion of "type X expresses the gene module/programs Y, Z, ...". As of version 0.9, collecting such gene modules
+    (or programs) is left to the analyst with little or no direct support in this package, other than providing the rare
+    gene modules (which by definition would apply only to a small subset of the metacells).
 
 ``x``, ``y`` per metacell (computed by ``compute_umap_by_markers``)
     A common and generally effective way to visualize the computed metacells is to project them to a 2D view. Currently
@@ -211,21 +223,21 @@ In addition, one should compute and look at the following (an easy way to comput
     levels of the marker genes. In version 0.8 this was based on picking (some of) the selected genes.
 
     This view is good for quality control. If it forces "unrelated" cell types together, this might mean that more genes
-    should be made lateral or marked as noisy (or even excluded). Or maybe the data contains a metacell of doublets, or
-    a metacell mixing cells from different types, if too many genes were marked as lateral or noisy (it takes very few
-    of these "connector" metacells to mess UMAP up).
+    should be made lateral or marked as noisy (or even excluded); or maybe the data contains a metacell of doublets; or
+    metacells mixing cells from different types, if too many genes were marked as lateral or noisy. It takes a
+    surprising small number of such doublet/mixture metacells to mess up the UMAP projection.
 
     Also, one shouldn't read too much from the 2D layout, as by definition it can't express the "true" structure of the
     data. Looking at specific gene-gene plots gives much more robust insight into the actual differences between the
-    metacell types.
+    metacell types, identify doublets, etc.
 
 ``u``, ``v``, ``w`` per metacell (computed by ``compute_umap_by_markers`` with ``dimentions=3``)
     These are computed similar to ``x`` and ``y``, but project the metacells to a 3D space. One way to kickstart
     analysis of brand-new metacells data is to use K-means to group them into some number of clusters (which wouldn't
-    map exactly to "types" but would be a start). To give a reasonable initial color to each such cluster, we project
-    the metacells to a 3D space and (using the ``chameleon`` R package) map that to RGB, so that "similar" colors are
-    given to "similar" clusters. Using a 3D space allows the projection to better capture the "true" structure of the
-    data, but of course it is still only an approximation.
+    map exactly to "types", but would be a start). To give a reasonable initial color to each such cluster, we project
+    the metacells to a 3D space (using the ``chameleon`` R package), and map that to colors, so that "similar" colors
+    are given to "similar" clusters. Using a 3D space allows the projection to better capture the "true" structure of
+    the data (and maps nicely to the 3D LAB color space), but of course it is still only an approximation.
 
 Metacells Projection
 ....................
@@ -234,13 +246,13 @@ For the use case of projecting metacells we use the following terminology:
 
 ``atlas``
     A set of metacells with associated metadata, most importantly a ``type`` annotation per metacell. In addition, the
-    atlas may provide an ``essential_gene_of_<type>`` mask for each such type. For a query metacell to successfully
-    project to a given type will require that the expression of the type's essential genes matches the atlas. We
-    also use the metadata listed above (specifically, ``lateral_gene``, ``noisy_gene`` and ``marker_gene``).
+    atlas may provide an ``essential_gene_of_<type>`` mask for each type. For a query metacell to successfully project
+    to a given type will require that the query's expression of the type's essential genes matches the atlas. We also
+    use the metadata listed above (specifically, ``lateral_gene``, ``noisy_gene`` and ``marker_gene``).
 
 ``query``
     A set of metacells with minimal associated metadata, specifically without a ``type``. This may optionally contain
-    its own ``lateral_gene``, ``noisy_gene`` and/or ``marker_gene`` annotations.
+    its own ``lateral_gene``, ``noisy_gene`` and/or even ``marker_gene`` annotations.
 
 Given these two input data sets, the ``projection_pipeline`` computes the following (inside the query ``AnnData``
 object):
@@ -254,7 +266,7 @@ object):
     These masks are copied from the atlas to the query (restricting them to the common ``atlas_gene`` subset).
 
 ``corrected_fractions`` per gene per query metacell
-    For each ``atlas_gene``, its fraction in each query metacell, out of all the atlas genes. This may be further
+    For each ``atlas_gene``, its fraction in each query metacell, out of only the atlas genes. This may be further
     corrected (see below) if projecting between different scRNA-seq technologies (e.g. 10X v2 and 10X v3). For
     non-``atlas_gene`` this is 0.
 
@@ -262,87 +274,99 @@ object):
     For each ``atlas_gene``, its fraction in its projection on the atlas. This projection is computed as a weighted
     average of some atlas metacells (see below), which are all sufficiently close to each other (in terms of gene
     expression), so averaging them is reasonable to capture the fact the query metacell may be along some position on
-    some gradient that isn't an exact match for any single atlas metacell. For non-``atlas_gene`` this is 0.
+    some gradient that isn't an exact match for any specific atlas metacell. For non-``atlas_gene`` this is 0.
 
 ``total_atlas_umis`` per query metacell
-    The total effective UMIs of the ``atlas_gene`` in each query metacell. This is used in the analysis as described for
-    ``total_umis`` above, that is, to ensure comparing expression levels will ignore cases where the total effective
-    number of UMIs of both compared gene profiles is too low to make a reliable determination. In such cases we take the
-    effective fold factor to be 0.
+    The total effective UMIs of the ``atlas_gene`` in each query metacell (this need not be an integer). This is used in
+    the analysis as described for ``total_umis`` above, that is, to ensure comparing expression levels will ignore cases
+    where the total effective number of UMIs of both compared gene profiles is too low to make a reliable determination.
+    In such cases we take the effective fold factor to be 0.
 
 ``weights`` per query metacell per atlas metacsll
     The weights used to compute the ``projected_fractions``. Due to ``AnnData`` limitations this is returned as a
-    separate object, but in ``daf`` we may be able to do better.
+    separate object, but in ``daf`` we should be able to store this directly into the query object.
 
-In theory, this would be enough for looking at the query metacells and comparing them to the atlas, possibly projecting
-metadata from the atlas to the query (e.g., the metacell type). In practice, there is significant amount of quality
-control one needs to apply before accepting these results, which we compute as follows:
+In theory, this would be enough for looking at the query metacells and comparing them to the atlas, and to project
+metadata from the atlas to the query (e.g., the metacell type) using ``convey_atlas_to_query``. In practice, there is
+significant amount of quality control one needs to apply before accepting these results, which we compute as follows:
 
-``correction_factor`` per ``atlas_gene``
+``correction_factor`` per gene
     If projecting a query on an atlas with different technologies (e.g., 10X v3 to 10X v2), an automatically computed
     factor we multiplied the query gene fractions by to compensate for the systematic difference between the
     technologies (1.0 for uncorrected genes and non-``atlas_gene``).
 
 ``projected_type`` per query metacell
-    For each query metacell, the best ``type`` we can assign to it based on its projection. Note this does not indicate
-    that the query metacell is "truly" of this type; to make this determination one needs to look at the quality control
-    data below.
+    For each query metacell, the best atlas ``type`` we can assign to it based on its projection. Note this does not
+    indicate that the query metacell is "truly" of this type; to make this determination one needs to look at the
+    quality control data below.
 
 ``projected_secondary_type`` per query metacell
-    In some cases, a query metacell may fail to project to a single region of the atlas, but instead does project well
-    to a combination of two regions. This may be due to the query metacell containing doublets, of a mixture of cells
-    which match different atlas regions (e.g. due to sparsity of data in the query data set). Either way, if this
-    happens, we place here the type that best describes the secondary region the query metacell was projected to,
+    In some cases, a query metacell may fail to project well to a single region of the atlas, but does project well to a
+    combination of two distinct atlas regions. This may be due to the query metacell containing doublets, of a mixture
+    of cells which match different atlas regions (e.g. due to sparsity of data in the query data set). Either way, if
+    this happens, we place here the type that best describes the secondary region the query metacell was projected to;
     otherwise this would be the empty string. Note that the ``weights`` matrix above does not distinguish between the
     regions.
 
 ``fitted_gene_of_<type>`` mask
-    For each type, the genes that were in general successfully projected from the query to the atlas for that type. For
-    non-``atlas_gene`` this is set to ``False``. This does not guarantee that a specific query metacell of that type
-    successfully projected each of these genes, just that most of them did. Any ``atlas_gene`` outside this mask failed
-    to project well from the query to the atlas for (most) metacells of this type. Whether this indicates that the query
-    metacells weren't "truly" of the ``projected_type`` is a decision which only the analyst can make based on prior
-    biological knowledge of the relevant genes.
+    For each type, the genes that were projected well from the query to the atlas for most cells of that type; any
+    ``atlas_gene`` outside this mask failed to project well from the query to the atlas for most metacells of this type.
+    For non-``atlas_gene`` this is set to ``False``.
+
+    Whether failing to project well some of the ``atlas_gene`` for most metacells of some ``projected_type`` indicates
+    that they aren't "truly" of that type is a decision which only the analyst can make based, on prior biological
+    knowledge of the relevant genes.
 
 ``fitted_gene`` mask per gene per query metacell
-    For each ``atlas_gene`` for each query metacell, whether the gene was expected to be well projected, based on the
+    For each ``atlas_gene`` for each query metacell, whether the gene was expected to be projected well, based on the
     query metacell ``projected_type`` (and the ``projected_secondary_type``, if any). For non-``atlas_gene`` this is set
-    to ``False``. This does not guarantee the gene was actually well projected.
+    to ``False``. This does not guarantee the gene was actually projected well.
 
 ``misfit_gene`` mask per gene per query metacell
     For each ``atlas_gene`` for each query metacell, whether the ``corrected_fractions`` of the gene was significantly
-    different from the ``projected_fractions``. This is expected to be rate for ``fitted_gene`` and common for the rest
-    of the ``atlas_gene``. For non-``atlas_gene`` this is set to ``False``. For most (but not all) metacells and genes,
-    this would be ``False`` for ``fitted_gene`` and ``True`` for the rest of the ``atlas_gene``.
+    different from the ``projected_fractions`` (that is, whether the gene was not projected well for this metacell). For
+    non-``atlas_gene`` this is set to ``False`` to make it easier to identify problematic genes.
+
+    This is expected to be rare for ``fitted_gene`` and common for the rest of the ``atlas_gene``. If too many
+    ``fitted_gene`` are also ``misfit_gene``, then one should be suspicious whether the query metacell is "truly" of the
+    ``projected_type``.
 
 ``essential_gene`` mask per gene per query metacell
-    Which of the ``atlas_gene`` were listed in the ``essential_gene_of_<type>`` for the ``projected_type`` (and also the
-    ``projected_secondary_type``, if any) of each query metacell. If an ``essential_gene`` is also a ``misfit_gene``,
-    then one should be very suspicious whether the query metacell is "truly" of the ``projected_type``.
+    Which of the ``atlas_gene`` were also listed in the ``essential_gene_of_<type>`` for the ``projected_type`` (and
+    also the ``projected_secondary_type``, if any) of each query metacell.
+
+    If an ``essential_gene`` is also a ``misfit_gene``, then one should be very suspicious whether the query metacell is
+    "truly" of the ``projected_type``.
 
 ``projection_correlation`` per query metacell
     The correlation between between the ``corrected_fractions`` and the ``projected_fractions`` for only the
     ``fitted_gene`` expression levels of each query metacell. This serves as a very rough estimator for the quality of
     the projection for this query metacell (e.g. can be used to compute R^2 values).
 
+    In general we expect high correlation (more than 0.9 in most metacells) since we restricted the ``fitted_gene`` mask
+    only to genes we projected well.
+
 ``projected_fold`` per gene per query metacell
     The fold factor between the ``corrected_fractions`` and the ``projected_fractions`` (0 for non-``atlas_gene``). If
-    the absolute value of this is high (3 for 8x ratio) then the gene was not well mapped for this metacell. It is
-    expected this would have low values for most fitted genes and high values for the rest, but specific values will
-    vary from one query metacell to another. This allows the analyst to make fine-grained determination about the
-    quality of the projection, and/or identify quantitative differences between the query and the atlas (e.g., when
-    studying perturbed systems such as knockouts or disease models).
+    the absolute value of this is high (3 for 8x ratio) then the gene was not projected well for this metacell. This
+    will be 0 for non-``atlas_gene``.
+
+    It is expected this would have low values for most ``fitted_gene`` and high values for the rest of the
+    ``atlas_gene``, but specific values will vary from one query metacell to another. This allows the analyst to make
+    fine-grained determination about the quality of the projection, and/or identify quantitative differences between the
+    query and the atlas (e.g., when studying perturbed systems such as knockouts or disease models).
 
 ``similar`` mask per query metacell
     A conservative determination of whether the query metacell is "similar" to its projection on the atlas. This is
     based on whether the number of ``misfit_gene`` for the query metacell is low enough (by default, up to 3 genes), and
     also that at least 75% of the ``essential_gene`` of the query metacell were not ``misfit_gene``. Note that this
     explicitly allows for a ``projected_secondary_type``, that is, a metacell of doublets will be "similar" to the
-    atlas.
+    atlas, but a metacell of a novel state missing from the atlas will be "dissimilar".
 
-    The final determination is, as always, up to the analyst, based on prior biological knowledge, the context of the
-    collection of the query (and atlas) data sets, etc. The analyst need not (indeed, should not) blindly accept this
-    determination without examining the rest of the quality control data listed above.
+    The final determination of whether to accept the projection is, as always, up to the analyst, based on prior
+    biological knowledge, the context of the collection of the query (and atlas) data sets, etc. The analyst need not
+    (indeed, *should not*) blindly accept the ``similar`` determination without examining the rest of the quality
+    control data listed above.
 
 Installation
 ------------
