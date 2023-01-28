@@ -3,6 +3,8 @@ Collect
 -------
 """
 
+from hashlib import shake_128
+from typing import List
 from typing import Optional
 from typing import Union
 
@@ -10,7 +12,6 @@ import numpy as np
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
-import metacells.tools as tl
 import metacells.utilities as ut
 
 __all__ = [
@@ -20,18 +21,19 @@ __all__ = [
 
 @ut.logged()
 @ut.timed_call()
-def collect_metacells(
+def collect_metacells(  # pylint: disable=too-many-statements
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
-    max_cell_size: Optional[float] = pr.max_cell_size,
+    max_cell_size_quantile: Optional[float] = pr.max_cell_size_quantile,
     max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
-    cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
+    max_cell_size_noisy_quantile: Optional[float] = pr.max_cell_size_noisy_quantile,
+    max_cell_size_noisy_factor: Optional[float] = pr.max_cell_size_noisy_factor,
     groups: Union[str, ut.Vector] = "metacell",
     name: str = "metacells",
     prefix: Optional[str] = "M",
     top_level: bool = True,
-    random_seed: int,
+    _metacell_groups: bool = False,
 ) -> AnnData:
     """
     Collect computed metacells ``what`` (default: {what}) data.
@@ -51,17 +53,19 @@ def collect_metacells(
         ``*``
             Every per-gene annotations of ``adata`` is copied to the result.
 
+        ``noisy_gene`` (optional)
+            Genes which may have inconsistent expression levels in the cells of the same metacell.
+
     Observations (Cell) Annotations
         ``grouped``
             The number of ("clean") cells grouped into each metacell.
 
-        ``metacell_level``
-            Which level of processing generated the metacell (0 - from cells which were never
-            outliers; 1 - from cells which were outliers in the 1st step, etc.).
-
     Also sets in the full ``adata``:
 
     Observations (Cell) Annotations
+        ``total_umis``
+            The total of all the UMIs for all the cells grouped into each metacell.
+
         ``metacell_name``
             The string name of the metacell, which is ``prefix`` (default: {prefix}) followed by the metacell index,
             followed by ``.checksum`` where the checksum is a 2 digits, reflecting the (names of the) set of cells
@@ -71,37 +75,129 @@ def collect_metacells(
 
     **Computation Parameters**
 
-    1. In each metacell, compute each cell's capped size by invoking
-       :py:func:`metacells.utilities.computation.capped_sizes` using the ``max_cell_size`` (default: {max_cell_size}),
-       ``max_cell_size_factor`` (default: {max_cell_size_factor}) and ``cell_sizes`` (default: {cell_sizes}).
+    1. Compute the total size of each metacell using the ``cell_sizes`` and the ``groups``.
 
-    2. Downsample the cell's data using these capped, if needed, using the ``random_seed``.
+    2. In each metacell, compute each cell's capped size by invoking
+       :py:func:`metacells.utilities.computation.capped_sizes` using the ``max_cell_size_quantile`` (default:
+       {max_cell_size_quantile}), ``max_cell_size_factor`` (default: {max_cell_size_factor}).
 
-    3. Invoke :py:func:`metacells.tools.group.group_obs_data` to sum the cells into
-       metacells.
+    3. Scale the cells UMIs using these caps, if needed.
 
-    4. Pass all relevant per-gene and per-cell annotations to the result.
+    4. Invoke :py:func:`metacells.utilities.computation.sum_groups` to sum the scaled cell UMIs into metacells.
 
-    5. Set the ``metacell_name`` property of each cell in ``adata`` to the name of the group (metacell) it belongs to.
-       Cells which do not belong to any metacell are assigned the metacell name ``Outliers``.
+    5. If there are no ``noisy_gene``, skip steps 6-9.
+
+    6. In each metacell, compute each cell's noisy capped size by invoking
+       :py:func:`metacells.utilities.computation.capped_sizes` using the ``max_cell_size_noisy_quantile`` (default:
+       {max_cell_size_noisy_quantile}), ``max_cell_size_noisy_factor`` (default: {max_cell_size_noisy_factor}).
+
+    7. Scale the cells noisy UMIs using these caps, if needed.
+
+    8. Compute a geo-mean with a normalization factor of 1 UMI for the (scaled) noisy UMIs of the cells in each
+       metacell.
+
+    9. Finally, scale the geo-mean according to the ratio between the capped size from step 2 and the capped noisy size
+       from step 6, and use the result for the noisy gene UMIs instead of the results from step 5.
+
+    10. Compute the fraction of each gene effective UMIs out of the total effective metacell UMIs.
+
+    11. Pass all relevant per-gene and per-cell annotations to the result.
+
+    12. Set the ``metacell_name`` property of each cell in ``adata`` to the name of the group (metacell) it belongs to.
+        Cells which do not belong to any metacell are assigned the metacell name ``Outliers``.
     """
-    cell_sizes = ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
-    cell_samples = _cell_samples(
-        adata, max_cell_size=max_cell_size, max_cell_size_factor=max_cell_size_factor, cell_sizes=cell_sizes
-    )
+    metacell_of_cells = ut.get_o_numpy(adata, groups, formatter=ut.groups_description).copy()
+    metacell_of_cells[metacell_of_cells < 0] = -1
 
-    if cell_samples is not None:
-        data = ut.get_vo_proper(adata, what, layout="row_major")
-        what = ut.downsample_matrix(data, per="row", samples=cell_samples, random_seed=random_seed)
+    raw_cell_umis = ut.get_vo_proper(adata, what, layout="row_major")
+    raw_cell_sizes = ut.sum_per(raw_cell_umis, per="row")
+    ut.log_calc("raw_cell_sizes", raw_cell_sizes, formatter=ut.sizes_description)
 
-    mdata = tl.group_obs_data(adata, what, groups=groups, name=name, prefix=prefix)
-    assert mdata is not None
+    if max_cell_size_quantile is not None and max_cell_size_factor is not None:
+        effective_cell_sizes = ut.capped_sizes(
+            max_size_quantile=max_cell_size_quantile, max_size_factor=max_cell_size_factor, sizes=raw_cell_sizes
+        )
+        normal_cell_factors = effective_cell_sizes / raw_cell_sizes
+        effective_cell_umis = ut.scale_by(raw_cell_umis, normal_cell_factors, by="row")
+        ut.log_calc("effective_cell_sizes", effective_cell_sizes, formatter=ut.sizes_description)
+        ut.log_calc("normal_cell_factors", normal_cell_factors, formatter=ut.sizes_description)
+    else:
+        effective_cell_umis = raw_cell_umis
+
+    if (
+        max_cell_size_noisy_quantile is not None
+        and max_cell_size_noisy_factor is not None
+        and ut.has_data(adata, "noisy_gene")
+    ):
+        noisy_genes_mask = ut.get_v_numpy(adata, "noisy_gene")
+        if np.any(noisy_genes_mask):
+            raw_cell_noisy_umis = ut.to_numpy_matrix(raw_cell_umis[:, noisy_genes_mask])
+
+            noisy_cell_sizes = ut.capped_sizes(
+                max_size_quantile=max_cell_size_noisy_quantile,
+                max_size_factor=max_cell_size_noisy_factor,
+                sizes=raw_cell_sizes,
+            )
+            noisy_cell_factors = noisy_cell_sizes / raw_cell_sizes
+            ut.log_calc("noisy_cell_sizes", noisy_cell_sizes, formatter=ut.sizes_description)
+            ut.log_calc("noisy_cell_factors", noisy_cell_factors, formatter=ut.sizes_description)
+
+            effective_cell_noisy_umis = ut.mustbe_numpy_matrix(
+                ut.scale_by(raw_cell_noisy_umis, noisy_cell_factors, by="row")
+            )
+            effective_cell_noisy_umis += 1
+            effective_cell_log2_noisy_umis = np.log2(effective_cell_noisy_umis, out=effective_cell_noisy_umis)
+
+            results = ut.sum_groups(effective_cell_log2_noisy_umis, metacell_of_cells, per="row")
+            assert results is not None
+            effective_metacell_sum_log2_noisy_umis, cells_of_metacells = results
+
+            scale_of_metacells = np.reciprocal(cells_of_metacells, out=cells_of_metacells)
+            effective_metacell_mean_log2_noisy_umis = ut.mustbe_numpy_matrix(
+                ut.scale_by(effective_metacell_sum_log2_noisy_umis, scale_of_metacells, by="row")
+            )
+            effective_metacell_noisy_umis = np.exp2(
+                effective_metacell_mean_log2_noisy_umis, out=effective_metacell_mean_log2_noisy_umis
+            )
+            effective_metacell_noisy_umis -= 1
+
+            noisy_scale_factors = effective_cell_sizes / noisy_cell_sizes
+            ut.log_calc("noisy_scale_factors", noisy_scale_factors, formatter=ut.sizes_description)
+
+            effective_metacell_noisy_umis *= noisy_scale_factors
+            if effective_cell_umis is raw_cell_umis:
+                effective_cell_umis = raw_cell_umis.copy()
+            effective_cell_umis[:, noisy_genes_mask] = effective_metacell_noisy_umis
+
+    results = ut.sum_groups(effective_cell_umis, metacell_of_cells, per="row")
+    assert results is not None
+    effective_metacell_umis, cells_of_metacells = results
+    ut.log_calc("cells_of_metacells", cells_of_metacells, formatter=ut.sizes_description)
+
+    if _metacell_groups:
+        mdata = AnnData(effective_metacell_umis)
+    else:
+        effective_metacell_sizes = ut.sum_per(effective_metacell_umis, per="row")
+        ut.log_calc("effective_metacell_sizes", effective_metacell_sizes, formatter=ut.sizes_description)
+        effective_metacell_scale = np.reciprocal(effective_metacell_sizes, out=effective_metacell_sizes)
+        ut.log_calc("effective_metacell_scale", effective_metacell_scale, formatter=ut.sizes_description)
+        effective_metacell_fractions = ut.scale_by(effective_metacell_umis, effective_metacell_scale, by="row")
+        mdata = AnnData(effective_metacell_fractions)
+
     if top_level:
         ut.top_level(mdata)
 
+    mdata.var_names = adata.var_names
+    mdata.obs_names = _obs_names(prefix or "", ut.to_numpy_vector(adata.obs_names), metacell_of_cells)
+
+    ut.set_name(mdata, ut.get_name(adata))
+    ut.set_name(mdata, name)
+
+    raw_metacell_sizes = _metacell_sizes(raw_cell_sizes, metacell_of_cells)
+    ut.set_o_data(mdata, "total_umis", raw_metacell_sizes, formatter=ut.sizes_description)
+    ut.set_o_data(mdata, "grouped", cells_of_metacells, formatter=ut.sizes_description)
+
     metacell_names = np.array(["Outliers"] + list(mdata.obs_names), dtype="str")
-    metacell_of_cells = ut.get_o_numpy(adata, groups, formatter=ut.groups_description).copy()
-    metacell_of_cells[metacell_of_cells < 0] = -1
     metacell_of_cells += 1
     metacell_name_of_cells = metacell_names[metacell_of_cells]
     ut.set_o_data(adata, "metacell_name", metacell_name_of_cells)
@@ -110,33 +206,33 @@ def collect_metacells(
         value_per_gene = ut.get_v_numpy(adata, annotation_name)
         ut.set_v_data(mdata, annotation_name, value_per_gene)
 
-    if ut.has_data(adata, "metacell_level"):
-        tl.group_obs_annotation(
-            adata, mdata, groups=groups, formatter=ut.sizes_description, name="metacell_level", method="unique"
-        )
-
     return mdata
 
 
-def _cell_samples(
-    adata: AnnData,
-    *,
-    max_cell_size: Optional[float] = pr.max_cell_size,
-    max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
-    cell_sizes: Optional[ut.NumpyVector],
-) -> Optional[ut.NumpyVector]:
-    if cell_sizes is None or (max_cell_size is None and max_cell_size_factor is None):
-        return None
+# TODO: Replicated in metacells.tools.group
+def _obs_names(prefix: str, name_of_members: ut.NumpyVector, group_of_members: ut.NumpyVector) -> List[str]:
+    groups_count = np.max(group_of_members) + 1
+    name_of_groups: List[str] = []
+    prefix = prefix or ""
+    for group_index in range(groups_count):
+        groups_mask = group_of_members == group_index
+        assert np.any(groups_mask)
+        hasher = shake_128()
+        for member_name in name_of_members[groups_mask]:
+            hasher.update(member_name.encode("utf8"))
+        checksum = int(hasher.hexdigest(16), 16) % 10  # pylint: disable=too-many-function-args
+        name_of_groups.append(f"{prefix}{group_index}.{checksum:02d}")
+    return name_of_groups
 
-    metacell_of_cells = ut.get_o_numpy(adata, "metacell")
+
+def _metacell_sizes(
+    cell_sizes: ut.NumpyVector,
+    metacell_of_cells: ut.NumpyVector,
+) -> ut.NumpyVector:
     metacells_count = np.max(metacell_of_cells) + 1
-    capped_sizes = cell_sizes.copy()
+    metacell_sizes = np.empty(metacells_count, dtype="float32")
 
-    for metacell in range(metacells_count):
-        cell_indices = np.where(metacell_of_cells == metacell)[0]
-        capped_sizes[cell_indices] = ut.capped_sizes(
-            max_size=max_cell_size, max_size_factor=max_cell_size_factor, sizes=cell_sizes[cell_indices]
-        )
+    for metacell_index in range(metacells_count):
+        metacell_sizes[metacell_index] = np.sum(cell_sizes[metacell_of_cells == metacell_index])
 
-    capped_sizes[capped_sizes >= cell_sizes] = -1
-    return capped_sizes
+    return metacell_sizes

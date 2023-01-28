@@ -2349,22 +2349,18 @@ def sparsify_matrix(
 
 
 @utm.timed_call()
-def capped_sizes(
-    *, max_size: Optional[float] = None, max_size_factor: Optional[float] = None, sizes: utt.NumpyVector
-) -> utt.NumpyVector:
+def capped_sizes(*, max_size_quantile: float, max_size_factor: float, sizes: utt.NumpyVector) -> utt.NumpyVector:
     """
     Given an array of sizes, return an array of capped sizes such that the sizes don't differ too match.
 
-    If ``max_size`` (default: {max_cell_size}) is specified, use it as a cap on the size. Otherwise, if
-    ``max_size_factor`` is specified, use as a cap the median size times this factor. If both are ``None``, use no cap
-    and return (a copy of) the original sizes array.
+    Compute a maximal size of ``max_size_quantile`` of the sizes multipled by the ``max_size_factor``. Any higher size
+    is reduced to this maximal size.
+
+    Return a new sizes array with these capped sizes.
     """
+    assert 0 < max_size_quantile < 1
+    assert max_size_factor > 0
     sizes = sizes.copy()
-
-    if max_size is None and max_size_factor is not None:
-        max_size = np.median(sizes) * max_size_factor
-
-    if max_size is not None:
-        sizes[sizes > max_size] = max_size
-
+    max_size = np.quantile(sizes, max_size_quantile) * max_size_factor
+    sizes[sizes > max_size] = max_size
     return sizes

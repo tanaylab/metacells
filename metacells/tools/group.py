@@ -89,6 +89,7 @@ def group_obs_data(
     return gdata
 
 
+# TODO: Replicated in metacells.pipeline.collect
 def _obs_names(prefix: str, name_of_members: ut.NumpyVector, group_of_members: ut.NumpyVector) -> List[str]:
     groups_count = np.max(group_of_members) + 1
     name_of_groups: List[str] = []

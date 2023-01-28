@@ -76,7 +76,7 @@ def compute_direct_metacells(
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_method: str = pr.cells_similarity_method,
     target_metacell_size: float = pr.target_metacell_size,
-    max_cell_size: Optional[float] = pr.max_cell_size,
+    max_cell_size_quantile: Optional[float] = pr.max_cell_size_quantile,
     max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     knn_k: Optional[int] = pr.knn_k,
@@ -207,7 +207,7 @@ def compute_direct_metacells(
 
     7. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
        the candidate metacells, using the
-       ``max_cell_size`` (default: {max_cell_size}),
+       ``max_cell_size_quantile`` (default: {max_cell_size_quantile}),
        ``max_cell_size_factor`` (default: {max_cell_size_factor}),
        ``min_seed_size_quantile`` (default: {min_seed_size_quantile}),
        ``max_seed_size_quantile`` (default: {max_seed_size_quantile}),
@@ -315,7 +315,7 @@ def compute_direct_metacells(
             sdata,
             target_metacell_size=target_metacell_size,
             cell_sizes=cell_sizes,
-            max_cell_size=max_cell_size,
+            max_cell_size_quantile=max_cell_size_quantile,
             max_cell_size_factor=max_cell_size_factor,
             min_seed_size_quantile=min_seed_size_quantile,
             max_seed_size_quantile=max_seed_size_quantile,
@@ -353,7 +353,7 @@ def compute_direct_metacells(
             deviants=deviants,
             target_metacell_size=target_metacell_size,
             cell_sizes=cell_sizes,
-            max_cell_size=max_cell_size,
+            max_cell_size_quantile=max_cell_size_quantile,
             max_cell_size_factor=max_cell_size_factor,
             min_robust_size_factor=dissolve_min_robust_size_factor,
             min_convincing_size_factor=dissolve_min_convincing_size_factor,

@@ -131,6 +131,11 @@ typically runs ``divide_and_conquer_pipeline`` to obtain the following:
     per-metacell annotations, which all currently use the metacell integer indices (this will change when we switch to
     ``daf``). The metacell string names are safer to use, especially when slicing the data.
 
+``dissolve`` cells mask
+    Whether the cell was in a candidate matecall that was dissolved due to being too small (too few cells and/or total
+    UMIs). This may aid quality control when there are a large number of outliers; lowering the ``target_metacell_size``
+    may help avoid this.
+
 Having computed the metacells, the next step is to run ``collect_metacells`` to create a new ``AnnData`` object for them
 (when using ``daf``, they will be created in the same dataset for easier analysis), which will contain all the per-gene
 metadata, and also:
@@ -148,6 +153,9 @@ metadata, and also:
     metacell may vary, our estimator also ensures one large cell doesn't dominate the results. That is, the computed
     fractions are *not* simply "sum of the gene UMIs in all cells divided by the sum of all gene UMIs in all cells".
 
+``grouped`` per metacell
+    The number of cells grouped into each metacell.
+
 ``total_umis`` per metacell
     We still provide the total UMIs count for each metacell (the sum of all the UMIs in all the genes in all the cells).
     We call the "effective UMIs" of a specific gene in the metacell is this number time its fraction in the metacell
@@ -158,11 +166,6 @@ metadata, and also:
     UMIs were used (the sum of effective UMIs of the gene in both compared metacells). The functions provided here for
     computing fold factors (log base 2 of the ratio) and related comparisons automatically ignore cases when this sum is
     below some threshold (40) by considering the effective fold factor to be 0 (that is, "no difference").
-
-``metacell_level``
-    This is set to ``0`` for metacells computed for rare gene modules (see below), ``1`` for the metacells computed
-    directly from the 2nd phase piles, and ``2`` for the metacells computed for the outlier cells collected from these
-    piles. We provide this information more for our internal debugging of the algorithm than for downstream analysis.
 
 If using ``divide_and_conquer_pipeline``, the following are also computed (but not by the simple
 ``compute_divide_and_conquer_metacells``:

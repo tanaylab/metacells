@@ -139,21 +139,38 @@ target_metacells_in_pile: int = 100
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 target_metacell_size: float = 160000
 
-#: The maximal cell size (total UMIs) to use. See
+#: The quantile of the cell sizes to use for reducing the impact of cell size variance. See
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
 #: and
 #: :py:func:`metacells.pipeline.collect.collect_metacells`.
-max_cell_size: Optional[float] = None
+max_cell_size_quantile: Optional[float] = 0.5
 
-#: The maximal cell size as a factor of the median cell size. See
+#: The maximal cell size to use for reducing the impact of cell size variance as a factor of the quantile cell size. See
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
 #: and
 #: :py:func:`metacells.pipeline.collect.collect_metacells`.
 max_cell_size_factor: Optional[float] = 2.0
+
+#: The quantile of the cell sizes to use for reducing the impact of cell size variance for noisy genes. See
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
+#: and
+#: :py:func:`metacells.pipeline.collect.collect_metacells`.
+max_cell_size_noisy_quantile: Optional[float] = 0.1
+
+#: The maximal cell size to use for reducing the impact of cell size variance as a factor of the quantile cell size for
+#: noisy genes. See
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
+#: and
+#: :py:func:`metacells.pipeline.collect.collect_metacells`.
+max_cell_size_noisy_factor: Optional[float] = 1.0
 
 #: The genetic size of each cell for computing each metacell's size. See
 #: :py:const:`candidates_cell_sizes`,

@@ -208,7 +208,7 @@ class DirectParameters:  # pylint: disable=too-many-instance-attributes
     cells_similarity_log_data: bool
     cells_similarity_method: str
     target_metacell_size: float
-    max_cell_size: Optional[float]
+    max_cell_size_quantile: Optional[float]
     max_cell_size_factor: Optional[float]
     cell_sizes: ut.NumpyVector
     knn_k: Optional[int]
@@ -281,17 +281,11 @@ class SubsetResults:
         *,
         adata: AnnData,
         counts: List[int],
-        metacells_level: int,
         collected_mask: ut.NumpyVector,
     ) -> None:
         """
         Collect the results of the subset into the full data.
         """
-        metacell_levels = ut.get_o_numpy(adata, "metacell_level", formatter=ut.groups_description).copy()
-        metacell_levels[self.full_cell_indices] = metacells_level
-        metacell_levels[self.full_cell_indices[self.metacell_indices < 0]] = metacells_level + 1
-        ut.set_o_data(adata, "metacell_level", metacell_levels, formatter=ut.groups_description)
-
         metacell_of_cells = ut.get_o_numpy(adata, "metacell", formatter=ut.groups_description).copy()
         dissolved_of_cells = ut.get_o_numpy(adata, "dissolved", formatter=ut.groups_description).copy()
 
@@ -388,7 +382,7 @@ def divide_and_conquer_pipeline(
     min_target_pile_size: int = pr.min_target_pile_size,
     max_target_pile_size: int = pr.max_target_pile_size,
     target_metacells_in_pile: int = pr.target_metacells_in_pile,
-    max_cell_size: Optional[float] = pr.max_cell_size,
+    max_cell_size_quantile: Optional[float] = pr.max_cell_size_quantile,
     max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     piles_knn_k_size_factor: float = pr.piles_knn_k_size_factor,
@@ -531,7 +525,7 @@ def divide_and_conquer_pipeline(
             cells_similarity_log_data=cells_similarity_log_data,
             cells_similarity_method=cells_similarity_method,
             target_metacell_size=target_metacell_size,
-            max_cell_size=max_cell_size,
+            max_cell_size_quantile=max_cell_size_quantile,
             max_cell_size_factor=max_cell_size_factor,
             cell_sizes=explicit_cell_sizes,
             knn_k=knn_k,
@@ -617,7 +611,6 @@ def divide_and_conquer_pipeline(
                     what,
                     pile_of_cells=rare_module_of_cells,
                     prefix="rare" if name is None else name + ".rare",
-                    metacells_level=0,
                     counts=counts,
                     collected_mask=np.zeros(adata.n_obs, dtype="bool"),
                     direct_parameters=replace(
@@ -671,7 +664,7 @@ def compute_divide_and_conquer_metacells(
     min_target_pile_size: int = pr.min_target_pile_size,
     max_target_pile_size: int = pr.max_target_pile_size,
     target_metacells_in_pile: int = pr.target_metacells_in_pile,
-    max_cell_size: Optional[float] = pr.max_cell_size,
+    max_cell_size_quantile: Optional[float] = pr.max_cell_size_quantile,
     max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     piles_knn_k_size_factor: float = pr.piles_knn_k_size_factor,
@@ -741,12 +734,6 @@ def compute_divide_and_conquer_metacells(
             The integer index of the final metacell each cell belongs to. The metacells are in no particular order. This
             is ``-1`` for cells not included in any metacell (outliers, excluded).
 
-        ``metacell_level``
-            The number of times the cell was rejected into the outliers. Zero means a cell was grouped to a metacell as
-            soon as possible, one means it was marked as an outlier once (either in the 1st or 2nd phases), two means it
-            was an outlier amongst the outliers, etc. This will have the same value for all cells in the same metacell,
-            and higher-index metacells will have a higher cell level. Outlier cells will have the maximal value.
-
         ``dissolve``
            A boolean mask of the cells which were in a dissolved metacell (in the last pile they were in).
 
@@ -779,12 +766,11 @@ def compute_divide_and_conquer_metacells(
        ``piles_max_merge_size_factor`` (default: {piles_max_merge_size_factor}).
 
     7. Phase 1 (final): group the cells into piles based on the groups-of-metacells. Compute metacells using the piles,
-       by invoking :py:func:`metacells.pipeline.direct.compute_direct_metacells`, possibly in parallel. These metacells
-       will have ``metacell_level=0``.
+       by invoking :py:func:`metacells.pipeline.direct.compute_direct_metacells`, possibly in parallel.
 
     8. Collect the outliers from all the piles and compute metacells for them (possibly in parallel). If
-       ``quick_and_dirty``, give these ``metacell_level=1`` and stop. Otherwise, continue to group all the cells
-       in metacells by grouping the outliers-of-outliers similarly to step 5.
+       ``quick_and_dirty``, stop. Otherwise, continue to group all the cells in metacells by grouping the
+       outliers-of-outliers similarly to step 5.
 
     9. Phase 1 to 2: Recursively run the algorithm grouping the outlier metacells into groups-of-metacells, using
        ``piles_knn_k_size_factor`` (default: {piles_knn_k_size_factor}),
@@ -793,9 +779,8 @@ def compute_divide_and_conquer_metacells(
        ``piles_max_merge_size_factor`` (default: {piles_max_merge_size_factor}).
 
     10. Phase 2 (outliers): Group the cells into piles based on the groups-of-metacells. Compute metacells using the
-        piles, by invoking :py:func:`metacells.pipeline.direct.compute_direct_metacells`, possibly in parallel. These
-        metacells will have a ``metacell_level`` of ``1``. Stop here and accept all outliers as final outliers
-        (that is, there are no level 2 metacells).
+        piles, by invoking :py:func:`metacells.pipeline.direct.compute_direct_metacells`, possibly in parallel. Stop
+        here and accept all outliers as final outliers (that is, there are no level 2 metacells).
     """
     explicit_cell_sizes, target_pile_size = compute_derived_parameters(
         adata=adata,
@@ -830,7 +815,7 @@ def compute_divide_and_conquer_metacells(
             cells_similarity_log_data=cells_similarity_log_data,
             cells_similarity_method=cells_similarity_method,
             target_metacell_size=target_metacell_size,
-            max_cell_size=max_cell_size,
+            max_cell_size_quantile=max_cell_size_quantile,
             max_cell_size_factor=max_cell_size_factor,
             cell_sizes=explicit_cell_sizes,
             knn_k=knn_k,
@@ -885,7 +870,6 @@ def compute_divide_and_conquer_metacells(
 @ut.logged()
 def _initialize_divide_and_conquer_results(adata: AnnData) -> None:
     for name, value, dtype in (
-        ("metacell_level", 0, "int32"),
         ("metacell", -1, "int32"),
         ("dissolved", False, "bool"),
     ):
@@ -900,10 +884,7 @@ def _initialize_divide_and_conquer_results(adata: AnnData) -> None:
 
 @ut.logged()
 def _reset_subset_results(adata: AnnData, subset_cells_mask: ut.NumpyVector) -> None:
-    for name, value, formatter in (
-        ("metacell_level", 0, ut.sizes_description),
-        ("metacell", -1, ut.groups_description),
-    ):
+    for name, value, formatter in (("metacell", -1, ut.groups_description),):
         values = ut.get_o_numpy(adata, name, formatter=formatter).copy()
         values[subset_cells_mask] = value
         ut.set_o_data(adata, name, values, formatter=formatter)
@@ -1086,7 +1067,6 @@ def _compute_metacells_in_levels(
                 what,
                 prefix=f"{prefix}.level.{metacells_level}",
                 pile_of_cells=pile_of_cells,
-                metacells_level=metacells_level,
                 counts=counts,
                 collected_mask=collected_mask,
                 direct_parameters=dac_parameters.direct_parameters,
@@ -1131,9 +1111,13 @@ def _compute_metacell_groups(
     mdata = collect_metacells(
         sdata,
         what,
+        max_cell_size_quantile=None,
+        max_cell_size_factor=None,
+        max_cell_size_noisy_quantile=None,
+        max_cell_size_noisy_factor=None,
         groups=metacell_of_cells[subset_mask],
         name=prefix,
-        random_seed=dac_parameters.direct_parameters.random_seed,
+        _metacell_groups=True,
     )
 
     metacell_sizes = ut.get_o_numpy(mdata, "grouped")
@@ -1154,8 +1138,6 @@ def _compute_metacell_groups(
             target_metacell_size=dac_parameters.target_pile_size,
             select_correction=None,
             cell_sizes=metacell_sizes,
-            max_cell_size=None,
-            max_cell_size_factor=None,
             knn_k_size_factor=dac_parameters.piles_knn_k_size_factor,
             candidates_min_split_size_factor=dac_parameters.piles_min_split_size_factor,
             candidates_max_merge_size_factor=dac_parameters.piles_max_merge_size_factor,
@@ -1201,7 +1183,6 @@ def _compute_metacells_of_piles(
     *,
     prefix: str,
     pile_of_cells: ut.NumpyVector,
-    metacells_level: int,
     counts: List[int],
     collected_mask: ut.NumpyVector,
     direct_parameters: DirectParameters,
@@ -1253,7 +1234,6 @@ def _compute_metacells_of_piles(
                     adata=adata,
                     counts=counts,
                     collected_mask=collected_mask,
-                    metacells_level=metacells_level,
                 )
 
     ut.log_calc("collected counts", counts)
