@@ -60,6 +60,7 @@ __all__ = [
     "cross_logistics_rows",
     "pairs_logistics_rows",
     "log_data",
+    "median_per",
     "mean_per",
     "nanmean_per",
     "max_per",
@@ -985,6 +986,48 @@ def matrix_rows_folds_and_aurocs(
         )
 
     return (rows_folds, rows_auroc)
+
+
+@utm.timed_call()
+def median_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
+    """
+    Compute the mean value ``per`` (``row`` or ``column``) of some ``matrix``.
+
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
+    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
+    ``column``, and the matrix must be in the appropriate layout (``row_major`` operating on rows,
+    ``column_major`` for operating on columns).
+    """
+    per = _ensure_per_for("median", matrix, per)
+    axis = 1 - utt.PER_OF_AXIS.index(per)
+
+    sparse = utt.maybe_sparse_matrix(matrix)
+    if sparse is not None:
+        return _reduce_matrix("median", sparse, per, lambda sparse: _median_sparse(sparse, per))  # type: ignore
+
+    dense = utt.to_numpy_matrix(matrix, only_extract=True)
+    return _reduce_matrix("median", dense, per, lambda dense: np.median(dense, axis=axis))
+
+
+@utm.timed_call()
+def _median_sparse(sparse: utt.SparseMatrix, per: str) -> utt.NumpyVector:
+    """
+    Compute the median for each row or column of a sparse matrix.
+    """
+    if per == "row":
+        assert sparse.getformat() == "csr"
+    else:
+        assert sparse.getformat() == "csc"
+    axis = utt.PER_OF_AXIS.index(per)
+    output = np.empty(sparse.shape[axis], dtype=sparse.dtype)  # type: ignore
+    extension_name = "median_compressed_%s_t_%s_t_%s_t" % (  # pylint: disable=consider-using-f-string
+        sparse.data.dtype,  # type: ignore
+        sparse.indices.dtype,  # type: ignore
+        sparse.indptr.dtype,  # type: ignore
+    )
+    extension = getattr(xt, extension_name)
+    extension(sparse.data, sparse.indices, sparse.indptr, sparse.shape[1 - axis], output)  # type: ignore
+    return output
 
 
 @utm.timed_call()

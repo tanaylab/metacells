@@ -42,8 +42,5 @@ History
 * Restrict number of rare gene candidates.
 * Tighter control over metacells size and internal quality.
 * Improved divide-and-conquer strategy.
-* Terminology changes:
-  * Rename "forbidden" genes to "lateral" genes.
-  * Add "noisy" genes ("lateral", but also ignored when computing deviant outlier cells).
-  * Rename "feature" genes to "selected" genes.
-  * Rename "significant" genes to "marker" genes.
+* Base deviants (outliers) on median instead of mean
+* Terminology changes (see the README for details).

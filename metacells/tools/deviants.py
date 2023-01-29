@@ -226,18 +226,20 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
             assert compressed.has_canonical_format
             continue
 
-        data_of_candidate: ut.ProperMatrix = data[candidate_cell_indices, :].copy()
-        assert ut.is_layout(data_of_candidate, "row_major")
-        assert data_of_candidate.shape == (candidate_cells_count, genes_count)
+        umis_of_candidate_by_row: ut.ProperMatrix = data[candidate_cell_indices, :]
+        assert ut.is_layout(umis_of_candidate_by_row, "row_major")
+        assert umis_of_candidate_by_row.shape == (candidate_cells_count, genes_count)
 
         totals_of_candidate_cells = totals_of_cells[candidate_cell_indices]
 
-        totals_of_candidate_genes = ut.sum_per(ut.to_layout(data_of_candidate, "column_major"), per="column")
-        assert totals_of_candidate_genes.size == genes_count
+        fractions_of_candidate_by_row = ut.scale_by(
+            umis_of_candidate_by_row, np.reciprocal(totals_of_candidate_cells), by="row"
+        )
 
-        fractions_of_candidate_genes = ut.to_numpy_vector(totals_of_candidate_genes / np.sum(totals_of_candidate_genes))
+        fractions_of_candidate_by_column = ut.to_layout(fractions_of_candidate_by_row, "column_major")
+        medians_of_candidate_genes = ut.median_per(fractions_of_candidate_by_column, per="column")
 
-        _, dense, compressed = ut.to_proper_matrices(data_of_candidate)
+        _, dense, compressed = ut.to_proper_matrices(umis_of_candidate_by_row)
 
         if compressed is not None:
             if compressed.nnz == 0:
@@ -259,7 +261,7 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
                     min_gene_fold_factor,
                     abs_folds,
                     totals_of_candidate_cells,
-                    fractions_of_candidate_genes,
+                    medians_of_candidate_genes,
                 )
 
             if noisy_genes_mask is not None:
@@ -278,7 +280,7 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
                     min_gene_fold_factor,
                     abs_folds,
                     totals_of_candidate_cells,
-                    fractions_of_candidate_genes,
+                    medians_of_candidate_genes,
                 )
 
             if noisy_genes_mask is not None:

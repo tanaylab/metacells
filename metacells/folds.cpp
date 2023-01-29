@@ -188,6 +188,90 @@ top_distinct(pybind11::array_t<int32_t>& gene_indices_array,
                                abs_folds);
     });
 }
+//
+/// See the Python `metacell.utilities.computation._median_sparse` function.
+template<typename D, typename I, typename P>
+static void
+median_compressed(const pybind11::array_t<D>& data_array,
+                  const pybind11::array_t<I>& indices_array,
+                  const pybind11::array_t<P>& indptr_array,
+                  const size_t elements_count,
+                  pybind11::array_t<D>& medians_array) {
+    WithoutGil without_gil{};
+
+    ConstCompressedMatrix<D, I, P> data(ConstArraySlice<D>(data_array, "data"),
+                                        ConstArraySlice<I>(indices_array, "indices"),
+                                        ConstArraySlice<P>(indptr_array, "indptr"),
+                                        elements_count,
+                                        "data");
+
+    ArraySlice<D> medians(medians_array, "medians");
+
+    const size_t bands_count = medians_array.size();
+
+    FastAssertCompare(elements_count, >, 0);
+    FastAssertCompare(data.bands_count(), ==, bands_count);
+
+    if (elements_count % 2 == 1) {
+        const size_t median_rank = elements_count / 2;
+        parallel_loop(bands_count, [&](size_t band_index) {
+            auto band_data = data.get_band_data(band_index);
+            const size_t nnz_count = band_data.size();
+            const size_t zeros_count = elements_count - nnz_count;
+
+            if (median_rank < zeros_count) {
+                medians[band_index] = 0;
+            } else {
+                size_t median_position = median_rank - zeros_count;
+
+                TmpVectorSizeT raii_indices;
+                auto tmp_indices = raii_indices.array_slice("tmp_indices", nnz_count);
+                std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
+
+                std::nth_element(tmp_indices.begin(),
+                                 tmp_indices.begin() + median_position,
+                                 tmp_indices.end(),
+                                 [&](auto left, auto right) { return band_data[left] < band_data[right]; });
+                medians[band_index] = band_data[tmp_indices[median_position]];
+            }
+        });
+
+    } else {
+        const size_t high_rank = elements_count / 2;
+        const size_t low_rank = high_rank - 1;
+        parallel_loop(bands_count, [&](size_t band_index) {
+            auto band_data = data.get_band_data(band_index);
+            const size_t nnz_count = band_data.size();
+            const size_t zeros_count = elements_count - nnz_count;
+
+            if (high_rank < zeros_count) {
+                medians[band_index] = 0;
+            } else {
+                size_t high_position = high_rank - zeros_count;
+
+                TmpVectorSizeT raii_indices;
+                auto tmp_indices = raii_indices.array_slice("tmp_indices", nnz_count);
+                std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
+
+                std::nth_element(tmp_indices.begin(),
+                                 tmp_indices.begin() + high_position,
+                                 tmp_indices.end(),
+                                 [&](auto left, auto right) { return band_data[left] < band_data[right]; });
+                auto high_value = band_data[tmp_indices[high_position]];
+
+                D low_value = 0;
+                if (low_rank >= zeros_count) {
+                    size_t low_index =
+                        *std::max_element(tmp_indices.begin(),
+                                          tmp_indices.begin() + high_position,
+                                          [&](auto left, auto right) { return band_data[left] < band_data[right]; });
+                    low_value = band_data[low_index];
+                }
+                medians[band_index] = (low_value + high_value) / 2;
+            }
+        });
+    }
+}
 
 void
 register_folds(pybind11::module& module) {
@@ -201,7 +285,10 @@ register_folds(pybind11::module& module) {
 #define REGISTER_F_I_P(F, I, P)                             \
     module.def("fold_factor_compressed_" #F "_" #I "_" #P,  \
                &metacells::fold_factor_compressed<F, I, P>, \
-               "Fold factors of compressed data.");
+               "Fold factors of compressed data.");         \
+    module.def("median_compressed_" #F "_" #I "_" #P,       \
+               &metacells::median_compressed<F, I, P>,      \
+               "Medians of compressed data.");
 
 #define REGISTER_FS_I_P(I, P)       \
     REGISTER_F_I_P(float32_t, I, P) \

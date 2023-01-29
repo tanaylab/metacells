@@ -509,6 +509,9 @@ def _test_per(rows_matrix: ut.Matrix) -> None:
     assert np.allclose(ut.mean_per(rows_matrix, per="row"), np.array([3 / 3, 12 / 3]))
     assert np.allclose(ut.mean_per(columns_matrix, per="column"), np.array([3 / 2, 5 / 2, 7 / 2]))
 
+    assert np.allclose(ut.median_per(rows_matrix, per="row"), np.array([3 / 3, 12 / 3]))
+    assert np.allclose(ut.median_per(columns_matrix, per="column"), np.array([3 / 2, 5 / 2, 7 / 2]))
+
     assert np.allclose(
         ut.variance_per(rows_matrix, per="row"), np.array([5 / 3 - (3 / 3) ** 2, 50 / 3 - (12 / 3) ** 2])
     )
