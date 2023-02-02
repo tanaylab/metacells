@@ -919,7 +919,9 @@ cover_fraction: float = 1 / 3.0
 noise_fraction: float = 0.1
 
 #: The minimal total number of UMIs for a gene to compute meaningful quality statistics for it.
-#: See :py:func:`metacells.tools.quality.compute_inner_normalized_variance`.
+#: See :py:func:`metacells.tools.quality.compute_inner_normalized_variance`,
+#: :py:func:`metacells.tools.quality.compute_inner_fold_factors`, and
+#: :py:func:`metacells.tools.quality.compute_outliers_fold_factors`.
 quality_min_gene_total: int = 40
 
 #: The maximal amount of memory to use when guessing the number of parallel piles. If zero or
@@ -937,7 +939,7 @@ project_fold_normalization: float = 1e-5
 
 #: The minimal number of UMIs for a gene to be a potential cause to mark a metacell as dissimilar. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
-project_min_significant_gene_value: float = 40
+project_min_significant_gene_value: int = 40
 
 #: The number of atlas candidates to consider when projecting a query onto an atlas. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
@@ -963,33 +965,9 @@ project_abs_folds: bool = abs_folds
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
 project_max_consistency_fold_factor: float = significant_gene_fold_factor - 1.0
 
-#: The minimal fold factor for a gene to be significant for metacell quality. See
-#: :py:func:`metacells.tools.quality.compute_inner_fold_factors`.
-min_gene_inner_fold_factor: float = significant_gene_fold_factor
-
-#: The minimal fold factor for a gene entry in a metacell to be significant for metacell quality. See
-#: :py:func:`metacells.tools.quality.compute_inner_fold_factors`.
-min_entry_inner_fold_factor: float = significant_gene_fold_factor - 1.0
-
 #: Whether to consider the absolute fold factor when evaluating the inner folds. See
 #: :py:func:`metacells.tools.quality.compute_inner_fold_factors`.
 inner_abs_folds: bool = abs_folds
-
-#: The minimal fold factor for a gene to be significant for outliers. See
-#: :py:func:`metacells.tools.quality.compute_outliers_fold_factors`.
-min_gene_outliers_fold_factor: float = significant_gene_fold_factor
-
-#: The minimal fold factor for a gene entry in a metacell to be significant for outliers. See
-#: :py:func:`metacells.tools.quality.compute_outliers_fold_factors`.
-min_entry_outliers_fold_factor: float = significant_gene_fold_factor - 1.0
-
-#: Whether to consider the absolute fold factor when evaluating the outliers folds. See
-#: :py:func:`metacells.tools.quality.compute_outliers_fold_factors`.
-outliers_abs_folds: bool = abs_folds
-
-#: The minimal fold factor for a gene entry in a metacell to be significant for metacell projection quality. See
-#: :py:func:`metacells.tools.quality.compute_projected_fold_factors`.
-min_entry_project_fold_factor: float = significant_gene_fold_factor - 1.0
 
 #: The normalization factor to use when computing log of fractions for finding the most similar group for outliers. See
 #: :py:func:`metacells.tools.quality.compute_outliers_matches`.
@@ -1032,6 +1010,10 @@ min_marker_metacells_gene_range_fold_factor: float = 2.0
 #: computing metacell gene range folds. See
 #: :py:func:`metacells.tools.high.find_metacells_marker_genes`.
 metacells_gene_range_normalization: float = 1e-5
+
+#: The normalization factor to use after computing the normalized inner variance of metacell. See
+#: :py:func:`metacells.tools.quality.compute_inner_normalized_variance`.
+normalized_inner_variance_gene_normalization: float = 1e-5
 
 #: The minimal maximal gene expression in metacells to be a "marker".
 #: See :py:func:`metacells.tools.high.find_metacells_marker_genes`.

@@ -281,6 +281,7 @@ class SubsetResults:
         *,
         adata: AnnData,
         counts: List[int],
+        metacells_level: int,
         collected_mask: ut.NumpyVector,
     ) -> None:
         """
@@ -288,6 +289,7 @@ class SubsetResults:
         """
         metacell_of_cells = ut.get_o_numpy(adata, "metacell", formatter=ut.groups_description).copy()
         dissolved_of_cells = ut.get_o_numpy(adata, "dissolved", formatter=ut.groups_description).copy()
+        level_of_cells = ut.get_o_numpy(adata, "metacell_level").copy()
 
         if np.any(collected_mask):
             max_collected = np.max(metacell_of_cells[collected_mask])
@@ -304,8 +306,10 @@ class SubsetResults:
         counts[0] += metacells_count
         metacell_of_cells[self.full_cell_indices] = metacell_of_subset
         dissolved_of_cells[self.full_cell_indices] = dissolved_of_subset
+        level_of_cells[self.full_cell_indices] = metacells_level
         ut.set_o_data(adata, "metacell", metacell_of_cells, formatter=ut.groups_description)
         ut.set_o_data(adata, "dissolved", dissolved_of_cells)
+        ut.set_o_data(adata, "metacell_level", level_of_cells)
 
         assert not np.any(collected_mask[self.full_cell_indices])
         collected_mask[self.full_cell_indices] = True
@@ -613,6 +617,7 @@ def divide_and_conquer_pipeline(
                     prefix="rare" if name is None else name + ".rare",
                     counts=counts,
                     collected_mask=np.zeros(adata.n_obs, dtype="bool"),
+                    metacells_level=0,
                     direct_parameters=replace(
                         dac_parameters.direct_parameters,
                         dissolve_min_robust_size_factor=rare_dissolve_min_robust_size_factor,
@@ -872,6 +877,7 @@ def _initialize_divide_and_conquer_results(adata: AnnData) -> None:
     for name, value, dtype in (
         ("metacell", -1, "int32"),
         ("dissolved", False, "bool"),
+        ("metacell_level", -1, "int32"),
     ):
         ut.incremental(adata, "o", name)
         ut.set_o_data(
@@ -1070,6 +1076,7 @@ def _compute_metacells_in_levels(
                 counts=counts,
                 collected_mask=collected_mask,
                 direct_parameters=dac_parameters.direct_parameters,
+                metacells_level=metacells_level + 1,
             )
             assert np.all(collected_mask[subset_mask])
 
@@ -1186,6 +1193,7 @@ def _compute_metacells_of_piles(
     counts: List[int],
     collected_mask: ut.NumpyVector,
     direct_parameters: DirectParameters,
+    metacells_level: int,
 ) -> int:
     piles_count = np.max(pile_of_cells) + 1
 
@@ -1234,6 +1242,7 @@ def _compute_metacells_of_piles(
                     adata=adata,
                     counts=counts,
                     collected_mask=collected_mask,
+                    metacells_level=metacells_level,
                 )
 
     ut.log_calc("collected counts", counts)

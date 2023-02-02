@@ -51,7 +51,6 @@ def projection_pipeline(
     project_max_consistency_fold_factor: float = pr.project_max_consistency_fold_factor,
     project_max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
     project_max_dissimilar_genes: int = pr.project_max_dissimilar_genes,
-    min_entry_project_fold_factor: float = pr.min_entry_project_fold_factor,
     project_min_similar_essential_genes_fraction: Optional[float] = pr.project_min_similar_essential_genes_fraction,
     project_abs_folds: bool = pr.project_abs_folds,
     ignored_gene_names_of_type: Optional[Dict[str, Collection[str]]] = None,
@@ -283,15 +282,10 @@ def projection_pipeline(
         the query metacell. If it is now similar, mark it as a doublet or a mixture depending on whether the primary and
         the secondary types are different or identical.
 
-    16. Invoke :py:func:`metacells.utilities.computation.sparsify_matrix` to preserve only the significant
-        ``projected_fold`` values, using ``project_max_projection_fold_factor`` (default:
-        {project_max_projection_fold_factor}) and ``min_entry_project_fold_factor`` (default:
-        ``min_entry_project_fold_factor``).
-
-    17. Invoke :py:func:`metacells.tools.quality.compute_metacells_projection_correlation` to compute the correlation
+    16. Invoke :py:func:`metacells.tools.quality.compute_metacells_projection_correlation` to compute the correlation
         between the projected and the corrected UMIs of each query metacell.
 
-    18. If ``renormalize_query_by_atlas`` (default: {renormalize_query_by_atlas}), then invoke
+    17. If ``renormalize_query_by_atlas`` (default: {renormalize_query_by_atlas}), then invoke
         :py:func:`metacells.tools.project.renormalize_query_by_atlas` using the ``renormalize_var_annotations``,
         ``renormalize_layers`` and ``renormalize_varp_annotations``, if any, to add an ``ATLASNORM`` pseudo-gene so that
         the fraction out of the total UMIs in the query of the genes common to the atlas would be the same on average as
@@ -393,11 +387,8 @@ def projection_pipeline(
         adata=adata,
         qdata=qdata,
         common_qdata=common_qdata,
-        project_max_projection_fold_factor=project_max_projection_fold_factor,
-        min_entry_project_fold_factor=min_entry_project_fold_factor,
         project_min_similar_essential_genes_fraction=project_min_similar_essential_genes_fraction,
         atlas_type_property_name=atlas_type_property_name,
-        project_abs_folds=project_abs_folds,
     )
 
     tl.compute_metacells_projection_correlation(qdata, reproducible=reproducible)
@@ -554,11 +545,8 @@ def _convey_query_common_to_full_data(
     adata: AnnData,
     qdata: AnnData,
     common_qdata: AnnData,
-    project_max_projection_fold_factor: float,
-    min_entry_project_fold_factor: float,
     project_min_similar_essential_genes_fraction: Optional[float],
     atlas_type_property_name: str,
-    project_abs_folds: bool,
 ) -> None:
     similar_mask = ut.get_o_numpy(common_qdata, "similar")
     primary_type = ut.get_o_numpy(common_qdata, "projected_type")
@@ -633,13 +621,7 @@ def _convey_query_common_to_full_data(
     common_projected_fold = ut.get_vo_proper(common_qdata, "projected_fold")
     full_projected_fold = np.zeros(qdata.shape, dtype="float32")
     full_projected_fold[:, full_gene_index_of_common_qdata] = common_projected_fold
-    sparse_projected_fold = ut.sparsify_matrix(
-        full_projected_fold,
-        min_column_max_value=project_max_projection_fold_factor,
-        min_entry_value=min_entry_project_fold_factor,
-        abs_values=project_abs_folds,
-    )
-    ut.set_vo_data(qdata, "projected_fold", sp.csr_matrix(sparse_projected_fold))
+    ut.set_vo_data(qdata, "projected_fold", sp.csr_matrix(full_projected_fold))
 
     common_projected = ut.get_vo_proper(common_qdata, "projected")
     full_projected = np.zeros(qdata.shape, dtype="float32")
@@ -789,7 +771,7 @@ def _compute_preliminary_projection(
             query_total_umis=query_total_common_umis,
         )
 
-        tl.compute_projected_fold_factors(
+        tl.compute_projected_folds(
             included_qdata,
             what,
             total_umis=query_total_common_umis,
@@ -1235,7 +1217,7 @@ def _compute_type_projection(
         query_total_umis=query_type_total_common_umis,
     )
 
-    tl.compute_projected_fold_factors(
+    tl.compute_projected_folds(
         type_included_qdata,
         what,
         total_umis=query_type_total_common_umis,
@@ -1402,9 +1384,7 @@ def outliers_projection_pipeline(
     adata: AnnData,
     odata: AnnData,
     fold_normalization: float = pr.outliers_fold_normalization,
-    min_gene_outliers_fold_factor: float = pr.min_gene_outliers_fold_factor,
-    min_entry_outliers_fold_factor: float = pr.min_entry_outliers_fold_factor,
-    abs_folds: bool = pr.outliers_abs_folds,
+    project_min_significant_gene_value: int = pr.project_min_significant_gene_value,
     reproducible: bool,
 ) -> None:
     """
@@ -1431,9 +1411,7 @@ def outliers_projection_pipeline(
        (default: {fold_normalization}) and ``reproducible``.
 
     2. Invoke :py:func:`metacells.tools.quality.compute_outliers_fold_factors` using the ``fold_normalization``
-       (default: {fold_normalization}), ``min_gene_outliers_fold_factor`` (default: {min_gene_outliers_fold_factor}),
-       ``min_entry_outliers_fold_factor`` (default: {min_entry_outliers_fold_factor}) and ``abs_folds`` (default:
-       {abs_folds}).
+       (default: {fold_normalization}).
     """
     if list(odata.var_names) != list(adata.var_names):
         atlas_genes_list = list(adata.var_names)
@@ -1466,10 +1444,7 @@ def outliers_projection_pipeline(
         adata=common_odata,
         gdata=common_adata,
         most_similar="atlas_most_similar",
-        fold_normalization=fold_normalization,
-        min_gene_outliers_fold_factor=min_gene_outliers_fold_factor,
-        min_entry_outliers_fold_factor=min_entry_outliers_fold_factor,
-        abs_folds=abs_folds,
+        min_gene_total=project_min_significant_gene_value,
     )
 
     if list(odata.var_names) != list(adata.var_names):
@@ -1694,11 +1669,10 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
         query_total_umis=metacell_total_common_umis,
     )
 
-    tl.compute_projected_fold_factors(
+    tl.compute_projected_folds(
         metacell_included_qdata,
         what,
         total_umis=metacell_total_common_umis,
-        fold_normalization=project_fold_normalization,
         min_significant_gene_value=project_min_significant_gene_value,
     )
 

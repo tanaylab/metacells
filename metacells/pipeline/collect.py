@@ -12,6 +12,7 @@ import numpy as np
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
+import metacells.tools as tl
 import metacells.utilities as ut
 
 __all__ = [
@@ -205,6 +206,9 @@ def collect_metacells(  # pylint: disable=too-many-statements
     for annotation_name in adata.var.keys():
         value_per_gene = ut.get_v_numpy(adata, annotation_name)
         ut.set_v_data(mdata, annotation_name, value_per_gene)
+
+    if isinstance(groups, str) and ut.has_data(adata, "metacells_level"):
+        tl.convey_obs_to_group(adata=adata, gdata=mdata, group=groups, property_name="metacell_level")
 
     return mdata
 

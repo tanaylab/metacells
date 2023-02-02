@@ -10,7 +10,6 @@ from typing import Dict
 from typing import Optional
 from typing import Union
 
-import numpy as np
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
@@ -37,12 +36,12 @@ def compute_for_mcview(
     find_metacells_marker_genes: Optional[Dict[str, Any]] = {},
     compute_umap_by_markers_2: Optional[Dict[str, Any]] = {},
     compute_umap_by_markers_3: Optional[Dict[str, Any]] = {},
-    compute_inner_fold_factors: Optional[Dict[str, Any]] = {},
     compute_outliers_matches: Optional[Dict[str, Any]] = {},
-    compute_outliers_fold_factors: Optional[Dict[str, Any]] = {},
-    compute_deviant_fold_factors: Optional[Dict[str, Any]] = {},
+    compute_deviant_folds: Optional[Dict[str, Any]] = {},
+    compute_inner_folds: Optional[Dict[str, Any]] = {},
+    compute_inner_variance_folds: Optional[Dict[str, Any]] = {},
     compute_var_var_similarity: Optional[Dict[str, Any]] = dict(top=50, bottom=50),
-) -> Optional[AnnData]:
+) -> None:
     """
     Compute metacell analysis in preparation for exporting the data to MCView.
 
@@ -65,9 +64,7 @@ def compute_for_mcview(
 
     **Returns**
 
-    Sets many properties in ``gdata``, see below. If ``compute_outliers_fold_factors`` is not ``None``, return a new
-    annotated data containing just the outliers with their ``most_similar_fold`` sparse layer. Otherwise, returns
-    ``None``.
+    Sets many properties in ``gdata`` and some in ``adata``, see below.
 
     **Computation Parameters**
 
@@ -83,47 +80,48 @@ def compute_for_mcview(
        manifold structure (used to automatically generate cluster colors). Therefore in this case there are two
        dictionary parameters ``compute_umap_by_markers_2`` and ``compute_umap_by_markers_3``.
 
-    3. Compute for each gene and for each metacell the fold factor between the metacell cells using
-       :py:func:`metacells.tools.quality.compute_inner_fold_factors`.
-
-    4. Compute for each outlier cell the "most similar" metacecell for it using
+    3. Compute for each outlier cell the "most similar" metacecell for it using
        :py:func:`metacells.tools.quality.compute_outliers_matches`.
 
-    5. Compute for each metacell the fold factor between the metacell and the outliers most similar to it using
-       :py:func:`metacells.tools.quality.compute_deviant_fold_factors`.
+    4. Compute for each gene and cell the fold factor between the gene's expression and that of the metacell
+       it belongs to (or, for outliers, the one it is most similar to) using
+       :py:func:`metacells.tools.compute_deviant_folds`.
+
+    5. Compute for each gene for each metacell the maximal of the above using
+       :py:func:`metacells.tools.compute_inner_folds`.
+
+    6. Compute for each gene for each metacell the fold factor between its variance and mean using
+       :py:func:`metacells.tools.compute_inner_variance_folds`.
 
     6. Compute the gene-gene (variable-variable) similarity matrix. Note by default this will use
        {compute_var_var_similarity} which aren't the normal defaults for ``compute_var_var_similarity``, in order to
        keep just the top correlated genes and bottom (anti-)correlated genes for each gene. Otherwise you will get a
        dense matrix of ~X0K by ~X0K entries, which typically isn't what you want.
-
-    7. Compute for each gene and for each outlier cell the fold factor between the cell and the most similar
-       metacell using :py:func:`metacells.tools.quality.compute_outliers_fold_factors`.
     """
     reproducible = random_seed != 0
+
     if find_metacells_marker_genes is not None:
         tl.find_metacells_marker_genes(gdata, what, **find_metacells_marker_genes)
+
     if compute_umap_by_markers_3 is not None:
         compute_umap_by_markers(gdata, what, dimensions=3, random_seed=random_seed, **compute_umap_by_markers_3)
+
     if compute_umap_by_markers_2 is not None:
         compute_umap_by_markers(gdata, what, dimensions=2, random_seed=random_seed, **compute_umap_by_markers_2)
+
     if compute_outliers_matches is not None:
         tl.compute_outliers_matches(
             what, adata=adata, gdata=gdata, group=group, reproducible=reproducible, **compute_outliers_matches
         )
-    if compute_inner_fold_factors is not None:
-        tl.compute_inner_fold_factors(what, adata=adata, gdata=gdata, group=group, **compute_inner_fold_factors)
-    if compute_deviant_fold_factors is not None:
-        tl.compute_deviant_fold_factors(what, adata=adata, gdata=gdata, group=group, **compute_deviant_fold_factors)
+
+    if compute_deviant_folds is not None:
+        tl.compute_deviant_folds(what, adata=adata, gdata=gdata, group=group, **compute_deviant_folds)
+
+    if compute_inner_folds is not None:
+        tl.compute_inner_folds(adata=adata, gdata=gdata, group=group)
+
+    if compute_inner_variance_folds is not None:
+        tl.compute_inner_variance_folds(what, adata=adata, gdata=gdata, group=group, **compute_inner_variance_folds)
+
     if compute_var_var_similarity is not None:
         tl.compute_var_var_similarity(gdata, what, **compute_var_var_similarity)
-
-    if compute_outliers_fold_factors is None:
-        return None
-    group_of_cells = ut.get_o_numpy(adata, group)
-    outliers_mask = group_of_cells < 0
-    if np.sum(outliers_mask) == 0:
-        return None
-    odata = ut.slice(adata, name=".outliers", obs=outliers_mask)
-    tl.compute_outliers_fold_factors(what, adata=odata, gdata=gdata, **compute_outliers_fold_factors)
-    return odata

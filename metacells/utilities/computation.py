@@ -92,6 +92,7 @@ __all__ = [
     "rank_matrix_by_layout",
     "bincount_vector",
     "most_frequent",
+    "strongest",
     "highest_weight",
     "weighted_mean",
     "fraction_of_grouped",
@@ -1708,6 +1709,17 @@ def most_frequent(vector: utt.Vector) -> Any:
     counts = np.bincount(positions)
     maxpos = np.argmax(counts)
     return unique[maxpos]
+
+
+@utm.timed_call()
+def strongest(vector: utt.Vector) -> Any:
+    """
+    Return the strongest (maximal absolute) value in a ``vector``.
+
+    This is useful for :py:func:`metacells.tools.convey.convey_obs_to_group`.
+    """
+    vector = utt.to_numpy_vector(vector)
+    return vector[np.argmax(np.abs(vector))]
 
 
 @utm.timed_call()

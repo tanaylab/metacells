@@ -3,18 +3,15 @@ Quality
 -------
 """
 
-from typing import Any
 from typing import Collection
-from typing import List
 from typing import Optional
-from typing import Set
 from typing import Tuple
 from typing import TypeVar
 from typing import Union
 
 import numpy as np
+import scipy.sparse as sp  # type: ignore
 from anndata import AnnData  # type: ignore
-from scipy import sparse  # type: ignore
 
 import metacells.parameters as pr
 import metacells.utilities as ut
@@ -22,16 +19,15 @@ import metacells.utilities as ut
 from .mask import combine_masks
 
 __all__ = [
-    "compute_type_compatible_sizes",
-    "compute_inner_normalized_variance",
-    "compute_inner_fold_factors",
-    "compute_projected_fold_factors",
+    "compute_inner_variance_folds",
+    "compute_projected_folds",
     "compute_metacells_projection_correlation",
     "compute_similar_query_metacells",
     "compute_outliers_matches",
-    "compute_deviant_fold_factors",
-    "compute_outliers_fold_factors",
+    "compute_deviant_folds",
+    "compute_inner_folds",
     "compute_type_genes_normalized_variances",
+    "compute_outliers_fold_factors",
 ]
 
 
@@ -41,363 +37,30 @@ T = TypeVar("T")
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def compute_type_compatible_sizes(
-    adatas: List[AnnData],
-    *,
-    size: str = "grouped",
-    kind: str = "type",
-) -> None:
-    """
-    Given multiple annotated data of groups, compute a "compatible" size for each one to allow for
-    consistent inner normalized variance comparison.
-
-    Since the inner normalized variance quality measure is sensitive to the group (metacell) sizes,
-    it is useful to artificially shrink the groups so the sizes will be similar between the compared
-    data sets. Assuming each group (metacell) has a type annotation, for each such type, we give
-    each one a "compatible" size (less than or equal to its actual size) so that using this reduced
-    size will give us comparable measures between all the data sets.
-
-    The "compatible" sizes are chosen such that the density distributions of the sizes in all data
-    sets would be as similar to each other as possible.
-
-    .. note::
-
-        This is only effective if the groups are "similar" in size. Using this to compare very coarse
-        grouping (few thousands of cells) with fine-grained ones (few dozens of cells) will still
-        result in very different results.
-
-    **Input**
-
-    Several annotated ``adatas`` where each observation is a group. Should contain per-observation
-    ``size`` annotation (default: {size}) and ``kind`` annotation (default: {kind}).
-
-    **Returns**
-
-    Sets the following in each ``adata``:
-
-    Per-Observation (group) Annotations:
-
-        ``compatible_size``
-            The number of grouped cells in the group to use for computing excess R^2 and inner
-            normalized variance.
-
-    **Computation**
-
-    1. For each type, sort the groups (metacells) in increasing number of grouped observations (cells).
-
-    2. Consider the maximal quantile (rank) of the next smallest group (metacell) in each data set.
-
-    3. Compute the minimal number of grouped observations in all the metacells whose quantile is up
-       to this maximal quantile.
-
-    4. Use this as the "compatible" size for all these groups, and remove them from consideration.
-
-    5. Loop until all groups are assigned a "compatible" size.
-    """
-    assert len(adatas) > 0
-    if len(adatas) == 1:
-        ut.set_o_data(adatas[0], "compatible_size", ut.get_o_numpy(adatas[0], size, formatter=ut.sizes_description))
-        return
-
-    group_sizes_of_data = [ut.get_o_numpy(adata, size, formatter=ut.sizes_description) for adata in adatas]
-    group_types_of_data = [ut.get_o_numpy(adata, kind) for adata in adatas]
-
-    unique_types: Set[Any] = set()
-    for group_types in group_types_of_data:
-        unique_types.update(group_types)
-
-    compatible_size_of_data = [np.full(adata.n_obs, -1) for adata in adatas]
-
-    groups_count_of_data: List[int] = []
-    for type_index, group_type in enumerate(sorted(unique_types)):
-        with ut.log_step(f"- {group_type}", ut.progress_description(len(unique_types), type_index, "type")):
-            sorted_group_indices_of_data = [
-                np.argsort(group_sizes)[group_types == group_type]
-                for group_sizes, group_types in zip(group_sizes_of_data, group_types_of_data)
-            ]
-
-            groups_count_of_data = [len(sorted_group_indices) for sorted_group_indices in sorted_group_indices_of_data]
-
-            ut.log_calc("group_counts", groups_count_of_data)
-
-            def _for_each(value_of_data: List[T]) -> List[T]:
-                return [value for groups_count, value in zip(groups_count_of_data, value_of_data) if groups_count > 0]
-
-            groups_count_of_each = _for_each(groups_count_of_data)
-
-            if len(groups_count_of_each) == 0:
-                continue
-
-            sorted_group_indices_of_each = _for_each(sorted_group_indices_of_data)
-            group_sizes_of_each = _for_each(group_sizes_of_data)
-            compatible_size_of_each = _for_each(compatible_size_of_data)
-
-            if len(groups_count_of_each) == 1:
-                compatible_size_of_each[0][sorted_group_indices_of_each[0]] = group_sizes_of_each[0][
-                    sorted_group_indices_of_each[0]
-                ]
-
-            group_quantile_of_each = [
-                (np.arange(len(sorted_group_indices)) + 1) / len(sorted_group_indices)
-                for sorted_group_indices in sorted_group_indices_of_each
-            ]
-
-            next_position_of_each = np.full(len(group_quantile_of_each), 0)
-
-            while True:
-                next_quantile_of_each = [
-                    group_quantile[next_position]
-                    for group_quantile, next_position in zip(group_quantile_of_each, next_position_of_each)
-                ]
-                next_quantile = max(next_quantile_of_each)
-
-                last_position_of_each = next_position_of_each.copy()
-                next_position_of_each[:] = [
-                    np.sum(group_quantile <= next_quantile) for group_quantile in group_quantile_of_each
-                ]
-
-                positions_of_each = [
-                    range(last_position, next_position)
-                    for last_position, next_position in zip(last_position_of_each, next_position_of_each)
-                ]
-
-                sizes_of_each = [
-                    group_sizes[sorted_group_indices[positions]]
-                    for group_sizes, sorted_group_indices, positions in zip(
-                        group_sizes_of_each, sorted_group_indices_of_each, positions_of_each
-                    )
-                ]
-
-                min_size_of_each = [np.min(sizes) for sizes, positions in zip(sizes_of_each, positions_of_each)]
-                min_size = min(min_size_of_each)
-
-                for sorted_group_indices, positions, compatible_size in zip(
-                    sorted_group_indices_of_each, positions_of_each, compatible_size_of_each
-                ):
-                    compatible_size[sorted_group_indices[positions]] = min_size
-
-                is_done_of_each = [
-                    next_position == groups_count
-                    for next_position, groups_count in zip(next_position_of_each, groups_count_of_each)
-                ]
-                if all(is_done_of_each):
-                    break
-
-                assert not any(is_done_of_each)
-
-    for adata, compatible_size in zip(adatas, compatible_size_of_data):
-        assert np.min(compatible_size) > 0
-        ut.set_o_data(adata, "compatible_size", compatible_size)
-
-
-@ut.logged()
-@ut.timed_call()
-@ut.expand_doc()
-def compute_inner_normalized_variance(
+def compute_inner_variance_folds(
     what: Union[str, ut.Matrix] = "__x__",
     *,
-    compatible_size: Optional[str] = None,
-    downsample_min_samples: int = pr.downsample_min_samples,
-    downsample_min_cell_quantile: float = pr.downsample_min_cell_quantile,
-    downsample_max_cell_quantile: float = pr.downsample_max_cell_quantile,
     min_gene_total: int = pr.quality_min_gene_total,
     adata: AnnData,
     gdata: AnnData,
     group: Union[str, ut.Vector] = "metacell",
-    random_seed: int = pr.random_seed,
 ) -> None:
     """
-    Compute the inner normalized variance (variance / mean) for each gene in each group.
+    Compute the inner normalized variance (variance / mean) for each gene in each metacell.
 
-    This is also known as the "index of dispersion" and can serve as a quality measure for
-    the groups. An ideal group would contain only cells with "the same" biological state
-    and all remaining inner variance would be due to technical sampling noise.
-
-    **Input**
-
-    Annotated ``adata``, where the observations are cells and the variables are genes, where
-    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
-    annotation containing such a matrix.
-
-    In addition, ``gdata`` is assumed to have one observation for each group, and use the same
-    genes as ``adata``.
-
-    **Returns**
-
-    Sets the following in ``gdata``:
-
-    Per-Variable Per-Observation (Gene-Cell) Annotations
-
-        ``inner_variance``
-            For each gene and group, the variance of the gene in the group.
-
-        ``inner_normalized_variance``
-            For each gene and group, the normalized variance (variance over mean) of the
-            gene in the group.
-
-    **Computation Parameters**
-
-    For each group (metacell):
-
-    1. If ``compatible_size`` (default: {compatible_size}) is specified, it should be an
-       integer per-observation annotation of the groups, whose value is at most the
-       number of grouped cells in the group. Pick a random subset of the cells of
-       this size. If ``compatible_size`` is ``None``, use all the cells of the group.
-
-    2. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the surviving
-       cells to the same total number of UMIs, using the ``downsample_min_samples`` (default:
-       {downsample_min_samples}), ``downsample_min_cell_quantile`` (default:
-       {downsample_min_cell_quantile}), ``downsample_max_cell_quantile`` (default:
-       {downsample_max_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
-
-    3. Compute the normalized variance of each gene based on the downsampled data. Set the
-       result to ``nan`` for genes with less than ``min_gene_total`` (default: {min_gene_total}).
-    """
-    cells_data = ut.get_vo_proper(adata, what, layout="row_major")
-
-    if compatible_size is not None:
-        compatible_size_of_groups: Optional[ut.NumpyVector] = ut.get_o_numpy(
-            gdata, compatible_size, formatter=ut.sizes_description
-        )
-    else:
-        compatible_size_of_groups = None
-
-    group_of_cells = ut.get_o_numpy(adata, group, formatter=ut.groups_description)
-
-    groups_count = np.max(group_of_cells) + 1
-    assert groups_count > 0
-
-    assert gdata.n_obs == groups_count
-    variance_per_gene_per_group = np.full(gdata.shape, None, dtype="float32")
-    normalized_variance_per_gene_per_group = np.full(gdata.shape, None, dtype="float32")
-
-    for group_index in range(groups_count):
-        with ut.log_step(
-            "- group",
-            group_index,
-            formatter=lambda group_index: ut.progress_description(groups_count, group_index, "group"),
-        ):
-            if compatible_size_of_groups is not None:
-                compatible_size_of_group = compatible_size_of_groups[group_index]
-            else:
-                compatible_size_of_group = None
-
-            _collect_group_data(
-                group_index,
-                group_of_cells=group_of_cells,
-                cells_data=cells_data,
-                compatible_size=compatible_size_of_group,
-                downsample_min_samples=downsample_min_samples,
-                downsample_min_cell_quantile=downsample_min_cell_quantile,
-                downsample_max_cell_quantile=downsample_max_cell_quantile,
-                min_gene_total=min_gene_total,
-                random_seed=random_seed,
-                variance_per_gene_per_group=variance_per_gene_per_group,
-                normalized_variance_per_gene_per_group=normalized_variance_per_gene_per_group,
-            )
-
-    ut.set_vo_data(gdata, "inner_variance", variance_per_gene_per_group)
-    ut.set_vo_data(gdata, "inner_normalized_variance", normalized_variance_per_gene_per_group)
-
-
-def _collect_group_data(
-    group_index: int,
-    *,
-    group_of_cells: ut.NumpyVector,
-    cells_data: ut.ProperMatrix,
-    compatible_size: Optional[int],
-    downsample_min_samples: int,
-    downsample_min_cell_quantile: float,
-    downsample_max_cell_quantile: float,
-    min_gene_total: int,
-    random_seed: int,
-    variance_per_gene_per_group: ut.NumpyMatrix,
-    normalized_variance_per_gene_per_group: ut.NumpyMatrix,
-) -> None:
-    cell_indices = np.where(group_of_cells == group_index)[0]
-    cells_count = len(cell_indices)
-    if cells_count < 2:
-        return
-
-    if compatible_size is None:
-        ut.log_calc("  cells", cells_count)
-    else:
-        assert 0 < compatible_size <= cells_count
-        if compatible_size < cells_count:
-            np.random.seed(random_seed)
-            if ut.logging_calc():
-                ut.log_calc(
-                    "  cells: " + ut.ratio_description(len(cell_indices), "cell", compatible_size, "compatible")
-                )
-            cell_indices = np.random.choice(cell_indices, size=compatible_size, replace=False)
-            assert len(cell_indices) == compatible_size
-
-    assert ut.is_layout(cells_data, "row_major")
-    group_data = cells_data[cell_indices, :]
-
-    total_per_cell = ut.sum_per(group_data, per="row")
-    samples = int(
-        round(
-            min(
-                max(downsample_min_samples, np.quantile(total_per_cell, downsample_min_cell_quantile)),
-                np.quantile(total_per_cell, downsample_max_cell_quantile),
-            )
-        )
-    )
-    if ut.logging_calc():
-        ut.log_calc(f"  samples: {samples}")
-    downsampled_data = ut.downsample_matrix(group_data, per="row", samples=samples, random_seed=random_seed)
-
-    downsampled_data = ut.to_layout(downsampled_data, layout="column_major")
-    total_per_gene = ut.sum_per(downsampled_data, per="column")
-    too_small_genes = total_per_gene < min_gene_total
-    if ut.logging_calc():
-        included_genes_count = len(too_small_genes) - np.sum(too_small_genes)
-        ut.log_calc(f"  included genes: {included_genes_count}")
-
-    variance_per_gene = ut.variance_per(downsampled_data, per="column")
-    normalized_variance_per_gene = ut.normalized_variance_per(downsampled_data, per="column")
-
-    variance_per_gene[too_small_genes] = None
-    normalized_variance_per_gene[too_small_genes] = None
-
-    variance_per_gene_per_group[group_index, :] = variance_per_gene
-    normalized_variance_per_gene_per_group[group_index, :] = normalized_variance_per_gene
-
-
-@ut.logged()
-@ut.timed_call()
-@ut.expand_doc()
-def compute_inner_fold_factors(
-    what: Union[str, ut.Matrix] = "__x__",
-    *,
-    adata: AnnData,
-    gdata: AnnData,
-    group: Union[str, ut.Vector] = "metacell",
-    min_gene_inner_fold_factor: float = pr.min_gene_inner_fold_factor,
-    min_entry_inner_fold_factor: float = pr.min_entry_inner_fold_factor,
-    inner_abs_folds: bool = pr.inner_abs_folds,
-) -> None:
-    """
-    Compute the inner fold factors of genes within in each metacell.
-
-    This computes, for each cell of the metacell, the same fold factors that are used to detect deviant cells (see
-    :py:func:`metacells.tools.deviants.find_deviant_cells`), and keeps the maximal fold for each gene in the metacell.
-    The result per-metacell-per-gene matrix is then made sparse by discarding too-low values (setting them to zero).
-    Ideally, this matrix should be "very" sparse. If it contains "too many" non-zero values, this indicates the
-    metacells contains "too much" variability. This may be due to actual biology (e.g. immune cells or olfactory nerves
-    which are all similar except for each one expressing one different gene), due to batch effects (similar cells in
-    distinct batches differing in some genes due to technical issues), due to low data quality (the overall noise level
-    is so high that this is simply the best the algorithm can do), or worse - a combination of the above.
+    This is also known as the "index of dispersion" and can serve as a quality measure for the groups. An ideal metacell
+    would contain only cells with "the same" biological state and all remaining inner variance would be due to technical
+    sampling noise, so the inner normalized variance should be 1. In practice we see higher values - the lower, the
+    better.
 
     **Input**
 
     Annotated ``adata``, where the observations are cells and the variables are genes, where ``what`` is a
-    per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
-    matrix.
+    per-variable-per-observation (UMIs) matrix or the name of a per-variable-per-observation annotation containing such
+    a matrix.
 
-    In addition, ``gdata`` is assumed to have one observation for each group, and use the same
-    genes as ``adata``.
+    In addition, ``gdata`` is assumed to have one (fraction) observation for each metacell, a ``total_umis`` per
+    metacell, and use the same genes as ``adata``.
 
     **Returns**
 
@@ -405,84 +68,100 @@ def compute_inner_fold_factors(
 
     Per-Variable Per-Observation (Gene-Cell) Annotations
 
-        ``inner_fold``
-            For each gene and group, the maximal fold factor of this gene in any cell contained in the group (unless the
-            value is too low to be of interest, in which case it will be zero).
+        ``inner_variance_fold``
+            For each gene and metacell, the normalized variance (variance over mean) of the gene in the metacell,
+            if it has a sufficient number of UMIs to make this meaningful (otherwise, is 0).
 
     **Computation Parameters**
 
-    1. For each group (metacell), for each gene, compute the gene's maximal (in all the cells of the group) fold factor
-       log2((actual UMIs + 1) / (expected UMIs + 1)), similarly to
-       :py:func:`metacells.tools.deviants.find_deviant_cells`.
+    For each metacell:
 
-    2. If the maximal fold factor for a gene (across all metacells) is below ``min_gene_inner_fold_factor`` (default:
-       {min_gene_inner_fold_factor}), then set all the gene's fold factors to zero (too low to be of interest). If
-       ``inner_abs_folds`` (default: {inner_abs_folds}), consider the absolute fold factors.
+    1. Compute the median number of UMIs for a cell in the metacell. Scale all the UMIs so that the total number per
+       cell is this median.
 
-    3. Otherwise, for any metacell whose fold factor for the gene is less than ``min_entry_inner_fold_factor`` (default:
-       {min_entry_inner_fold_factor}), set the fold factor to zero (too low to be of interest).
+    2. Compute the ratio between the variance of these normalized UMIs, and the expected number of UMIs if using
+       the metacells overall per-gene fractions.
+
+    3. Set the ratio to 1.0 for genes that do not have at least ``min_gene_total`` (default: {min_gene_total}) UMIs in
+       the metacell.
     """
-    assert 0 <= min_entry_inner_fold_factor <= min_gene_inner_fold_factor
+    assert list(adata.var_names) == list(gdata.var_names)
 
-    cells_data = ut.get_vo_proper(adata, what, layout="row_major")
-    metacells_data = ut.get_vo_proper(gdata, what, layout="row_major")
-    group_of_cells = ut.get_o_numpy(adata, group, formatter=ut.groups_description)
-    total_umis_per_cell = ut.sum_per(cells_data, per="row")
-    total_umis_per_metacell = ut.sum_per(metacells_data, per="row")
+    metacell_of_cells = ut.get_o_numpy(adata, group, formatter=ut.groups_description)
+    assert gdata.n_obs == np.max(metacell_of_cells) + 1
 
-    @ut.timed_call("compute_metacell_inner_folds")
-    def _compute_single_metacell_inner_folds(metacell_index: int) -> ut.NumpyVector:
-        return _compute_metacell_inner_folds(
+    umis_per_gene_per_cell = ut.get_vo_proper(adata, what, layout="row_major")
+    total_umis_per_metacell = ut.get_o_numpy(gdata, "total_umis")
+    fraction_per_gene_per_metacell = ut.to_numpy_matrix(ut.get_vo_proper(adata, what, layout="row_major"), copy=True)
+
+    @ut.timed_call()
+    def _single_metacell_inner_variance(metacell_index: int) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
+        return _compute_metacell_inner_variance(
             metacell_index=metacell_index,
-            cells_data=cells_data,
-            metacells_data=metacells_data,
-            group_of_cells=group_of_cells,
-            total_umis_per_cell=total_umis_per_cell,
+            metacell_of_cells=metacell_of_cells,
+            umis_per_gene_per_cell=umis_per_gene_per_cell,
+            fraction_per_gene_per_metacell=fraction_per_gene_per_metacell,
             total_umis_per_metacell=total_umis_per_metacell,
+            min_gene_total=min_gene_total,
         )
 
-    results = list(ut.parallel_map(_compute_single_metacell_inner_folds, gdata.n_obs))
-    dense_inner_folds_by_row = np.array(results)
-    dense_inner_folds_by_column = ut.to_layout(dense_inner_folds_by_row, "column_major")
-    sparse_inner_folds = ut.sparsify_matrix(
-        dense_inner_folds_by_column,
-        min_column_max_value=min_gene_inner_fold_factor,
-        min_entry_value=min_entry_inner_fold_factor,
-        abs_values=inner_abs_folds,
+    results = list(ut.parallel_map(_single_metacell_inner_variance, gdata.n_obs))
+    data = np.concatenate([metacell_fold_factors for _metacell_gene_indices, metacell_fold_factors in results])
+    indices = np.concatenate([metacell_gene_indices for metacell_gene_indices, _metacell_fold_factors in results])
+    indptr = np.array(
+        [0] + [len(metacell_gene_indices) for metacell_gene_indices, _metacell_fold_factors in results], dtype="int32"
     )
-    ut.set_vo_data(gdata, "inner_fold", sparse_inner_folds)
+    np.cumsum(indptr, out=indptr)
+
+    assert data.dtype == "float32"
+    assert indices.dtype == "int32"
+    assert indptr.dtype == "int32"
+
+    fold_per_gene_per_metacell = sp.csr_matrix((data, indices, indptr), shape=gdata.shape)
+    ut.set_vo_data(gdata, "inner_variance_fold", sp.csr_matrix(fold_per_gene_per_metacell))
 
 
 @ut.logged()
-def _compute_metacell_inner_folds(
+def _compute_metacell_inner_variance(
     *,
     metacell_index: int,
-    cells_data: ut.Matrix,
-    metacells_data: ut.Matrix,
-    group_of_cells: ut.NumpyVector,
-    total_umis_per_cell: ut.NumpyVector,
+    metacell_of_cells: ut.NumpyVector,
+    umis_per_gene_per_cell: ut.ProperMatrix,
+    fraction_per_gene_per_metacell: ut.NumpyMatrix,
     total_umis_per_metacell: ut.NumpyVector,
-) -> ut.NumpyVector:
-    grouped_cells_mask = group_of_cells == metacell_index
-    assert np.sum(grouped_cells_mask) > 0
-    grouped_cells_data = ut.to_numpy_matrix(cells_data[grouped_cells_mask, :])
-    total_umis_per_grouped_cell = total_umis_per_cell[grouped_cells_mask]
-    metacell_data = metacells_data[metacell_index, :]
-    total_umis_of_metacell = total_umis_per_metacell[metacell_index]
-    expected_scale_per_grouped_cell = total_umis_per_grouped_cell / total_umis_of_metacell
-    expected_cells_data = expected_scale_per_grouped_cell[:, np.newaxis] * metacell_data[np.newaxis, :]
-    assert expected_cells_data.shape == grouped_cells_data.shape
-    fold_factors_per_grouped_cell = np.log2((expected_cells_data + 1) / (grouped_cells_data + 1))
-    fold_factors = ut.max_per(ut.to_layout(fold_factors_per_grouped_cell, "column_major"), per="column")
-    max_fold_factor = np.max(fold_factors)
-    ut.log_calc("max_fold_factor", max_fold_factor)
-    return fold_factors
+    min_gene_total: int,
+) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
+    cell_indices = np.where(metacell_of_cells == metacell_index)[0]
+
+    umis_per_gene_per_cell = ut.to_numpy_matrix(umis_per_gene_per_cell[cell_indices, :])
+    total_umis_per_cell = ut.sum_per(umis_per_gene_per_cell, per="row")
+    median_total_umis = np.median(total_umis_per_cell)
+
+    total_umis_per_cell[total_umis_per_cell == 0] = 1
+    scale_per_cell = median_total_umis / total_umis_per_cell
+    scaled_umis_per_gene_per_cell = ut.scale_by(umis_per_gene_per_cell, by="row", scale=scale_per_cell)
+    scaled_umis_per_gene_per_cell = ut.to_layout(scaled_umis_per_gene_per_cell, "column_major")
+    variance_per_gene_of_metacell = ut.variance_per(scaled_umis_per_gene_per_cell, per="column")
+
+    mean_per_gene_of_metacell = ut.to_numpy_vector(fraction_per_gene_per_metacell[metacell_index, :], copy=True)
+    mask_per_gene_of_metacell = mean_per_gene_of_metacell < min_gene_total / total_umis_per_metacell[metacell_index]
+    mean_per_gene_of_metacell *= median_total_umis
+
+    mean_per_gene_of_metacell += 1
+    variance_per_gene_of_metacell += 1
+
+    fold_per_gene_of_metacell = np.log2(variance_per_gene_of_metacell) - np.log2(mean_per_gene_of_metacell)
+    fold_per_gene_of_metacell[mask_per_gene_of_metacell] = 0.0
+
+    gene_indices = np.where(fold_per_gene_of_metacell != 0)[0]
+    ut.log_calc("nnz_fold_genes_count", len(gene_indices))
+    return (gene_indices.astype("int32"), fold_per_gene_of_metacell[gene_indices].astype("float32"))
 
 
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def compute_projected_fold_factors(
+def compute_projected_folds(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
@@ -531,11 +210,13 @@ def compute_projected_fold_factors(
     metacells_fractions = ut.fraction_by(metacells_data, by="row", sums=total_umis)
     projected_fractions = ut.fraction_by(projected_data, by="row", sums=total_umis)
 
-    metacells_fractions += fold_normalization  # type: ignore
-    projected_fractions += fold_normalization  # type: ignore
+    metacells_fractions = ut.to_numpy_matrix(metacells_fractions)
+    projected_fractions = ut.to_numpy_matrix(projected_fractions)
 
-    dense_folds = metacells_fractions / projected_fractions  # type: ignore
-    dense_folds = np.log2(dense_folds, out=dense_folds)
+    metacells_fractions += fold_normalization
+    projected_fractions += fold_normalization
+
+    dense_folds = np.log2(metacells_fractions) - np.log2(projected_fractions)
 
     total_umis = ut.to_numpy_matrix(metacells_data + projected_data)  # type: ignore
     insignificant_folds_mask = total_umis < min_significant_gene_value
@@ -616,7 +297,7 @@ def compute_similar_query_metacells(
     Annotated query ``adata``, where the observations are metacells and the variables are genes.
 
     The data should contain per-observation-per-variable annotations ``projected_fold`` with the significant projection
-    folds factors, as computed by :py:func:`compute_projected_fold_factors`. If
+    folds factors, as computed by :py:func:`compute_projected_folds`. If
     ``min_essential_significant_genes_fraction``, and ``essential_genes_property`` are specified, then the data may
     contain additional per-observation (gene) mask(s) denoting the essential genes.
 
@@ -720,47 +401,47 @@ def compute_outliers_matches(
     """
     assert list(adata.var_names) == list(gdata.var_names)
 
-    group_of_cells = ut.get_o_numpy(adata, group)
-    outliers_mask = group_of_cells < 0
+    metacell_per_cell = ut.get_o_numpy(adata, group)
+    outliers_mask = metacell_per_cell < 0
     odata = ut.slice(adata, obs=outliers_mask)
 
     outliers_data = ut.get_vo_proper(odata, what, layout="row_major")
-    groups_data = ut.get_vo_proper(gdata, what, layout="row_major")
+    metacells_data = ut.get_vo_proper(gdata, what, layout="row_major")
 
     outliers_fractions = ut.fraction_by(outliers_data, by="row")
-    groups_fractions = ut.fraction_by(groups_data, by="row")
+    metacells_fractions = ut.fraction_by(metacells_data, by="row")
 
     outliers_fractions = ut.to_numpy_matrix(outliers_fractions)
-    groups_fractions = ut.to_numpy_matrix(groups_fractions)
+    metacells_fractions = ut.to_numpy_matrix(metacells_fractions)
 
     outliers_fractions += value_normalization
-    groups_fractions += value_normalization
+    metacells_fractions += value_normalization
 
     outliers_log_fractions = np.log2(outliers_fractions, out=outliers_fractions)
-    groups_log_fractions = np.log2(groups_fractions, out=groups_fractions)
+    metacells_log_fractions = np.log2(metacells_fractions, out=metacells_fractions)
 
-    outliers_groups_correlation = ut.cross_corrcoef_rows(
-        outliers_log_fractions, groups_log_fractions, reproducible=reproducible
+    outliers_metacells_correlation = ut.cross_corrcoef_rows(
+        outliers_log_fractions, metacells_log_fractions, reproducible=reproducible
     )
-    outliers_similar_group_indices = np.argmax(outliers_groups_correlation, axis=1)
-    assert len(outliers_similar_group_indices) == odata.n_obs
+    outliers_similar_metacell_indices = np.argmax(outliers_metacells_correlation, axis=1)
+    assert len(outliers_similar_metacell_indices) == odata.n_obs
 
-    cells_similar_group_indices = np.full(adata.n_obs, -1, dtype="int32")
-    cells_similar_group_indices[outliers_mask] = outliers_similar_group_indices
-    ut.set_o_data(adata, most_similar, cells_similar_group_indices)
+    cells_similar_metacell_indices = np.full(adata.n_obs, -1, dtype="int32")
+    cells_similar_metacell_indices[outliers_mask] = outliers_similar_metacell_indices
+    ut.set_o_data(adata, most_similar, cells_similar_metacell_indices)
 
 
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def compute_deviant_fold_factors(
+def compute_deviant_folds(
     what: Union[str, ut.Matrix] = "__x__",
     *,
     adata: AnnData,
     gdata: AnnData,
     group: Union[str, ut.Vector] = "metacell",
     most_similar: Union[str, ut.Vector] = "most_similar",
-    significant_gene_fold_factor: float = pr.significant_gene_fold_factor,
+    min_gene_total: int = pr.quality_min_gene_total,
 ) -> None:
     """
     Given an assignment of observations (cells) to groups (metacells) or, if an outlier, to the most similar groups,
@@ -795,162 +476,169 @@ def compute_deviant_fold_factors(
     **Computation Parameters**
 
     1. For each cell, compute the expected UMIs for each gene given the fraction of the gene in the metacells associated
-       with the cell (the one it is belongs to, or the most similar one for outliers). If this is less than
-       ``significant_gene_fold_factor`` (default: {significant_gene_fold_factor}), set it to zero so the result will be
-       sparse.
+       with the cell (the one it is belongs to, or the most similar one for outliers).
+
+    2. If the number of UMIs in the metacell (for grouped cells), or sum of the UMIs of the gene in an outlier cell and
+       the metacell, is less than ``min_gene_total`` (default: {min_gene_total}), set the fold factor to 0 as we do not
+       have sufficient data to robustly estimate it.
     """
-    cells_data = ut.get_vo_proper(adata, what, layout="row_major")
-    metacells_data = ut.get_vo_proper(gdata, what, layout="row_major")
-    total_umis_per_cell = ut.sum_per(cells_data, per="row")
-    total_umis_per_metacell = ut.sum_per(metacells_data, per="row")
+    umis_per_gene_per_cell = ut.get_vo_proper(adata, what, layout="row_major")
+    fraction_per_gene_per_metacell = ut.get_vo_proper(gdata, what, layout="row_major")
+    total_umis_per_metacell = ut.get_o_numpy(gdata, "total_umis")
 
-    group_of_cells = ut.get_o_numpy(adata, group, formatter=ut.groups_description)
-    most_similar_of_cells = ut.get_o_numpy(adata, most_similar, formatter=ut.groups_description)
+    metacell_per_cell = ut.get_o_numpy(adata, group, formatter=ut.groups_description)
+    most_similar_per_cell = ut.get_o_numpy(adata, most_similar, formatter=ut.groups_description)
+    outliers_mask = metacell_per_cell < 0
+    assert np.all(most_similar_per_cell[outliers_mask] >= 0)
+    assert np.all(most_similar_per_cell[~outliers_mask] < 0)
+    combined_per_cell = metacell_per_cell.copy()
+    combined_per_cell[outliers_mask] = most_similar_per_cell[outliers_mask]
 
-    @ut.timed_call("compute_cell_deviant_certificates")
-    def _compute_cell_deviant_certificates(cell_index: int) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
-        return _compute_cell_certificates(
+    @ut.timed_call()
+    def _single_cell_deviant_folds(cell_index: int) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
+        return _compute_cell_deviant_folds(
             cell_index=cell_index,
-            cells_data=cells_data,
-            metacells_data=metacells_data,
-            group_of_cells=group_of_cells,
-            most_similar_of_cells=most_similar_of_cells,
-            total_umis_per_cell=total_umis_per_cell,
+            umis_per_gene_per_cell=umis_per_gene_per_cell,
+            fraction_per_gene_per_metacell=fraction_per_gene_per_metacell,
+            outliers_mask=outliers_mask,
+            metacell_per_cell=combined_per_cell,
             total_umis_per_metacell=total_umis_per_metacell,
-            significant_gene_fold_factor=significant_gene_fold_factor,
+            min_gene_total=min_gene_total,
         )
 
-    results = list(ut.parallel_map(_compute_cell_deviant_certificates, adata.n_obs))
-
-    cell_indices = np.concatenate(
-        [np.full(len(result[0]), cell_index, dtype="int32") for cell_index, result in enumerate(results)]
+    results = list(ut.parallel_map(_single_cell_deviant_folds, adata.n_obs))
+    data = np.concatenate([cell_fold_factors for _cell_gene_indices, cell_fold_factors in results])
+    indices = np.concatenate([cell_gene_indices for cell_gene_indices, _cell_fold_factors in results])
+    indptr = np.array(
+        [0] + [len(cell_gene_indices) for cell_gene_indices, _cell_fold_factors in results], dtype="int32"
     )
-    gene_indices = np.concatenate([result[0] for result in results])
-    fold_factors = np.concatenate([result[1] for result in results])
+    np.cumsum(indptr, out=indptr)
 
-    deviant_folds = sparse.csr_matrix((fold_factors, (cell_indices, gene_indices)), shape=adata.shape)
-    ut.set_vo_data(adata, "deviant_folds", deviant_folds)
+    assert data.dtype == "float32"
+    assert indices.dtype == "int32"
+    assert indptr.dtype == "int32"
+
+    fold_factors_per_gene_per_cell = sp.csr_matrix((data, indices, indptr), shape=adata.shape)
+    ut.set_vo_data(adata, "deviant_fold", fold_factors_per_gene_per_cell)
 
 
 @ut.logged()
-def _compute_cell_certificates(
+def _compute_cell_deviant_folds(
     *,
     cell_index: int,
-    cells_data: ut.Matrix,
-    metacells_data: ut.Matrix,
-    group_of_cells: ut.NumpyVector,
-    most_similar_of_cells: ut.NumpyVector,
-    total_umis_per_cell: ut.NumpyVector,
+    umis_per_gene_per_cell: ut.Matrix,
+    fraction_per_gene_per_metacell: ut.Matrix,
+    metacell_per_cell: ut.NumpyVector,
+    outliers_mask: ut.NumpyVector,
     total_umis_per_metacell: ut.NumpyVector,
-    significant_gene_fold_factor: float,
+    min_gene_total: int,
 ) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
-    group_index = group_of_cells[cell_index]
-    most_similar_index = most_similar_of_cells[cell_index]
-    assert (group_index < 0) != (most_similar_index < 0)
-    metacell_index = max(group_index, most_similar_index)
+    actual_umis_per_gene = ut.to_numpy_vector(umis_per_gene_per_cell[cell_index, :], copy=True)
+    total_umis_of_cell = np.sum(actual_umis_per_gene)
 
-    expected_scale = total_umis_per_cell[cell_index] / total_umis_per_metacell[metacell_index]
-    expected_data = ut.to_numpy_vector(metacells_data[metacell_index, :], copy=True)
-    expected_data *= expected_scale
+    metacell_index = metacell_per_cell[cell_index]
+    total_umis_of_metacell = total_umis_per_metacell[metacell_index]
+    metacell_fraction_per_gene = ut.to_numpy_vector(fraction_per_gene_per_metacell[metacell_index, :])
+    metacell_umis_per_gene = total_umis_of_metacell * metacell_fraction_per_gene
+    expected_umis_per_gene = total_umis_of_cell * metacell_fraction_per_gene
 
-    actual_data = ut.to_numpy_vector(cells_data[cell_index, :], copy=True)
+    if outliers_mask[cell_index]:
+        total_umis_per_gene = actual_umis_per_gene + metacell_umis_per_gene
+    else:
+        total_umis_per_gene = metacell_umis_per_gene
 
-    expected_data += 1.0
-    actual_data += 1.0
+    actual_umis_per_gene += 1
+    expected_umis_per_gene += 1
+    fold_factors = np.log2(actual_umis_per_gene) - np.log2(expected_umis_per_gene)
 
-    fold_factors = actual_data
-    fold_factors /= expected_data
-    fold_factors = np.log2(fold_factors, out=fold_factors)
-    fold_factors = np.abs(fold_factors, out=fold_factors)
-
-    significant_folds_mask = fold_factors >= significant_gene_fold_factor
-    ut.log_calc("significant_folds_mask", significant_folds_mask)
-
-    significant_gene_indices = np.where(significant_folds_mask)[0].astype("int32")
-    significant_gene_folds = fold_factors[significant_folds_mask].astype("float32")
-    return (significant_gene_indices, significant_gene_folds)
+    gene_indices = np.where(total_umis_per_gene >= min_gene_total)[0].astype("int32")
+    ut.log_calc("nnz_fold_genes_count", len(gene_indices))
+    return (gene_indices.astype("int32"), fold_factors[gene_indices].astype("float32"))
 
 
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def compute_outliers_fold_factors(
-    what: Union[str, ut.Matrix] = "__x__",
+def compute_inner_folds(
     *,
     adata: AnnData,
     gdata: AnnData,
-    most_similar: Union[str, ut.Vector] = "most_similar",
-    fold_normalization: float = pr.outliers_fold_normalization,
-    min_gene_outliers_fold_factor: float = pr.min_gene_outliers_fold_factor,
-    min_entry_outliers_fold_factor: float = pr.min_entry_outliers_fold_factor,
-    abs_folds: bool = pr.outliers_abs_folds,
+    group: Union[str, ut.Vector] = "metacell",
+    abs_folds: bool = pr.inner_abs_folds,
 ) -> None:
     """
-    Given annotated data which is a slice containing just the outliers, where each has a "most similar" group, compute
-    for each observation and gene the fold factor relative to its group.
-
-    All outliers should have at least one (typically several) genes with high fold factors, which are the reason they
-    couldn't be merged into their most similar group.
-
-    **Input**
-
-    Annotated ``adata``, where the observations are outlier cells and the variables are genes, where ``what`` is a
-    per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
-    matrix.
-
-    In addition, ``gdata`` is assumed to have one observation for each group, and use the same genes as ``adata``.
-    It should have a ``marker_gene`` mask.
-
-    **Returns**
-
-    Sets the following in ``adata``:
-
-    Per-Variable Per-Observation (Gene-Cell) Annotations
-
-        ``<most_similar>_fold`` (default: {most_similar}_fold)
-            The fold factor between the outlier gene expression and their expression in the most similar group, (unless
-            the value is too low to be of interest, in which case it will be zero).
-
-    **Computation Parameters**
-
-    1. For each outlier, compute the expected UMIs for each gene given the fraction of the gene in the metacell
-       associated with the outlier by the ``most_similar`` (default: {most_similar}). If this is less than
-       ``min_entry_outliers_fold_factor`` (default: {min_entry_outliers_fold_factor}), or if the gene doesn't
-       have a fold factor of at least ``min_gene_outliers_fold_factor`` (default: {min_gene_outliers_fold_factor})
-       in any outlier, this is set to zero to make the matrix sparse. Also, all columns for genes not listed
-       in the ``marker_gene`` mask are also set to zero.
+    Given ``adata`` with computed ``deviant_fold`` for each gene for each cell, set in ``inner_fold`` in ``gdata``, for
+    each gene for each metacell the ``deviant_fold`` with the maximal absolute value (if ``abs_folds``, default:
+    {abs_folds}), otherwise just with the maximal value.
     """
-    assert list(adata.var_names) == list(gdata.var_names)
+    group_per_cell = ut.get_o_numpy(adata, group)
+    deviant_fold_per_gene_per_cell = ut.get_vo_proper(adata, "deviant_fold")
 
-    most_similar_of_outliers = ut.get_o_numpy(adata, most_similar, formatter=ut.groups_description)
-    assert np.min(most_similar_of_outliers) >= 0
+    @ut.timed_call()
+    def _single_metacell_inner_folds(metacell_index: int) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
+        return _compute_metacell_inner_folds(
+            metacell_index=metacell_index,
+            group_per_cell=group_per_cell,
+            deviant_fold_per_gene_per_cell=deviant_fold_per_gene_per_cell,
+            abs_folds=abs_folds,
+        )
 
-    outliers_data = ut.to_numpy_matrix(ut.get_vo_proper(adata, what, layout="row_major"))
-    groups_data = ut.to_numpy_matrix(ut.get_vo_proper(gdata, what, layout="row_major"))
-    most_similar_data = groups_data[most_similar_of_outliers, :]
+    results = list(ut.parallel_map(_single_metacell_inner_folds, gdata.n_obs))
 
-    outliers_fractions = ut.fraction_by(outliers_data, by="row")
-    most_similar_fractions = ut.fraction_by(most_similar_data, by="row")
-
-    outliers_fractions += fold_normalization  # type: ignore
-    most_similar_fractions += fold_normalization  # type: ignore
-
-    outliers_log_fractions = np.log2(outliers_fractions, out=outliers_fractions)  # type: ignore
-    most_similar_log_fractions = np.log2(most_similar_fractions, out=most_similar_fractions)  # type: ignore
-
-    fold_factors = ut.to_layout(outliers_log_fractions - most_similar_log_fractions, layout="column_major")
-
-    marker_gene_mask = ut.get_v_numpy(gdata, "marker_gene")
-    fold_factors[:, ~marker_gene_mask] = 0
-
-    sparse_folds = ut.sparsify_matrix(
-        fold_factors,
-        min_column_max_value=min_gene_outliers_fold_factor,
-        min_entry_value=min_entry_outliers_fold_factor,
-        abs_values=abs_folds,
+    data = np.concatenate([metacell_fold_factors for _metacell_gene_indices, metacell_fold_factors in results])
+    indices = np.concatenate([metacell_gene_indices for metacell_gene_indices, _metacell_fold_factors in results])
+    assert len(data) == len(indices)
+    indptr = np.array(
+        [0] + [len(metacell_gene_indices) for metacell_gene_indices, _metacell_fold_factors in results], dtype="int32"
     )
+    np.cumsum(indptr, out=indptr)
 
-    ut.set_vo_data(adata, f"{most_similar}_fold", sparse_folds)
+    assert data.dtype == "float32"
+    assert indices.dtype == "int32"
+    assert indptr.dtype == "int32"
+
+    fold_factors_per_gene_per_metacell = sp.csr_matrix((data, indices, indptr), shape=gdata.shape)
+    ut.set_vo_data(gdata, "inner_fold", fold_factors_per_gene_per_metacell)
+
+
+@ut.logged()
+def _compute_metacell_inner_folds(
+    *,
+    metacell_index: int,
+    group_per_cell: ut.NumpyVector,
+    deviant_fold_per_gene_per_cell: ut.ProperMatrix,
+    abs_folds: bool,
+) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
+    cells_mask = group_per_cell == metacell_index
+    cells_count = np.sum(cells_mask)
+    assert cells_count > 0
+    genes_count = deviant_fold_per_gene_per_cell.shape[1]
+
+    tmp_deviant_fold_per_gene_per_cell = ut.to_numpy_matrix(
+        deviant_fold_per_gene_per_cell[cells_mask, :], copy=abs_folds
+    )
+    tmp_deviant_fold_per_gene_per_cell = ut.to_layout(tmp_deviant_fold_per_gene_per_cell, layout="column_major")
+    assert tmp_deviant_fold_per_gene_per_cell.shape == (cells_count, genes_count)
+
+    if abs_folds:
+        negative_folds_mask = tmp_deviant_fold_per_gene_per_cell < 0
+        tmp_deviant_fold_per_gene_per_cell[negative_folds_mask] *= -1
+
+    max_index_per_gene = np.argmax(tmp_deviant_fold_per_gene_per_cell, axis=0)
+    assert len(max_index_per_gene) == genes_count
+
+    if abs_folds:
+        tmp_deviant_fold_per_gene_per_cell[negative_folds_mask] *= -1
+
+    # ut.log_calc("max_index_per_gene", str(list(max_index_per_gene)))
+    # ut.log_calc("tmp_deviant_fold_per_gene_per_cell", tmp_deviant_fold_per_gene_per_cell)
+    max_deviant_fold_per_gene = tmp_deviant_fold_per_gene_per_cell[max_index_per_gene, range(genes_count)]
+    # ut.log_calc("max_deviant_fold_per_gene", str(list(max_deviant_fold_per_gene)))
+    assert len(max_deviant_fold_per_gene) == genes_count
+
+    gene_indices = np.where(max_deviant_fold_per_gene != 0.0)[0].astype("int32")
+    ut.log_calc("nnz_fold_genes_count", len(gene_indices))
+    return (gene_indices.astype("int32"), max_deviant_fold_per_gene[gene_indices].astype("float32"))
 
 
 @ut.logged()
@@ -1004,7 +692,7 @@ def compute_type_genes_normalized_variances(
     unique_types = np.unique(type_of_metacell)
     ut.log_calc("types_count", len(unique_types))
 
-    metacell_of_cells = ut.get_o_numpy(adata, group_property)
+    metacell_per_cell = ut.get_o_numpy(adata, group_property)
     cells_umis = ut.get_vo_proper(adata, what, layout="row_major")
 
     @ut.logged()
@@ -1020,7 +708,7 @@ def compute_type_genes_normalized_variances(
 
         for position, metacell_index in enumerate(type_metacells_indices):
             _compute_metacell_genes_normalized_variances(
-                metacell_of_cells=metacell_of_cells,
+                metacell_per_cell=metacell_per_cell,
                 cells_umis=cells_umis,
                 position=position,
                 metacell_index=metacell_index,
@@ -1044,13 +732,13 @@ def compute_type_genes_normalized_variances(
 @ut.timed_call()
 def _compute_metacell_genes_normalized_variances(
     *,
-    metacell_of_cells: ut.NumpyVector,
+    metacell_per_cell: ut.NumpyVector,
     cells_umis: ut.Matrix,
     position: int,
     metacell_index: int,
     type_gene_normalized_variances_per_metacell: ut.NumpyVector,
 ) -> None:
-    metacell_cells_mask = metacell_of_cells == metacell_index
+    metacell_cells_mask = metacell_per_cell == metacell_index
     metacell_umis = cells_umis[metacell_cells_mask, :]
     total_umis = ut.sum_per(metacell_umis, per="row")
     median_total_umis = np.median(total_umis)
@@ -1060,3 +748,77 @@ def _compute_metacell_genes_normalized_variances(
     metacell_fractions *= median_total_umis
     genes_normalized_variance = ut.normalized_variance_per(metacell_fractions, per="column")
     type_gene_normalized_variances_per_metacell[position, :] = genes_normalized_variance
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def compute_outliers_fold_factors(
+    what: Union[str, ut.Matrix] = "__x__",
+    *,
+    adata: AnnData,
+    gdata: AnnData,
+    most_similar: Union[str, ut.Vector] = "most_similar",
+    min_gene_total: int = pr.quality_min_gene_total,
+) -> None:
+    """
+    Given annotated data which is a slice containing just the outliers, where each has a "most similar" group, compute
+    for each observation and gene the fold factor relative to its group.
+
+    All outliers should have at least one (typically several) genes with high fold factors, which are the reason they
+    couldn't be merged into their most similar group.
+
+    **Input**
+
+    Annotated ``adata``, where the observations are outlier cells and the variables are genes, where ``what`` is a
+    per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
+    matrix.
+
+    In addition, ``gdata`` is assumed to have one observation for each group, and use the same genes as ``adata``.
+    It should have a ``marker_gene`` mask.
+
+    **Returns**
+
+    Sets the following in ``adata``:
+
+    Per-Variable Per-Observation (Gene-Cell) Annotations
+
+        ``<most_similar>_fold`` (default: {most_similar}_fold)
+            The fold factor between the outlier gene expression and their expression in the most similar group, (unless
+            the value is too low to be of interest, in which case it will be zero).
+
+    **Computation Parameters**
+
+    1. For each outlier, compute the expected UMIs for each gene given the fraction of the gene in the metacell
+       associated with the outlier by the ``most_similar`` (default: {most_similar}).
+
+    2. If the sum of the UMIs of the gene in cell and the metacell are less than ``min_gene_total`` (default:
+       {min_gene_total}), set the fold factor to 0 as we do not have sufficient data to robustly estimate it.
+    """
+    assert list(adata.var_names) == list(gdata.var_names)
+
+    actual_umis_per_gene_per_outlier = ut.to_numpy_matrix(ut.get_vo_proper(adata, what, layout="row_major"), copy=True)
+    total_umis_per_outlier = ut.sum_per(actual_umis_per_gene_per_outlier, per="row")
+
+    most_similar_of_outliers = ut.get_o_numpy(adata, most_similar, formatter=ut.groups_description)
+    assert np.min(most_similar_of_outliers) >= 0
+
+    metacells_data = ut.to_numpy_matrix(ut.get_vo_proper(gdata, what, layout="row_major"))
+    fraction_per_gene_per_most_similar = ut.to_numpy_matrix(metacells_data[most_similar_of_outliers, :])
+    total_umis_per_metacell = ut.get_o_numpy(gdata, "total_umis")
+    total_umis_per_gene_per_most_similar = fraction_per_gene_per_most_similar * total_umis_per_metacell[:, np.newaxis]
+
+    expected_umis_per_gene_per_outlier = fraction_per_gene_per_most_similar * total_umis_per_outlier[:, np.newaxis]
+    assert actual_umis_per_gene_per_outlier.shape == expected_umis_per_gene_per_outlier.shape
+
+    total_umis_per_gene_per_fold = actual_umis_per_gene_per_outlier + total_umis_per_gene_per_most_similar
+
+    actual_umis_per_gene_per_outlier += 1
+    expected_umis_per_gene_per_outlier += 1
+
+    fold_factor_per_gene_per_outlier = np.log2(actual_umis_per_gene_per_outlier) - np.log2(
+        expected_umis_per_gene_per_outlier
+    )
+    fold_factor_per_gene_per_outlier[total_umis_per_gene_per_fold < min_gene_total] = 0.0
+
+    ut.set_vo_data(adata, f"{most_similar}_fold", sp.csr_matrix(fold_factor_per_gene_per_outlier))

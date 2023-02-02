@@ -79,11 +79,13 @@ def test_direct_pipeline() -> None:
 
         mdata = mc.pl.collect_metacells(cdata)
 
-        mc.tl.compute_inner_normalized_variance(adata=cdata, gdata=mdata, random_seed=123456)
+        mc.pl.compute_for_mcview(adata=cdata, gdata=mdata, random_seed=123456)
 
-        expected_results = expected["inner_normalized_variance"]
+        expected_results = expected["inner_variance_fold"]
 
-        actual_results = np.nanmean(mc.ut.get_vo_proper(mdata, "inner_normalized_variance", layout="column_major"))
+        actual_results = np.mean(
+            mc.ut.to_numpy_matrix(mc.ut.get_vo_proper(mdata, "inner_variance_fold", layout="column_major"))
+        )
 
         # mc.ut.log_calc('PATH', path)
         # mc.ut.log_calc('EXPECT', expected_results)

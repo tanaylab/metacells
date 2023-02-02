@@ -167,6 +167,10 @@ metadata, and also:
     computing fold factors (log base 2 of the ratio) and related comparisons automatically ignore cases when this sum is
     below some threshold (40) by considering the effective fold factor to be 0 (that is, "no difference").
 
+``metacells_level`` per cell or metacell
+    This is 0 for rare gene module metacells, 1 for metacells computed from the main piles in the 2nd divide-and-conquer
+    phase and 2 for metacells computed for their outliers.
+
 If using ``divide_and_conquer_pipeline``, the following are also computed (but not by the simple
 ``compute_divide_and_conquer_metacells``:
 
@@ -190,25 +194,31 @@ One obvious measure is the number of outlier cells (with a negative metacell ind
 In addition, one should compute and look at the following (an easy way to compute all of them at once is to call
 ``compute_for_mcview``, this will change in the future):
 
-``inner_fold`` (computed by ``compute_inner_fold_factors``)
-    For each gene, in each metacell, hold the fold factor between the maximal and minimal gene expression level of the
-    gene in the cells of the metacells. This uses the same (strong) normalization factor we use when computing deviant
-    (outlier) cells, so ideally you will not see any fold factors above 3 (8x). Such fold factors may still exist when
-    we cap the fraction of deviant (outlier) cells (by default we cap it at 25%), however this should be rare for good
-    quality data sets. If the same genes have a high fold factor in many cells, you should consider marking them as
-    noisy genes (you can double check this by looking at the most similar fold, see below).
-
 ``most_similar``, ``most_similar_name`` per cell (computed by ``compute_outliers_most_similar``)
     For each outlier cell (whose metacell index is ``-1`` and metacell name is ``Outliers``), the index and name of the
     metacell which is the "most similar" to the cell (has highest correlation).
 
-``most_similar_fold`` per gene per cell (computed by ``compute_outliers_fold_factors``)
-    For each outlier cell, for each gene, hold the fold factor between the expression level of the gene in the cell and
-    the most similar metacell to that cell. This uses the same (strong) normalization factor we use when computing
-    deviant (outlier) cells, so you should see some (non-excluded, non-noisy) genes with a fold factor above 3 (8x)
-    which justify why we haven't merged that cell into a metacell. If there is a large number of outlier cells and a few
-    genes have a high fold factor for many of them, you should consider marking these genes as noisy and recomputing the
-    metacells.
+``deviant_fold`` per gene per cell (computed by ``compute_deviant_folds``)
+    For each cell, for each gene, the ``deviant_fold`` holds the fold factor (log base 2) between the expression level
+    of the gene in the cell and the metacell it belongs to (or the most similar metacell for outlier cells). This uses
+    the same (strong) normalization factor we use when computing deviant (outlier) cells, so for outliers, you should
+    see some (non-excluded, non-noisy) genes with a fold factor above 3 (8x) which justify why we haven't merged that
+    cell into a metacell; for cells grouped into metacells, you shouldn't see (many) such genes. If there is a large
+    number of outlier cells and a few genes have a high fold factor for many of them, you should consider marking these
+    genes as noisy and recomputing the metacells.
+
+``inner_fold`` per gene per metacell (computed by ``compute_inner_folds``)
+    For each metacell, for each gene, the ``inner_fold`` is the strongest (highest absolute value) ``deviant_fold`` of
+    any of the cells contained in the metacell. Both this and the ``inner_variance_fold`` below can be used for quality
+    control over the consistency of the gene expression in the metacell.
+
+``inner_variance_fold`` per gene per metacell (computed by ``compute_inner_variance_folds``)
+    For each metacell, for each gene, the variance of the fraction of the gene in the metacell cells, and the fold
+    factor (log base 2) of this over the mean gene expression. In an "ideal" metacell, all the cells should express the
+    same level of every gene, so that the only noise should be the result of multinomial sampling, so this fold factor
+    should be around 0 (variance identical to the mean). In practice we see higher fold factors of up to 1 (variance
+    which is 2x the mean). Both this and the ``inner_fold`` above can be used for quality control over the consistency
+    of the gene expression in the metacell.
 
 ``marker_gene`` mask (computed by ``find_metacells_marker_genes``)
     Given the computed metacells, we can identify genes that have a sufficient number of effective UMIs (in some
@@ -234,13 +244,11 @@ In addition, one should compute and look at the following (an easy way to comput
     data. Looking at specific gene-gene plots gives much more robust insight into the actual differences between the
     metacell types, identify doublets, etc.
 
-``u``, ``v``, ``w`` per metacell (computed by ``compute_umap_by_markers`` with ``dimentions=3``)
-    These are computed similar to ``x`` and ``y``, but project the metacells to a 3D space. One way to kickstart
-    analysis of brand-new metacells data is to use K-means to group them into some number of clusters (which wouldn't
-    map exactly to "types", but would be a start). To give a reasonable initial color to each such cluster, we project
-    the metacells to a 3D space (using the ``chameleon`` R package), and map that to colors, so that "similar" colors
-    are given to "similar" clusters. Using a 3D space allows the projection to better capture the "true" structure of
-    the data (and maps nicely to the 3D LAB color space), but of course it is still only an approximation.
+``obs_outgoing_weights`` per metacell per metacell (also computed by ``compute_umap_by_markers``)
+    The (sparse) matrix of weights of the graph used to generate the ``x`` and ``y`` 2D projection. This graph is *very*
+    sparse, that is, has a very low degree for the nodes. It is meant to be used only in conjunction with the 2D
+    coordinates for visualization, and should **not** be used by any downstream analysis to determine which metacells
+    are "near" each other for any other purpose.
 
 Metacells Projection
 ....................
