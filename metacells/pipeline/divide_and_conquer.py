@@ -229,6 +229,7 @@ class DirectParameters:  # pylint: disable=too-many-instance-attributes
     candidates_max_split_min_cut_strength: Optional[float]
     candidates_min_cut_seed_cells: Optional[int]
     must_complete_cover: bool
+    deviants_policy: str
     deviants_min_gene_fold_factor: float
     deviants_abs_folds: bool
     deviants_max_gene_fraction: Optional[float]
@@ -412,6 +413,7 @@ def divide_and_conquer_pipeline(
     candidates_max_split_min_cut_strength: Optional[float] = pr.max_split_min_cut_strength,
     candidates_min_cut_seed_cells: int = pr.min_cut_seed_cells,
     must_complete_cover: bool = False,
+    deviants_policy: str = pr.deviants_policy,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     deviants_abs_folds: bool = pr.deviants_abs_folds,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
@@ -550,6 +552,7 @@ def divide_and_conquer_pipeline(
             candidates_max_split_min_cut_strength=candidates_max_split_min_cut_strength,
             candidates_min_cut_seed_cells=candidates_min_cut_seed_cells,
             must_complete_cover=must_complete_cover,
+            deviants_policy=deviants_policy,
             deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
             deviants_abs_folds=deviants_abs_folds,
             deviants_max_gene_fraction=deviants_max_gene_fraction,
@@ -695,6 +698,7 @@ def compute_divide_and_conquer_metacells(
     candidates_max_split_min_cut_strength: Optional[float] = pr.max_split_min_cut_strength,
     candidates_min_cut_seed_cells: int = pr.min_cut_seed_cells,
     must_complete_cover: bool = False,
+    deviants_policy: str = pr.deviants_policy,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     deviants_abs_folds: bool = pr.deviants_abs_folds,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
@@ -841,6 +845,7 @@ def compute_divide_and_conquer_metacells(
             candidates_max_split_min_cut_strength=candidates_max_split_min_cut_strength,
             candidates_min_cut_seed_cells=candidates_min_cut_seed_cells,
             must_complete_cover=must_complete_cover,
+            deviants_policy=deviants_policy,
             deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
             deviants_abs_folds=deviants_abs_folds,
             deviants_max_gene_fraction=deviants_max_gene_fraction,

@@ -6,7 +6,6 @@ namespace metacells {
 template<typename D>
 static void
 fold_factor_dense(pybind11::array_t<D>& data_array,
-                  const float64_t min_gene_fold_factor,
                   const bool abs_folds,
                   const pybind11::array_t<D>& total_of_rows_array,
                   const pybind11::array_t<D>& fraction_of_columns_array) {
@@ -20,35 +19,20 @@ fold_factor_dense(pybind11::array_t<D>& data_array,
 
     const size_t rows_count = data.rows_count();
     const size_t columns_count = data.columns_count();
-    if (abs_folds) {
-        parallel_loop(rows_count, [&](size_t row_index) {
-            const auto row_total = total_of_rows[row_index];
-            auto row_data = data.get_row(row_index);
-            for (size_t column_index = 0; column_index < columns_count; ++column_index) {
-                const auto column_fraction = fraction_of_columns[column_index];
-                const auto expected = row_total * column_fraction;
-                auto& value = row_data[column_index];
-                value = D(log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE);
-                if (abs(value) < min_gene_fold_factor) {
-                    value = 0;
-                }
+    parallel_loop(rows_count, [&](size_t row_index) {
+        const auto row_total = total_of_rows[row_index];
+        auto row_data = data.get_row(row_index);
+        for (size_t column_index = 0; column_index < columns_count; ++column_index) {
+            const auto column_fraction = fraction_of_columns[column_index];
+            const auto expected = row_total * column_fraction;
+            auto& value = row_data[column_index];
+            const auto actual = row_total * value;
+            value = D(log((actual + 1.0) / (expected + 1.0)) * LOG2_SCALE);
+            if (abs_folds) {
+                value = abs(value);
             }
-        });
-    } else {
-        parallel_loop(rows_count, [&](size_t row_index) {
-            const auto row_total = total_of_rows[row_index];
-            auto row_data = data.get_row(row_index);
-            for (size_t column_index = 0; column_index < columns_count; ++column_index) {
-                const auto column_fraction = fraction_of_columns[column_index];
-                const auto expected = row_total * column_fraction;
-                auto& value = row_data[column_index];
-                value = D(log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE);
-                if (value < min_gene_fold_factor) {
-                    value = 0;
-                }
-            }
-        });
-    }
+        }
+    });
 }
 
 /// See the Python `metacell.tools.outlier_cells._collect_fold_factors` function.
@@ -57,7 +41,6 @@ static void
 fold_factor_compressed(pybind11::array_t<D>& data_array,
                        pybind11::array_t<I>& indices_array,
                        pybind11::array_t<P>& indptr_array,
-                       const float64_t min_gene_fold_factor,
                        const bool abs_folds,
                        const pybind11::array_t<D>& total_of_bands_array,
                        const pybind11::array_t<D>& fraction_of_elements_array) {
@@ -82,27 +65,15 @@ fold_factor_compressed(pybind11::array_t<D>& data_array,
         auto band_data = data.get_band_data(band_index);
 
         const size_t band_elements_count = band_indices.size();
-        if (abs_folds) {
-            for (size_t position = 0; position < band_elements_count; ++position) {
-                const auto element_index = band_indices[position];
-                const auto element_fraction = fraction_of_elements[element_index];
-                const auto expected = band_total * element_fraction;
-                auto& value = band_data[position];
-                value = D(log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE);
-                if (abs(value) < min_gene_fold_factor) {
-                    value = 0;
-                }
-            }
-        } else {
-            for (size_t position = 0; position < band_elements_count; ++position) {
-                const auto element_index = band_indices[position];
-                const auto element_fraction = fraction_of_elements[element_index];
-                const auto expected = band_total * element_fraction;
-                auto& value = band_data[position];
-                value = D(log((value + 1.0) / (expected + 1.0)) * LOG2_SCALE);
-                if (value < min_gene_fold_factor) {
-                    value = 0;
-                }
+        for (size_t position = 0; position < band_elements_count; ++position) {
+            const auto element_index = band_indices[position];
+            const auto element_fraction = fraction_of_elements[element_index];
+            const auto expected = band_total * element_fraction;
+            auto& value = band_data[position];
+            const auto actual = band_total * value;
+            value = D(log((actual + 1.0) / (expected + 1.0)) * LOG2_SCALE);
+            if (abs_folds) {
+                value = abs(value);
             }
         }
     });

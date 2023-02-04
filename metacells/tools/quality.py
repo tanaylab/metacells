@@ -400,9 +400,14 @@ def compute_outliers_matches(
     2. Cross-correlate each of the outlier cells with each of the group metacells, in a ``reproducible`` manner.
     """
     assert list(adata.var_names) == list(gdata.var_names)
+    cells_similar_metacell_indices = np.full(adata.n_obs, -1, dtype="int32")
 
     metacell_per_cell = ut.get_o_numpy(adata, group)
     outliers_mask = metacell_per_cell < 0
+    if not np.any(outliers_mask):
+        ut.set_o_data(adata, most_similar, cells_similar_metacell_indices)
+        return
+
     odata = ut.slice(adata, obs=outliers_mask)
 
     outliers_data = ut.get_vo_proper(odata, what, layout="row_major")
@@ -426,7 +431,6 @@ def compute_outliers_matches(
     outliers_similar_metacell_indices = np.argmax(outliers_metacells_correlation, axis=1)
     assert len(outliers_similar_metacell_indices) == odata.n_obs
 
-    cells_similar_metacell_indices = np.full(adata.n_obs, -1, dtype="int32")
     cells_similar_metacell_indices[outliers_mask] = outliers_similar_metacell_indices
     ut.set_o_data(adata, most_similar, cells_similar_metacell_indices)
 

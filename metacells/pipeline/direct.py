@@ -97,6 +97,7 @@ def compute_direct_metacells(
     candidates_max_split_min_cut_strength: Optional[float] = pr.max_split_min_cut_strength,
     candidates_min_cut_seed_cells: int = pr.min_cut_seed_cells,
     must_complete_cover: bool = False,
+    deviants_policy: str = pr.deviants_policy,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     deviants_abs_folds: bool = pr.deviants_abs_folds,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
@@ -341,6 +342,7 @@ def compute_direct_metacells(
         deviants = tl.find_deviant_cells(
             adata,
             candidates=candidate_of_cells,
+            policy=deviants_policy,
             min_gene_fold_factor=deviants_min_gene_fold_factor,
             abs_folds=deviants_abs_folds,
             max_gene_fraction=deviants_max_gene_fraction,

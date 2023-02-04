@@ -11,8 +11,8 @@ from typing import Union
 
 import numpy as np
 from anndata import AnnData  # type: ignore
-from scipy import sparse  # type: ignore
-from scipy import stats
+from scipy import sparse as sp  # type: ignore
+from scipy import stats as st
 
 import metacells.parameters as pr
 import metacells.utilities as ut
@@ -28,15 +28,17 @@ __all__ = [
 @ut.logged(candidates=ut.groups_description)
 @ut.timed_call()
 @ut.expand_doc()
-def find_deviant_cells(  # pylint: disable=too-many-statements
+def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
     candidates: Union[str, ut.Vector] = "candidate",
     min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
+    min_noisy_gene_fold_factor: float = pr.deviants_min_noisy_gene_fold_factor,
     abs_folds: bool = pr.deviants_abs_folds,
     max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
+    policy: str = pr.deviants_policy,
 ) -> ut.Vector:
     """
     Find cells which are have significantly different gene expression from the metacells they are
@@ -60,6 +62,8 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
     the mean expression in the candidate metacells. We then mark as deviants some fraction of the
     cells whose expression of these genes was least predictable compared to the mean expression in
     the candidate metacells. Operationally:
+
+    TODOY
 
     1. Compute for each candidate metacell the mean fraction of the UMIs expressed by each gene.
        Scale this by each cell's total UMIs to compute the expected number of UMIs for each cell.
@@ -91,6 +95,153 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
     7. If the total fraction of deviants is below the ``max_cell_fraction``, repeats steps 1-5 to account for the mean
        expression in each candidate metacell having been modified due to the removal of deviant cells.
     """
+    assert policy in ("votes", "genes", "folds")
+    if policy == "votes":
+        return _votes_deviant_cells(
+            adata,
+            what,
+            candidates=candidates,
+            min_gene_fold_factor=min_gene_fold_factor,
+            # TODOY min_noisy_gene_fold_factor=min_noisy_gene_fold_factor,
+            abs_folds=abs_folds,
+            max_gene_fraction=max_gene_fraction,
+            max_cell_fraction=max_cell_fraction,
+        )
+
+    cells_count, genes_count = adata.shape
+    assert cells_count > 0
+
+    candidate_of_cells = ut.get_o_numpy(adata, candidates, formatter=ut.groups_description).copy()
+    candidates_count = np.max(candidate_of_cells) + 1
+
+    total_umis_per_cell = ut.get_o_numpy(adata, what, sum=True)
+    assert total_umis_per_cell.size == cells_count
+
+    noisy_genes_mask: Optional[ut.NumpyVector] = None
+    if ut.has_data(adata, "noisy_gene"):
+        noisy_genes_mask = ut.get_v_numpy(adata, "noisy_gene")
+        if not np.any(noisy_genes_mask):
+            noisy_genes_mask = None
+
+    umis_per_gene_per_cell = ut.get_vo_proper(adata, what, layout="row_major")
+
+    fold_per_gene_per_cell = np.zeros(adata.shape, dtype="float32")
+    for candidate_index in range(candidates_count):
+        candidate_cell_indices = np.where(candidate_of_cells == candidate_index)[0]
+
+        candidate_cells_count = candidate_cell_indices.size
+        assert candidate_cells_count > 0
+
+        total_umis_per_grouped = total_umis_per_cell[candidate_cell_indices]
+        umis_per_gene_per_grouped = ut.to_numpy_matrix(umis_per_gene_per_cell[candidate_cell_indices, :], copy=True)
+        assert ut.is_layout(umis_per_gene_per_grouped, "row_major")
+        assert umis_per_gene_per_grouped.shape == (candidate_cells_count, genes_count)
+
+        fraction_per_gene_per_grouped = ut.fraction_by(umis_per_gene_per_grouped, by="row", sums=total_umis_per_grouped)
+
+        fraction_per_gene_per_grouped_by_columns = ut.to_layout(fraction_per_gene_per_grouped, "column_major")
+        assert fraction_per_gene_per_grouped_by_columns.shape == (candidate_cells_count, genes_count)
+        median_fraction_per_gene = ut.median_per(fraction_per_gene_per_grouped_by_columns, per="column")
+        assert len(median_fraction_per_gene) == genes_count
+
+        _, dense, compressed = ut.to_proper_matrices(fraction_per_gene_per_grouped)
+
+        if compressed is not None:
+            if compressed.nnz == 0:
+                continue
+
+            extension_name = "fold_factor_compressed_%s_t_%s_t_%s_t" % (  # pylint: disable=consider-using-f-string
+                compressed.data.dtype,
+                compressed.indices.dtype,
+                compressed.indptr.dtype,
+            )
+            extension = getattr(xt, extension_name)
+
+            with ut.timed_step("extensions.fold_factor_compressed"):
+                extension(
+                    compressed.data,
+                    compressed.indices,
+                    compressed.indptr,
+                    abs_folds,
+                    total_umis_per_grouped,
+                    median_fraction_per_gene,
+                )
+
+            fold_per_gene_per_cell[candidate_cell_indices, :] = compressed
+
+        else:
+            assert dense is not None
+
+            extension_name = f"fold_factor_dense_{dense.dtype}_t"
+            extension = getattr(xt, extension_name)
+
+            with ut.timed_step("extensions.fold_factor_dense"):
+                extension(
+                    dense,
+                    abs_folds,
+                    total_umis_per_grouped,
+                    median_fraction_per_gene,
+                )
+
+            fold_per_gene_per_cell[candidate_cell_indices, :] = dense
+
+    if abs_folds:
+        effective_fold_per_gene_per_cell = np.abs(fold_per_gene_per_cell)
+    else:
+        effective_fold_per_gene_per_cell = fold_per_gene_per_cell
+
+    if policy == "genes":
+        if noisy_genes_mask is None:
+            certificate_per_gene_per_cell = effective_fold_per_gene_per_cell >= min_gene_fold_factor
+        else:
+            min_fold_factor_per_gene = np.full(genes_count, min_gene_fold_factor)
+            min_fold_factor_per_gene[noisy_genes_mask] = min_noisy_gene_fold_factor
+            certificate_per_gene_per_cell = effective_fold_per_gene_per_cell >= min_fold_factor_per_gene[np.newaxis, :]
+        ut.log_calc("certificate_per_gene_per_cell", certificate_per_gene_per_cell)
+
+        certificates_per_cell = ut.sum_per(certificate_per_gene_per_cell, per="row")
+        ut.log_calc("certificates_per_cell", certificates_per_cell, formatter=ut.sizes_description)
+
+        if max_cell_fraction is None:
+            certificate_threshold = 0
+        else:
+            certificate_threshold = np.quantile(certificates_per_cell, 1.0 - max_cell_fraction)
+        ut.log_calc("certificate_threshold", certificate_threshold)
+
+        deviant_cells_mask = certificates_per_cell > certificate_threshold
+
+    else:
+        assert policy == "folds"
+        if noisy_genes_mask is not None:
+            effective_fold_per_gene_per_cell[:, noisy_genes_mask] += min_gene_fold_factor - min_noisy_gene_fold_factor
+
+        fold_factor_per_cell = ut.max_per(effective_fold_per_gene_per_cell, per="row")
+        ut.log_calc("fold_factor_per_cell", fold_factor_per_cell, formatter=ut.sizes_description)
+
+        if max_cell_fraction is None:
+            fold_factor_threshold = min_gene_fold_factor
+        else:
+            fold_factor_threshold = max(
+                min_gene_fold_factor, np.quantile(fold_factor_per_cell, 1.0 - max_cell_fraction)
+            )
+        ut.log_calc("fold_factor_threshold", fold_factor_threshold)
+
+        deviant_cells_mask = fold_factor_per_cell > fold_factor_threshold
+
+    ut.log_calc("deviant_cells_mask", deviant_cells_mask)
+    return deviant_cells_mask
+
+
+def _votes_deviant_cells(  # pylint: disable=too-many-statements
+    adata: AnnData,
+    what: Union[str, ut.Matrix] = "__x__",
+    *,
+    candidates: Union[str, ut.Vector] = "candidate",
+    min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
+    abs_folds: bool = pr.deviants_abs_folds,
+    max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
+    max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
+) -> ut.Vector:
     if max_gene_fraction is None:
         max_gene_fraction = 1
 
@@ -188,7 +339,7 @@ def find_deviant_cells(  # pylint: disable=too-many-statements
 
 
 @ut.timed_call()
-def _collect_fold_factors(  # pylint: disable=too-many-statements
+def _collect_fold_factors(  # pylint: disable=too-many-statements,too-many-branches
     *,
     data: ut.ProperMatrix,
     candidate_of_cells: ut.NumpyVector,
@@ -218,7 +369,7 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
         remaining_cells_count -= candidate_cells_count
 
         if candidate_cells_count < 2:
-            compressed = sparse.csr_matrix(
+            compressed = sp.csr_matrix(
                 ([], [], [0] * (candidate_cells_count + 1)), shape=(candidate_cells_count, genes_count)
             )
             list_of_fold_factors.append(compressed)
@@ -258,7 +409,6 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
                     compressed.data,
                     compressed.indices,
                     compressed.indptr,
-                    min_gene_fold_factor,
                     abs_folds,
                     totals_of_candidate_cells,
                     medians_of_candidate_genes,
@@ -266,6 +416,12 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
 
             if noisy_genes_mask is not None:
                 compressed[:, noisy_genes_mask] = 0.0
+
+            if abs_folds:
+                compressed[(compressed < min_gene_fold_factor) & (compressed > -min_gene_fold_factor)] = 0.0
+            else:
+                compressed[compressed < min_gene_fold_factor] = 0.0
+
             ut.eliminate_zeros(compressed)
 
         else:
@@ -277,7 +433,6 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
             with ut.timed_step("extensions.fold_factor_dense"):
                 extension(
                     dense,
-                    min_gene_fold_factor,
                     abs_folds,
                     totals_of_candidate_cells,
                     medians_of_candidate_genes,
@@ -285,7 +440,13 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
 
             if noisy_genes_mask is not None:
                 dense[:, noisy_genes_mask] = 0.0
-            compressed = sparse.csr_matrix(dense)
+
+            if abs_folds:
+                dense[(dense < min_gene_fold_factor) & (dense > -min_gene_fold_factor)] = 0.0
+            else:
+                dense[dense < min_gene_fold_factor] = 0.0
+
+            compressed = sp.csr_matrix(dense)
             assert compressed.has_sorted_indices
             assert compressed.has_canonical_format
 
@@ -296,7 +457,7 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements
     if remaining_cells_count > 0:
         assert remaining_cells_count == np.sum(candidate_of_cells < 0)
         list_of_cell_index_of_rows.append(np.where(candidate_of_cells < 0)[0])
-        compressed = sparse.csr_matrix(
+        compressed = sp.csr_matrix(
             ([], [], [0] * (remaining_cells_count + 1)), shape=(remaining_cells_count, genes_count)
         )
         assert compressed.has_sorted_indices
@@ -314,12 +475,12 @@ def _construct_fold_factors(
 ) -> ut.CompressedMatrix:
     cell_index_of_rows = np.concatenate(list_of_cell_index_of_rows)
     if cell_index_of_rows.size == 0:
-        return sparse.csr_matrix((0, 0))
+        return sp.csr_matrix((0, 0))
 
     cell_row_of_indices = np.empty_like(cell_index_of_rows)
     cell_row_of_indices[cell_index_of_rows] = np.arange(cells_count)
 
-    fold_factors = sparse.vstack(list_of_fold_factors, format="csr")
+    fold_factors = sp.vstack(list_of_fold_factors, format="csr")
     fold_factors = fold_factors[cell_row_of_indices, :]
     if fold_factors.nnz > 0:
         fold_factors = ut.to_layout(fold_factors, "column_major")
@@ -387,7 +548,7 @@ def _fold_ranks(
         gene_fold_factors = fold_factors.data[gene_start_offset:gene_stop_offset]
         gene_suspect_cell_indices = fold_factors.indices[gene_start_offset:gene_stop_offset]
 
-        gene_fold_ranks = stats.rankdata(gene_fold_factors, method="min")
+        gene_fold_ranks = st.rankdata(gene_fold_factors, method="min")
         gene_fold_ranks *= -1
         gene_fold_ranks += gene_fold_ranks.size + 1
 

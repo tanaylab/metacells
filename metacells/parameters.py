@@ -754,6 +754,14 @@ candidates_max_merge_size_factor: float = max_merge_size_factor
 #: :py:func:`metacells.tools.candidates.compute_candidate_metacells`.
 candidates_min_metacell_cells: int = min_metacell_cells
 
+#: The policy to use for deciding which cell is "deviant". See
+#: :py:func:`metacells.tools.deviants.find_deviant_cells`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+deviants_policy: str = "votes"
+
 #: The minimal fold factor for a gene to indicate a cell is "deviant". See
 #: :py:const:`significant_gene_fold_factor`,
 #: :py:func:`metacells.tools.deviants.find_deviant_cells`,
@@ -762,6 +770,15 @@ candidates_min_metacell_cells: int = min_metacell_cells
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 deviants_min_gene_fold_factor: float = significant_gene_fold_factor
+
+#: The minimal fold factor for a noisy gene to indicate a cell is "deviant". See
+#: :py:const:`significant_gene_fold_factor`,
+#: :py:func:`metacells.tools.deviants.find_deviant_cells`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+deviants_min_noisy_gene_fold_factor: float = significant_gene_fold_factor + 2
 
 #: Whether to consider the absolute fold factor when computing deviant cells. See
 #: :py:func:`metacells.tools.deviants.find_deviant_cells`.
