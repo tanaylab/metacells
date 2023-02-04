@@ -231,6 +231,7 @@ class DirectParameters:  # pylint: disable=too-many-instance-attributes
     must_complete_cover: bool
     deviants_policy: str
     deviants_min_gene_fold_factor: float
+    deviants_min_noisy_gene_fold_factor: float
     deviants_abs_folds: bool
     deviants_max_gene_fraction: Optional[float]
     deviants_max_cell_fraction: Optional[float]
@@ -415,6 +416,7 @@ def divide_and_conquer_pipeline(
     must_complete_cover: bool = False,
     deviants_policy: str = pr.deviants_policy,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
+    deviants_min_noisy_gene_fold_factor: float = pr.deviants_min_noisy_gene_fold_factor,
     deviants_abs_folds: bool = pr.deviants_abs_folds,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     deviants_max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
@@ -554,6 +556,7 @@ def divide_and_conquer_pipeline(
             must_complete_cover=must_complete_cover,
             deviants_policy=deviants_policy,
             deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
+            deviants_min_noisy_gene_fold_factor=deviants_min_noisy_gene_fold_factor,
             deviants_abs_folds=deviants_abs_folds,
             deviants_max_gene_fraction=deviants_max_gene_fraction,
             deviants_max_cell_fraction=deviants_max_cell_fraction,
@@ -700,6 +703,7 @@ def compute_divide_and_conquer_metacells(
     must_complete_cover: bool = False,
     deviants_policy: str = pr.deviants_policy,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
+    deviants_min_noisy_gene_fold_factor: float = pr.deviants_min_noisy_gene_fold_factor,
     deviants_abs_folds: bool = pr.deviants_abs_folds,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     deviants_max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
@@ -847,6 +851,7 @@ def compute_divide_and_conquer_metacells(
             must_complete_cover=must_complete_cover,
             deviants_policy=deviants_policy,
             deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
+            deviants_min_noisy_gene_fold_factor=deviants_min_noisy_gene_fold_factor,
             deviants_abs_folds=deviants_abs_folds,
             deviants_max_gene_fraction=deviants_max_gene_fraction,
             deviants_max_cell_fraction=deviants_max_cell_fraction,

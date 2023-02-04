@@ -99,6 +99,7 @@ def compute_direct_metacells(
     must_complete_cover: bool = False,
     deviants_policy: str = pr.deviants_policy,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
+    deviants_min_noisy_gene_fold_factor: float = pr.deviants_min_noisy_gene_fold_factor,
     deviants_abs_folds: bool = pr.deviants_abs_folds,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     deviants_max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
@@ -228,6 +229,7 @@ def compute_direct_metacells(
        :py:func:`metacells.tools.deviants.find_deviant_cells` to remove deviants from the candidate
        metacells, using the
        ``deviants_min_gene_fold_factor`` (default: {deviants_min_gene_fold_factor}),
+       ``deviants_min_noisy_gene_fold_factor`` (default: {deviants_min_noisy_gene_fold_factor}),
        ``deviants_abs_folds`` (default: {deviants_abs_folds}),
        ``deviants_max_gene_fraction`` (default: {deviants_max_gene_fraction})
        and
@@ -344,6 +346,7 @@ def compute_direct_metacells(
             candidates=candidate_of_cells,
             policy=deviants_policy,
             min_gene_fold_factor=deviants_min_gene_fold_factor,
+            min_noisy_gene_fold_factor=deviants_min_noisy_gene_fold_factor,
             abs_folds=deviants_abs_folds,
             max_gene_fraction=deviants_max_gene_fraction,
             max_cell_fraction=deviants_max_cell_fraction,
