@@ -95,7 +95,7 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
     7. If the total fraction of deviants is below the ``max_cell_fraction``, repeats steps 1-5 to account for the mean
        expression in each candidate metacell having been modified due to the removal of deviant cells.
     """
-    assert policy in ("votes", "genes", "folds")
+    assert policy in ("votes", "count", "max", "sum")
     if policy == "votes":
         return _votes_deviant_cells(
             adata,
@@ -190,44 +190,28 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
     else:
         effective_fold_per_gene_per_cell = fold_per_gene_per_cell
 
-    if policy == "genes":
-        if noisy_genes_mask is None:
-            certificate_per_gene_per_cell = effective_fold_per_gene_per_cell >= min_gene_fold_factor
-        else:
-            min_fold_factor_per_gene = np.full(genes_count, min_gene_fold_factor)
-            min_fold_factor_per_gene[noisy_genes_mask] = min_noisy_gene_fold_factor
-            certificate_per_gene_per_cell = effective_fold_per_gene_per_cell >= min_fold_factor_per_gene[np.newaxis, :]
-        ut.log_calc("certificate_per_gene_per_cell", certificate_per_gene_per_cell)
+    effective_fold_per_gene_per_cell -= min_gene_fold_factor
+    if noisy_genes_mask is not None:
+        effective_fold_per_gene_per_cell[:, noisy_genes_mask] += min_gene_fold_factor - min_noisy_gene_fold_factor
+    effective_fold_per_gene_per_cell[effective_fold_per_gene_per_cell < 0] = 0
 
-        certificates_per_cell = ut.sum_per(certificate_per_gene_per_cell, per="row")
-        ut.log_calc("certificates_per_cell", certificates_per_cell, formatter=ut.sizes_description)
-
-        if max_cell_fraction is None:
-            certificate_threshold = 0
-        else:
-            certificate_threshold = np.quantile(certificates_per_cell, 1.0 - max_cell_fraction)
-        ut.log_calc("certificate_threshold", certificate_threshold)
-
-        deviant_cells_mask = certificates_per_cell > certificate_threshold
-
+    if policy == "count":
+        policy_per_cell = ut.sum_per(effective_fold_per_gene_per_cell > 0, per="row")
+    elif policy == "sum":
+        policy_per_cell = ut.sum_per(effective_fold_per_gene_per_cell, per="row")
+    elif policy == "max":
+        policy_per_cell = ut.max_per(effective_fold_per_gene_per_cell, per="row")
     else:
-        assert policy == "folds"
-        if noisy_genes_mask is not None:
-            effective_fold_per_gene_per_cell[:, noisy_genes_mask] += min_gene_fold_factor - min_noisy_gene_fold_factor
+        assert False
+    ut.log_calc(f"{policy}_per_gene_per_cell", policy_per_cell)
 
-        fold_factor_per_cell = ut.max_per(effective_fold_per_gene_per_cell, per="row")
-        ut.log_calc("fold_factor_per_cell", fold_factor_per_cell, formatter=ut.sizes_description)
+    if max_cell_fraction is None:
+        policy_threshold = 0
+    else:
+        policy_threshold = np.quantile(policy_per_cell, 1.0 - max_cell_fraction)
+    ut.log_calc(f"{policy}_threshold", policy_threshold)
 
-        if max_cell_fraction is None:
-            fold_factor_threshold = min_gene_fold_factor
-        else:
-            fold_factor_threshold = max(
-                min_gene_fold_factor, np.quantile(fold_factor_per_cell, 1.0 - max_cell_fraction)
-            )
-        ut.log_calc("fold_factor_threshold", fold_factor_threshold)
-
-        deviant_cells_mask = fold_factor_per_cell > fold_factor_threshold
-
+    deviant_cells_mask = policy_per_cell > policy_threshold
     ut.log_calc("deviant_cells_mask", deviant_cells_mask)
     return deviant_cells_mask
 

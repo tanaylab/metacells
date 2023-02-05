@@ -156,16 +156,16 @@ metadata, and also:
 ``grouped`` per metacell
     The number of cells grouped into each metacell.
 
-``total_umis`` per metacell
-    We still provide the total UMIs count for each metacell (the sum of all the UMIs in all the genes in all the cells).
-    We call the "effective UMIs" of a specific gene in the metacell is this number time its fraction in the metacell
-    (from above). This need not be an integer number.
+``total_umis`` per gene per metacell and per metacell
+    We still provide the total UMIs count for each each gene for each cell in each metacell, and the total UMIs in each
+    metacell. Note that the estimated fraction of each gene in the metacell is *not* its total UMIs divided by the
+    metacell's total UMIs; the actual estimator is more complex.
 
-    Tracking the effective UMIs are important to ensure that analysis is meaningful. For example, comparing expression
-    levels of lowly-expressed genes in two metacells will yield wildly inaccurate results unless a sufficient number of
-    UMIs were used (the sum of effective UMIs of the gene in both compared metacells). The functions provided here for
-    computing fold factors (log base 2 of the ratio) and related comparisons automatically ignore cases when this sum is
-    below some threshold (40) by considering the effective fold factor to be 0 (that is, "no difference").
+    The total UMIs are important to ensure that analysis is meaningful. For example, comparing expression levels of
+    lowly-expressed genes in two metacells will yield wildly inaccurate results unless a sufficient number of UMIs were
+    used (the sum of UMIs of the gene in both compared metacells). The functions provided here for computing fold
+    factors (log base 2 of the ratio) and related comparisons automatically ignore cases when this sum is below some
+    threshold (40) by considering the effective fold factor to be 0 (that is, "no difference").
 
 ``metacells_level`` per cell or metacell
     This is 0 for rare gene module metacells, 1 for metacells computed from the main piles in the 2nd divide-and-conquer
