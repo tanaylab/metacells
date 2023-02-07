@@ -10,6 +10,7 @@ from typing import Dict
 from typing import Optional
 from typing import Union
 
+import numpy as np
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
@@ -99,6 +100,11 @@ def compute_for_mcview(
        dense matrix of ~X0K by ~X0K entries, which typically isn't what you want.
     """
     reproducible = random_seed != 0
+
+    ut.set_m_data(gdata, "mcview_format", "1.0")
+
+    metacell_of_cells = ut.get_o_numpy(adata, "metacell")
+    ut.set_m_data(gdata, "outliers", np.sum(metacell_of_cells < 0))
 
     if find_metacells_marker_genes is not None:
         tl.find_metacells_marker_genes(gdata, what, **find_metacells_marker_genes)

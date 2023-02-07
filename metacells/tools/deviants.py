@@ -402,9 +402,11 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements,too-many-branc
                 compressed[:, noisy_genes_mask] = 0.0
 
             if abs_folds:
-                compressed[(compressed < min_gene_fold_factor) & (compressed > -min_gene_fold_factor)] = 0.0
+                compressed.data[
+                    (compressed.data < min_gene_fold_factor) & (compressed.data > -min_gene_fold_factor)
+                ] = 0.0
             else:
-                compressed[compressed < min_gene_fold_factor] = 0.0
+                compressed.data[compressed.data < min_gene_fold_factor] = 0.0
 
             ut.eliminate_zeros(compressed)
 

@@ -63,6 +63,10 @@ def collect_metacells(  # pylint: disable=too-many-statements
 
     Also sets in the full ``adata``:
 
+    Observations-Variables (Cell-Gene) Annotations
+        ``total_umis``
+            The total of all the UMIs for all the cells grouped into each metacell.
+
     Observations (Cell) Annotations
         ``total_umis``
             The total of all the UMIs for all the cells grouped into each metacell.
@@ -193,6 +197,11 @@ def collect_metacells(  # pylint: disable=too-many-statements
 
     ut.set_name(mdata, ut.get_name(adata))
     ut.set_name(mdata, name)
+
+    raw_results = ut.sum_groups(raw_cell_umis, metacell_of_cells, per="row")
+    assert raw_results is not None
+    total_metacell_umis, _cells_of_metacells = raw_results
+    ut.set_vo_data(mdata, "total_umis", total_metacell_umis)
 
     raw_metacell_sizes = _metacell_sizes(raw_cell_sizes, metacell_of_cells)
     ut.set_o_data(mdata, "total_umis", raw_metacell_sizes, formatter=ut.sizes_description)
