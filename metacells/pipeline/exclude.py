@@ -9,6 +9,7 @@ to be generically useful, but as always specific data sets may require custom cl
 
 from re import Pattern
 from typing import Collection
+from typing import List
 from typing import Optional
 from typing import Union
 
@@ -32,9 +33,17 @@ def exclude_genes(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
+    bursty_max_sampled_cells: Optional[int] = pr.bursty_lonely_max_sampled_cells,
+    bursty_downsample_min_samples: int = pr.bursty_lonely_downsample_min_samples,
+    bursty_downsample_min_cell_quantile: float = pr.bursty_lonely_downsample_max_cell_quantile,
+    bursty_downsample_max_cell_quantile: float = pr.bursty_lonely_downsample_min_cell_quantile,
+    bursty_min_gene_total: int = pr.bursty_lonely_min_gene_total,
+    bursty_min_gene_normalized_variance: float = pr.bursty_lonely_min_gene_normalized_variance,
+    bursty_max_gene_similarity: float = pr.bursty_lonely_max_gene_similarity,
     properly_sampled_min_gene_total: Optional[int] = pr.properly_sampled_min_gene_total,
     excluded_gene_names: Optional[Collection[str]] = None,
     excluded_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    random_seed: int = pr.random_seed,
 ) -> None:
     """
     Exclude a subset of the genes from the metacells computation.
@@ -58,16 +67,47 @@ def exclude_genes(
 
     **Computation Parameters**
 
-    1. Invoke :py:func:`metacells.tools.properly_sampled.find_properly_sampled_genes` using
+    1. Invoke :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes` using
+       ``bursty_max_sampled_cells`` (default: {bursty_max_sampled_cells}),
+       ``bursty_downsample_min_samples`` (default: {bursty_downsample_min_samples}),
+       ``bursty_downsample_min_cell_quantile`` (default: {bursty_downsample_min_cell_quantile}),
+       ``bursty_downsample_max_cell_quantile`` (default: {bursty_downsample_max_cell_quantile}),
+       ``bursty_min_gene_total`` (default: {bursty_min_gene_total}),
+       ``bursty_min_gene_normalized_variance`` (default: {bursty_min_gene_normalized_variance}),
+       ``bursty_max_gene_similarity`` (default: {bursty_max_gene_similarity}),
+       Any "bursty_lonely_genes" will be excluded.
+
+    2. Invoke :py:func:`metacells.tools.properly_sampled.find_properly_sampled_genes` using
        ``properly_sampled_min_gene_total`` (default: {properly_sampled_min_gene_total}). Genes which are not properly
        sampled will be excluded.
 
-    2. Invoke :py:func:`metacells.tools.named.find_named_genes` to also exclude genes based on their name, using the
+    3. Invoke :py:func:`metacells.tools.named.find_named_genes` to also exclude genes based on their name, using the
        ``excluded_gene_names`` (default: {excluded_gene_names}) and ``excluded_gene_patterns`` (default:
        {excluded_gene_patterns}).
     """
-    if properly_sampled_min_gene_total is None and excluded_gene_names is None and excluded_gene_patterns is None:
+    if (
+        bursty_max_sampled_cells is None
+        and properly_sampled_min_gene_total is None
+        and excluded_gene_names is None
+        and excluded_gene_patterns is None
+    ):
         return
+
+    bursty_lonely_genes_mask: Optional[ut.NumpyVector] = None
+    if bursty_max_sampled_cells is not None:
+        tl.find_bursty_lonely_genes(
+            adata,
+            what,
+            max_sampled_cells=bursty_max_sampled_cells,
+            downsample_min_samples=bursty_downsample_min_samples,
+            downsample_min_cell_quantile=bursty_downsample_min_cell_quantile,
+            downsample_max_cell_quantile=bursty_downsample_max_cell_quantile,
+            min_gene_total=bursty_min_gene_total,
+            min_gene_normalized_variance=bursty_min_gene_normalized_variance,
+            max_gene_similarity=bursty_max_gene_similarity,
+            random_seed=random_seed,
+        )
+        bursty_lonely_genes_mask = ut.get_v_numpy(adata, "bursty_lonely_gene")
 
     properly_sampled_genes_mask: Optional[ut.NumpyVector] = None
     if properly_sampled_min_gene_total is not None:
@@ -83,8 +123,14 @@ def exclude_genes(
         named_genes_mask = named_genes_series.values
 
     excluded_genes_mask: Optional[ut.NumpyVector] = None
+    if bursty_lonely_genes_mask is not None:
+        excluded_genes_mask = ~bursty_lonely_genes_mask
+
     if properly_sampled_genes_mask is not None:
-        excluded_genes_mask = ~properly_sampled_genes_mask
+        if excluded_genes_mask is None:
+            excluded_genes_mask = ~properly_sampled_genes_mask
+        else:
+            excluded_genes_mask = excluded_genes_mask | ~properly_sampled_genes_mask
 
     if named_genes_mask is not None:
         if excluded_genes_mask is None:
@@ -105,6 +151,7 @@ def exclude_cells(
     properly_sampled_min_cell_total: Optional[int],
     properly_sampled_max_cell_total: Optional[int],
     properly_sampled_max_excluded_genes_fraction: Optional[float],
+    excluded_cells_masks: Optional[List[str]] = None,
 ) -> None:
     """
     Exclude a subset of the cells from the metacells computation.
@@ -131,8 +178,11 @@ def exclude_cells(
     **Computation Parameters**
 
     1. Invoke :py:func:`metacells.tools.properly_sampled.find_properly_sampled_cells` using
-       ``properly_sampled_min_cell_total`` (no default), ``properly_sampled_max_cell_total`` (no
-       default) and ``properly_sampled_max_excluded_genes_fraction`` (no default).
+       ``properly_sampled_min_cell_total`` (no default), ``properly_sampled_max_cell_total`` (no default) and
+       ``properly_sampled_max_excluded_genes_fraction`` (no default).
+
+    2. Exclude any cells which are not properly sampled, or that are listed in any of the ``excluded_cells_masks``
+       (using  :py:func:`metacells.tools.mask.combine_masks`).
     """
     tl.find_properly_sampled_cells(
         adata,
@@ -142,8 +192,10 @@ def exclude_cells(
         max_excluded_genes_fraction=properly_sampled_max_excluded_genes_fraction,
     )
 
-    properly_sampled_cells_mask = ut.get_o_numpy(adata, "properly_sampled_cell")
-    ut.set_o_data(adata, "excluded_cell", ~properly_sampled_cells_mask)
+    if excluded_cells_masks is None:
+        excluded_cells_masks = []
+    excluded_cells_masks = excluded_cells_masks + ["~properly_sampled_cell"]
+    tl.combine_masks(adata, excluded_cells_masks, to="excluded_cell")
 
 
 @ut.logged()

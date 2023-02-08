@@ -69,7 +69,7 @@ def find_rare_gene_modules(
     ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation
     annotation containing such a matrix.
 
-    Obeys (ignores the genes of) the ``noisy_gene`` and/or ``lateral_gene`` per-gene (variable) annotation, if any.
+    Obeys (ignores the genes of) the ``lateral_gene`` per-gene (variable) annotation, if any.
 
     **Returns**
 
@@ -95,9 +95,9 @@ def find_rare_gene_modules(
 
     1. Pick as candidates all genes that are expressed in at most ``max_gene_cell_fraction``
        (default: {max_gene_cell_fraction}) of the cells, and whose maximal value in a cell is at least
-       ``min_gene_maximum`` (default: {min_gene_maximum}). If ``noisy_gene`` and/or ``lateral_gene`` masks exist,
-       exclude them from the candidates. Out of the candidates, pick at most ``max_genes`` (default {max_genes}) which
-       are expressed in the least cells.
+       ``min_gene_maximum`` (default: {min_gene_maximum}). If a ``lateral_gene`` masks exist, exclude them from the
+       candidates. Out of the candidates, pick at most ``max_genes`` (default {max_genes}) which are expressed in the
+       least cells.
 
     2. Compute the similarity between the genes using
        :py:func:`metacells.tools.similarity.compute_var_var_similarity` using the
@@ -122,9 +122,9 @@ def find_rare_gene_modules(
        {min_related_gene_fold_factor}) times their fraction in the rest of the population, as long
        as their maximal value in one of the expressing cells is at least ``min_gene_maximum``,
        as long as this doesn't add more than ``max_related_gene_increase_factor`` times the original
-       number of cells to the rare gene module, and as long as they are not listed in the ``noisy_gene``
-       and/or ``lateral_gene`` masks. If a gene is above the threshold for multiple gene modules, associate
-       it with the gene module for which its fold factor is higher.
+       number of cells to the rare gene module, and as long as they are not listed in the ``lateral_gene`` masks. If a
+       gene is above the threshold for multiple gene modules, associate it with the gene module for which its fold
+       factor is higher.
 
     7. Associate cells with the rare gene module if they contain at least ``min_cell_module_total``
        (default: {min_cell_module_total}) UMIs of the expanded rare gene module. If a cell meets the
@@ -151,9 +151,6 @@ def find_rare_gene_modules(
 
     if ut.has_data(adata, "lateral_gene"):
         allowed_genes_mask &= ~ut.get_v_numpy(adata, "lateral_gene")
-
-    if ut.has_data(adata, "noisy_gene"):
-        allowed_genes_mask &= ~ut.get_v_numpy(adata, "noisy_gene")
 
     ut.log_calc("allowed_genes_mask", allowed_genes_mask)
 

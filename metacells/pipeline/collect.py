@@ -201,7 +201,7 @@ def collect_metacells(  # pylint: disable=too-many-statements
     raw_results = ut.sum_groups(raw_cell_umis, metacell_of_cells, per="row")
     assert raw_results is not None
     total_metacell_umis, _cells_of_metacells = raw_results
-    ut.set_vo_data(mdata, "total_umis", total_metacell_umis)
+    ut.set_vo_data(mdata, "total_umis", ut.to_proper_matrix(total_metacell_umis))
 
     raw_metacell_sizes = _metacell_sizes(raw_cell_sizes, metacell_of_cells)
     ut.set_o_data(mdata, "total_umis", raw_metacell_sizes, formatter=ut.sizes_description)

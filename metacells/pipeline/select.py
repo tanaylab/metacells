@@ -59,10 +59,6 @@ def extract_selected_data(
             A boolean mask of genes which are lateral from being chosen as "select" genes based
             on their name.
 
-        ``noisy_gene``
-            A boolean mask of genes which are not only lateral, but are also ignored when computing
-            deviant (outlier) cells.
-
     **Returns**
 
     Returns annotated sliced data containing the "select" subset of the original data. By default,
@@ -121,7 +117,7 @@ def extract_selected_data(
         )
 
     else:
-        var_masks = ["&~lateral_gene?", "&~noisy_gene?"]
+        var_masks = ["&~lateral_gene?"]
 
         if min_gene_top3 is not None:
             var_masks.append("&high_top3_gene")

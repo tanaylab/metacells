@@ -78,8 +78,19 @@ terminology for these lists:
 
 ``excluded_gene``, ``excluded_cell`` masks
     Excluded genes (and/or cells) are totally ignored by the algorithm (e.g. mytochondrial genes, cells with too few
-    UMIs). Currently the 1st step of the processing must be to create a "clean" data set which lacks the excluded genes
-    and cells.
+    UMIs).
+
+    Deciding on the "right" list of excluded genes (and cells) is crucial for creating high-quality metacells. We rely
+    on the analyst to provide this list based on prior biological knowledge. To support this supervised task, we provide
+    the ``excluded_genes`` and ``exclude_cells`` functions which implement "reasonable" strategies for detecting some
+    (not all) of the genes and cells to exclude. For example, these will exclude any genes found by
+    ``find_bursty_lonely_genes``, (called ``find_noisy_lonely_genes`` in v0.8). Additional considerations might be to
+    use ``relate_genes`` to (manually) exclude genes that are highly correlated with known-to-need-to-be-excluded genes,
+    or exclude any cells that are marked as doublets, etc.
+
+    Currently the 1st step of the processing must be to create a "clean" data set which lacks the excluded genes and
+    cells (e.g. using ``extract_clean_data``). When we switch to ``daf`` we'll just stay with the original data set and
+    apply the exclusion masks to the rest of the algorithm.
 
 ``select_gene`` mask
     When computing metacells, we only consider the similarity between cells using a select subset of the genes. When we
@@ -103,19 +114,16 @@ terminology for these lists:
     list.
 
 ``noisy_gene`` mask
-    Noisy genes are not only forbidden from being selected for computing cells similarity, but are also ignored when
-    computing deviant (outlier) cells. Noisy genes are still counted towards the total UMIs count when computing gene
-    expression level for cell similarity. That is, we don't expect cells in the same metacell to have the same
-    expression level for such genes.
+    Noisy genes are not only forbidden from being selected for computing cells similarity, but are also given more
+    freedom when computing deviant (outlier) cells. That is, we don't expect the expression level of such genes in the
+    cells in the same metacell to be as consistent as we do for regular (non-noisy) genes.
 
     The motivation is that some genes are inherently bursty and therefore cause many cells which are otherwise a good
     match for their metacell to be marked as deviant (outliers). An indication for this is by examining the
     ``deviant_fold`` matrix (see below).
 
     Deciding on the "right" list of noisy genes is again crucial for creating high-quality metacells (and minimizing the
-    fraction of outlier cells). Again we rely on the analyst here, but we also provide the ``find_bursty_lonely_genes``
-    function as a way to identify such troublesome genes. In version 0.8 this was called ``find_noisy_lonely_genes`` and
-    the genes were excluded.
+    fraction of outlier cells). Again we rely on the analyst here,
 
 Having determined the inputs and possibly tweaking the hyper-parameters (a favorite one is the ``target_metacell_size``,
 which by default is 160K UMIs; this may be reduced for small data sets and may be increased for larger data sets), one
@@ -202,10 +210,11 @@ In addition, one should compute and look at the following (an easy way to comput
     For each cell, for each gene, the ``deviant_fold`` holds the fold factor (log base 2) between the expression level
     of the gene in the cell and the metacell it belongs to (or the most similar metacell for outlier cells). This uses
     the same (strong) normalization factor we use when computing deviant (outlier) cells, so for outliers, you should
-    see some (non-excluded, non-noisy) genes with a fold factor above 3 (8x) which justify why we haven't merged that
-    cell into a metacell; for cells grouped into metacells, you shouldn't see (many) such genes. If there is a large
-    number of outlier cells and a few genes have a high fold factor for many of them, you should consider marking these
-    genes as noisy and recomputing the metacells.
+    see some (non-excluded, non-noisy) genes with a fold factor above 3 (8x), or some (non-excluded, noisy) genes with a
+    fold factor above 5 (32x), which justify why we haven't merged that cell into a metacell; for cells grouped into
+    metacells, you shouldn't see (many) such genes. If there is a large number of outlier cells and a few non-noisy
+    genes have a high fold factor for many of them, you should consider marking these genes as noisy and recomputing the
+    metacells. If they are already marked as noisy, you may want to completely exclude them.
 
 ``inner_fold`` per gene per metacell (computed by ``compute_inner_folds``)
     For each metacell, for each gene, the ``inner_fold`` is the strongest (highest absolute value) ``deviant_fold`` of
@@ -236,8 +245,8 @@ In addition, one should compute and look at the following (an easy way to comput
     levels of the marker genes. In version 0.8 this was based on picking (some of) the selected genes.
 
     This view is good for quality control. If it forces "unrelated" cell types together, this might mean that more genes
-    should be made lateral or marked as noisy (or even excluded); or maybe the data contains a metacell of doublets; or
-    metacells mixing cells from different types, if too many genes were marked as lateral or noisy. It takes a
+    should be made lateral, or noisy, or even excluded; or maybe the data contains a metacell of doublets; or metacells
+    mixing cells from different types, if too many genes were marked as lateral or noisy, or excluded. It takes a
     surprising small number of such doublet/mixture metacells to mess up the UMAP projection.
 
     Also, one shouldn't read too much from the 2D layout, as by definition it can't express the "true" structure of the

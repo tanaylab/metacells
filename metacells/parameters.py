@@ -927,13 +927,13 @@ umap_fraction_normalization: float = 1e-5
 #: :py:func:`metacells.utilities.computation.cover_coordinates`
 #: and
 #: :py:func:`metacells.tools.layout.umap_by_distances`,
-cover_fraction: float = 1 / 3.0
+spread_cover_fraction: float = 1 / 3.0
 
 #: The noise to add to the UMAP plot area. See
 #: :py:func:`metacells.utilities.computation.cover_coordinates`
 #: and
 #: :py:func:`metacells.tools.layout.umap_by_distances`,
-noise_fraction: float = 0.1
+spread_noise_fraction: float = 0.1
 
 #: The minimal total number of UMIs for a gene to compute meaningful quality statistics for it.
 #: See :py:func:`metacells.tools.quality.compute_inner_normalized_variance`,

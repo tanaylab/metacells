@@ -17,7 +17,6 @@ from typing import Union
 
 from anndata import AnnData  # type: ignore
 
-import metacells.parameters as pr
 import metacells.tools as tl
 import metacells.utilities as ut
 
@@ -71,18 +70,9 @@ def mark_lateral_genes(
 @ut.expand_doc()
 def mark_noisy_genes(
     adata: AnnData,
-    what: Union[str, ut.Matrix] = "__x__",
     *,
-    bursty_lonely_max_sampled_cells: int = pr.bursty_lonely_max_sampled_cells,
-    bursty_lonely_downsample_min_samples: int = pr.bursty_lonely_downsample_min_samples,
-    bursty_lonely_downsample_min_cell_quantile: float = pr.bursty_lonely_downsample_min_cell_quantile,
-    bursty_lonely_downsample_max_cell_quantile: float = pr.bursty_lonely_downsample_max_cell_quantile,
-    bursty_lonely_min_gene_total: int = pr.bursty_lonely_min_gene_total,
-    bursty_lonely_min_gene_normalized_variance: float = pr.bursty_lonely_min_gene_normalized_variance,
-    bursty_lonely_max_gene_similarity: float = pr.bursty_lonely_max_gene_similarity,
     noisy_gene_names: Optional[Collection[str]] = None,
     noisy_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    random_seed: int = pr.random_seed,
 ) -> None:
     """
     Mark a subset of the genes as "noisy", that is, prevent them from both being selected for computing metacells and
@@ -99,50 +89,16 @@ def mark_noisy_genes(
     Sets the following in the data:
 
     Variable (gene) annotations:
-        ``bursty_lonely_genes``
-            A boolean mask indicating whether each gene was found to be a "bursty lonely" gene.
-
         ``noisy_gene``
             A mask of the "noisy" genes.
 
     **Computation Parameters**
 
-    1. Invoke :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes` using
-       ``bursty_lonely_max_sampled_cells`` (default: {bursty_lonely_max_sampled_cells}),
-       ``bursty_lonely_downsample_min_samples`` (default: {bursty_lonely_downsample_min_samples}),
-       ``bursty_lonely_downsample_min_cell_quantile`` (default:
-       {bursty_lonely_downsample_min_cell_quantile}), ``bursty_lonely_downsample_max_cell_quantile``
-       (default: {bursty_lonely_downsample_max_cell_quantile}), ``bursty_lonely_min_gene_total``
-       (default: {bursty_lonely_min_gene_total}), ``bursty_lonely_min_gene_normalized_variance``
-       (default: {bursty_lonely_min_gene_normalized_variance}), and
-       ``bursty_lonely_max_gene_similarity`` (default: {bursty_lonely_max_gene_similarity}). Mark all
-       bursty lonely genes as "noisy".
-
-    2. Invoke :py:func:`metacells.tools.named.find_named_genes` to also mark noisy genes based on their name, using
+    1. Invoke :py:func:`metacells.tools.named.find_named_genes` to also mark noisy genes based on their name, using
        the ``noisy_gene_names`` (default: {noisy_gene_names}) and ``noisy_gene_patterns`` (default:
        {noisy_gene_patterns}).
     """
-    tl.find_bursty_lonely_genes(
-        adata,
-        what,
-        max_sampled_cells=bursty_lonely_max_sampled_cells,
-        downsample_min_samples=bursty_lonely_downsample_min_samples,
-        downsample_min_cell_quantile=bursty_lonely_downsample_min_cell_quantile,
-        downsample_max_cell_quantile=bursty_lonely_downsample_max_cell_quantile,
-        min_gene_total=bursty_lonely_min_gene_total,
-        min_gene_normalized_variance=bursty_lonely_min_gene_normalized_variance,
-        max_gene_similarity=bursty_lonely_max_gene_similarity,
-        random_seed=random_seed,
-    )
-
-    noisy_genes_mask = ut.get_v_numpy(adata, "bursty_lonely_gene")
-
-    if noisy_gene_names is not None or noisy_gene_patterns is not None:
-        noisy_genes_series = tl.find_named_genes(adata, to=None, names=noisy_gene_names, patterns=noisy_gene_patterns)
-        assert noisy_genes_series is not None
-        noisy_genes_mask |= noisy_genes_series.values
-
-    ut.set_v_data(adata, "noisy_gene", noisy_genes_mask)
+    tl.find_named_genes(adata, names=noisy_gene_names, patterns=noisy_gene_patterns, to="noisy_gene")
 
 
 @ut.logged()

@@ -92,7 +92,10 @@ def compute_inner_variance_folds(
 
     umis_per_gene_per_cell = ut.get_vo_proper(adata, what, layout="row_major")
     total_umis_per_metacell = ut.get_o_numpy(gdata, "total_umis")
-    fraction_per_gene_per_metacell = ut.to_numpy_matrix(ut.get_vo_proper(adata, what, layout="row_major"), copy=True)
+    fraction_per_gene_per_metacell = ut.to_numpy_matrix(ut.get_vo_proper(gdata, what, layout="row_major"), copy=True)
+    umis_per_gene_per_metacell = ut.to_numpy_matrix(
+        ut.get_vo_proper(gdata, "total_umis", layout="row_major"), copy=True
+    )
 
     @ut.timed_call()
     def _single_metacell_inner_variance(metacell_index: int) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
@@ -101,6 +104,7 @@ def compute_inner_variance_folds(
             metacell_of_cells=metacell_of_cells,
             umis_per_gene_per_cell=umis_per_gene_per_cell,
             fraction_per_gene_per_metacell=fraction_per_gene_per_metacell,
+            umis_per_gene_per_metacell=umis_per_gene_per_metacell,
             total_umis_per_metacell=total_umis_per_metacell,
             min_gene_total=min_gene_total,
         )
@@ -128,6 +132,7 @@ def _compute_metacell_inner_variance(
     metacell_of_cells: ut.NumpyVector,
     umis_per_gene_per_cell: ut.ProperMatrix,
     fraction_per_gene_per_metacell: ut.NumpyMatrix,
+    umis_per_gene_per_metacell: ut.NumpyMatrix,
     total_umis_per_metacell: ut.NumpyVector,
     min_gene_total: int,
 ) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
@@ -144,13 +149,14 @@ def _compute_metacell_inner_variance(
     variance_per_gene_of_metacell = ut.variance_per(scaled_umis_per_gene_per_cell, per="column")
 
     mean_per_gene_of_metacell = ut.to_numpy_vector(fraction_per_gene_per_metacell[metacell_index, :], copy=True)
-    mask_per_gene_of_metacell = mean_per_gene_of_metacell < min_gene_total / total_umis_per_metacell[metacell_index]
     mean_per_gene_of_metacell *= median_total_umis
 
     mean_per_gene_of_metacell += 1
     variance_per_gene_of_metacell += 1
-
     fold_per_gene_of_metacell = np.log2(variance_per_gene_of_metacell) - np.log2(mean_per_gene_of_metacell)
+
+    umis_per_gene_of_metacell = umis_per_gene_per_metacell[metacell_index, :]
+    mask_per_gene_of_metacell = umis_per_gene_of_metacell < min_gene_total / total_umis_per_metacell[metacell_index]
     fold_per_gene_of_metacell[mask_per_gene_of_metacell] = 0.0
 
     gene_indices = np.where(fold_per_gene_of_metacell != 0)[0]
@@ -488,7 +494,7 @@ def compute_deviant_folds(
     """
     umis_per_gene_per_cell = ut.get_vo_proper(adata, what, layout="row_major")
     fraction_per_gene_per_metacell = ut.get_vo_proper(gdata, what, layout="row_major")
-    total_umis_per_metacell = ut.get_o_numpy(gdata, "total_umis")
+    umis_per_gene_per_metacell = ut.get_vo_proper(gdata, "total_umis", layout="row_major")
 
     metacell_per_cell = ut.get_o_numpy(adata, group, formatter=ut.groups_description)
     most_similar_per_cell = ut.get_o_numpy(adata, most_similar, formatter=ut.groups_description)
@@ -504,9 +510,9 @@ def compute_deviant_folds(
             cell_index=cell_index,
             umis_per_gene_per_cell=umis_per_gene_per_cell,
             fraction_per_gene_per_metacell=fraction_per_gene_per_metacell,
+            umis_per_gene_per_metacell=umis_per_gene_per_metacell,
             outliers_mask=outliers_mask,
             metacell_per_cell=combined_per_cell,
-            total_umis_per_metacell=total_umis_per_metacell,
             min_gene_total=min_gene_total,
         )
 
@@ -532,28 +538,27 @@ def _compute_cell_deviant_folds(
     cell_index: int,
     umis_per_gene_per_cell: ut.Matrix,
     fraction_per_gene_per_metacell: ut.Matrix,
+    umis_per_gene_per_metacell: ut.Matrix,
     metacell_per_cell: ut.NumpyVector,
     outliers_mask: ut.NumpyVector,
-    total_umis_per_metacell: ut.NumpyVector,
     min_gene_total: int,
 ) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
     actual_umis_per_gene = ut.to_numpy_vector(umis_per_gene_per_cell[cell_index, :], copy=True)
     total_umis_of_cell = np.sum(actual_umis_per_gene)
 
     metacell_index = metacell_per_cell[cell_index]
-    total_umis_of_metacell = total_umis_per_metacell[metacell_index]
     metacell_fraction_per_gene = ut.to_numpy_vector(fraction_per_gene_per_metacell[metacell_index, :])
-    metacell_umis_per_gene = total_umis_of_metacell * metacell_fraction_per_gene
     expected_umis_per_gene = total_umis_of_cell * metacell_fraction_per_gene
-
-    if outliers_mask[cell_index]:
-        total_umis_per_gene = actual_umis_per_gene + metacell_umis_per_gene
-    else:
-        total_umis_per_gene = metacell_umis_per_gene
 
     actual_umis_per_gene += 1
     expected_umis_per_gene += 1
     fold_factors = np.log2(actual_umis_per_gene) - np.log2(expected_umis_per_gene)
+
+    metacell_umis_per_gene = ut.to_numpy_vector(umis_per_gene_per_metacell[metacell_index, :])
+    if outliers_mask[cell_index]:
+        total_umis_per_gene = actual_umis_per_gene + metacell_umis_per_gene
+    else:
+        total_umis_per_gene = metacell_umis_per_gene
 
     gene_indices = np.where(total_umis_per_gene >= min_gene_total)[0].astype("int32")
     ut.log_calc("nnz_fold_genes_count", len(gene_indices))
@@ -634,10 +639,7 @@ def _compute_metacell_inner_folds(
     if abs_folds:
         tmp_deviant_fold_per_gene_per_cell[negative_folds_mask] *= -1
 
-    # ut.log_calc("max_index_per_gene", str(list(max_index_per_gene)))
-    # ut.log_calc("tmp_deviant_fold_per_gene_per_cell", tmp_deviant_fold_per_gene_per_cell)
     max_deviant_fold_per_gene = tmp_deviant_fold_per_gene_per_cell[max_index_per_gene, range(genes_count)]
-    # ut.log_calc("max_deviant_fold_per_gene", str(list(max_deviant_fold_per_gene)))
     assert len(max_deviant_fold_per_gene) == genes_count
 
     gene_indices = np.where(max_deviant_fold_per_gene != 0.0)[0].astype("int32")
@@ -807,15 +809,13 @@ def compute_outliers_fold_factors(
     most_similar_of_outliers = ut.get_o_numpy(adata, most_similar, formatter=ut.groups_description)
     assert np.min(most_similar_of_outliers) >= 0
 
-    metacells_data = ut.to_numpy_matrix(ut.get_vo_proper(gdata, what, layout="row_major"))
-    fraction_per_gene_per_most_similar = ut.to_numpy_matrix(metacells_data[most_similar_of_outliers, :])
-    total_umis_per_metacell = ut.get_o_numpy(gdata, "total_umis")
-    total_umis_per_gene_per_most_similar = fraction_per_gene_per_most_similar * total_umis_per_metacell[:, np.newaxis]
+    metacells_fractions = ut.to_numpy_matrix(ut.get_vo_proper(gdata, what, layout="row_major"))
+    metacells_umis = ut.to_numpy_matrix(ut.get_vo_proper(gdata, "total_umis", layout="row_major"))
+    fraction_per_gene_per_most_similar = ut.to_numpy_matrix(metacells_fractions[most_similar_of_outliers, :])
+    umis_per_gene_per_most_similar = ut.to_numpy_matrix(metacells_umis[most_similar_of_outliers, :])
 
     expected_umis_per_gene_per_outlier = fraction_per_gene_per_most_similar * total_umis_per_outlier[:, np.newaxis]
     assert actual_umis_per_gene_per_outlier.shape == expected_umis_per_gene_per_outlier.shape
-
-    total_umis_per_gene_per_fold = actual_umis_per_gene_per_outlier + total_umis_per_gene_per_most_similar
 
     actual_umis_per_gene_per_outlier += 1
     expected_umis_per_gene_per_outlier += 1
@@ -823,6 +823,9 @@ def compute_outliers_fold_factors(
     fold_factor_per_gene_per_outlier = np.log2(actual_umis_per_gene_per_outlier) - np.log2(
         expected_umis_per_gene_per_outlier
     )
+
+    total_umis_per_gene_per_most_similar = umis_per_gene_per_most_similar[most_similar_of_outliers, :]
+    total_umis_per_gene_per_fold = actual_umis_per_gene_per_outlier + total_umis_per_gene_per_most_similar
     fold_factor_per_gene_per_outlier[total_umis_per_gene_per_fold < min_gene_total] = 0.0
 
     ut.set_vo_data(adata, f"{most_similar}_fold", sp.csr_matrix(fold_factor_per_gene_per_outlier))

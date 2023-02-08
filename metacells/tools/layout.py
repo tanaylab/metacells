@@ -131,8 +131,8 @@ def spread_coordinates(
     *,
     prefix: str = "",
     suffix: str = "_spread",
-    cover_fraction: float = pr.cover_fraction,
-    noise_fraction: float = pr.noise_fraction,
+    cover_fraction: float = pr.spread_cover_fraction,
+    noise_fraction: float = pr.spread_noise_fraction,
     random_seed: int = pr.random_seed,
 ) -> None:
     """
