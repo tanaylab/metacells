@@ -551,10 +551,19 @@ def pairs_corrcoef_rows(
     assert first_matrix.shape == second_matrix.shape
     assert first_matrix.dtype == second_matrix.dtype
 
+    is_single_row = first_matrix.shape[0] == 1
+    if is_single_row:
+        first_matrix = np.vstack([first_matrix, first_matrix])
+        second_matrix = np.vstack([second_matrix, second_matrix])
+
     extension_name = f"pairs_correlate_dense_{first_matrix.dtype}_t"
     result = np.empty(first_matrix.shape[0], dtype="float32")
     extension = getattr(xt, extension_name)
     extension(first_matrix, second_matrix, result)
+
+    if is_single_row:
+        result = result[[0]]
+
     return result
 
 

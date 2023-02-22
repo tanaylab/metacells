@@ -487,13 +487,13 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
 
         if value.ndim == 1:
             value = utt.to_numpy_vector(value)
-            if len(value) > 100:
+            if len(value) > 20:
                 text = f"{len(value)} {value.dtype}s"
                 return text + checksum
             value = list(value)
 
     if isinstance(value, list):
-        if len(value) > 100:
+        if len(value) > 20 or (len(value) > 0 and hasattr(value[0], "__len__")):
             return f"{len(value)} {value[0].__class__.__name__}s" + checksum
         texts = [
             element.uns.get("__name__", "unnamed") if isinstance(element, AnnData) else str(element)
@@ -502,6 +502,10 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
         return f'[ {", ".join(texts)} ]' + checksum
 
     if isinstance(value, dict):
+        values = list(value.values())
+        if len(values) > 20 or (len(values) > 0 and hasattr(values[0], "__len__")):
+            keys = list(value.keys())
+            return f"dict {_format_value(keys, 'keys')} => {_format_value(values, 'values')}"
         return str(value) + checksum
 
     return f"{value.__class__.__module__}.{value.__class__.__qualname__}#{id(value)}"

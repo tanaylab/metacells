@@ -16,8 +16,6 @@ from anndata import AnnData  # type: ignore
 import metacells.parameters as pr
 import metacells.utilities as ut
 
-from .mask import combine_masks
-
 __all__ = [
     "compute_inner_variance_folds",
     "compute_projected_folds",
@@ -168,13 +166,11 @@ def _compute_metacell_inner_variance(
 @ut.timed_call()
 @ut.expand_doc()
 def compute_projected_folds(
-    adata: AnnData,
-    what: Union[str, ut.Matrix] = "__x__",
-    *,
-    total_umis: Optional[ut.Vector] = None,
-    projected: Union[str, ut.Matrix] = "projected",
+    qdata: AnnData,
+    from_query_layer: str = "corrected_fraction",
+    to_query_layer: str = "projected_fraction",
     fold_normalization: float = pr.project_fold_normalization,
-    min_significant_gene_value: float = pr.project_min_significant_gene_value,
+    min_significant_gene_umis: float = pr.project_min_significant_gene_umis,
 ) -> None:
     """
     Compute the projected fold factors of genes for each query metacell.
@@ -184,15 +180,17 @@ def compute_projected_folds(
 
     **Input**
 
-    Annotated ``adata``, where the observations are query metacells and the variables are genes, where ``what`` is a
-    per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
+    Annotated query ``qdata``, where the observations are query metacells and the variables are genes, where ``what`` is
+    a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
     matrix.
 
     In addition, the ``projected`` UMIs of each query metacells onto the atlas.
 
     **Returns**
 
-    Sets the following in ``gdata``:
+    TODOX
+
+    Sets the following in ``qdata``:
 
     Per-Variable Per-Observation (Gene-Cell) Annotations
         ``projected_fold``
@@ -206,58 +204,45 @@ def compute_projected_folds(
        {fold_normalization}).
 
     2. Set the fold factor to zero for every case where the total UMIs in the query metacell and the projected image is
-       not at least ``min_significant_gene_value`` (default: {min_significant_gene_value}).
+       not at least ``min_significant_gene_umis`` (default: {min_significant_gene_umis}).
     """
     assert fold_normalization >= 0
 
-    metacells_data = ut.get_vo_proper(adata, what, layout="row_major")
-    projected_data = ut.get_vo_proper(adata, projected, layout="row_major")
+    corrected_fractions = ut.get_vo_proper(qdata, from_query_layer, layout="row_major")
+    projected_fractions = ut.get_vo_proper(qdata, to_query_layer, layout="row_major")
 
-    metacells_fractions = ut.fraction_by(metacells_data, by="row", sums=total_umis)
-    projected_fractions = ut.fraction_by(projected_data, by="row", sums=total_umis)
+    corrected_fractions = ut.to_numpy_matrix(corrected_fractions, copy=True)
+    projected_fractions = ut.to_numpy_matrix(projected_fractions, copy=True)
 
-    metacells_fractions = ut.to_numpy_matrix(metacells_fractions)
-    projected_fractions = ut.to_numpy_matrix(projected_fractions)
-
-    metacells_fractions += fold_normalization
+    corrected_fractions += fold_normalization
     projected_fractions += fold_normalization
 
-    dense_folds = np.log2(metacells_fractions) - np.log2(projected_fractions)
+    dense_folds = np.log2(corrected_fractions) - np.log2(projected_fractions)
 
-    total_umis = ut.to_numpy_matrix(metacells_data + projected_data)  # type: ignore
-    insignificant_folds_mask = total_umis < min_significant_gene_value
-    ut.log_calc("insignificant entries", insignificant_folds_mask)
+    total_umis = ut.to_numpy_matrix(ut.get_vo_proper(qdata, "total_umis", layout="row_major"))
+    insignificant_folds_mask = total_umis < min_significant_gene_umis
+    ut.log_calc("insignificant folds mask", insignificant_folds_mask)
 
     dense_folds[insignificant_folds_mask] = 0.0
-    dense_folds_by_column = ut.to_layout(dense_folds, layout="column_major")
-
-    ut.set_vo_data(adata, "projected_fold", dense_folds_by_column)
+    sparse_folds = sp.csr_matrix(dense_folds)
+    ut.set_vo_data(qdata, "projected_fold", sparse_folds)
 
 
 @ut.logged()
 @ut.timed_call()
 def compute_metacells_projection_correlation(
-    adata: AnnData,
-    what: Union[str, ut.Matrix] = "__x__",
+    qdata: AnnData,
     *,
-    gene_masks: Collection[str] = [
-        "&atlas_gene?",
-        "&~lateral_gene?",
-        "&~atlas_lateral_gene?",
-        "&marker_gene?",
-        "&atlas_marker_gene?",
-        "&~noisy_gene?",
-        "&~atlas_noisy_gene?",
-    ],
-    projected: Union[str, ut.Matrix] = "projected",
     reproducible: bool,
 ) -> None:
     """
     Compute the correlation between the metacells UMIs and their projection on the atlas.
 
+    TODOX
+
     **Input**
 
-    Annotated query ``adata``, where the observations are metacells and the variables are genes and ``what`` is the
+    Annotated query ``qdata``, where the observations are metacells and the variables are genes and ``what`` is the
     (corrected) UMIs of the metacells.
 
     The data should contain per-observation-per-variable annotations ``projected`` with the projection of the
@@ -273,23 +258,21 @@ def compute_metacells_projection_correlation(
     If ``reproducible``, a slower (still parallel) but reproducible algorithm will be used.
     """
 
-    mask = combine_masks(adata, gene_masks)
-    included_adata = ut.slice(adata, vars=mask, name=".included")
-    corrected = ut.to_numpy_matrix(ut.get_vo_proper(included_adata, what))
-    projected = ut.to_numpy_matrix(ut.get_vo_proper(included_adata, projected))
-    projected_correlation = ut.pairs_corrcoef_rows(corrected, projected, reproducible=reproducible)
-    ut.set_o_data(adata, "projected_correlation", projected_correlation)
+    corrected_fractions = ut.to_numpy_matrix(ut.get_vo_proper(qdata, "corrected_fraction"))
+    projected_fractions = ut.to_numpy_matrix(ut.get_vo_proper(qdata, "projected_fraction"))
+    projected_correlation = ut.pairs_corrcoef_rows(corrected_fractions, projected_fractions, reproducible=reproducible)
+    ut.set_o_data(qdata, "projected_correlation", projected_correlation)
 
 
 @ut.logged()
 @ut.timed_call()
 def compute_similar_query_metacells(
-    adata: AnnData,
+    qdata: AnnData,
     max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
-    max_dissimilar_genes: int = pr.project_max_dissimilar_genes,
+    max_projection_noisy_fold_factor: float = pr.project_max_projection_noisy_fold_factor,
+    max_misfit_genes: int = pr.project_max_misfit_genes,
     essential_genes_property: Union[None, str, Collection[str]] = None,
-    min_similar_essential_genes: Optional[float] = None,
-    abs_folds: bool = pr.project_abs_folds,
+    min_essential_genes: Optional[int] = None,
 ) -> None:
     """
     Mark query metacells that are similar to their projection on the atlas.
@@ -300,7 +283,7 @@ def compute_similar_query_metacells(
 
     **Input**
 
-    Annotated query ``adata``, where the observations are metacells and the variables are genes.
+    Annotated query ``qdata``, where the observations are metacells and the variables are genes.
 
     The data should contain per-observation-per-variable annotations ``projected_fold`` with the significant projection
     folds factors, as computed by :py:func:`compute_projected_folds`. If
@@ -309,56 +292,76 @@ def compute_similar_query_metacells(
 
     **Returns**
 
-    Sets the following in ``adata``:
+    Sets the following in ``qdata``:
 
     Per-Observation (Cell) Annotations
 
         ``similar``
             A boolean mask indicating the query metacell is similar to its projection in the atlas.
-        ``dissimilar_genes_count``
-            The number of genes whose fold factor is above the threshold.
+
+    Per-Variable Per-Observation (Gene-Cell) Annotations
+        ``misfit``
+            Whether the gene has a too-high fold factor between the query and its projection in the atlas.
 
     **Computation Parameters**
 
-    1. Mark as dissimilar any query metacells which have more than ``max_dissimilar_genes`` (default:
-       {max_dissimilar_genes}) genes whose projection fold is above ``max_projection_fold_factor``.
+    TODOX
 
-    2. If ``essential_genes_property`` and ``min_similar_essential_genes`` are specified, the former should be the
+    1. Mark as dissimilar any query metacells which have more than ``max_misfit_genes`` (default:
+       {max_misfit_genes}) genes whose projection fold is above ``max_projection_fold_factor``.
+
+    2. If ``essential_genes_property`` and ``max_misfit_essential_genes`` are specified, the former should be the
        name(s) of boolean per-gene property/ies, and we will mark as dissimilar any query metacells which do not have at
        least this number of genes denoted by that mask(s) with a projection fold at most ``max_projection_fold_factor``.
     """
     assert max_projection_fold_factor >= 0
-    assert max_dissimilar_genes >= 0
+    assert max_projection_noisy_fold_factor >= 0
+    assert max_misfit_genes >= 0
 
-    projected_folds = ut.get_vo_proper(adata, "projected_fold", layout="row_major")
-    if abs_folds:
-        projected_folds = np.abs(projected_folds)  # type: ignore
-    high_folds = projected_folds > max_projection_fold_factor  # type: ignore
-    high_folds_per_metacell = ut.sum_per(high_folds, per="row")  # type: ignore
-    ut.set_o_data(adata, "dissimilar_genes_count", high_folds_per_metacell, formatter=ut.mask_description)
+    projected_fold_per_gene_per_metacell = ut.get_vo_proper(qdata, "projected_fold", layout="row_major")
+    projected_fold_per_gene_per_metacell = np.abs(projected_fold_per_gene_per_metacell)  # type: ignore
 
-    ut.log_calc("max dissimilar_genes_count", np.max(high_folds_per_metacell))
-    similar_mask = high_folds_per_metacell <= min(max_dissimilar_genes, adata.n_vars)
+    if ut.has_data(qdata, "projected_noisy_gene"):
+        max_projection_fold_factor_per_gene = np.full(qdata.n_vars, max_projection_fold_factor, dtype="float32")
+        noisy_per_gene = ut.get_v_numpy(qdata, "projected_noisy_gene")
+        max_projection_fold_factor_per_gene[noisy_per_gene] += max_projection_noisy_fold_factor
+        misfit_per_gene_per_metacell = (
+            projected_fold_per_gene_per_metacell > max_projection_fold_factor_per_gene[np.newaxis, :]
+        )
+    else:
+        misfit_per_gene_per_metacell = projected_fold_per_gene_per_metacell > max_projection_fold_factor  # type: ignore
+    ut.set_vo_data(qdata, "misfit", sp.csr_matrix(misfit_per_gene_per_metacell))
 
-    if essential_genes_property is not None and min_similar_essential_genes is not None:
-        essential_genes_mask = np.zeros(adata.n_vars, dtype="bool")
+    misfit_per_metacell = ut.sum_per(misfit_per_gene_per_metacell, per="row")
+    ut.log_calc("misfit_per_metacell", misfit_per_metacell, formatter=ut.sizes_description)
+
+    similar_mask = misfit_per_metacell <= max_misfit_genes
+    ut.log_calc("similar_mask", similar_mask)
+
+    if essential_genes_property is not None and min_essential_genes is not None:
+        essential_genes_mask = np.zeros(qdata.n_vars, dtype="bool")
         if isinstance(essential_genes_property, str):
             essential_genes_property = [essential_genes_property]
         for property_name in essential_genes_property:
-            essential_genes_mask |= ut.get_v_numpy(adata, property_name)
+            essential_genes_mask |= ut.get_v_numpy(qdata, property_name)
 
         ut.log_calc("essential_genes_mask", essential_genes_mask)
-        ut.log_calc("essential_gene_names", adata.var_names[essential_genes_mask])
-        essential_similar_genes_mask = ~high_folds[:, essential_genes_mask]  # type: ignore
-        essential_similar_genes_per_metacell = ut.sum_per(
-            ut.to_layout(essential_similar_genes_mask, layout="row_major"), per="row"
-        )
-        ut.set_o_data(adata, "similar_essential_genes_count", essential_similar_genes_per_metacell)
-        essential_metacells_similar_mask = essential_similar_genes_per_metacell >= min_similar_essential_genes
-        ut.log_calc("essential_metacells_similar_mask", essential_metacells_similar_mask)
-        similar_mask &= essential_metacells_similar_mask
+        essential_genes_count = np.sum(essential_genes_mask)
+        if essential_genes_count > 0:
+            ut.log_calc("essential_gene_names", qdata.var_names[essential_genes_mask])
+            misfit_per_essential_gene_per_metacell = misfit_per_gene_per_metacell[:, essential_genes_mask]
+            misfit_essential_per_metacell = ut.sum_per(misfit_per_essential_gene_per_metacell, per="row")
+            fitted_essential_per_metacell = essential_genes_count - misfit_essential_per_metacell
+        else:
+            fitted_essential_per_metacell = np.zeros(len(misfit_per_metacell), dtype="bool")
 
-    ut.set_o_data(adata, "similar", similar_mask)
+        ut.log_calc("fitted_essential_per_metacell", fitted_essential_per_metacell, formatter=ut.sizes_description)
+        essential_similar_mask = fitted_essential_per_metacell >= min_essential_genes
+        ut.log_calc("essential_similar_mask", essential_similar_mask)
+
+        similar_mask &= essential_similar_mask
+
+    ut.set_o_data(qdata, "similar", similar_mask)
 
 
 @ut.logged()
@@ -573,12 +576,10 @@ def compute_inner_folds(
     adata: AnnData,
     gdata: AnnData,
     group: Union[str, ut.Vector] = "metacell",
-    abs_folds: bool = pr.inner_abs_folds,
 ) -> None:
     """
     Given ``adata`` with computed ``deviant_fold`` for each gene for each cell, set in ``inner_fold`` in ``gdata``, for
-    each gene for each metacell the ``deviant_fold`` with the maximal absolute value (if ``abs_folds``, default:
-    {abs_folds}), otherwise just with the maximal value.
+    each gene for each metacell the ``deviant_fold`` with the maximal absolute value.
     """
     group_per_cell = ut.get_o_numpy(adata, group)
     deviant_fold_per_gene_per_cell = ut.get_vo_proper(adata, "deviant_fold")
@@ -589,7 +590,6 @@ def compute_inner_folds(
             metacell_index=metacell_index,
             group_per_cell=group_per_cell,
             deviant_fold_per_gene_per_cell=deviant_fold_per_gene_per_cell,
-            abs_folds=abs_folds,
         )
 
     results = list(ut.parallel_map(_single_metacell_inner_folds, gdata.n_obs))
@@ -616,28 +616,23 @@ def _compute_metacell_inner_folds(
     metacell_index: int,
     group_per_cell: ut.NumpyVector,
     deviant_fold_per_gene_per_cell: ut.ProperMatrix,
-    abs_folds: bool,
 ) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
     cells_mask = group_per_cell == metacell_index
     cells_count = np.sum(cells_mask)
     assert cells_count > 0
     genes_count = deviant_fold_per_gene_per_cell.shape[1]
 
-    tmp_deviant_fold_per_gene_per_cell = ut.to_numpy_matrix(
-        deviant_fold_per_gene_per_cell[cells_mask, :], copy=abs_folds
-    )
+    tmp_deviant_fold_per_gene_per_cell = ut.to_numpy_matrix(deviant_fold_per_gene_per_cell[cells_mask, :], copy=True)
     tmp_deviant_fold_per_gene_per_cell = ut.to_layout(tmp_deviant_fold_per_gene_per_cell, layout="column_major")
     assert tmp_deviant_fold_per_gene_per_cell.shape == (cells_count, genes_count)
 
-    if abs_folds:
-        negative_folds_mask = tmp_deviant_fold_per_gene_per_cell < 0
-        tmp_deviant_fold_per_gene_per_cell[negative_folds_mask] *= -1
+    negative_folds_mask = tmp_deviant_fold_per_gene_per_cell < 0
+    tmp_deviant_fold_per_gene_per_cell[negative_folds_mask] *= -1
 
     max_index_per_gene = np.argmax(tmp_deviant_fold_per_gene_per_cell, axis=0)
     assert len(max_index_per_gene) == genes_count
 
-    if abs_folds:
-        tmp_deviant_fold_per_gene_per_cell[negative_folds_mask] *= -1
+    tmp_deviant_fold_per_gene_per_cell[negative_folds_mask] *= -1
 
     max_deviant_fold_per_gene = tmp_deviant_fold_per_gene_per_cell[max_index_per_gene, range(genes_count)]
     assert len(max_deviant_fold_per_gene) == genes_count

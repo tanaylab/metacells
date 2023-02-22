@@ -43,15 +43,12 @@ significant_gene_similarity: float = 0.1
 #: :py:const:`dissolve_min_convincing_gene_fold_factor`.
 significant_gene_fold_factor: float = 3.0
 
-#: Whether to use the absolute folds when considering fold factors. See
-#: :py:const:`deviants_abs_folds`,
-#: :py:const:`distinct_abs_folds`,
-#: :py:const:`inner_abs_folds`,
-#: :py:const:`outliers_abs_folds`,
-#: :py:const:`project_abs_folds`,
+#: The generic additional "significant" fold factor for noisy genes, in addition to ``significant_gene_fold_factor``.
+# See
+#: :py:const:`deviants_min_gene_fold_factor`
 #: and
-#: :py:func:`inner_abs_folds`.
-abs_folds: bool = True
+#: :py:const:`dissolve_min_convincing_gene_fold_factor`.
+significant_noisy_gene_fold_factor: float = 2.0
 
 #: The generic minimal value (number of UMIs) we can say is "significant" given the technical noise. See
 #: :py:const:`rare_min_gene_maximum`,
@@ -771,18 +768,15 @@ deviants_policy: str = "votes"
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 deviants_min_gene_fold_factor: float = significant_gene_fold_factor
 
-#: The minimal fold factor for a noisy gene to indicate a cell is "deviant". See
+#: The minimal additional fold factor for a noisy gene to indicate a cell is "deviant",
+# in addition to ``deviants_min_gene_fold_factor``. See
 #: :py:const:`significant_gene_fold_factor`,
 #: :py:func:`metacells.tools.deviants.find_deviant_cells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-deviants_min_noisy_gene_fold_factor: float = significant_gene_fold_factor + 2
-
-#: Whether to consider the absolute fold factor when computing deviant cells. See
-#: :py:func:`metacells.tools.deviants.find_deviant_cells`.
-deviants_abs_folds: bool = False
+deviants_min_noisy_gene_fold_factor: float = significant_noisy_gene_fold_factor
 
 #: The maximal fraction of genes to use to indicate cell are "deviants". See
 #: :py:func:`metacells.tools.deviants.find_deviant_cells`,
@@ -863,17 +857,9 @@ rare_dissolve_min_convincing_size_factor: Optional[float] = None
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 dissolve_min_convincing_gene_fold_factor: float = significant_gene_fold_factor
 
-#: Whether to consider the absolute fold factor when dissolving metacells. See
-#: :py:func:`metacells.tools.dissolve.dissolve_metacells`.
-dissolve_abs_folds: bool = False
-
 #: The number of most-distinct genes to collect for each cell. See
 #: :py:func:`metacells.tools.distinct.find_distinct_genes`.
 distinct_genes_count: int = 20
-
-#: Whether to consider the absolute fold factor when collecting most-distinct genes for each cell. See
-#: :py:func:`metacells.tools.distinct.find_distinct_genes`.
-distinct_abs_folds: bool = abs_folds
 
 #: The normalization factor to use if/when computing the fractions of the data for UMAP.
 #: See
@@ -946,45 +932,39 @@ quality_min_gene_total: int = 40
 #: :py:func:`metacells.pipeline.divide_and_conquer.guess_max_parallel_piles`.
 max_gbs: float = -0.1
 
-#: Whether to compute projections based on the log of the data instead of the data itself. See
-#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
-project_log_data: bool = True
-
 #: The normalization factor to use when computing fold factors for projecting a query onto an atlas. See
-#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_fold_normalization: float = 1e-5
 
 #: The minimal number of UMIs for a gene to be a potential cause to mark a metacell as dissimilar. See
-#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
-project_min_significant_gene_value: int = 40
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
+project_min_significant_gene_umis: int = 40
 
 #: The number of atlas candidates to consider when projecting a query onto an atlas. See
-#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_candidates_count: int = 50
 
-#: The minimal number of atlas candidates to use even if they fail the consistency check. See
-#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+#: The minimal number of atlas candidates to use even if they fail the consistency check as a fraction of
+#: `project_candidates_count`. See
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_min_candidates_fraction: float = 1.0 / 3.0
 
 #: The minimal weight of an atlas metacell used for the projection of a query metacell. See
-#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_min_usage_weight: float = 1e-5
 
 #: The maximal fold factor of genes between the projection and the query metacell. See
-#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_max_projection_fold_factor: float = significant_gene_fold_factor
 
-#: Whether to consider the absolute fold factor when evaluating the projection of the query metacells . See
-#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
-project_abs_folds: bool = abs_folds
+#: The maximal additional fold factor of noisy genes between the projection and the query metacell,
+# in addition to ``project_max_projection_fold_factor``. See
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
+project_max_projection_noisy_fold_factor: float = significant_noisy_gene_fold_factor
 
 #: The maximal fold factor of genes between the atlas metacells used for the projection of a query metacell. See
-#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_max_consistency_fold_factor: float = significant_gene_fold_factor - 1.0
-
-#: Whether to consider the absolute fold factor when evaluating the inner folds. See
-#: :py:func:`metacells.tools.quality.compute_inner_fold_factors`.
-inner_abs_folds: bool = abs_folds
 
 #: The normalization factor to use when computing log of fractions for finding the most similar group for outliers. See
 #: :py:func:`metacells.tools.quality.compute_outliers_matches`.
@@ -996,7 +976,7 @@ ignore_atlas_lateral_genes: bool = True
 
 #: Whether to ignore the noisy genes of the atlas when computing projections. See
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
-ignore_atlas_noisy_genes: bool = True
+consider_atlas_noisy_genes: bool = True
 
 #: Whether to ignore the non-marker genes of the atlas when computing projections. See
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
@@ -1008,11 +988,11 @@ only_query_marker_genes: bool = False
 
 #: Whether to ignore the lateral genes of the query when computing projections. See
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
-ignore_query_lateral_genes: bool = False
+ignore_query_lateral_genes: bool = True
 
 #: Whether to ignore the noisy genes of the query when computing projections. See
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
-ignore_query_noisy_genes: bool = False
+consider_query_noisy_genes: bool = True
 
 #: The minimal fraction of metacells where a gene has a high projection fold factor to mark the gene as "misfit".
 #: See :py:func:`metacells.tools.project.find_misfit_genes`,
@@ -1055,7 +1035,7 @@ project_min_corrected_gene_factor: float = 0.15
 #: The maximal number of deviant genes allowed for saying a query is similar to the projection in the atlas.
 #: See :py:func:`metacells.tools.quality.compute_similar_query_metacells`
 # and :py:func:`metacells.pipeline.projection.projection_pipeline`.
-project_max_dissimilar_genes: int = 3
+project_max_misfit_genes: int = 3
 
 #: Whether to add a pseudo-gene to the query to renormalize its total UMIs so that the fractions of the common genes
 #: would be as expected. See :py:func:`metacells.tools.project.renormalize_query_by_atlas` and
@@ -1066,5 +1046,8 @@ renormalize_query_by_atlas: bool = True
 #: See :py:func:`metacells.tools.quality.compute_type_genes_normalized_variances`.
 type_gene_normalized_variance_quantile: float = 0.95
 
-#: Minimal fraction of atlas essential genes which must be similar for a projection to be valid.
-project_min_similar_essential_genes_fraction: float = 0.75
+#: Minimal fraction of atlas essential genes required for saying a query is similar to the projection in the
+#: atlas.
+#: See :py:func:`metacells.tools.quality.compute_similar_query_metacells`
+# and :py:func:`metacells.pipeline.projection.projection_pipeline`.
+project_min_essential_genes_fraction: float = 0.75

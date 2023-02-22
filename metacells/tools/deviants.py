@@ -35,7 +35,6 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
     candidates: Union[str, ut.Vector] = "candidate",
     min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     min_noisy_gene_fold_factor: float = pr.deviants_min_noisy_gene_fold_factor,
-    abs_folds: bool = pr.deviants_abs_folds,
     max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
     policy: str = pr.deviants_policy,
@@ -72,11 +71,10 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
 
     2. If a ``noisy_gene`` mask exists, then ignore all the genes it contains.
 
-    3. Ignore all fold factors less than the ``min_gene_fold_factor`` (default: {min_gene_fold_factor}). If
-       ``abs_folds`` (default: {abs_folds}), consider the absolute fold factors. Count the number of genes which have a
-       fold factor above this minimum in at least one cell. If the fraction of such genes is above ``max_gene_fraction``
-       (default: {max_gene_fraction}), then raise the minimal gene fold factor such that at most this fraction of genes
-       remain.
+    3. Ignore all fold factors less than the ``min_gene_fold_factor`` (default: {min_gene_fold_factor}). Count the
+       number of genes which have an absolute fold factor above this minimum in at least one cell. If the fraction of
+       such genes is above ``max_gene_fraction`` (default: {max_gene_fraction}), then raise the minimal gene fold factor
+       such that at most this fraction of genes remain.
 
     4. For each remaining gene, rank all the cells where it is expressed above the min fold
        factor. Give an artificial maximum rank to all cells with fold factor 0, that is, below the
@@ -102,8 +100,6 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
             what,
             candidates=candidates,
             min_gene_fold_factor=min_gene_fold_factor,
-            # TODOY min_noisy_gene_fold_factor=min_noisy_gene_fold_factor,
-            abs_folds=abs_folds,
             max_gene_fraction=max_gene_fraction,
             max_cell_fraction=max_cell_fraction,
         )
@@ -162,7 +158,6 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
                     compressed.data,
                     compressed.indices,
                     compressed.indptr,
-                    abs_folds,
                     total_umis_per_grouped,
                     median_fraction_per_gene,
                 )
@@ -178,21 +173,16 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
             with ut.timed_step("extensions.fold_factor_dense"):
                 extension(
                     dense,
-                    abs_folds,
                     total_umis_per_grouped,
                     median_fraction_per_gene,
                 )
 
             fold_per_gene_per_cell[candidate_cell_indices, :] = dense
 
-    if abs_folds:
-        effective_fold_per_gene_per_cell = np.abs(fold_per_gene_per_cell)
-    else:
-        effective_fold_per_gene_per_cell = fold_per_gene_per_cell
-
+    effective_fold_per_gene_per_cell = np.abs(fold_per_gene_per_cell)
     effective_fold_per_gene_per_cell -= min_gene_fold_factor
     if noisy_genes_mask is not None:
-        effective_fold_per_gene_per_cell[:, noisy_genes_mask] += min_gene_fold_factor - min_noisy_gene_fold_factor
+        effective_fold_per_gene_per_cell[:, noisy_genes_mask] -= min_noisy_gene_fold_factor
     effective_fold_per_gene_per_cell[effective_fold_per_gene_per_cell < 0] = 0
 
     if policy == "count":
@@ -222,7 +212,6 @@ def _votes_deviant_cells(  # pylint: disable=too-many-statements
     *,
     candidates: Union[str, ut.Vector] = "candidate",
     min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
-    abs_folds: bool = pr.deviants_abs_folds,
     max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
 ) -> ut.Vector:
@@ -263,7 +252,6 @@ def _votes_deviant_cells(  # pylint: disable=too-many-statements
             candidate_of_cells=candidate_of_cells,
             totals_of_cells=totals_of_cells,
             min_gene_fold_factor=min_gene_fold_factor,
-            abs_folds=abs_folds,
             acceptable_cells_mask=acceptable_cells_mask,
             noisy_genes_mask=noisy_genes_mask,
         )
@@ -323,13 +311,12 @@ def _votes_deviant_cells(  # pylint: disable=too-many-statements
 
 
 @ut.timed_call()
-def _collect_fold_factors(  # pylint: disable=too-many-statements,too-many-branches
+def _collect_fold_factors(  # pylint: disable=too-many-statements
     *,
     data: ut.ProperMatrix,
     candidate_of_cells: ut.NumpyVector,
     totals_of_cells: ut.NumpyVector,
     min_gene_fold_factor: float,
-    abs_folds: bool,
     acceptable_cells_mask: ut.NumpyVector,
     noisy_genes_mask: Optional[ut.NumpyVector],
 ) -> Tuple[List[ut.CompressedMatrix], List[ut.NumpyVector]]:
@@ -393,7 +380,6 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements,too-many-branc
                     compressed.data,
                     compressed.indices,
                     compressed.indptr,
-                    abs_folds,
                     totals_of_candidate_cells,
                     medians_of_candidate_genes,
                 )
@@ -401,12 +387,7 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements,too-many-branc
             if noisy_genes_mask is not None:
                 compressed[:, noisy_genes_mask] = 0.0
 
-            if abs_folds:
-                compressed.data[
-                    (compressed.data < min_gene_fold_factor) & (compressed.data > -min_gene_fold_factor)
-                ] = 0.0
-            else:
-                compressed.data[compressed.data < min_gene_fold_factor] = 0.0
+            compressed.data[(compressed.data < min_gene_fold_factor) & (compressed.data > -min_gene_fold_factor)] = 0.0
 
             ut.eliminate_zeros(compressed)
 
@@ -419,7 +400,6 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements,too-many-branc
             with ut.timed_step("extensions.fold_factor_dense"):
                 extension(
                     dense,
-                    abs_folds,
                     totals_of_candidate_cells,
                     medians_of_candidate_genes,
                 )
@@ -427,10 +407,7 @@ def _collect_fold_factors(  # pylint: disable=too-many-statements,too-many-branc
             if noisy_genes_mask is not None:
                 dense[:, noisy_genes_mask] = 0.0
 
-            if abs_folds:
-                dense[(dense < min_gene_fold_factor) & (dense > -min_gene_fold_factor)] = 0.0
-            else:
-                dense[dense < min_gene_fold_factor] = 0.0
+            dense[(dense < min_gene_fold_factor) & (dense > -min_gene_fold_factor)] = 0.0
 
             compressed = sp.csr_matrix(dense)
             assert compressed.has_sorted_indices

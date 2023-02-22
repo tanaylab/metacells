@@ -164,7 +164,7 @@ metadata, and also:
 ``grouped`` per metacell
     The number of cells grouped into each metacell.
 
-``total_umis`` per gene per metacell and per metacell
+``total_umis`` per metacell, and per gene per metacell
     We still provide the total UMIs count for each each gene for each cell in each metacell, and the total UMIs in each
     metacell. Note that the estimated fraction of each gene in the metacell is *not* its total UMIs divided by the
     metacell's total UMIs; the actual estimator is more complex.
@@ -274,6 +274,13 @@ For the use case of projecting metacells we use the following terminology:
     A set of metacells with minimal associated metadata, specifically without a ``type``. This may optionally contain
     its own ``lateral_gene``, ``noisy_gene`` and/or even ``marker_gene`` annotations.
 
+``ignored_gene`` mask, ``ignored_gene_of_<type>`` mask
+    A set of genes to not even try to match between the query and the atlas. In general the projection matches only a
+    subset of the genes (that are common to the atlas and the query). However, the analyst has the option to force
+    additional genes to be ignored, either in general or only when projecting metacells of a specific type. Manually
+    ignoring specific genes which are known not to match (e.g., due to the query being some experiment, e.g. a knockout
+    or a disease model) can improve the quality of the projection for the genes which do match.
+
 Given these two input data sets, the ``projection_pipeline`` computes the following (inside the query ``AnnData``
 object):
 
@@ -285,22 +292,26 @@ object):
 ``atlas_lateral_gene``, ``atlas_noisy_gene``, ``atlas_marker_gene``, ``essential_gene_of_<type>`` masks
     These masks are copied from the atlas to the query (restricting them to the common ``atlas_gene`` subset).
 
-``corrected_fractions`` per gene per query metacell
+``projected_noisy_gene``
+    The mask of the genes that were considered "noisy" when computing the projection. By default this is the union
+    of the noisy atlas and query genes.
+
+``corrected_fraction`` per gene per query metacell
     For each ``atlas_gene``, its fraction in each query metacell, out of only the atlas genes. This may be further
     corrected (see below) if projecting between different scRNA-seq technologies (e.g. 10X v2 and 10X v3). For
     non-``atlas_gene`` this is 0.
 
-``projected_fractions`` per gene per query metacell
+``projected_fraction`` per gene per query metacell
     For each ``atlas_gene``, its fraction in its projection on the atlas. This projection is computed as a weighted
     average of some atlas metacells (see below), which are all sufficiently close to each other (in terms of gene
     expression), so averaging them is reasonable to capture the fact the query metacell may be along some position on
     some gradient that isn't an exact match for any specific atlas metacell. For non-``atlas_gene`` this is 0.
 
 ``total_atlas_umis`` per query metacell
-    The total effective UMIs of the ``atlas_gene`` in each query metacell (this need not be an integer). This is used in
-    the analysis as described for ``total_umis`` above, that is, to ensure comparing expression levels will ignore cases
-    where the total effective number of UMIs of both compared gene profiles is too low to make a reliable determination.
-    In such cases we take the effective fold factor to be 0.
+    The total UMIs of the ``atlas_gene`` in each query metacell. This is used in the analysis as described for
+    ``total_umis`` above, that is, to ensure comparing expression levels will ignore cases where the total number of
+    UMIs of both compared gene profiles is too low to make a reliable determination. In such cases we take the fold
+    factor to be 0.
 
 ``weights`` per query metacell per atlas metacsll
     The weights used to compute the ``projected_fractions``. Due to ``AnnData`` limitations this is returned as a
@@ -313,7 +324,7 @@ significant amount of quality control one needs to apply before accepting these 
 ``correction_factor`` per gene
     If projecting a query on an atlas with different technologies (e.g., 10X v3 to 10X v2), an automatically computed
     factor we multiplied the query gene fractions by to compensate for the systematic difference between the
-    technologies (1.0 for uncorrected genes and non-``atlas_gene``).
+    technologies (1.0 for uncorrected genes and 0.0 for non-``atlas_gene``).
 
 ``projected_type`` per query metacell
     For each query metacell, the best atlas ``type`` we can assign to it based on its projection. Note this does not
@@ -337,29 +348,29 @@ significant amount of quality control one needs to apply before accepting these 
     that they aren't "truly" of that type is a decision which only the analyst can make based, on prior biological
     knowledge of the relevant genes.
 
-``fitted_gene`` mask per gene per query metacell
+``fitted`` mask per gene per query metacell
     For each ``atlas_gene`` for each query metacell, whether the gene was expected to be projected well, based on the
     query metacell ``projected_type`` (and the ``projected_secondary_type``, if any). For non-``atlas_gene`` this is set
     to ``False``. This does not guarantee the gene was actually projected well.
 
-``misfit_gene`` mask per gene per query metacell
-    For each ``atlas_gene`` for each query metacell, whether the ``corrected_fractions`` of the gene was significantly
+``misfit`` mask per gene per query metacell
+    For each ``atlas_gene`` for each query metacell, whether the ``corrected_fraction`` of the gene was significantly
     different from the ``projected_fractions`` (that is, whether the gene was not projected well for this metacell). For
-    non-``atlas_gene`` this is set to ``False`` to make it easier to identify problematic genes.
+    non-``atlas_gene`` this is set to ``False``, to make it easier to identify problematic genes.
 
     This is expected to be rare for ``fitted_gene`` and common for the rest of the ``atlas_gene``. If too many
     ``fitted_gene`` are also ``misfit_gene``, then one should be suspicious whether the query metacell is "truly" of the
     ``projected_type``.
 
-``essential_gene`` mask per gene per query metacell
+``essential`` mask per gene per query metacell
     Which of the ``atlas_gene`` were also listed in the ``essential_gene_of_<type>`` for the ``projected_type`` (and
     also the ``projected_secondary_type``, if any) of each query metacell.
 
     If an ``essential_gene`` is also a ``misfit_gene``, then one should be very suspicious whether the query metacell is
     "truly" of the ``projected_type``.
 
-``projection_correlation`` per query metacell
-    The correlation between between the ``corrected_fractions`` and the ``projected_fractions`` for only the
+``projected_correlation`` per query metacell
+    The correlation between between the ``corrected_fraction`` and the ``projected_fraction`` for only the
     ``fitted_gene`` expression levels of each query metacell. This serves as a very rough estimator for the quality of
     the projection for this query metacell (e.g. can be used to compute R^2 values).
 
@@ -367,7 +378,7 @@ significant amount of quality control one needs to apply before accepting these 
     only to genes we projected well.
 
 ``projected_fold`` per gene per query metacell
-    The fold factor between the ``corrected_fractions`` and the ``projected_fractions`` (0 for non-``atlas_gene``). If
+    The fold factor between the ``corrected_fraction`` and the ``projected_fraction`` (0 for non-``atlas_gene``). If
     the absolute value of this is high (3 for 8x ratio) then the gene was not projected well for this metacell. This
     will be 0 for non-``atlas_gene``.
 

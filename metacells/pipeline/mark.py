@@ -12,6 +12,7 @@ be fully automated, and therefore relies on the analyst to manually provide the 
 
 from re import Pattern
 from typing import Collection
+from typing import Dict
 from typing import Optional
 from typing import Union
 
@@ -24,6 +25,7 @@ __all__ = [
     "mark_lateral_genes",
     "mark_noisy_genes",
     "mark_select_genes",
+    "mark_ignored_genes",
 ]
 
 
@@ -133,8 +135,64 @@ def mark_select_genes(
 
     **Computation Parameters**
 
-    1. Invoke :py:func:`metacells.tools.named.find_named_genes` to also select genes based on their name, using
+    1. Invoke :py:func:`metacells.tools.named.find_named_genes` to select genes based on their name, using
        the ``select_gene_names`` (default: {select_gene_names}) and ``select_gene_patterns`` (default:
        {select_gene_patterns}).
     """
     tl.find_named_genes(adata, names=select_gene_names, patterns=select_gene_patterns, to="select_gene")
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def mark_ignored_genes(
+    adata: AnnData,
+    *,
+    ignored_gene_names: Optional[Collection[str]] = None,
+    ignored_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    ignored_gene_names_of_types: Optional[Dict[str, Collection[str]]] = None,
+    ignored_gene_patterns_of_types: Optional[Dict[str, Collection[str]]] = None,
+) -> None:
+    """
+    Mark a subset of the genes as "ignored", that is, do not attempt to match them when projecting this (query)
+    data onto an atlas.
+
+    You can also just manually set the ``ignored_gene`` and/or ``ignored_gene_of_<type>`` masks, or further manipulate
+    them after calling this function.
+
+    **Input**
+
+    Annotated ``adata``, where the observations are cells and the variables are genes.
+
+    **Returns**
+
+    Sets the following in the data:
+
+    Variable (gene) annotations:
+        ``ignored_gene``
+            A mask of the "ignored" genes for all the query metacells regardless of their type.
+
+        ``ignored_gene_of_<type>``
+            A mask of the "ignored" genes for query metacells that are assigned a specific type.
+
+    **Computation Parameters**
+
+    1. Invoke :py:func:`metacells.tools.named.find_named_genes` to ignore genes based on their name, using
+       the ``ignored_gene_names`` (default: {ignored_gene_names}) and ``ignored_gene_patterns`` (default:
+       {ignored_gene_patterns}).
+
+    2. Similarly for each type specified in ``ignored_gene_names_of_types`` and/or ``ignored_gene_patterns_of_types``.
+    """
+    tl.find_named_genes(adata, names=ignored_gene_names, patterns=ignored_gene_patterns, to="ignored_gene")
+
+    ignored_gene_names_of_types = ignored_gene_names_of_types or {}
+    ignored_gene_patterns_of_types = ignored_gene_patterns_of_types or {}
+    types = set(ignored_gene_names_of_types.keys()) | set(ignored_gene_patterns_of_types.keys())
+
+    for type_name in types:
+        tl.find_named_genes(
+            adata,
+            names=ignored_gene_names_of_types.get(type_name),
+            patterns=ignored_gene_patterns_of_types.get(type_name),
+            to=f"ignored_gene_of_{type_name}",
+        )

@@ -34,7 +34,6 @@ def dissolve_metacells(
     min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
     min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
-    abs_folds: bool = pr.dissolve_abs_folds,
 ) -> None:
     """
     Dissolve too-small metacells based on ``what`` (default: {what}) data.
@@ -82,9 +81,9 @@ def dissolve_metacells(
     5. If ``min_convincing_size_factor`` (default: {min_convincing_size_factor}) is specified, then any remaining
        metacells whose size is at least ``target_metacell_size * min_convincing_size_factor`` are preserved, given they
        contain at least one gene whose fold factor (log2((actual + 1) / (expected + 1))) is at least
-       ``min_convincing_gene_fold_factor`` (default: {min_convincing_gene_fold_factor}). If ``abs_folds``, consider the
-       absolute fold factors. That is, we only preserve these smaller metacells if there is at least one gene whose
-       expression is significantly different from the mean of the population.
+       ``min_convincing_gene_fold_factor`` (default: {min_convincing_gene_fold_factor}). Consider the absolute fold
+       factors. That is, we only preserve these smaller metacells if there is at least one gene whose expression is
+       significantly different from the mean of the population.
 
     6 . Any remaining metacell is dissolved into "outlier" cells.
     """
@@ -132,7 +131,6 @@ def dissolve_metacells(
             min_robust_size=min_robust_size,
             min_convincing_size=min_convincing_size,
             min_convincing_gene_fold_factor=min_convincing_gene_fold_factor,
-            abs_folds=abs_folds,
             candidates_count=candidates_count,
             candidate_cell_indices=candidate_cell_indices,
         ):
@@ -161,7 +159,6 @@ def _keep_candidate(  # pylint: disable=too-many-branches
     min_robust_size: Optional[float],
     min_convincing_size: Optional[float],
     min_convincing_gene_fold_factor: float,
-    abs_folds: bool,
     candidates_count: int,
     candidate_cell_indices: ut.NumpyVector,
 ) -> bool:
@@ -227,10 +224,7 @@ def _keep_candidate(  # pylint: disable=too-many-branches
     candidate_data_of_genes += 1
     candidate_data_of_genes /= candidate_expected_of_genes
     np.log2(candidate_data_of_genes, out=candidate_data_of_genes)
-    if abs_folds:
-        convincing_genes_mask = np.abs(candidate_data_of_genes) >= min_convincing_gene_fold_factor
-    else:
-        convincing_genes_mask = candidate_data_of_genes >= min_convincing_gene_fold_factor
+    convincing_genes_mask = np.abs(candidate_data_of_genes) >= min_convincing_gene_fold_factor
     keep_candidate = bool(np.any(convincing_genes_mask))
 
     if ut.logging_calc():

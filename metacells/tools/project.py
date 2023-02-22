@@ -9,7 +9,6 @@ from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Tuple
-from typing import Union
 
 import numpy as np
 import scipy.sparse as sp  # type: ignore
@@ -19,209 +18,38 @@ import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
-    "renormalize_query_by_atlas",
-    "project_query_onto_atlas",
+    "compute_projection",
     "convey_atlas_to_query",
-    "find_misfit_genes",
-    "compute_query_projection",
 ]
 
 
 @ut.logged()
 @ut.timed_call()
-def renormalize_query_by_atlas(  # pylint: disable=too-many-statements,too-many-branches
-    what: str = "__x__",
-    *,
-    adata: AnnData,
-    qdata: AnnData,
-    var_annotations: Dict[str, Any],
-    layers: Dict[str, Any],
-    varp_annotations: Dict[str, Any],
-) -> Optional[AnnData]:
-    """
-    Add an ``ATLASNORM`` pseudo-gene to query metacells data to compensate for the query having filtered out many genes.
-
-    This renormalizes the gene fractions in the query to fit the atlas in case the query has aggressive filtered a
-    significant amount of genes.
-
-    **Input**
-
-    Annotated query ``qdata`` and atlas ``adata``, where the observations are cells and the variables are genes, where
-    ``X`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing
-    such a matrix.
-
-    **Returns**
-
-    None if no normalization is needed (or possible). Otherwise, a copy of the query metacells data, with an additional
-    variable (gene) called ``ATLASNORM`` to the query data, such that the total number of UMIs for each query metacells
-    is as expected given the total number of UMIs of the genes common to the query and the atlas. This is skipped if the
-    query and the atlas have exactly the same list of genes, or if if the query already contains a high number of genes
-    missing from the atlas so that the total number of UMIs for the query metacells is already at least the expected
-    based on the common genes.
-
-    **Computation Parameters**
-
-    1. Computes how many UMIs should be added to each query metacell so that its (total UMIs / total common gene UMIs)
-       would be the same as the (total atlas UMIs / total atlas common UMIs). If this is zero (or negative), stop.
-
-    2. Add an ``ATLASNORM`` pseudo-gene to the query with the above amount of UMIs. For each per-variable (gene)
-       observation, add the value specified in ``var_annotations``, whose list of keys must cover the set of
-       per-variable annotations in the query data. For each per-observation-per-variable layer, add the value specified
-       in ``layers``, whose list of keys must cover the existing layers. For each per-variable-per-variable annotation,
-       add the value specified in ``varp_annotations``.
-    """
-    for name in qdata.var.keys():
-        if "|" not in name and name not in var_annotations.keys():
-            raise RuntimeError(f"missing default value for variable annotation {name}")
-
-    for name in qdata.layers.keys():
-        if name not in layers.keys():
-            raise RuntimeError(f"missing default value for layer {name}")
-
-    for name in qdata.varp.keys():
-        if name not in varp_annotations.keys():
-            raise RuntimeError(f"missing default value for variable-variable {name}")
-
-    if list(qdata.var_names) == list(adata.var_names):
-        return None
-
-    query_genes_list = list(qdata.var_names)
-    atlas_genes_list = list(adata.var_names)
-    common_genes_list = list(sorted(set(qdata.var_names) & set(adata.var_names)))
-    query_gene_indices = np.array([query_genes_list.index(gene) for gene in common_genes_list])
-    atlas_gene_indices = np.array([atlas_genes_list.index(gene) for gene in common_genes_list])
-    common_qdata = ut.slice(qdata, name=".common", vars=query_gene_indices)
-    common_adata = ut.slice(adata, name=".common", vars=atlas_gene_indices)
-
-    assert list(common_qdata.var_names) == list(common_adata.var_names)
-
-    atlas_total_umis_per_metacell = ut.get_o_numpy(adata, what, sum=True)
-    atlas_common_umis_per_metacell = ut.get_o_numpy(common_adata, what, sum=True)
-    atlas_total_umis = np.sum(atlas_total_umis_per_metacell)
-    atlas_common_umis = np.sum(atlas_common_umis_per_metacell)
-    atlas_disjoint_umis_fraction = atlas_total_umis / atlas_common_umis - 1.0
-
-    ut.log_calc("atlas_total_umis", atlas_total_umis)
-    ut.log_calc("atlas_common_umis", atlas_common_umis)
-    ut.log_calc("atlas_disjoint_umis_fraction", atlas_disjoint_umis_fraction)
-
-    query_total_umis_per_metacell = ut.get_o_numpy(qdata, what, sum=True)
-    query_common_umis_per_metacell = ut.get_o_numpy(common_qdata, what, sum=True)
-    query_total_umis = np.sum(query_total_umis_per_metacell)
-    query_common_umis = np.sum(query_common_umis_per_metacell)
-    query_disjoint_umis_fraction = query_total_umis / query_common_umis - 1.0
-
-    ut.log_calc("query_total_umis", query_total_umis)
-    ut.log_calc("query_common_umis", query_common_umis)
-    ut.log_calc("query_disjoint_umis_fraction", query_disjoint_umis_fraction)
-
-    if query_disjoint_umis_fraction >= atlas_disjoint_umis_fraction:
-        return None
-
-    query_normalization_umis_fraction = atlas_disjoint_umis_fraction - query_disjoint_umis_fraction
-    ut.log_calc("query_normalization_umis_fraction", query_normalization_umis_fraction)
-    query_normalization_umis_per_metacell = query_common_umis_per_metacell * query_normalization_umis_fraction
-
-    _proper, dense, compressed = ut.to_proper_matrices(qdata.X)
-
-    if dense is None:
-        assert compressed is not None
-        dense = ut.to_numpy_matrix(compressed)
-    added = np.concatenate([dense, query_normalization_umis_per_metacell[:, np.newaxis]], axis=1)
-
-    if compressed is not None:
-        added = sp.csr_matrix(added)
-
-    assert added.shape[0] == qdata.shape[0]
-    assert added.shape[1] == qdata.shape[1] + 1
-
-    ndata = AnnData(added)
-    ndata.obs_names = qdata.obs_names
-    var_names = list(qdata.var_names)
-    var_names.append("ATLASNORM")
-    ndata.var_names = var_names
-
-    for name, value in qdata.uns.items():
-        ut.set_m_data(ndata, name, value)
-
-    for name, value in qdata.obs.items():
-        ut.set_o_data(ndata, name, value)
-
-    for name, value in qdata.obsp.items():
-        ut.set_oo_data(ndata, name, value)
-
-    for name in qdata.var.keys():
-        if "|" in name:
-            continue
-        value = ut.get_v_numpy(qdata, name)
-        value = np.append(value, [var_annotations[name]])
-        ut.set_v_data(ndata, name, value)
-
-    for name in qdata.layers.keys():
-        data = ut.get_vo_proper(qdata, name)
-        _proper, dense, compressed = ut.to_proper_matrices(data)
-
-        if dense is None:
-            assert compressed is not None
-            dense = ut.to_numpy_matrix(compressed)
-
-        values = np.full(qdata.n_obs, layers[name], dtype=dense.dtype)
-        added = np.concatenate([dense, values[:, np.newaxis]], axis=1)
-
-        if compressed is not None:
-            added = sp.csr_matrix(added)
-
-        ut.set_vo_data(ndata, name, added)
-
-    for name in qdata.varp.keys():
-        data = ut.get_vv_proper(qdata, name)
-        _proper, dense, compressed = ut.to_proper_matrices(data)
-
-        if dense is None:
-            assert compressed is not None
-            dense = ut.to_numpy_matrix(compressed)
-
-        values = np.full(qdata.n_vars, varp_annotations[name], dtype=dense.dtype)
-        added = np.concatenate([dense, values[:, np.newaxis]], axis=1)
-        values = np.full(qdata.n_vars + 1, varp_annotations[name], dtype=dense.dtype)
-        added = np.concatenate([added, values[np.newaxis, :]], axis=0)
-
-        if compressed is not None:
-            added = sp.csr_matrix(added)
-
-        ut.set_vv_data(ndata, name, added)
-
-    return ndata
-
-
-@ut.logged()
-@ut.timed_call()
 @ut.expand_doc()
-def project_query_onto_atlas(
-    what: Union[str, ut.Matrix] = "__x__",
-    *,
+def compute_projection(
     adata: AnnData,
     qdata: AnnData,
-    atlas_total_umis: Optional[ut.Vector] = None,
-    query_total_umis: Optional[ut.Vector] = None,
-    project_log_data: bool = pr.project_log_data,
+    *,
+    from_atlas_layer: str = "corrected_fraction",
+    from_query_layer: str = "corrected_fraction",
+    to_query_layer: str = "projected_fraction",
     fold_normalization: float = pr.project_fold_normalization,
-    min_significant_gene_value: float = pr.project_min_significant_gene_value,
+    min_significant_gene_umis: float = pr.project_min_significant_gene_umis,
     max_consistency_fold_factor: float = pr.project_max_consistency_fold_factor,
     candidates_count: int = pr.project_candidates_count,
     min_candidates_fraction: float = pr.project_min_candidates_fraction,
     min_usage_weight: float = pr.project_min_usage_weight,
-    reproducible: bool,
     second_anchor_indices: Optional[List[int]] = None,
+    reproducible: bool,
 ) -> ut.CompressedMatrix:
     """
-    Project query metacells onto atlas metacells.
+    Compute the weights and results of projecting a query onto an atlas.
 
     **Input**
 
     Annotated query ``qdata`` and atlas ``adata``, where the observations are cells and the variables are genes, where
-    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation
-    containing such a matrix.
+    ``what`` is a per-variable-per-observation matrix of fractions, or the name of a per-variable-per-observation
+    annotation containing such a matrix.
 
     Typically this data excludes any genes having a systematic difference between the query and the atlas.
 
@@ -234,11 +62,19 @@ def project_query_onto_atlas(
 
     In addition, sets the following annotations in ``qdata``:
 
+    TODOX
+
     Observation (Cell) Annotations
         ``similar``
             A boolean mask indicating whether the query metacell is similar to its projection onto the atlas. If
             ``False`` the metacells is said to be "dissimilar", which may indicate the query contains cell states that
             do not appear in the atlas.
+
+    Observation-Variable (Cell-Gene) Annotations
+        ``projected_fractions``
+            A matrix of UMIs where the sum of UMIs for each corrected query metacell is the same as the sum of ``what``
+            UMIs, describing the "projected" image of the query metacell onto the atlas. This projection is a weighted
+            average of some atlas metacells (using the computed weights returned by this function).
 
     **Computation Parameters**
 
@@ -262,33 +98,32 @@ def project_query_onto_atlas(
        ``max_consistency_fold_factor`` (default: {max_consistency_fold_factor}). Keep at least
        ``min_candidates_fraction`` (default: {min_candidates_fraction}) of the original candidates even if they are less
        consistent. For this computation, Ignore the fold factors of genes whose sum of UMIs in the anchor(s) and the
-       candidate metacells is less than ``min_significant_gene_value`` (default: {min_significant_gene_value}).
+       candidate metacells is less than ``min_significant_gene_umis`` (default: {min_significant_gene_umis}).
 
     4. Compute the non-negative weights (with a sum of 1) of the selected candidates that give the best projection of
        the query metacells onto the atlas. Since the algorithm for computing these weights rarely produces an exact 0
        weight, reduce all weights less than the ``min_usage_weight`` (default: {min_usage_weight}) to zero. If
-       ``project_log_data`` (default: {project_log_data}), compute the match on the log of the data instead of the
+       TODOX compute the match on the log of the data instead of the
        actual data. If ``second_anchor_indices`` is not ``None``, it is set to the list of indices of the used atlas
        metacells candidates correlated with the second anchor.
     """
     prepared_arguments = _project_query_atlas_data_arguments(
-        what,
         adata=adata,
         qdata=qdata,
-        atlas_total_umis=atlas_total_umis,
-        query_total_umis=query_total_umis,
-        project_log_data=project_log_data,
+        from_atlas_layer=from_atlas_layer,
+        from_query_layer=from_query_layer,
+        to_query_layer=to_query_layer,
         fold_normalization=fold_normalization,
-        min_significant_gene_value=min_significant_gene_value,
+        min_significant_gene_umis=min_significant_gene_umis,
         max_consistency_fold_factor=max_consistency_fold_factor,
         candidates_count=candidates_count,
         min_candidates_fraction=min_candidates_fraction,
         min_usage_weight=min_usage_weight,
-        reproducible=reproducible,
         second_anchor_indices=second_anchor_indices,
+        reproducible=reproducible,
     )
 
-    @ut.timed_call("project_single_metacell")
+    @ut.timed_call()
     def _project_single(query_metacell_index: int) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
         return _project_single_metacell(
             query_metacell_index=query_metacell_index,
@@ -307,25 +142,30 @@ def project_query_onto_atlas(
     atlas_used_sizes.insert(0, 0)
     indptr = np.cumsum(np.array(atlas_used_sizes))
 
-    return sp.csr_matrix((data, indices, indptr), shape=(qdata.n_obs, adata.n_obs))
+    weights = sp.csr_matrix((data, indices, indptr), shape=(qdata.n_obs, adata.n_obs))
+
+    projected_fractions = weights @ prepared_arguments["atlas_fractions"]
+    assert projected_fractions.shape == qdata.shape
+    projected_fractions = ut.fraction_by(projected_fractions, by="row")
+    ut.set_vo_data(qdata, "projected_fraction", sp.csr_matrix(projected_fractions))
+
+    return weights
 
 
 def _project_query_atlas_data_arguments(
-    what: Union[str, ut.Matrix],
-    *,
     adata: AnnData,
     qdata: AnnData,
-    atlas_total_umis: Optional[ut.Vector],
-    query_total_umis: Optional[ut.Vector],
-    project_log_data: bool,
+    from_atlas_layer: str,
+    from_query_layer: str,
+    to_query_layer: str,
     fold_normalization: float,
-    min_significant_gene_value: float,
+    min_significant_gene_umis: float,
     max_consistency_fold_factor: float,
     candidates_count: int,
     min_candidates_fraction: float,
     min_usage_weight: float,
-    reproducible: bool,
     second_anchor_indices: Optional[List[int]],
+    reproducible: bool,
 ) -> Dict[str, Any]:
     assert fold_normalization > 0
     assert candidates_count > 0
@@ -334,23 +174,17 @@ def _project_query_atlas_data_arguments(
     assert max_consistency_fold_factor >= 0
     assert np.all(adata.var_names == qdata.var_names)
 
-    atlas_umis = ut.get_vo_proper(adata, what, layout="row_major")
-    query_umis = ut.get_vo_proper(qdata, what, layout="row_major")
+    atlas_umis = ut.get_vo_proper(adata, "total_umis", layout="row_major")
 
-    if atlas_total_umis is None:
-        atlas_total_umis = ut.sum_per(atlas_umis, per="row")
-    atlas_total_umis = ut.to_numpy_vector(atlas_total_umis)
+    atlas_fractions = ut.get_vo_proper(adata, from_atlas_layer, layout="row_major")
+    query_fractions = ut.get_vo_proper(qdata, from_query_layer, layout="row_major")
 
-    if query_total_umis is None:
-        query_total_umis = ut.sum_per(query_umis, per="row")
-    query_total_umis = ut.to_numpy_vector(query_total_umis)
-
-    atlas_fractions = ut.to_numpy_matrix(ut.fraction_by(atlas_umis, by="row", sums=atlas_total_umis))
-    query_fractions = ut.to_numpy_matrix(ut.fraction_by(query_umis, by="row", sums=query_total_umis))
+    atlas_fractions = ut.to_numpy_matrix(atlas_fractions, copy=True)
+    query_fractions = ut.to_numpy_matrix(query_fractions, copy=True)
 
     if second_anchor_indices is not None:
         assert qdata.n_obs == 1
-        query_single_fractions = ut.to_numpy_vector(ut.get_vo_proper(qdata, "projected")) / query_total_umis[0]
+        query_single_fractions = ut.to_numpy_vector(ut.get_vo_proper(qdata, to_query_layer))
 
         query_residual_fractions = query_fractions - query_single_fractions[np.newaxis, :]
         query_residual_fractions[query_residual_fractions < 0] = 0
@@ -358,15 +192,11 @@ def _project_query_atlas_data_arguments(
         atlas_residual_fractions = atlas_fractions - ut.to_numpy_vector(query_residual_fractions)[np.newaxis, :]
         atlas_residual_fractions[atlas_residual_fractions < 0] = 0
 
-        if project_log_data:
-            atlas_residual_fractions += fold_normalization
-            query_residual_fractions += fold_normalization
+        atlas_residual_fractions += fold_normalization
+        query_residual_fractions += fold_normalization
 
-            atlas_project_residual_data = np.log2(atlas_residual_fractions)
-            query_project_residual_data = np.log2(query_residual_fractions)
-        else:
-            atlas_project_residual_data = atlas_residual_fractions
-            query_project_residual_data = query_residual_fractions
+        atlas_project_residual_data = np.log2(atlas_residual_fractions)
+        query_project_residual_data = np.log2(query_residual_fractions)
 
         query_atlas_corr_residual: Optional[ut.NumpyMatrix] = ut.cross_corrcoef_rows(
             query_project_residual_data, atlas_project_residual_data, reproducible=reproducible
@@ -384,24 +214,17 @@ def _project_query_atlas_data_arguments(
     atlas_fractions -= fold_normalization
     query_fractions -= fold_normalization
 
-    if project_log_data:
-        atlas_project_data = atlas_log_fractions
-        query_project_data = query_log_fractions
-    else:
-        atlas_project_data = atlas_fractions
-        query_project_data = query_fractions
-
-    query_atlas_corr = ut.cross_corrcoef_rows(query_project_data, atlas_project_data, reproducible=reproducible)
+    query_atlas_corr = ut.cross_corrcoef_rows(query_log_fractions, atlas_log_fractions, reproducible=reproducible)
 
     return dict(
         atlas_umis=atlas_umis,
         query_atlas_corr=query_atlas_corr,
-        atlas_project_data=atlas_project_data,
-        query_project_data=query_project_data,
+        atlas_fractions=atlas_fractions,
         atlas_log_fractions=atlas_log_fractions,
+        query_log_fractions=query_log_fractions,
         candidates_count=candidates_count,
         min_candidates_fraction=min_candidates_fraction,
-        min_significant_gene_value=min_significant_gene_value,
+        min_significant_gene_umis=min_significant_gene_umis,
         min_usage_weight=min_usage_weight,
         max_consistency_fold_factor=max_consistency_fold_factor,
         second_anchor_indices=second_anchor_indices,
@@ -415,18 +238,18 @@ def _project_single_metacell(  # pylint: disable=too-many-statements,too-many-br
     query_metacell_index: int,
     atlas_umis: ut.Matrix,
     query_atlas_corr: ut.NumpyMatrix,
-    atlas_project_data: ut.NumpyMatrix,
-    query_project_data: ut.NumpyMatrix,
+    atlas_fractions: ut.NumpyMatrix,  # pylint: disable=unused-argument
     atlas_log_fractions: ut.NumpyMatrix,
+    query_log_fractions: ut.NumpyMatrix,
     candidates_count: int,
     min_candidates_fraction: float,
-    min_significant_gene_value: float,
+    min_significant_gene_umis: float,
     min_usage_weight: float,
     max_consistency_fold_factor: float,
     second_anchor_indices: Optional[List[int]],
     query_atlas_corr_residual: Optional[ut.NumpyMatrix],
 ) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
-    query_metacell_project_data = query_project_data[query_metacell_index, :]
+    query_metacell_log_fractions = query_log_fractions[query_metacell_index, :]
 
     query_metacell_atlas_correlations = query_atlas_corr[query_metacell_index, :]
     query_metacell_atlas_order = np.argsort(-query_metacell_atlas_correlations)
@@ -446,7 +269,7 @@ def _project_single_metacell(  # pylint: disable=too-many-statements,too-many-br
         atlas_metacell_log_fractions = atlas_log_fractions[atlas_metacell_index, :]
         atlas_metacell_consistency_fold_factors = np.abs(atlas_metacell_log_fractions - atlas_anchor_log_fractions)
         atlas_metacell_umis = ut.to_numpy_vector(atlas_umis[atlas_metacell_index, :])
-        atlas_metacell_significant_genes_mask = atlas_metacell_umis + atlas_anchor_umis >= min_significant_gene_value
+        atlas_metacell_significant_genes_mask = atlas_metacell_umis + atlas_anchor_umis >= min_significant_gene_umis
         if np.any(atlas_metacell_significant_genes_mask):
             atlas_metacell_consistency = np.max(
                 atlas_metacell_consistency_fold_factors[atlas_metacell_significant_genes_mask]
@@ -496,7 +319,7 @@ def _project_single_metacell(  # pylint: disable=too-many-statements,too-many-br
             )
             atlas_metacell_umis = ut.to_numpy_vector(atlas_umis[atlas_metacell_index, :])
             atlas_metacell_significant_genes_mask = (
-                atlas_metacell_umis + atlas_secondary_anchor_umis >= min_significant_gene_value
+                atlas_metacell_umis + atlas_secondary_anchor_umis >= min_significant_gene_umis
             )
             if np.any(atlas_metacell_significant_genes_mask):
                 atlas_metacell_consistency = np.max(
@@ -522,9 +345,9 @@ def _project_single_metacell(  # pylint: disable=too-many-statements,too-many-br
 
         atlas_candidate_indices = np.array(sorted(atlas_candidate_indices_set | atlas_secondary_candidate_indices_set))
 
-    atlas_candidates_project_data = atlas_project_data[atlas_candidate_indices, :]
+    atlas_candidates_log_fractions = atlas_log_fractions[atlas_candidate_indices, :]
 
-    represent_result = ut.represent(query_metacell_project_data, atlas_candidates_project_data)
+    represent_result = ut.represent(query_metacell_log_fractions, atlas_candidates_log_fractions)
     assert represent_result is not None
     atlas_candidate_weights = represent_result[1]
     atlas_candidate_weights[atlas_candidate_weights < min_usage_weight] = 0
@@ -577,129 +400,12 @@ def convey_atlas_to_query(
     property_of_atlas_metacells = ut.get_o_numpy(adata, property_name, formatter=formatter)
     property_of_query_metacells = []
     for query_metacell_index in range(qdata.n_obs):
-        metacell_weights = ut.to_numpy_vector(weights[query_metacell_index, :])
-        metacell_mask = metacell_weights > 0
-        assert np.any(metacell_mask)
-        metacell_weights = ut.to_numpy_vector(metacell_weights[metacell_mask])
-        metacell_values = property_of_atlas_metacells[metacell_mask]
-        property_of_query_metacells.append(method(metacell_weights, metacell_values))
+        atlas_metacell_weights = ut.to_numpy_vector(weights[query_metacell_index, :])
+        used_atlas_metacells_mask = atlas_metacell_weights > 0
+        assert np.any(used_atlas_metacells_mask)
+        used_atlas_metacell_weights = ut.to_numpy_vector(atlas_metacell_weights[used_atlas_metacells_mask])
+        used_atlas_metacell_values = property_of_atlas_metacells[used_atlas_metacells_mask]
+        property_of_query_metacells.append(method(used_atlas_metacell_weights, used_atlas_metacell_values))
 
-    ut.set_o_data(qdata, to_property_name, np.array(property_of_query_metacells))
-
-
-@ut.logged()
-@ut.timed_call()
-@ut.expand_doc()
-def find_misfit_genes(
-    adata: AnnData,
-    *,
-    max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
-    min_metacells_fraction: float = pr.misfit_min_metacells_fraction,
-    abs_folds: bool = pr.project_abs_folds,
-    to_property_name: str = "misfit_gene",
-) -> None:
-    """
-    Find genes with a very poor fit between the query and the atlas.
-
-    **Input**
-
-    Annotated query ``adata`` where the observations are cells and the variables are genes, where ``what`` is a
-    per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
-    matrix.
-
-    This should contain a ``projected_fold`` per-variable-per-observation matrix with the fold factor between each query
-    metacell and its projected image on the atlas.
-
-    **Returns**
-
-    Sets the following annotations in ``adata``:
-
-    Variable (Gene) Annotations
-        ``misfit_gene`` (or ``to_property_name``):
-            A boolean mask indicating whether the gene has a very poor fit between the query and the atlas.
-
-    **Computation Parameters**
-
-    1. Count for each such gene the number of query metacells for which the ``projected_fold`` is above
-       ``max_projection_fold_factor``. If ``abs_folds`` (default: {abs_folds}), consider the absolute fold factor.
-
-    2. Mark the gene as misfit if either count is at least a ``min_metacells_fraction`` (default:
-       {min_metacells_fraction}) of the metacells.
-    """
-    assert max_projection_fold_factor >= 0
-    assert 0 <= min_metacells_fraction <= 1
-
-    projected_fold = ut.get_vo_proper(adata, "projected_fold", layout="column_major")
-    if abs_folds:
-        projected_fold = np.abs(projected_fold)  # type: ignore
-
-    high_projection_folds = ut.to_numpy_matrix(projected_fold > max_projection_fold_factor)  # type: ignore
-    ut.log_calc("high_projection_folds", high_projection_folds)
-
-    count_of_genes = ut.sum_per(high_projection_folds, per="column")
-    min_count = adata.n_obs * min_metacells_fraction
-    mask_of_genes = count_of_genes >= min_count
-
-    ut.set_v_data(adata, to_property_name, mask_of_genes)
-
-
-@ut.logged()
-@ut.timed_call()
-def compute_query_projection(
-    what: Union[str, ut.Matrix] = "__x__",
-    *,
-    adata: AnnData,
-    qdata: AnnData,
-    weights: ut.Matrix,
-    atlas_total_umis: Optional[ut.Vector] = None,
-    query_total_umis: Optional[ut.Vector] = None,
-) -> None:
-    """
-    Compute the projected image of the query on the atlas.
-
-    **Input**
-
-    Annotated query ``qdata`` and atlas ``adata``, where the observations are cells and the variables are genes, where
-    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation
-    containing such a matrix.
-
-    The ``weights`` of the projection where each row is a query metacell, each column is an atlas metacell, and the
-    value is the weight of the atlas cell for projecting the metacell, such that the sum of weights in each row
-    is one.
-
-    **Returns**
-
-    In addition, sets the following annotations in ``qdata``:
-
-    Observation (Cell) Annotations
-        ``projection``
-            The number of UMIs of each gene in the projected image of the query to the metacell, if the total number of
-            UMIs in the projection is equal to the total number of UMIs in the query metacell.
-
-    **Computation Parameters**
-
-    1. Compute the fraction of each gene in the atlas and the query based on the total UMIs, unless ``atlas_total_umis``
-       and/or ``query_total_umis`` are specified.
-
-    2. Compute the projected image of each query metacell on the atlas using the weights.
-
-    3. Convert this image to UMIs count based on the total UMIs of each metacell. Note that if overriding the total
-       atlas or query UMIs, this means that the result need not sum to this total.
-    """
-    assert np.all(adata.var_names == qdata.var_names)
-
-    atlas_umis = ut.get_vo_proper(adata, what, layout="row_major")
-    query_umis = ut.get_vo_proper(qdata, what, layout="row_major")
-
-    if atlas_total_umis is None:
-        atlas_total_umis = ut.sum_per(atlas_umis, per="row")
-    atlas_total_umis = ut.to_numpy_vector(atlas_total_umis)
-
-    if query_total_umis is None:
-        query_total_umis = ut.sum_per(query_umis, per="row")
-    query_total_umis = ut.to_numpy_vector(query_total_umis)
-
-    atlas_fractions = ut.to_numpy_matrix(ut.fraction_by(atlas_umis, by="row", sums=atlas_total_umis))
-    projected_fractions = weights @ atlas_fractions  # type: ignore
-    projected_umis = ut.scale_by(projected_fractions, scale=query_total_umis, by="row")
-    ut.set_vo_data(qdata, "projected", projected_umis)
+    query_property_data = np.array(property_of_query_metacells, dtype=property_of_atlas_metacells.dtype)
+    ut.set_o_data(qdata, to_property_name, query_property_data)

@@ -232,7 +232,6 @@ class DirectParameters:  # pylint: disable=too-many-instance-attributes
     deviants_policy: str
     deviants_min_gene_fold_factor: float
     deviants_min_noisy_gene_fold_factor: float
-    deviants_abs_folds: bool
     deviants_max_gene_fraction: Optional[float]
     deviants_max_cell_fraction: Optional[float]
     dissolve_min_robust_size_factor: Optional[float]
@@ -417,7 +416,6 @@ def divide_and_conquer_pipeline(
     deviants_policy: str = pr.deviants_policy,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     deviants_min_noisy_gene_fold_factor: float = pr.deviants_min_noisy_gene_fold_factor,
-    deviants_abs_folds: bool = pr.deviants_abs_folds,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     deviants_max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
@@ -557,7 +555,6 @@ def divide_and_conquer_pipeline(
             deviants_policy=deviants_policy,
             deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
             deviants_min_noisy_gene_fold_factor=deviants_min_noisy_gene_fold_factor,
-            deviants_abs_folds=deviants_abs_folds,
             deviants_max_gene_fraction=deviants_max_gene_fraction,
             deviants_max_cell_fraction=deviants_max_cell_fraction,
             dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
@@ -704,7 +701,6 @@ def compute_divide_and_conquer_metacells(
     deviants_policy: str = pr.deviants_policy,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     deviants_min_noisy_gene_fold_factor: float = pr.deviants_min_noisy_gene_fold_factor,
-    deviants_abs_folds: bool = pr.deviants_abs_folds,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
     deviants_max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
@@ -852,7 +848,6 @@ def compute_divide_and_conquer_metacells(
             deviants_policy=deviants_policy,
             deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
             deviants_min_noisy_gene_fold_factor=deviants_min_noisy_gene_fold_factor,
-            deviants_abs_folds=deviants_abs_folds,
             deviants_max_gene_fraction=deviants_max_gene_fraction,
             deviants_max_cell_fraction=deviants_max_cell_fraction,
             dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,

@@ -6,7 +6,6 @@ namespace metacells {
 template<typename D>
 static void
 fold_factor_dense(pybind11::array_t<D>& data_array,
-                  const bool abs_folds,
                   const pybind11::array_t<D>& total_of_rows_array,
                   const pybind11::array_t<D>& fraction_of_columns_array) {
     WithoutGil without_gil{};
@@ -27,10 +26,7 @@ fold_factor_dense(pybind11::array_t<D>& data_array,
             const auto expected = row_total * column_fraction;
             auto& value = row_data[column_index];
             const auto actual = row_total * value;
-            value = D(log((actual + 1.0) / (expected + 1.0)) * LOG2_SCALE);
-            if (abs_folds) {
-                value = abs(value);
-            }
+            value = abs(D(log((actual + 1.0) / (expected + 1.0)) * LOG2_SCALE));
         }
     });
 }
@@ -41,7 +37,6 @@ static void
 fold_factor_compressed(pybind11::array_t<D>& data_array,
                        pybind11::array_t<I>& indices_array,
                        pybind11::array_t<P>& indptr_array,
-                       const bool abs_folds,
                        const pybind11::array_t<D>& total_of_bands_array,
                        const pybind11::array_t<D>& fraction_of_elements_array) {
     WithoutGil without_gil{};
@@ -71,10 +66,7 @@ fold_factor_compressed(pybind11::array_t<D>& data_array,
             const auto expected = band_total * element_fraction;
             auto& value = band_data[position];
             const auto actual = band_total * value;
-            value = D(log((actual + 1.0) / (expected + 1.0)) * LOG2_SCALE);
-            if (abs_folds) {
-                value = abs(value);
-            }
+            value = abs(D(log((actual + 1.0) / (expected + 1.0)) * LOG2_SCALE));
         }
     });
 }
@@ -83,47 +75,27 @@ template<typename D>
 static void
 collect_distinct_folds(ArraySlice<int32_t> gene_indices,
                        ArraySlice<float32_t> gene_folds,
-                       ConstArraySlice<D> fold_in_cell,
-                       bool abs_folds) {
+                       ConstArraySlice<D> fold_in_cell) {
     TmpVectorSizeT raii_indices;
     auto tmp_indices = raii_indices.array_slice("tmp_indices", fold_in_cell.size());
     std::iota(tmp_indices.begin(), tmp_indices.end(), 0);
 
-    if (abs_folds) {
-        std::nth_element(tmp_indices.begin(),
-                         tmp_indices.begin() + gene_indices.size(),
-                         tmp_indices.end(),
-                         [&](const size_t left_gene_index, const size_t right_gene_index) {
-                             const auto left_value = fold_in_cell[left_gene_index];
-                             const auto right_value = fold_in_cell[right_gene_index];
-                             return abs(left_value) > abs(right_value);
-                         });
+    std::nth_element(tmp_indices.begin(),
+                     tmp_indices.begin() + gene_indices.size(),
+                     tmp_indices.end(),
+                     [&](const size_t left_gene_index, const size_t right_gene_index) {
+                         const auto left_value = fold_in_cell[left_gene_index];
+                         const auto right_value = fold_in_cell[right_gene_index];
+                         return abs(left_value) > abs(right_value);
+                     });
 
-        std::sort(tmp_indices.begin(),
-                  tmp_indices.begin() + gene_indices.size(),
-                  [&](const size_t left_gene_index, const size_t right_gene_index) {
-                      const auto left_value = fold_in_cell[left_gene_index];
-                      const auto right_value = fold_in_cell[right_gene_index];
-                      return abs(left_value) > abs(right_value);
-                  });
-    } else {
-        std::nth_element(tmp_indices.begin(),
-                         tmp_indices.begin() + gene_indices.size(),
-                         tmp_indices.end(),
-                         [&](const size_t left_gene_index, const size_t right_gene_index) {
-                             const auto left_value = fold_in_cell[left_gene_index];
-                             const auto right_value = fold_in_cell[right_gene_index];
-                             return left_value > right_value;
-                         });
-
-        std::sort(tmp_indices.begin(),
-                  tmp_indices.begin() + gene_indices.size(),
-                  [&](const size_t left_gene_index, const size_t right_gene_index) {
-                      const auto left_value = fold_in_cell[left_gene_index];
-                      const auto right_value = fold_in_cell[right_gene_index];
-                      return left_value > right_value;
-                  });
-    }
+    std::sort(tmp_indices.begin(),
+              tmp_indices.begin() + gene_indices.size(),
+              [&](const size_t left_gene_index, const size_t right_gene_index) {
+                  const auto left_value = fold_in_cell[left_gene_index];
+                  const auto right_value = fold_in_cell[right_gene_index];
+                  return abs(left_value) > abs(right_value);
+              });
 
     for (size_t position = 0; position < gene_indices.size(); ++position) {
         size_t gene_index = tmp_indices[position];
@@ -136,8 +108,7 @@ template<typename D>
 static void
 top_distinct(pybind11::array_t<int32_t>& gene_indices_array,
              pybind11::array_t<float32_t>& gene_folds_array,
-             const pybind11::array_t<D>& fold_in_cells_array,
-             bool abs_folds) {
+             const pybind11::array_t<D>& fold_in_cells_array) {
     WithoutGil without_gil{};
     MatrixSlice<float32_t> gene_folds(gene_folds_array, "gene_folds");
     MatrixSlice<int32_t> gene_indices(gene_indices_array, "gene_indices");
@@ -155,8 +126,7 @@ top_distinct(pybind11::array_t<int32_t>& gene_indices_array,
     parallel_loop(cells_count, [&](size_t cell_index) {
         collect_distinct_folds(gene_indices.get_row(cell_index),
                                gene_folds.get_row(cell_index),
-                               fold_in_cells.get_row(cell_index),
-                               abs_folds);
+                               fold_in_cells.get_row(cell_index));
     });
 }
 //
