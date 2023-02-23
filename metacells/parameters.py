@@ -922,8 +922,8 @@ spread_cover_fraction: float = 1 / 3.0
 spread_noise_fraction: float = 0.1
 
 #: The minimal total number of UMIs for a gene to compute meaningful quality statistics for it.
-#: See :py:func:`metacells.tools.quality.compute_inner_normalized_variance`,
-#: :py:func:`metacells.tools.quality.compute_inner_fold_factors`, and
+#: See :py:func:`metacells.tools.quality.compute_inner_variance_folds`,
+#: :py:func:`metacells.tools.quality.compute_inner_folds`, and
 #: :py:func:`metacells.tools.quality.compute_outliers_fold_factors`.
 quality_min_gene_total: int = 40
 
@@ -933,37 +933,37 @@ quality_min_gene_total: int = 40
 max_gbs: float = -0.1
 
 #: The normalization factor to use when computing fold factors for projecting a query onto an atlas. See
-#: :py:func:`metacells.tools.project.compute_projection_weights`.
+#: :py:func:`metacells.tools.project.compute_projection`.
 project_fold_normalization: float = 1e-5
 
 #: The minimal number of UMIs for a gene to be a potential cause to mark a metacell as dissimilar. See
-#: :py:func:`metacells.tools.project.compute_projection_weights`.
+#: :py:func:`metacells.tools.project.compute_projection`.
 project_min_significant_gene_umis: int = 40
 
 #: The number of atlas candidates to consider when projecting a query onto an atlas. See
-#: :py:func:`metacells.tools.project.compute_projection_weights`.
+#: :py:func:`metacells.tools.project.compute_projection`.
 project_candidates_count: int = 50
 
 #: The minimal number of atlas candidates to use even if they fail the consistency check as a fraction of
-#: `project_candidates_count`. See
-#: :py:func:`metacells.tools.project.compute_projection_weights`.
+#: ``project_candidates_count``. See
+#: :py:func:`metacells.tools.project.compute_projection`.
 project_min_candidates_fraction: float = 1.0 / 3.0
 
 #: The minimal weight of an atlas metacell used for the projection of a query metacell. See
-#: :py:func:`metacells.tools.project.compute_projection_weights`.
+#: :py:func:`metacells.tools.project.compute_projection`.
 project_min_usage_weight: float = 1e-5
 
 #: The maximal fold factor of genes between the projection and the query metacell. See
-#: :py:func:`metacells.tools.project.compute_projection_weights`.
+#: :py:func:`metacells.tools.project.compute_projection`.
 project_max_projection_fold_factor: float = significant_gene_fold_factor
 
 #: The maximal additional fold factor of noisy genes between the projection and the query metacell,
 # in addition to ``project_max_projection_fold_factor``. See
-#: :py:func:`metacells.tools.project.compute_projection_weights`.
+#: :py:func:`metacells.tools.project.compute_projection`.
 project_max_projection_noisy_fold_factor: float = significant_noisy_gene_fold_factor
 
 #: The maximal fold factor of genes between the atlas metacells used for the projection of a query metacell. See
-#: :py:func:`metacells.tools.project.compute_projection_weights`.
+#: :py:func:`metacells.tools.project.compute_projection`.
 project_max_consistency_fold_factor: float = significant_gene_fold_factor - 1.0
 
 #: The normalization factor to use when computing log of fractions for finding the most similar group for outliers. See
@@ -995,8 +995,7 @@ ignore_query_lateral_genes: bool = True
 consider_query_noisy_genes: bool = True
 
 #: The minimal fraction of metacells where a gene has a high projection fold factor to mark the gene as "misfit".
-#: See :py:func:`metacells.tools.project.find_misfit_genes`,
-#: :py:func:`metacells.pipeline.projection.projection_pipeline`.
+#: See :py:func:`metacells.pipeline.projection.projection_pipeline`.
 misfit_min_metacells_fraction: float = 0.5
 
 #: The minimal fold between the maximal and minimal gene expression in metacells to be a "marker".
@@ -1009,7 +1008,7 @@ min_marker_metacells_gene_range_fold_factor: float = 2.0
 metacells_gene_range_normalization: float = 1e-5
 
 #: The normalization factor to use after computing the normalized inner variance of metacell. See
-#: :py:func:`metacells.tools.quality.compute_inner_normalized_variance`.
+#: :py:func:`metacells.tools.quality.compute_inner_variance_folds`.
 normalized_inner_variance_gene_normalization: float = 1e-5
 
 #: The minimal maximal gene expression in metacells to be a "marker".
@@ -1036,11 +1035,6 @@ project_min_corrected_gene_factor: float = 0.15
 #: See :py:func:`metacells.tools.quality.compute_similar_query_metacells`
 # and :py:func:`metacells.pipeline.projection.projection_pipeline`.
 project_max_misfit_genes: int = 3
-
-#: Whether to add a pseudo-gene to the query to renormalize its total UMIs so that the fractions of the common genes
-#: would be as expected. See :py:func:`metacells.tools.project.renormalize_query_by_atlas` and
-#: :py:func:`metacells.pipeline.projection.projection_pipeline`.
-renormalize_query_by_atlas: bool = True
 
 #: The quantile of each gene's normalized variance across the metacells to use for the overall gene's variability.
 #: See :py:func:`metacells.tools.quality.compute_type_genes_normalized_variances`.

@@ -73,7 +73,6 @@ def test_direct_pipeline() -> None:
         assert cdata is not None
 
         mc.pl.mark_lateral_genes(pdata, **expected.get("mark_lateral_genes", {}))
-        mc.pl.mark_noisy_genes(pdata, **expected.get("mark_noisy", {}))
 
         mc.pl.compute_direct_metacells(cdata, random_seed=123456, **expected.get("compute_direct_metacells", {}))
 

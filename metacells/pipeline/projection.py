@@ -64,11 +64,12 @@ def projection_pipeline(
 
     Annotated query ``qdata`` and atlas ``adata``, where the observations are cells and the variables are genes, where
     ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation
-    containing such a matrix. The atlas should also contain a ``type`` per-observation (metacell) annotation.
+    containing such a matrix, containing the fraction of each gene in each cell. The atlas should also contain a
+    ``type`` per-observation (metacell) annotation.
 
-    The ``qdata`` may include per-gene masks, ``manually_ignored_gene`` and ``manually_ignored_gene_of_<type>``, which
-    force the code below to ignore the marked genes from either the preliminary projection or the following refined
-    type-specific projections.
+    The ``qdata`` may include per-gene masks, ``ignored_gene`` and ``ignored_gene_of_<type>``, which force the code
+    below to ignore the marked genes from either the preliminary projection or the following refined type-specific
+    projections.
 
     **Returns**
 
@@ -77,50 +78,28 @@ def projection_pipeline(
     metacell) is 1. The weighted sum of the atlas metacells using these weights is the "projected" image of the query
     metacell onto the atlas.
 
-    For "similar" query metacells (see below), these weights are all located in a small region of the atlas manifold.
-    For "dissimilar" query metacells, these weights will include atlas metacells in a secondary region of the atlas
-    attempting to cover the residual differences between the query and the main atlas manifold region. This tries to
-    identify doublets.
-
-    In addition, a modified version of ``qdata`` with a new ``ATLASNORM`` gene (if requested), and the following
-    additional annotations:
-
-    TODOX
-
     Variable (Gene) Annotations
-        ``correction_factor``
-            The ratio between the original query and the corrected values (>1 if the gene was increased, <1 if it was
-            reduced).
-
-        ``projected_correlation``
-            For each gene, the correlation between the (corrected) query expression level and the projected expression
-            level.
-
-        ``correlated_gene``
-            A boolean mask of genes which were ignored because they were very correlated between the query and the
-            atlas.
-
         ``atlas_gene``
-            A boolean mask indicating whether the gene exists in the atlas.
+            A mask of the query genes that also exist in the atlas. We match genes by their name; if projecting query
+            data from a different technology, we expect the caller to modify the query gene names to match the atlas
+            before projecting it.
 
-        ``atlas_marker_gene`` (``only_atlas_marker_genes`` requires an atlas ``marker_gene`` mask)
-            A boolean mask indicating whether the gene is considered a "marker" in the atlas.
+        ``atlas_lateral_gene``, ``atlas_noisy_gene``, ``atlas_marker_gene``, ``essential_gene_of_<type>``
+            Copied from the atlas to the query (``False`` for non-``atlas_gene``).
 
-        ``atlas_lateral_gene`` (``ignore_atlas_lateral_genes`` requires an atlas has ``lateral_gene`` mask) A boolean
-            mask indicating whether the gene was forbidden from being selected when computing the atlas metacell (and
-            hence is ignored).
+        ``projected_noisy_gene``
+            The mask of the genes that were considered "noisy" when computing the projection. By default this is the
+            union of the noisy atlas and query genes.
 
-        ``atlas_noisy_gene`` (``consider_atlas_noisy_genes`` requires an atlas has ``noisy_gene`` mask) A
-            boolean mask indicating whether the gene was forbidden from being selected or used for detecting deviant
-            (outlier) cells when computing the atlas metacells (and hence is ignored).
+        ``correction_factor`` (if ``project_corrections``)
+            If projecting a query on an atlas with different technologies (e.g., 10X v3 to 10X v2), an automatically
+            computed factor we multiplied the query gene fractions by to compensate for the systematic difference
+            between the technologies (1.0 for uncorrected genes and 0.0 for non-``atlas_gene``).
 
-        ``ignored_gene``
-            A boolean mask indicating whether the gene was ignored by the projection (for any reason).
-
-        ``essential_gene_of_<type>``
-            For each query metacell type, a boolean mask indicating whether properly projecting this gene is essential
-            for assigning this type to a query metacell. This is copied from the atlas if
-            ``project_min_essential_genes_fraction`` is specified.
+        ``fitted_gene_of_<type>``
+            For each type, the genes that were projected well from the query to the atlas for most cells of that
+            type; any ``atlas_gene`` outside this mask failed to project well from the query to the atlas for most
+            metacells of this type. For non-``atlas_gene`` this is set to ``False``.
 
         ``misfit_gene_of_<type>``
             For each query metacell type, a boolean mask indicating whether the gene has a strong bias in the query
@@ -131,98 +110,121 @@ def projection_pipeline(
             any reason) when computing the projection for metacells of this type.
 
     Observation (Cell) Annotations
-        ``similar``
-            A boolean mask indicating whether the corrected query metacell is similar to its projection onto the atlas
-            (ignoring the ``ignored_genes``). If ``False`` the metacell is said to be "dissimilar", which may indicate
-            the query contains cell states that do not appear in the atlas. If ``True`` the metacell is said to be
-            "similar", but there may still be significant systematic differences between the query and the atlas as
-            captured by the various per-gene annotations. In addition, the projection on the atlas might indicate the
-            query metacell is a doublet combining two different points in the atlas (see below). In either case, being
-            "similar" doesn't guarantee we have a good query metacell that exists in the atlas.
-
-        ``essential_genes_count``
-            If ``project_min_essential_genes_fraction`` was specified, the number of essential genes for the
-            metacell projected type(s).
-
-        ``similar_essential_genes_count``
-            If ``project_min_essential_genes_fraction`` was specified, the number of essential genes for the
-            metacell projected type(s) that were projected within the ``project_max_projection_fold_factor`` similarity
-            threshold.
-
-        ``dissimilar_genes_count``
-            The number of genes whose fold factor between the query metacell and its projection on the atlas is above
-            the threshold.
+        ``total_atlas_umis``
+            The total UMIs of the ``atlas_gene`` in each query metacell. This is used in the analysis as described for
+            ``total_umis`` above, that is, to ensure comparing expression levels will ignore cases where the total
+            number of UMIs of both compared gene profiles is too low to make a reliable determination. In such cases we
+            take the fold factor to be 0.
 
         ``projected_type``
-            The type assigned to each query metacell by its projection on the atlas, if it is "similar" and matches a
-            single region in the atlas. This will be the special value "Dissimilar" for query metacells that are not
-            similar to their projection, and "Mixture" for query metacells that are similar to a mixture of two regions
-            of the same type in the atlas, or "Doublet" if the two regions have different types. Even so, this should
-            not be taken as gospel, as there may still be significant systematic differences between the query and the
-            atlas as captured by the various per-gene annotations.
+            For each query metacell, the best atlas ``type`` we can assign to it based on its projection. Note this does
+            not indicate that the query metacell is "truly" of this type; to make this determination one needs to look
+            at the quality control data below.
 
         ``projected_secondary_type``
-            If the query metacell is "Dissimilar", "Doublet" or "Mixture", this contains the additional type information
-            (the type that best describes the projection for "Dissimilar" query metacells, or the ``;``-separated two
-            types that are mixed for a "Doublet" or "Mixture" query metacells).
+            In some cases, a query metacell may fail to project well to a single region of the atlas, but does project
+            well to a combination of two distinct atlas regions. This may be due to the query metacell containing
+            doublets, of a mixture of cells which match different atlas regions (e.g. due to sparsity of data in the
+            query data set). Either way, if this happens, we place here the type that best describes the secondary
+            region the query metacell was projected to; otherwise this would be the empty string. Note that the
+            ``weights`` matrix above does not distinguish between the regions.
 
-        ``projected_correlation``
-            The correlation between the projected and the corrected UMIs for each metacell.
+        ``projected_correlation`` per query metacell
+            The correlation between between the ``corrected_fraction`` and the ``projected_fraction`` for only the
+            ``fitted_gene`` expression levels of each query metacell. This serves as a very rough estimator for the
+            quality of the projection for this query metacell (e.g. can be used to compute R^2 values).
+
+            In general we expect high correlation (more than 0.9 in most metacells) since we restricted the
+            ``fitted_gene`` mask only to genes we projected well.
+
+        ``similar`` mask per query metacell
+            A conservative determination of whether the query metacell is "similar" to its projection on the atlas. This
+            is based on whether the number of ``misfit_gene`` for the query metacell is low enough (by default, up to 3
+            genes), and also that at least 75% of the ``essential_gene`` of the query metacell were not ``misfit_gene``.
+            Note that this explicitly allows for a ``projected_secondary_type``, that is, a metacell of doublets will be
+            "similar" to the atlas, but a metacell of a novel state missing from the atlas will be "dissimilar".
+
+            The final determination of whether to accept the projection is, as always, up to the analyst, based on prior
+            biological knowledge, the context of the collection of the query (and atlas) data sets, etc. The analyst
+            need not (indeed, *should not*) blindly accept the ``similar`` determination without examining the rest of
+            the quality control data listed above.
 
     Observation-Variable (Cell-Gene) Annotations
-        ``projected``
-            A matrix of UMIs where the sum of UMIs for each corrected query metacell is the same as the sum of ``what``
-            UMIs, describing the "projected" image of the query metacell onto the atlas. This projection is a weighted
-            average of some atlas metacells (using the computed weights returned by this function).
+        ``corrected_fraction`` per gene per query metacell
+            For each ``atlas_gene``, its fraction in each query metacell, out of only the atlas genes. This may be
+            further corrected (see below) if projecting between different scRNA-seq technologies (e.g. 10X v2 and 10X
+            v3). For non-``atlas_gene`` this is 0.
 
-        ``projected_fold``
-            For each gene and query metacell, the fold factor of this gene between the query and its projection (unless
-            the value is too low to be of interest, in which case it will be zero).
+        ``projected_fraction`` per gene per query metacell
+            For each ``atlas_gene``, its fraction in its projection on the atlas. This projection is computed as a
+            weighted average of some atlas metacells (see below), which are all sufficiently close to each other (in
+            terms of gene expression), so averaging them is reasonable to capture the fact the query metacell may be
+            along some position on some gradient that isn't an exact match for any specific atlas metacell. For
+            non-``atlas_gene`` this is 0.
+
+        ``fitted`` mask per gene per query metacell
+            For each ``atlas_gene`` for each query metacell, whether the gene was expected to be projected well, based
+            on the query metacell ``projected_type`` (and the ``projected_secondary_type``, if any). For
+            non-``atlas_gene`` this is set to ``False``. This does not guarantee the gene was actually projected well.
+
+        ``misfit``
+            For each ``atlas_gene`` for each query metacell, whether the ``corrected_fraction`` of the gene was
+            significantly different from the ``projected_fractions`` (that is, whether the gene was not projected well
+            for this metacell). For non-``atlas_gene`` this is set to ``False``, to make it easier to identify
+            problematic genes.
+
+            This is expected to be rare for ``fitted_gene`` and common for the rest of the ``atlas_gene``. If too many
+            ``fitted_gene`` are also ``misfit_gene``, then one should be suspicious whether the query metacell is
+            "truly" of the ``projected_type``.
+
+        ``essential``
+            Which of the ``atlas_gene`` were also listed in the ``essential_gene_of_<type>`` for the ``projected_type``
+            (and also the ``projected_secondary_type``, if any) of each query metacell.
+
+            If an ``essential_gene`` is also a ``misfit_gene``, then one should be very suspicious whether the query
+            metacell is "truly" of the ``projected_type``.
+
+        ``projected_fold`` per gene per query metacell
+            The fold factor between the ``corrected_fraction`` and the ``projected_fraction`` (0 for
+            non-``atlas_gene``). If the absolute value of this is high (3 for 8x ratio) then the gene was not projected
+            well for this metacell. This will be 0 for non-``atlas_gene``.
+
+            It is expected this would have low values for most ``fitted_gene`` and high values for the rest of the
+            ``atlas_gene``, but specific values will vary from one query metacell to another. This allows the analyst to
+            make fine-grained determination about the quality of the projection, and/or identify quantitative
+            differences between the query and the atlas (e.g., when studying perturbed systems such as knockouts or
+            disease models).
 
     **Computation Parameters**
 
     0. Find the subset of genes that exist in both the query and the atlas. All computations will be done on this common
-       subset.
+       subset. Normalize the fractions of the fitted gene fractions to sum to 1 in each metacell.
 
     Compute preliminary projection:
 
-    1. Compute a mask of ignored genes, containing any genes named in ``ignored_gene_names`` or that match any of the
-       ``ignored_gene_patterns``. If ``only_atlas_marker_genes`` (default:
-       ``only_atlas_marker_genes``), ignore genes the atlas did not mark as "marker" (and store the
-       ``atlas_marker_gene`` mask). If ``only_query_marker_genes`` (default:
-       ``only_query_marker_genes``), ignore genes the query did not mark as "marker". If
-       ``ignore_atlas_lateral_genes`` (default: {ignore_atlas_lateral_genes}), also ignore the ``lateral_gene`` of the
-       atlas (and store them as an ``atlas_lateral_gene`` mask). If ``consider_atlas_noisy_genes`` (default:
-       {consider_atlas_noisy_genes}), also ignore the ``noisy_gene`` of the atlas (and store them as an
-       ``atlas_noisy_gene`` mask). If ``ignore_query_lateral_genes`` (default: {ignore_query_lateral_genes}), also
-       ignore the ``lateral_gene`` of the query. If ``consider_query_noisy_genes`` (default:
-       {consider_query_noisy_genes}), also ignore the ``noisy_gene`` of the query. All these genes are ignored by
-       the following code. In addition, ignore any genes marked in ``manually_ignored_gene``, if this annotation exists
-       in the query.
+    1. Compute a mask of fitted genes, ignoring any genes included in ``ignored_gene``. If ``only_atlas_marker_genes``
+       (default: ``only_atlas_marker_genes``), ignore any non-``marker_gene`` of the atlas. If
+       ``only_query_marker_genes`` (default: ``only_query_marker_genes``), ignore any non-``marker_gene`` of the query.
+       If ``ignore_atlas_lateral_genes`` (default: {ignore_atlas_lateral_genes}), ignore the ``lateral_gene`` of the
+       atlas. If ``ignore_query_lateral_genes`` (default: {ignore_query_lateral_genes}), ignore the ``lateral_gene`` of
+       the atlas. Normalize the fractions of the fitted gene fractions to sum to 1 in each metacell.
 
-    2. Invoke :py:func:`metacells.tools.project.compute_projection_weights` and
-       :py:func:`metacells.tools.project.compute_projected_fractions` to project each query metacell onto the atlas,
-       using the ``project_fold_normalization`` (default: {project_fold_normalization}),
-       ``project_min_significant_gene_umis`` (default: {project_min_significant_gene_umis}),
-       ``project_candidates_count`` (default: {project_candidates_count}),
-       ``project_min_candidates_fraction`` (default: {project_min_candidates_fraction}),
-       ``project_min_usage_weight`` (default:
-       {project_min_usage_weight}) and ``reproducible``.
+    2. Invoke :py:func:`metacells.tools.project.compute_projection`
+       to project each query metacell onto the atlas, using the ``project_fold_normalization`` (default:
+       {project_fold_normalization}), ``project_min_significant_gene_umis`` (default:
+       {project_min_significant_gene_umis}), ``project_max_consistency_fold_factor`` (default:
+       {project_max_consistency_fold_factor}), ``project_candidates_count`` (default: {project_candidates_count}),
+       ``project_min_usage_weight`` (default: {project_min_usage_weight}), and ``reproducible``.
 
-    3. Invoke :py:func:`metacells.tools.quality.compute_projected_fold_factors` to compute the significant
-       fold factors between the query and its projection, using the ``project_fold_normalization`` (default:
-       {project_fold_normalization}) and ``project_min_significant_gene_umis`` (default:
-       {project_min_significant_gene_umis}).
-
-    4. Correlate the expression levels of each gene between the query and projection. If this is at least
-       ``project_min_corrected_gene_correlation`` (default: {project_min_corrected_gene_correlation}), compute the ratio
-       between the mean expression of the gene in the projection and the query. If this is at most
+    3. If ``project_corrections``: Correlate the expression levels of each gene between the query and projection. If
+       this is at least ``project_min_corrected_gene_correlation`` (default: {project_min_corrected_gene_correlation}),
+       compute the ratio between the mean expression of the gene in the projection and the query. If this is at most
        1/(1+``project_min_corrected_gene_factor``) or at least (1+``project_min_corrected_gene_factor``) (default:
        {project_min_corrected_gene_factor}), then multiply the gene's value by this factor so its level would match the
-       atlas. If any genes were ignored or corrected, then repeat steps 1-4. However, if not ``project_corrections``,
-       only record the correction factor and proceed without actually performing the correction.
+       atlas. As usual, ignore genes which do not have at least ``project_min_significant_gene_umis``. If any genes were
+       ignored or corrected, then repeat steps 1-4.
 
-    5. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` to assign a projected type to each of the
+    4. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` to assign a projected type to each of the
        query metacells based on the ``atlas_type_property_name`` (default: {atlas_type_property_name}).
 
     Then, for each type of query metacells:
@@ -232,53 +234,53 @@ def projection_pipeline(
     types of parallelism at once, which the code currently can't do without non-trivial coding (this would have been
     trivial in Julia...).
 
-    6. Enhance the mask of type-specific ignored genes with any genes marked in ``manually_ignored_gene_of_<type>``, if
-       this annotation exists in the query.
+    5. Further reduce the mask of type-specific fitted genes by ignoring any genes in ``ignored_gene_of_<type>``, if
+       this annotation exists in the query. Normalize the sum of the fitted gene fractions to 1 in each metacell.
 
-    7. Invoke :py:func:`metacells.tools.project.compute_projection_weights` to project each query metacell of the type
-       onto the atlas, using the type-specific ignored genes in addition to the global ignored genes. Note that even
-       though we only look at query metacells (tentatively) assigned the type, their projection on the atlas may use
-       metacells of any type.
+    6. Invoke :py:func:`metacells.tools.project.compute_projection` to project each query metacell of the type
+       onto the atlas. Note that even though we only look at query metacells (tentatively) assigned the type, their
+       projection on the atlas may use metacells of any type.
 
-    8. Invoke :py:func:`metacells.tools.project.compute_projected_fractions` and
-       :py:func:`metacells.tools.quality.compute_projected_fold_factors` to compute the significant fold factors between
-       the query and its projection.
+    7. Invoke :py:func:`metacells.tools.quality.compute_projected_folds` to compute the significant fold factors
+       between the query and its projection.
 
-    9. Invoke :py:func:`metacells.tools.project.find_misfit_genes` to identify type-specific misfit genes. If any such
-       genes are found, add them to the type-specific ignored genes (instead of the global misfit genes list) and repeat
-       steps 6-9.
+    8. Identify type-specific misfit genes whose fold factor is above ``project_max_projection_fold_factor``. If
+       ``consider_atlas_noisy_genes`` and/or ``consider_query_noisy_genes``, then any gene listed in either is allowed
+       an additional ``project_max_projection_noisy_fold_factor``. If any gene has such a high fold factor in at least
+       ``misfit_min_metacells_fraction``, remove it from the fitted genes mask and repeat steps 5-8.
 
-    10. Invoke :py:func:`metacells.tools.quality.compute_similar_query_metacells` to verify which query metacells
-        ended up being sufficiently similar to their projection, using the ``essential_gene_of_<type>`` if needed.
+    9. Invoke :py:func:`metacells.tools.quality.compute_similar_query_metacells` to verify which query metacells
+        ended up being sufficiently similar to their projection, using ``project_max_consistency_fold_factor`` (default:
+        {project_max_consistency_fold_factor}), ``project_max_projection_noisy_fold_factor`` (default:
+        {project_max_projection_noisy_fold_factor}), ``project_max_misfit_genes`` (default: {project_max_misfit_genes}),
+        and if needed, the the ``essential_gene_of_<type>``. Also compute the correlation between the corrected
+        and projected gene fractions for each metacell.
 
     And then:
 
-    11. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` to assign an updated projected type to each of
+    10. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` to assign an updated projected type to each of
         the query metacells based on the ``atlas_type_property_name`` (default: {atlas_type_property_name}). If this
-        changed the type assigned to any query metacell, repeat steps 6-10 (but do these steps no more than 3 times).
+        changed the type assigned to any query metacell, repeat steps 5-10 (but do these steps no more than 3 times).
 
-    For each query metacell that ended up being dissimilar:
+    For each query metacell that ended up being dissimilar, try to project them as a combination of two atlas regions:
 
-    12. Update the list of ignored genes for the metacell based on the ``ignored_gene_of_<type>`` for both the primary
+    11. Reduce the list of fitted genes for the metacell based on the ``ignored_gene_of_<type>`` for both the primary
         (initially from the above) query metacell type and the secondary query metacell type (initially empty).
+        Normalize the sum of the gene fractions in the metacell to 1.
 
-    13. Invoke :py:func:`metacells.tools.project.compute_projection_weights` just for this metacell, but allow the
-        projection to use a secondary location in the atlas based on the residuals of the atlas metacells relative to
-        the primary query projection.
+    12. Invoke :py:func:`metacells.tools.project.compute_projection` just for this metacell, allowing the projection to
+        use a secondary location in the atlas based on the residuals of the atlas metacells relative to the primary
+        query projection.
 
-    14. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` twice, once for the weights of the primary
+    13. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` twice, once for the weights of the primary
         location and once for the weights of the secondary location, to obtain a primary and secondary type for
         the query metacell. If these have changed, repeat steps 12-14 (but do these steps no more than 3 times; note
         will will always do them twice as the 1st run will generate some non-empty secondary type).
 
-    15. Invoke :py:func:`metacells.tools.project.compute_projected_fractions`,
-        :py:func:`metacells.tools.quality.compute_projected_fold_factors` and
+    14. Invoke :py:func:`metacells.tools.quality.compute_projected_folds` and
         :py:func:`metacells.tools.quality.compute_similar_query_metacells` to update the projection and evaluation of
-        the query metacell. If it is now similar, mark it as a doublet or a mixture depending on whether the primary and
-        the secondary types are different or identical.
-
-    16. Invoke :py:func:`metacells.tools.quality.compute_metacells_projection_correlation` to compute the correlation
-        between the projected and the corrected UMIs of each query metacell.
+        the query metacell. If it is now similar, then use the results for the metacell; otherwise, keep the original
+        results as they were at the end of step 9.
     """
     assert project_min_corrected_gene_factor >= 0
     use_essential_genes = project_min_essential_genes_fraction is not None
@@ -588,6 +590,9 @@ def _initial_fitted_genes_mask(
     if ignore_query_lateral_genes and ut.has_data(common_qdata, "lateral_gene"):
         initial_fitted_genes_mask &= ~ut.get_v_numpy(common_qdata, "lateral_gene")
 
+    if ut.has_data(common_qdata, "ignored_gene"):
+        initial_fitted_genes_mask &= ~ut.get_v_numpy(common_qdata, "ignored_gene")
+
     return initial_fitted_genes_mask
 
 
@@ -852,7 +857,10 @@ def _compute_per_type_projection(
     for _metacell_index in range(common_qdata.n_obs):
         old_types_per_metacell.append(set())
 
-    fitted_genes_mask_per_type = {type_name: initial_fitted_genes_mask.copy() for type_name in type_names}
+    fitted_genes_mask_per_type = _initial_fitted_genes_mask_per_type(
+        common_qdata=common_qdata, type_names=type_names, initial_fitted_genes_mask=initial_fitted_genes_mask
+    )
+
     misfit_per_gene_per_metacell = np.empty(common_qdata.shape, dtype="bool")
     projected_correlation_per_metacell = np.empty(common_qdata.n_obs, dtype="float32")
     projected_fold_per_gene_per_metacell = np.empty(common_qdata.shape, dtype="float32")
@@ -959,6 +967,22 @@ def _compute_per_type_projection(
     ut.set_vo_data(common_qdata, "projected_fold", projected_fold_per_gene_per_metacell)
 
     return weights_per_atlas_per_query_metacell
+
+
+def _initial_fitted_genes_mask_per_type(
+    common_qdata: AnnData,
+    type_names: List[str],
+    initial_fitted_genes_mask: ut.NumpyVector,
+) -> Dict[str, ut.NumpyVector]:
+    fitted_genes_mask_per_type: Dict[str, ut.NumpyVector] = {}
+    for type_name in type_names:
+        fitted_genes_mask_of_type = initial_fitted_genes_mask.copy()
+        property_name = f"ignored_gene_of_{type_name}"
+        if ut.has_data(common_qdata, property_name):
+            ignored_gene_mask_of_type = ut.get_v_numpy(common_qdata, property_name)
+            fitted_genes_mask_of_type &= ~ignored_gene_mask_of_type
+        fitted_genes_mask_per_type[type_name] = fitted_genes_mask_of_type
+    return fitted_genes_mask_per_type
 
 
 @ut.logged()

@@ -86,13 +86,13 @@ def compute_for_mcview(
 
     4. Compute for each gene and cell the fold factor between the gene's expression and that of the metacell
        it belongs to (or, for outliers, the one it is most similar to) using
-       :py:func:`metacells.tools.compute_deviant_folds`.
+       :py:func:`metacells.tools.quality.compute_deviant_folds`.
 
     5. Compute for each gene for each metacell the maximal of the above using
-       :py:func:`metacells.tools.compute_inner_folds`.
+       :py:func:`metacells.tools.quality.compute_inner_folds`.
 
     6. Compute for each gene for each metacell the fold factor between its variance and mean using
-       :py:func:`metacells.tools.compute_inner_variance_folds`.
+       :py:func:`metacells.tools.quality.compute_inner_variance_folds`.
 
     6. Compute the gene-gene (variable-variable) similarity matrix. Note by default this will use
        {compute_var_var_similarity} which aren't the normal defaults for ``compute_var_var_similarity``, in order to

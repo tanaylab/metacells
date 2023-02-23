@@ -1736,7 +1736,7 @@ def highest_weight(weights: utt.Vector, vector: utt.Vector) -> Any:
     """
     Return the value with the highest total ``weights`` in a ``vector``.
 
-    This is useful for :py:func:`metacells.tools.project.project_atlas_to_query`.
+    This is useful for :py:func:`metacells.tools.project.convey_atlas_to_query`.
     """
     unique, positions = np.unique(utt.to_numpy_vector(vector), return_inverse=True)
     counts = np.bincount(positions, weights=weights)
@@ -1749,7 +1749,7 @@ def weighted_mean(weights: utt.Vector, vector: utt.Vector) -> Any:
     """
     Return the weighted mean (using the ``weights`` and the values in the ``vector``).
 
-    This is useful for :py:func:`metacells.tools.project.project_atlas_to_query`.
+    This is useful for :py:func:`metacells.tools.project.convey_atlas_to_query`.
     """
     return np.average(vector, weights=weights)
 

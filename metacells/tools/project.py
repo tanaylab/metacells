@@ -47,22 +47,18 @@ def compute_projection(
 
     **Input**
 
-    Annotated query ``qdata`` and atlas ``adata``, where the observations are cells and the variables are genes, where
-    ``what`` is a per-variable-per-observation matrix of fractions, or the name of a per-variable-per-observation
-    annotation containing such a matrix.
-
-    Typically this data excludes any genes having a systematic difference between the query and the atlas.
+    Annotated query ``qdata`` and atlas ``adata``, where the observations are cells and the variables are genes. The
+    atlas should contain ``from_atlas_layer`` (default: {from_atlas_layer}) containing gene fractions, and the query
+    should similarly contain ``from_query_layer`` (default: {from_query_layer}) containing gene fractions.
 
     **Returns**
 
-    A matrix whose rows are query metacells and columns are atlas metacells, where each entry is the weight of the atlas
-    metacell in the projection of the query metacells. The sum of weights in each row (that is, for a single query
+    A CSR matrix whose rows are query metacells and columns are atlas metacells, where each entry is the weight of the
+    atlas metacell in the projection of the query metacells. The sum of weights in each row (that is, for a single query
     metacell) is 1. The weighted sum of the atlas metacells using these weights is the "projected" image of the query
     metacell onto the atlas.
 
     In addition, sets the following annotations in ``qdata``:
-
-    TODOX
 
     Observation (Cell) Annotations
         ``similar``
@@ -71,16 +67,15 @@ def compute_projection(
             do not appear in the atlas.
 
     Observation-Variable (Cell-Gene) Annotations
-        ``projected_fractions``
-            A matrix of UMIs where the sum of UMIs for each corrected query metacell is the same as the sum of ``what``
-            UMIs, describing the "projected" image of the query metacell onto the atlas. This projection is a weighted
-            average of some atlas metacells (using the computed weights returned by this function).
+        ``to_query_layer`` (default: {to_query_layer})
+            A matrix of gene fractions describing the "projected" image of the query metacell onto the atlas. This
+            projection is a weighted average of some atlas metacells (using the computed weights returned by this
+            function).
 
     **Computation Parameters**
 
-    0. All fold computations (log2 of the ratio between gene expressions as a fraction of the total UMIs) use the
-       ``fold_normalization`` (default: {fold_normalization}). Fractions are computed based on the total UMIs, unless
-       ``atlas_total_umis`` and/or ``query_total_umis`` are specified.
+    0. All fold computations (log2 of the ratio between gene fractions) use the ``fold_normalization`` (default:
+       {fold_normalization}).
 
     For each query metacell:
 
@@ -94,7 +89,7 @@ def compute_projection(
     2. Consider (for each anchor) the ``candidates_count`` (default: {candidates_count}) candidate metacells with the
        highest correlation with the query metacell.
 
-    2. Keep as candidates only atlas metacells whose maximal gene fold factor compared to the anchor(s) is at most
+    3. Keep as candidates only atlas metacells whose maximal gene fold factor compared to the anchor(s) is at most
        ``max_consistency_fold_factor`` (default: {max_consistency_fold_factor}). Keep at least
        ``min_candidates_fraction`` (default: {min_candidates_fraction}) of the original candidates even if they are less
        consistent. For this computation, Ignore the fold factors of genes whose sum of UMIs in the anchor(s) and the
@@ -103,9 +98,8 @@ def compute_projection(
     4. Compute the non-negative weights (with a sum of 1) of the selected candidates that give the best projection of
        the query metacells onto the atlas. Since the algorithm for computing these weights rarely produces an exact 0
        weight, reduce all weights less than the ``min_usage_weight`` (default: {min_usage_weight}) to zero. If
-       TODOX compute the match on the log of the data instead of the
-       actual data. If ``second_anchor_indices`` is not ``None``, it is set to the list of indices of the used atlas
-       metacells candidates correlated with the second anchor.
+       ``second_anchor_indices`` is not ``None``, it is set to the list of indices of the used atlas metacells
+       candidates correlated with the second anchor.
     """
     prepared_arguments = _project_query_atlas_data_arguments(
         adata=adata,

@@ -124,7 +124,7 @@ def exclude_genes(
 
     excluded_genes_mask: Optional[ut.NumpyVector] = None
     if bursty_lonely_genes_mask is not None:
-        excluded_genes_mask = ~bursty_lonely_genes_mask
+        excluded_genes_mask = bursty_lonely_genes_mask
 
     if properly_sampled_genes_mask is not None:
         if excluded_genes_mask is None:

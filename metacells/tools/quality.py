@@ -19,7 +19,6 @@ import metacells.utilities as ut
 __all__ = [
     "compute_inner_variance_folds",
     "compute_projected_folds",
-    "compute_metacells_projection_correlation",
     "compute_similar_query_metacells",
     "compute_outliers_matches",
     "compute_deviant_folds",
@@ -175,8 +174,8 @@ def compute_projected_folds(
     """
     Compute the projected fold factors of genes for each query metacell.
 
-    This computes, for each metacell of the query, the fold factors between the actual query UMIs and the UMIs of the
-    projection of the metacell onto the atlas (see :py:func:`metacells.tools.project.project_query_onto_atlas`).
+    This computes, for each metacell of the query, the fold factors between the corrected and projected gene fractions
+    projection of the metacell onto the atlas (see :py:func:`metacells.tools.project.compute_projection`).
 
     **Input**
 
@@ -188,8 +187,6 @@ def compute_projected_folds(
 
     **Returns**
 
-    TODOX
-
     Sets the following in ``qdata``:
 
     Per-Variable Per-Observation (Gene-Cell) Annotations
@@ -198,13 +195,13 @@ def compute_projected_folds(
 
     **Computation Parameters**
 
-    1. For each group (metacell), for each gene, compute the gene's fold factor
-       log2((actual UMIs + ``fold_normalization``) / (expected UMIs + ``fold_normalization``)), similarly to
-       :py:func:`metacells.tools.project.project_query_onto_atlas` (the default ``fold_normalization`` is
-       {fold_normalization}).
+    1. For each group (metacell), for each gene, compute the gene's fold factor log2((``from_query_layer`` (default:
+       {from_query_layer}) + ``fold_normalization``) / (``to_query_layer`` (default: {to_query_layer}) fractions +
+       ``fold_normalization``)), similarly to :py:func:`metacells.tools.project.compute_projection` (the default
+       ``fold_normalization`` is {fold_normalization}).
 
-    2. Set the fold factor to zero for every case where the total UMIs in the query metacell and the projected image is
-       not at least ``min_significant_gene_umis`` (default: {min_significant_gene_umis}).
+    2. Set the fold factor to zero for every case where the total UMIs of the gene in the query metacell are not at
+       least ``min_significant_gene_umis`` (default: {min_significant_gene_umis}).
     """
     assert fold_normalization >= 0
 
@@ -230,42 +227,6 @@ def compute_projected_folds(
 
 @ut.logged()
 @ut.timed_call()
-def compute_metacells_projection_correlation(
-    qdata: AnnData,
-    *,
-    reproducible: bool,
-) -> None:
-    """
-    Compute the correlation between the metacells UMIs and their projection on the atlas.
-
-    TODOX
-
-    **Input**
-
-    Annotated query ``qdata``, where the observations are metacells and the variables are genes and ``what`` is the
-    (corrected) UMIs of the metacells.
-
-    The data should contain per-observation-per-variable annotations ``projected`` with the projection of the
-    metacells on some atlas.
-
-    **Returns**
-
-    Sets the ``projected_correlation`` per-observation annotation to the correlation between the corrected and the
-    projected UMIs for each metacell. Correlation only looks at a subset of the genes specified by the
-    ``mask_names``; by default, it looks only at genes common to the atlas and the query, that were "marker" in
-    both, and that were not lateral or by noisy (forbidden from being selected for computing metacells).
-
-    If ``reproducible``, a slower (still parallel) but reproducible algorithm will be used.
-    """
-
-    corrected_fractions = ut.to_numpy_matrix(ut.get_vo_proper(qdata, "corrected_fraction"))
-    projected_fractions = ut.to_numpy_matrix(ut.get_vo_proper(qdata, "projected_fraction"))
-    projected_correlation = ut.pairs_corrcoef_rows(corrected_fractions, projected_fractions, reproducible=reproducible)
-    ut.set_o_data(qdata, "projected_correlation", projected_correlation)
-
-
-@ut.logged()
-@ut.timed_call()
 def compute_similar_query_metacells(
     qdata: AnnData,
     max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
@@ -275,20 +236,22 @@ def compute_similar_query_metacells(
     min_essential_genes: Optional[int] = None,
 ) -> None:
     """
-    Mark query metacells that are similar to their projection on the atlas.
+    Mark query metacells that are "similar" to their projection on the atlas.
 
     This does not guarantee the query metacell is "the same as" its projection on the atlas; rather, it means the two
-    are sufficiently similar that one can be "reasonably confident" in applying atlas metadata to the query metacell
-    based on the projection, which is a much lower bar.
+    are "sufficiently similar" that one can be reasonably confident in applying atlas metadata to the query metacell
+    based on the projection.
 
     **Input**
 
     Annotated query ``qdata``, where the observations are metacells and the variables are genes.
 
     The data should contain per-observation-per-variable annotations ``projected_fold`` with the significant projection
-    folds factors, as computed by :py:func:`compute_projected_folds`. If
-    ``min_essential_significant_genes_fraction``, and ``essential_genes_property`` are specified, then the data may
-    contain additional per-observation (gene) mask(s) denoting the essential genes.
+    folds factors, as computed by :py:func:`compute_projected_folds`. If ``min_essential_significant_genes_fraction``,
+    and ``essential_genes_property`` are specified, then the data may contain additional per-observation (gene) mask(s)
+    denoting the essential genes.
+
+    If a ``projected_noisy_gene`` mask exists, then the genes in it allow for a higher fold factor than normal genes.
 
     **Returns**
 
@@ -305,14 +268,13 @@ def compute_similar_query_metacells(
 
     **Computation Parameters**
 
-    TODOX
-
     1. Mark as dissimilar any query metacells which have more than ``max_misfit_genes`` (default:
-       {max_misfit_genes}) genes whose projection fold is above ``max_projection_fold_factor``.
+       {max_misfit_genes}) genes whose projection fold is above ``max_projection_fold_factor``,
+       or, for genes in ``projected_noisy_gene``, above an additional ``max_projection_noisy_fold_factor``.
 
-    2. If ``essential_genes_property`` and ``max_misfit_essential_genes`` are specified, the former should be the
-       name(s) of boolean per-gene property/ies, and we will mark as dissimilar any query metacells which do not have at
-       least this number of genes denoted by that mask(s) with a projection fold at most ``max_projection_fold_factor``.
+    2. If ``essential_genes_property`` and ``min_essential_genes`` are specified, the former should be the name(s) of
+       boolean per-gene property/ies, and we will mark as dissimilar any query metacells which have at least this number
+       of essential genes with a low projection fold factor.
     """
     assert max_projection_fold_factor >= 0
     assert max_projection_noisy_fold_factor >= 0
@@ -570,7 +532,6 @@ def _compute_cell_deviant_folds(
 
 @ut.logged()
 @ut.timed_call()
-@ut.expand_doc()
 def compute_inner_folds(
     *,
     adata: AnnData,
