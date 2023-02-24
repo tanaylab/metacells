@@ -113,6 +113,7 @@ def collect_metacells(  # pylint: disable=too-many-statements
     """
     metacell_of_cells = ut.get_o_numpy(adata, groups, formatter=ut.groups_description).copy()
     metacell_of_cells[metacell_of_cells < 0] = -1
+    outliers_count = np.sum(metacell_of_cells < 0)
 
     raw_cell_umis = ut.get_vo_proper(adata, what, layout="row_major")
     raw_cell_sizes = ut.sum_per(raw_cell_umis, per="row")
@@ -218,6 +219,8 @@ def collect_metacells(  # pylint: disable=too-many-statements
 
     if isinstance(groups, str) and ut.has_data(adata, "metacells_level"):
         tl.convey_obs_to_group(adata=adata, gdata=mdata, group=groups, property_name="metacell_level")
+
+    ut.set_m_data(mdata, "outliers", outliers_count)
 
     return mdata
 

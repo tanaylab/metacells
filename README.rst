@@ -60,14 +60,22 @@ Terminology and Results Format
 .. note::
 
    Version 0.9 **breaks compatibility** with version 0.8 when it comes to some APIs and the names and semantics of the
-   result annotations. See below for the description of updated results (and how they differ from 0.8). The new format
-   is meant to improve the usability of the system in downstream analysis pipelines. For convenience we also list here
-   the results of the new projection pipeline.
+   result annotations. See below for the description of updated results (and how they differ from version 0.8). The new
+   format is meant to improve the usability of the system in downstream analysis pipelines. For convenience we also list
+   here the results of the new projection pipeline added in version 0.9.
+
+   If you have existing metacell data that was computed using version 0.8 (the current published version you will get
+   from using ``pip install metacells``, you can use the
+   ``https://github.com/tanaylab/metacells/blob/masterbin/convert_0.8_to_0.9.py`` script to convert your data to the
+   format described below, while preserving any additional annotations you may have created for your data (e.g.
+   metacells type annotations). The script will not modify your existing data files, so you can examine the results and
+   tweak them if necessary.
 
    In the upcoming version 0.10 we will migrate from using ``AnnData`` to using ``daf`` to represent the data (``h5ad``
-   files will still be supported, either directly through an adapter or via a conversion import process). This will
-   again unavoidingly break API compatibility, but will provide many advantages over the restricted ``AnnData`` APIs. We
-   apologize for the inconvenience.
+   files will still be supported, either directly through an adapter or via a conversion process). This will again
+   unavoidingly break API compatibility, but will provide many advantages over the restricted ``AnnData`` APIs.
+
+   We apologize for the inconvenience.
 
 Metacells Computation
 .....................
