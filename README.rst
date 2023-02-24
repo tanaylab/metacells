@@ -65,9 +65,9 @@ Terminology and Results Format
    here the results of the new projection pipeline added in version 0.9.
 
    If you have existing metacell data that was computed using version 0.8 (the current published version you will get
-   from using ``pip install metacells``, you can use a
-   `script <https://github.com/tanaylab/metacells/blob/masterbin/convert_0.8_to_0.9.py>`_ script to convert your data to
-   the format described below, while preserving any additional annotations you may have created for your data (e.g.
+   from using ``pip install metacells``, you can use the provided `conversion script
+   <https://github.com/tanaylab/metacells/blob/master/bin/convert_0.8_to_0.9.py>`_ script to migrate your data to the
+   format described below, while preserving any additional annotations you may have created for your data (e.g.
    metacells type annotations). The script will not modify your existing data files, so you can examine the results and
    tweak them if necessary.
 
