@@ -6,7 +6,7 @@ Metacells 0.9.0-dev.1 - Single-cell RNA Sequencing Analysis
     :alt: Documentation Status
 
 The metacells package implements the improved metacell algorithm [1]_ for single-cell RNA sequencing (scRNA-seq) data
-analysis within the ``scipy https://www.scipy.org/`` framework. The original metacell algorithm [2]_ was implemented in
+analysis within the `scipy <https://www.scipy.org/>`_ framework. The original metacell algorithm [2]_ was implemented in
 R. The python package contains various algorithmic improvements and is scalable for larger data sets (millions of
 cells).
 
@@ -65,9 +65,9 @@ Terminology and Results Format
    here the results of the new projection pipeline added in version 0.9.
 
    If you have existing metacell data that was computed using version 0.8 (the current published version you will get
-   from using ``pip install metacells``, you can use the
-   ``https://github.com/tanaylab/metacells/blob/masterbin/convert_0.8_to_0.9.py`` script to convert your data to the
-   format described below, while preserving any additional annotations you may have created for your data (e.g.
+   from using ``pip install metacells``, you can use a
+   `script <https://github.com/tanaylab/metacells/blob/masterbin/convert_0.8_to_0.9.py>`_ script to convert your data to
+   the format described below, while preserving any additional annotations you may have created for your data (e.g.
    metacells type annotations). The script will not modify your existing data files, so you can examine the results and
    tweak them if necessary.
 
