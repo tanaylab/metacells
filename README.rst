@@ -58,7 +58,6 @@ Terminology and Results Format
 ------------------------------
 
 .. note::
-
    Version 0.9 **breaks compatibility** with version 0.8 when it comes to some APIs and the names and semantics of the
    result annotations. See below for the description of updated results (and how they differ from version 0.8). The new
    format is meant to improve the usability of the system in downstream analysis pipelines. For convenience we also list
