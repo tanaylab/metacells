@@ -18,7 +18,8 @@ import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
-    "compute_projection",
+    "compute_projection_weights",
+    "compute_projected_fractions",
     "convey_atlas_to_query",
 ]
 
@@ -26,10 +27,10 @@ __all__ = [
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def compute_projection(
+def compute_projection_weights(
+    *,
     adata: AnnData,
     qdata: AnnData,
-    *,
     from_atlas_layer: str = "corrected_fraction",
     from_query_layer: str = "corrected_fraction",
     to_query_layer: str = "projected_fraction",
@@ -136,14 +137,38 @@ def compute_projection(
     atlas_used_sizes.insert(0, 0)
     indptr = np.cumsum(np.array(atlas_used_sizes))
 
-    weights = sp.csr_matrix((data, indices, indptr), shape=(qdata.n_obs, adata.n_obs))
+    return sp.csr_matrix((data, indices, indptr), shape=(qdata.n_obs, adata.n_obs))
 
-    projected_fractions = weights @ prepared_arguments["atlas_fractions"]
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def compute_projected_fractions(
+    *,
+    adata: AnnData,
+    qdata: AnnData,
+    from_atlas_layer: str = "corrected_fraction",
+    to_query_layer: str = "projected_fraction",
+    weights: ut.ProperMatrix,
+) -> None:
+    """
+    Compute the projected image of a query on an atlas.
+
+    **Input**
+
+    Annotated query ``qdata`` and atlas ``adata``, where the observations are cells and the variables are genes. The
+    atlas should contain ``from_atlas_layer`` (default: {from_atlas_layer}) containing gene fractions.
+
+    **Returns**
+
+    Sets ``to_query_layer`` (default: {to_query_layer}) in the query containing the gene fractions of the projection
+    of the atlas fractions using the ``weights`` matrix.
+    """
+    atlas_fractions = ut.get_vo_proper(adata, from_atlas_layer, layout="row_major")
+    projected_fractions = weights @ atlas_fractions  # type: ignore
     assert projected_fractions.shape == qdata.shape
     projected_fractions = ut.fraction_by(projected_fractions, by="row")
-    ut.set_vo_data(qdata, "projected_fraction", sp.csr_matrix(projected_fractions))
-
-    return weights
+    ut.set_vo_data(qdata, to_query_layer, sp.csr_matrix(projected_fractions))
 
 
 def _project_query_atlas_data_arguments(

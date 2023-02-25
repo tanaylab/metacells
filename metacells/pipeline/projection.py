@@ -209,7 +209,7 @@ def projection_pipeline(
        atlas. If ``ignore_query_lateral_genes`` (default: {ignore_query_lateral_genes}), ignore the ``lateral_gene`` of
        the atlas. Normalize the fractions of the fitted gene fractions to sum to 1 in each metacell.
 
-    2. Invoke :py:func:`metacells.tools.project.compute_projection`
+    2. Invoke :py:func:`metacells.tools.project.compute_projection_weights`
        to project each query metacell onto the atlas, using the ``project_fold_normalization`` (default:
        {project_fold_normalization}), ``project_min_significant_gene_umis`` (default:
        {project_min_significant_gene_umis}), ``project_max_consistency_fold_factor`` (default:
@@ -237,7 +237,7 @@ def projection_pipeline(
     5. Further reduce the mask of type-specific fitted genes by ignoring any genes in ``ignored_gene_of_<type>``, if
        this annotation exists in the query. Normalize the sum of the fitted gene fractions to 1 in each metacell.
 
-    6. Invoke :py:func:`metacells.tools.project.compute_projection` to project each query metacell of the type
+    6. Invoke :py:func:`metacells.tools.project.compute_projection_weights` to project each query metacell of the type
        onto the atlas. Note that even though we only look at query metacells (tentatively) assigned the type, their
        projection on the atlas may use metacells of any type.
 
@@ -268,9 +268,9 @@ def projection_pipeline(
         (initially from the above) query metacell type and the secondary query metacell type (initially empty).
         Normalize the sum of the gene fractions in the metacell to 1.
 
-    12. Invoke :py:func:`metacells.tools.project.compute_projection` just for this metacell, allowing the projection to
-        use a secondary location in the atlas based on the residuals of the atlas metacells relative to the primary
-        query projection.
+    12. Invoke :py:func:`metacells.tools.project.compute_projection_weights` just for this metacell, allowing the
+        projection to use a secondary location in the atlas based on the residuals of the atlas metacells relative to
+        the primary query projection.
 
     13. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` twice, once for the weights of the primary
         location and once for the weights of the secondary location, to obtain a primary and secondary type for
@@ -302,8 +302,8 @@ def projection_pipeline(
         use_essential_genes=use_essential_genes,
     )
 
-    common_adata = _initialize_common_adata(adata, atlas_common_gene_indices)
-    common_qdata = _initialize_common_qdata(qdata, query_common_gene_indices)
+    common_adata = _initialize_common_adata(adata, what, atlas_common_gene_indices)
+    common_qdata = _initialize_common_qdata(qdata, what, query_common_gene_indices)
 
     min_essential_genes_of_type = _min_essential_genes_of_type(
         adata=adata,
@@ -312,7 +312,7 @@ def projection_pipeline(
         project_min_essential_genes_fraction=project_min_essential_genes_fraction,
     )
 
-    initial_fitted_genes_mask = _initial_fitted_genes_mask(
+    preliminary_fitted_genes_mask = _preliminary_fitted_genes_mask(
         common_adata=common_adata,
         common_qdata=common_qdata,
         only_atlas_marker_genes=only_atlas_marker_genes,
@@ -322,11 +322,10 @@ def projection_pipeline(
         min_significant_gene_umis=project_min_significant_gene_umis,
     )
 
-    _compute_preliminary_projected_type(
-        what=what,
+    _compute_preliminary_projection(
         common_adata=common_adata,
         common_qdata=common_qdata,
-        initial_fitted_genes_mask=initial_fitted_genes_mask,
+        preliminary_fitted_genes_mask=preliminary_fitted_genes_mask,
         project_fold_normalization=project_fold_normalization,
         project_min_significant_gene_umis=project_min_significant_gene_umis,
         project_max_consistency_fold_factor=project_max_consistency_fold_factor,
@@ -340,11 +339,10 @@ def projection_pipeline(
     )
 
     weights = _compute_per_type_projection(
-        what=what,
         common_adata=common_adata,
         common_qdata=common_qdata,
         type_names=type_names,
-        initial_fitted_genes_mask=initial_fitted_genes_mask,
+        preliminary_fitted_genes_mask=preliminary_fitted_genes_mask,
         misfit_min_metacells_fraction=misfit_min_metacells_fraction,
         project_fold_normalization=project_fold_normalization,
         project_candidates_count=project_candidates_count,
@@ -453,17 +451,20 @@ def _initialize_atlas_data_in_query(
     return type_names
 
 
-def _initialize_common_adata(adata: AnnData, atlas_common_gene_indices: ut.NumpyVector) -> AnnData:
-    common_adata = ut.slice(adata, name=".common", vars=atlas_common_gene_indices)
+def _initialize_common_adata(adata: AnnData, what: str, atlas_common_gene_indices: ut.NumpyVector) -> AnnData:
+    common_adata = ut.slice(adata, name=".common", vars=atlas_common_gene_indices, top_level=False)
 
     atlas_total_common_umis = ut.get_o_numpy(common_adata, "total_umis", sum=True)
     ut.set_o_data(common_adata, "total_umis", atlas_total_common_umis)
+
+    _normalize_corrected_fractions(common_adata, what)
 
     return common_adata
 
 
 def _initialize_common_qdata(
     qdata: AnnData,
+    what: str,
     query_common_gene_indices: ut.NumpyVector,
 ) -> AnnData:
     common_qdata = ut.slice(
@@ -471,11 +472,14 @@ def _initialize_common_qdata(
         name=".common",
         vars=query_common_gene_indices,
         track_var="full_gene_index_of_qdata",
+        top_level=False,
     )
 
     query_total_common_umis = ut.get_o_numpy(common_qdata, "total_umis", sum=True)
     ut.set_o_data(common_qdata, "total_umis", query_total_common_umis)
     ut.set_o_data(qdata, "total_atlas_umis", query_total_common_umis)
+
+    _normalize_corrected_fractions(common_qdata, what)
 
     return common_qdata
 
@@ -562,7 +566,7 @@ def _min_essential_genes_of_type(
     return min_essential_genes_of_type
 
 
-def _initial_fitted_genes_mask(
+def _preliminary_fitted_genes_mask(
     *,
     common_adata: AnnData,
     common_qdata: AnnData,
@@ -575,25 +579,25 @@ def _initial_fitted_genes_mask(
     atlas_total_umis_per_gene = ut.get_v_numpy(common_adata, "total_umis", sum=True)
     query_total_umis_per_gene = ut.get_v_numpy(common_qdata, "total_umis", sum=True)
     total_umis_per_gene = atlas_total_umis_per_gene + query_total_umis_per_gene
-    initial_fitted_genes_mask = total_umis_per_gene >= min_significant_gene_umis
-    ut.log_calc("total_umis_mask", initial_fitted_genes_mask)
+    preliminary_fitted_genes_mask = total_umis_per_gene >= min_significant_gene_umis
+    ut.log_calc("total_umis_mask", preliminary_fitted_genes_mask)
 
     if only_atlas_marker_genes and ut.has_data(common_adata, "marker_gene"):
-        initial_fitted_genes_mask &= ut.get_v_numpy(common_adata, "marker_gene")
+        preliminary_fitted_genes_mask &= ut.get_v_numpy(common_adata, "marker_gene")
 
     if only_query_marker_genes and ut.has_data(common_qdata, "marker_gene"):
-        initial_fitted_genes_mask &= ut.get_v_numpy(common_qdata, "marker_gene")
+        preliminary_fitted_genes_mask &= ut.get_v_numpy(common_qdata, "marker_gene")
 
     if ignore_atlas_lateral_genes and ut.has_data(common_adata, "lateral_gene"):
-        initial_fitted_genes_mask &= ~ut.get_v_numpy(common_adata, "lateral_gene")
+        preliminary_fitted_genes_mask &= ~ut.get_v_numpy(common_adata, "lateral_gene")
 
     if ignore_query_lateral_genes and ut.has_data(common_qdata, "lateral_gene"):
-        initial_fitted_genes_mask &= ~ut.get_v_numpy(common_qdata, "lateral_gene")
+        preliminary_fitted_genes_mask &= ~ut.get_v_numpy(common_qdata, "lateral_gene")
 
     if ut.has_data(common_qdata, "ignored_gene"):
-        initial_fitted_genes_mask &= ~ut.get_v_numpy(common_qdata, "ignored_gene")
+        preliminary_fitted_genes_mask &= ~ut.get_v_numpy(common_qdata, "ignored_gene")
 
-    return initial_fitted_genes_mask
+    return preliminary_fitted_genes_mask
 
 
 def _common_data_to_full(
@@ -604,26 +608,29 @@ def _common_data_to_full(
     use_essential_genes: bool,
     type_names: List[str],
 ) -> None:
+    if use_essential_genes:
+        primary_type_per_metacell = ut.get_o_numpy(qdata, "projected_type")
+        secondary_type_per_metacell = ut.get_o_numpy(qdata, "projected_secondary_type")
+        essential_per_gene_per_metacell = np.zeros(qdata.shape, dtype="bool")
+        essential_gene_per_type = {
+            type_name: ut.get_v_numpy(qdata, f"essential_gene_of_{type_name}")
+            for type_name in type_names
+            if type_name != "Outliers"
+        }
+        for metacell_index in range(qdata.n_obs):
+            primary_type_of_metacell = primary_type_per_metacell[metacell_index]
+            if primary_type_of_metacell != "Outliers":
+                essential_per_gene_per_metacell[metacell_index, :] = essential_gene_per_type[primary_type_of_metacell]
+
+            secondary_type_of_metacell = secondary_type_per_metacell[metacell_index]
+            if secondary_type_of_metacell not in ("", "Outliers", primary_type_of_metacell):
+                essential_per_gene_per_metacell[metacell_index, :] |= essential_gene_per_type[
+                    secondary_type_of_metacell
+                ]
+
+        ut.set_vo_data(qdata, "essential", sp.csr_matrix(essential_per_gene_per_metacell))
+
     full_gene_index_of_common_qdata = ut.get_v_numpy(common_qdata, "full_gene_index_of_qdata")
-
-    property_names = [f"fitted_gene_of_{type_name}" for type_name in type_names]
-    if project_corrections:
-        property_names.append("correction_factor")
-
-    for property_name in property_names:
-        data_per_common_gene = ut.get_v_numpy(common_qdata, property_name)
-        data_per_full_gene = np.zeros(qdata.n_vars, dtype=data_per_common_gene.dtype)
-        data_per_full_gene[full_gene_index_of_common_qdata] = data_per_common_gene
-        ut.set_v_data(qdata, property_name, data_per_full_gene)
-
-    for property_name in (
-        "projected_type",
-        "projected_secondary_type",
-        "projected_correlation",
-        "similar",
-    ):
-        data_per_metacell = ut.get_o_numpy(common_qdata, property_name)
-        ut.set_o_data(qdata, property_name, data_per_metacell)
 
     for property_name in (
         "corrected_fraction",
@@ -639,34 +646,33 @@ def _common_data_to_full(
         )
         ut.set_vo_data(qdata, property_name, sp.csr_matrix(data_per_gene_per_metacell))
 
-    if use_essential_genes:
-        primary_type_per_metacell = ut.get_o_numpy(qdata, "projected_type")
-        secondary_type_per_metacell = ut.get_o_numpy(qdata, "projected_secondary_type")
-        essential_per_gene_per_metacell = np.zeros(qdata.shape, dtype="bool")
-        for metacell_index in range(qdata.n_obs):
-            primary_type_of_metacell = primary_type_per_metacell[metacell_index]
-            if primary_type_of_metacell != "Outliers":
-                essential_per_gene_per_metacell[metacell_index, :] = ut.get_v_numpy(
-                    qdata, f"essential_gene_of_{primary_type_of_metacell}"
-                )
+    property_names = [f"fitted_gene_of_{type_name}" for type_name in type_names]
+    if project_corrections:
+        property_names.append("correction_factor")
 
-            secondary_type_of_metacell = secondary_type_per_metacell[metacell_index]
-            if secondary_type_of_metacell not in ("", "Outliers"):
-                essential_per_gene_per_metacell[metacell_index, :] |= ut.get_v_numpy(
-                    qdata, f"essential_gene_of_{secondary_type_of_metacell}"
-                )
+    for property_name in property_names:
+        data_per_common_gene = ut.get_v_numpy(common_qdata, property_name)
+        data_per_full_gene = np.zeros(qdata.n_vars, dtype=data_per_common_gene.dtype)
+        data_per_full_gene[full_gene_index_of_common_qdata] = data_per_common_gene
+        ut.set_v_data(qdata, property_name, data_per_full_gene)
 
-        ut.set_vo_data(qdata, "essential", sp.csr_matrix(essential_per_gene_per_metacell))
+    for property_name, formatter in (
+        ("projected_type", None),
+        ("projected_secondary_type", None),
+        ("projected_correlation", ut.sizes_description),
+        ("similar", None),
+    ):
+        data_per_metacell = ut.get_o_numpy(common_qdata, property_name, formatter=formatter)
+        ut.set_o_data(qdata, property_name, data_per_metacell, formatter=formatter)
 
 
 @ut.logged()
 @ut.timed_call()
-def _compute_preliminary_projected_type(
+def _compute_preliminary_projection(
     *,
-    what: str,
     common_adata: AnnData,
     common_qdata: AnnData,
-    initial_fitted_genes_mask: ut.NumpyVector,
+    preliminary_fitted_genes_mask: ut.NumpyVector,
     project_fold_normalization: float,
     project_min_significant_gene_umis: float,
     project_max_consistency_fold_factor: float,
@@ -678,25 +684,26 @@ def _compute_preliminary_projected_type(
     atlas_type_property_name: str,
     reproducible: bool,
 ) -> None:
-    fitted_adata = ut.slice(common_adata, name=".fitted", vars=initial_fitted_genes_mask)
-    _normalize_corrected_fractions(fitted_adata, what)
-
-    fitted_qdata = ut.slice(
-        common_qdata,
-        name=".fitted",
-        vars=initial_fitted_genes_mask,
-        track_var="common_gene_index_of_qdata",
-    )
-    _normalize_corrected_fractions(fitted_qdata, what)
-
-    fitted_genes_correction_factors = np.full(fitted_qdata.n_vars, 1.0, dtype="float32")
+    correction_factor_per_gene = np.full(common_qdata.n_vars, 1.0, dtype="float32")
 
     repeat = 0
     while True:
         repeat += 1
         ut.log_calc("preliminary repeat", repeat)
 
-        weights = tl.compute_projection(
+        fitted_adata = ut.slice(common_adata, name=".fitted", vars=preliminary_fitted_genes_mask, top_level=False)
+        _normalize_corrected_fractions(fitted_adata, "corrected_fraction")
+
+        fitted_qdata = ut.slice(
+            common_qdata,
+            name=".fitted",
+            vars=preliminary_fitted_genes_mask,
+            track_var="common_gene_index_of_qdata",
+            top_level=False,
+        )
+        _normalize_corrected_fractions(fitted_qdata, "corrected_fraction")
+
+        weights = tl.compute_projection_weights(
             adata=fitted_adata,
             qdata=fitted_qdata,
             fold_normalization=project_fold_normalization,
@@ -711,14 +718,20 @@ def _compute_preliminary_projected_type(
             repeat > 2
             or not project_corrections
             or not _correct_correlated_genes(
-                fitted_qdata=fitted_qdata,
+                common_adata=common_adata,
+                common_qdata=common_qdata,
+                preliminary_fitted_genes_mask=preliminary_fitted_genes_mask,
                 project_min_corrected_gene_correlation=project_min_corrected_gene_correlation,
                 project_min_corrected_gene_factor=project_min_corrected_gene_factor,
-                fitted_genes_correction_factors=fitted_genes_correction_factors,
+                correction_factor_per_gene=correction_factor_per_gene,
+                weights=weights,
                 reproducible=reproducible,
             )
         ):
             break
+
+    if project_corrections:
+        ut.set_v_data(common_qdata, "correction_factor", correction_factor_per_gene)
 
     tl.convey_atlas_to_query(
         adata=fitted_adata,
@@ -728,104 +741,62 @@ def _compute_preliminary_projected_type(
         to_property_name="projected_type",
     )
 
-    _fitted_data_to_common(
-        common_qdata=common_qdata,
-        fitted_qdata=fitted_qdata,
-        fitted_genes_correction_factors=fitted_genes_correction_factors,
-        project_corrections=project_corrections,
-    )
-
-
-def _fitted_data_to_common(
-    *,
-    common_qdata: AnnData,
-    fitted_qdata: AnnData,
-    fitted_genes_correction_factors: ut.NumpyVector,
-    project_corrections: bool,
-) -> None:
-    common_gene_index_of_fitted_qdata = ut.get_v_numpy(fitted_qdata, "common_gene_index_of_qdata")
-
-    for property_name in (
-        "corrected_fraction",
-        "projected_fraction",
-    ):
-        data_per_fitted_gene_per_metacell = ut.get_vo_proper(fitted_qdata, property_name)
-        data_per_gene_per_metacell = np.zeros(
-            common_qdata.shape, dtype=ut.shaped_dtype(data_per_fitted_gene_per_metacell)
-        )
-        data_per_gene_per_metacell[:, common_gene_index_of_fitted_qdata] = ut.to_numpy_matrix(
-            data_per_fitted_gene_per_metacell
-        )
-        ut.set_vo_data(common_qdata, property_name, sp.csr_matrix(data_per_gene_per_metacell))
-
-    if project_corrections:
-        common_genes_correction_factors = np.zeros(common_qdata.n_vars, dtype="float32")
-        common_genes_correction_factors[common_gene_index_of_fitted_qdata] = fitted_genes_correction_factors
-        ut.set_v_data(common_qdata, "correction_factor", common_genes_correction_factors)
-
 
 def _correct_correlated_genes(
     *,
-    fitted_qdata: AnnData,
+    common_adata: AnnData,
+    common_qdata: AnnData,
+    preliminary_fitted_genes_mask: ut.NumpyVector,
     project_min_corrected_gene_correlation: float,
     project_min_corrected_gene_factor: float,
-    fitted_genes_correction_factors: ut.NumpyVector,
+    correction_factor_per_gene: ut.NumpyVector,
+    weights: ut.ProperMatrix,
     reproducible: bool,
 ) -> bool:
-    corrected_fractions_per_gene_per_cell = ut.to_numpy_matrix(
-        ut.get_vo_proper(fitted_qdata, "corrected_fraction", layout="column_major")
-    )
-    projected_fractions_per_gene_per_cell = ut.to_numpy_matrix(
-        ut.get_vo_proper(fitted_qdata, "projected_fraction", layout="column_major")
+    corrected_fractions_per_gene_per_metacell = ut.to_numpy_matrix(
+        ut.get_vo_proper(common_qdata, "corrected_fraction", layout="column_major")
     )
 
-    corrected_fractions_per_cell_per_gene = corrected_fractions_per_gene_per_cell.transpose()
-    projected_fractions_per_cell_per_gene = projected_fractions_per_gene_per_cell.transpose()
-
-    gene_correlations = ut.pairs_corrcoef_rows(
-        projected_fractions_per_cell_per_gene, corrected_fractions_per_cell_per_gene, reproducible=reproducible
+    tl.compute_projected_fractions(adata=common_adata, qdata=common_qdata, weights=weights)
+    projected_fractions_per_gene_per_metacell = ut.to_numpy_matrix(
+        ut.get_vo_proper(common_qdata, "projected_fraction", layout="column_major")
     )
-    assert len(gene_correlations) == fitted_qdata.n_vars
 
-    correlated_genes_mask = gene_correlations >= project_min_corrected_gene_correlation
+    correlation_per_gene = np.full(common_qdata.n_vars, -2, dtype="float32")
+    correlation_per_gene[preliminary_fitted_genes_mask] = ut.pairs_corrcoef_rows(
+        corrected_fractions_per_gene_per_metacell[:, preliminary_fitted_genes_mask].transpose(),
+        projected_fractions_per_gene_per_metacell[:, preliminary_fitted_genes_mask].transpose(),
+        reproducible=reproducible,
+    )
+
+    correlated_genes_mask = correlation_per_gene >= project_min_corrected_gene_correlation
     ut.log_calc("correlated_genes_mask", correlated_genes_mask)
     if not np.any(correlated_genes_mask):
         return False
 
-    correlated_corrected_fractions_per_gene_per_cell = corrected_fractions_per_gene_per_cell[correlated_genes_mask, :]
-    correlated_projected_fractions_per_gene_per_cell = projected_fractions_per_gene_per_cell[correlated_genes_mask, :]
-
-    correlated_total_corrected_fractions_per_gene = ut.sum_per(
-        correlated_corrected_fractions_per_gene_per_cell, per="row"
-    )
-    correlated_total_projected_fractions_per_gene = ut.sum_per(
-        correlated_projected_fractions_per_gene_per_cell, per="row"
-    )
-
-    correlated_gene_correction_factors = (
-        correlated_total_projected_fractions_per_gene / correlated_total_corrected_fractions_per_gene
-    )
+    total_corrected_fractions_per_gene = ut.sum_per(corrected_fractions_per_gene_per_metacell, per="row")
+    total_projected_fractions_per_gene = ut.sum_per(projected_fractions_per_gene_per_metacell, per="row")
+    current_correction_factor_per_gene = total_projected_fractions_per_gene / total_corrected_fractions_per_gene
 
     high_factor = 1 + project_min_corrected_gene_factor
     low_factor = 1.0 / high_factor
-    corrected_genes_mask = (correlated_gene_correction_factors <= low_factor) | (
-        correlated_gene_correction_factors >= high_factor
+    corrected_genes_mask = correlated_genes_mask & (
+        (current_correction_factor_per_gene <= low_factor) | (current_correction_factor_per_gene >= high_factor)
     )
 
     ut.log_calc("corrected_genes_mask", corrected_genes_mask)
     if not np.any(corrected_genes_mask):
         return False
 
-    correlated_gene_indices = np.where(correlated_genes_mask)[0]
-    corrected_gene_indices = correlated_gene_indices[corrected_genes_mask]
-    corrected_gene_factors = correlated_gene_correction_factors[corrected_genes_mask]
-    fitted_genes_correction_factors[corrected_gene_indices] *= corrected_gene_factors
-
-    corrected_fractions = ut.get_vo_proper(fitted_qdata, "corrected_fraction")
-    corrected_fractions = ut.to_numpy_matrix(corrected_fractions, copy=True)
-    corrected_fractions[:, corrected_gene_indices] *= corrected_gene_factors[np.newaxis, corrected_gene_indices]
-    corrected_fractions = ut.fraction_by(corrected_fractions, by="row")
-    ut.set_vo_data(fitted_qdata, "corrected_fraction", corrected_fractions)
+    correction_factor_per_corrected_gene = current_correction_factor_per_gene[corrected_genes_mask]
+    correction_factor_per_gene[corrected_genes_mask] *= correction_factor_per_corrected_gene
+    corrected_fractions_per_gene_per_metacell[:, corrected_genes_mask] *= correction_factor_per_corrected_gene[
+        np.newaxis, :
+    ]
+    corrected_fractions_per_gene_per_metacell = ut.fraction_by(  # type: ignore
+        corrected_fractions_per_gene_per_metacell, by="row"
+    )
+    ut.set_vo_data(common_qdata, "corrected_fraction", sp.csr_matrix(corrected_fractions_per_gene_per_metacell))
 
     return True
 
@@ -834,11 +805,10 @@ def _correct_correlated_genes(
 @ut.timed_call()
 def _compute_per_type_projection(
     *,
-    what: str,
     common_adata: AnnData,
     common_qdata: AnnData,
     type_names: List[str],
-    initial_fitted_genes_mask: ut.NumpyVector,
+    preliminary_fitted_genes_mask: ut.NumpyVector,
     misfit_min_metacells_fraction: float,
     project_fold_normalization: float,
     project_candidates_count: int,
@@ -858,7 +828,7 @@ def _compute_per_type_projection(
         old_types_per_metacell.append(set())
 
     fitted_genes_mask_per_type = _initial_fitted_genes_mask_per_type(
-        common_qdata=common_qdata, type_names=type_names, initial_fitted_genes_mask=initial_fitted_genes_mask
+        common_qdata=common_qdata, type_names=type_names, preliminary_fitted_genes_mask=preliminary_fitted_genes_mask
     )
 
     misfit_per_gene_per_metacell = np.empty(common_qdata.shape, dtype="bool")
@@ -873,18 +843,16 @@ def _compute_per_type_projection(
         ut.log_calc("types repeat", repeat)
 
         type_of_query_metacells = ut.get_o_numpy(common_qdata, "projected_type")
+        query_type_names = list(np.unique(type_of_query_metacells))
 
         misfit_per_gene_per_metacell[:, :] = False
         projected_fold_per_gene_per_metacell[:, :] = 0.0
-
-        query_type_names = list(np.unique(type_of_query_metacells))
 
         @ut.timed_call("single_type_projection")
         def _single_type_projection(
             type_index: int,
         ) -> Dict[str, Any]:
             return _compute_single_type_projection(
-                what=what,
                 type_name=query_type_names[type_index],
                 common_adata=common_adata,
                 common_qdata=common_qdata,
@@ -903,16 +871,17 @@ def _compute_per_type_projection(
                 reproducible=reproducible,
             )
 
+        @ut.logged()
         def _collect_single_type_result(
             type_index: int,
             *,
             query_metacell_indices_of_type: ut.NumpyVector,
             fitted_genes_indices_of_type: ut.NumpyVector,
             similar_per_metacell_of_type: ut.NumpyVector,
-            misfit_per_fitted_gene_per_metacell_of_type: ut.Matrix,
+            misfit_per_gene_per_metacell_of_type: ut.ProperMatrix,
             projected_correlation_per_metacell_of_type: ut.NumpyVector,
-            projected_fold_per_fitted_gene_per_metacell_of_type: ut.Matrix,
-            weights_per_atlas_per_query_metacell_of_type: ut.Matrix,
+            projected_fold_per_gene_per_metacell_of_type: ut.ProperMatrix,
+            weights_per_atlas_per_query_metacell_of_type: ut.ProperMatrix,
         ) -> None:
             fitted_genes_mask_per_type[query_type_names[type_index]][:] = False
             fitted_genes_mask_per_type[query_type_names[type_index]][fitted_genes_indices_of_type] = True
@@ -920,14 +889,11 @@ def _compute_per_type_projection(
             projected_correlation_per_metacell[
                 query_metacell_indices_of_type
             ] = projected_correlation_per_metacell_of_type
-            genes_meshgrid = np.meshgrid(
-                query_metacell_indices_of_type, fitted_genes_indices_of_type, sparse=True, indexing="ij"
+            misfit_per_gene_per_metacell[query_metacell_indices_of_type, :] = ut.to_numpy_matrix(
+                misfit_per_gene_per_metacell_of_type
             )
-            misfit_per_gene_per_metacell[genes_meshgrid] = ut.to_numpy_matrix(
-                misfit_per_fitted_gene_per_metacell_of_type
-            )
-            projected_fold_per_gene_per_metacell[genes_meshgrid] = ut.to_numpy_matrix(
-                projected_fold_per_fitted_gene_per_metacell_of_type
+            projected_fold_per_gene_per_metacell[query_metacell_indices_of_type, :] = ut.to_numpy_matrix(
+                projected_fold_per_gene_per_metacell_of_type
             )
             weights_per_atlas_per_query_metacell[query_metacell_indices_of_type, :] = ut.to_numpy_matrix(
                 weights_per_atlas_per_query_metacell_of_type
@@ -972,11 +938,11 @@ def _compute_per_type_projection(
 def _initial_fitted_genes_mask_per_type(
     common_qdata: AnnData,
     type_names: List[str],
-    initial_fitted_genes_mask: ut.NumpyVector,
+    preliminary_fitted_genes_mask: ut.NumpyVector,
 ) -> Dict[str, ut.NumpyVector]:
     fitted_genes_mask_per_type: Dict[str, ut.NumpyVector] = {}
     for type_name in type_names:
-        fitted_genes_mask_of_type = initial_fitted_genes_mask.copy()
+        fitted_genes_mask_of_type = preliminary_fitted_genes_mask.copy()
         property_name = f"ignored_gene_of_{type_name}"
         if ut.has_data(common_qdata, property_name):
             ignored_gene_mask_of_type = ut.get_v_numpy(common_qdata, property_name)
@@ -989,7 +955,6 @@ def _initial_fitted_genes_mask_per_type(
 @ut.timed_call()
 def _compute_single_type_projection(
     *,
-    what: str,
     type_name: str,
     common_adata: AnnData,
     common_qdata: AnnData,
@@ -1011,35 +976,32 @@ def _compute_single_type_projection(
     query_metacell_mask_of_type = projected_type_per_metacell == type_name
     ut.log_calc("query_metacell_mask_of_type", query_metacell_mask_of_type)
     assert np.any(query_metacell_mask_of_type)
-    min_essential_genes = min_essential_genes_of_type[(type_name, type_name)]
+    type_common_qdata = ut.slice(common_qdata, name=f".{type_name}", obs=query_metacell_mask_of_type, top_level=False)
+    corrected_fractions = ut.get_vo_proper(type_common_qdata, "corrected_fraction")
 
     fitted_genes_mask_of_type = fitted_genes_mask_per_type[type_name]
     assert np.any(fitted_genes_mask_of_type)
 
-    name: Optional[str] = f".fitted.{type_name}"
     repeat = 0
     while True:
         repeat += 1
         ut.log_calc(f"{type_name} misfit repeat", repeat)
 
         type_fitted_adata = ut.slice(
-            common_adata, name=name or ut.get_name(common_adata), vars=fitted_genes_mask_of_type
+            common_adata, name=f".{type_name}.fitted", vars=fitted_genes_mask_of_type, top_level=False
         )
-        _normalize_corrected_fractions(type_fitted_adata, what)
+        _normalize_corrected_fractions(type_fitted_adata, "corrected_fraction")
 
         type_fitted_qdata = ut.slice(
-            common_qdata,
-            name=name or ut.get_name(common_qdata),
-            obs=query_metacell_mask_of_type,
+            type_common_qdata,
+            name=".fitted",
             vars=fitted_genes_mask_of_type,
             track_var="common_gene_index_of_qdata",
+            top_level=False,
         )
-        _normalize_corrected_fractions(type_fitted_qdata, what)
-        corrected_fractions = ut.get_vo_proper(type_fitted_qdata, "corrected_fraction")
+        _normalize_corrected_fractions(type_fitted_qdata, "corrected_fraction")
 
-        name = None
-
-        type_weights = tl.compute_projection(
+        type_weights = tl.compute_projection_weights(
             adata=type_fitted_adata,
             qdata=type_fitted_qdata,
             fold_normalization=project_fold_normalization,
@@ -1049,17 +1011,20 @@ def _compute_single_type_projection(
             min_usage_weight=project_min_usage_weight,
             reproducible=reproducible,
         )
-        projected_fractions = ut.get_vo_proper(type_fitted_qdata, "projected_fraction")
+
+        tl.compute_projected_fractions(adata=common_adata, qdata=type_common_qdata, weights=type_weights)
+        projected_fractions = ut.get_vo_proper(type_common_qdata, "projected_fraction")
 
         tl.compute_projected_folds(
-            type_fitted_qdata,
+            type_common_qdata,
             fold_normalization=project_fold_normalization,
             min_significant_gene_umis=project_min_significant_gene_umis,
         )
-        projected_fold_per_fitted_gene_per_metacell_of_type = ut.get_vo_proper(type_fitted_qdata, "projected_fold")
+        projected_fold_per_gene_per_metacell_of_type = ut.get_vo_proper(type_common_qdata, "projected_fold")
 
         if not _detect_type_misfit_genes(
-            type_fitted_qdata=type_fitted_qdata,
+            type_common_qdata=type_common_qdata,
+            projected_fold_per_gene_per_metacell_of_type=projected_fold_per_gene_per_metacell_of_type,
             max_projection_fold_factor=project_max_projection_fold_factor,
             max_projection_noisy_fold_factor=project_max_projection_noisy_fold_factor,
             misfit_min_metacells_fraction=misfit_min_metacells_fraction,
@@ -1068,54 +1033,56 @@ def _compute_single_type_projection(
             break
 
     tl.compute_similar_query_metacells(
-        type_fitted_qdata,
+        type_common_qdata,
         max_projection_fold_factor=project_max_projection_fold_factor,
         max_projection_noisy_fold_factor=project_max_projection_noisy_fold_factor,
         max_misfit_genes=project_max_misfit_genes,
         essential_genes_property=f"essential_gene_of_{type_name}",
-        min_essential_genes=min_essential_genes,
+        min_essential_genes=min_essential_genes_of_type[(type_name, type_name)],
+        fitted_genes_mask=fitted_genes_mask_of_type,
     )
-    similar_per_metacell_of_type = ut.get_o_numpy(type_fitted_qdata, "similar")
-    misfit_per_fitted_gene_per_metacell_of_type = ut.get_vo_proper(type_fitted_qdata, "misfit")
+    similar_per_metacell_of_type = ut.get_o_numpy(type_common_qdata, "similar")
+    misfit_per_gene_per_metacell_of_type = ut.get_vo_proper(type_common_qdata, "misfit")
 
+    fitted_corrected_fractions = corrected_fractions[:, fitted_genes_mask_of_type]
+    fitted_projected_fractions = projected_fractions[:, fitted_genes_mask_of_type]
     projected_correlation_per_metacell_of_type = ut.pairs_corrcoef_rows(
-        ut.to_numpy_matrix(corrected_fractions), ut.to_numpy_matrix(projected_fractions), reproducible=reproducible
+        ut.to_layout(ut.to_numpy_matrix(fitted_corrected_fractions), layout="row_major"),
+        ut.to_layout(ut.to_numpy_matrix(fitted_projected_fractions), layout="row_major"),
+        reproducible=reproducible,
     )
 
     if top_level_parallel:
-        if not isinstance(misfit_per_fitted_gene_per_metacell_of_type, sp.csr_matrix):
-            misfit_per_fitted_gene_per_metacell_of_type = sp.csr_matrix(misfit_per_fitted_gene_per_metacell_of_type)
-        if not isinstance(projected_fold_per_fitted_gene_per_metacell_of_type, sp.csr_matrix):
-            projected_fold_per_fitted_gene_per_metacell_of_type = sp.csr_matrix(
-                projected_fold_per_fitted_gene_per_metacell_of_type
-            )
+        if not isinstance(misfit_per_gene_per_metacell_of_type, sp.csr_matrix):
+            misfit_per_gene_per_metacell_of_type = sp.csr_matrix(misfit_per_gene_per_metacell_of_type)
+        if not isinstance(projected_fold_per_gene_per_metacell_of_type, sp.csr_matrix):
+            projected_fold_per_gene_per_metacell_of_type = sp.csr_matrix(projected_fold_per_gene_per_metacell_of_type)
         if not isinstance(type_weights, sp.csr_matrix):
             type_weights = sp.csr_matrix(type_weights)
 
     ut.log_return("query_metacell_mask_of_type", query_metacell_mask_of_type)
     ut.log_return("fitted_genes_mask_of_type", fitted_genes_mask_of_type)
     ut.log_return("similar_per_metacell_of_type", similar_per_metacell_of_type)
-    ut.log_return("misfit_per_fitted_gene_per_metacell_of_type", misfit_per_fitted_gene_per_metacell_of_type)
+    ut.log_return("misfit_per_gene_per_metacell_of_type", misfit_per_gene_per_metacell_of_type)
     ut.log_return("projected_correlation_per_metacell_of_type", projected_correlation_per_metacell_of_type)
-    ut.log_return(
-        "projected_fold_per_fitted_gene_per_metacell_of_type", projected_fold_per_fitted_gene_per_metacell_of_type
-    )
+    ut.log_return("projected_fold_per_gene_per_metacell_of_type", projected_fold_per_gene_per_metacell_of_type)
     ut.log_return("weights", type_weights)
 
     return dict(
         query_metacell_indices_of_type=np.where(query_metacell_mask_of_type)[0],
         fitted_genes_indices_of_type=np.where(fitted_genes_mask_of_type)[0],
         similar_per_metacell_of_type=similar_per_metacell_of_type,
-        misfit_per_fitted_gene_per_metacell_of_type=misfit_per_fitted_gene_per_metacell_of_type,
+        misfit_per_gene_per_metacell_of_type=misfit_per_gene_per_metacell_of_type,
         projected_correlation_per_metacell_of_type=projected_correlation_per_metacell_of_type,
-        projected_fold_per_fitted_gene_per_metacell_of_type=projected_fold_per_fitted_gene_per_metacell_of_type,
+        projected_fold_per_gene_per_metacell_of_type=projected_fold_per_gene_per_metacell_of_type,
         weights_per_atlas_per_query_metacell_of_type=type_weights,
     )
 
 
 def _detect_type_misfit_genes(
     *,
-    type_fitted_qdata: AnnData,
+    type_common_qdata: AnnData,
+    projected_fold_per_gene_per_metacell_of_type: ut.ProperMatrix,
     max_projection_fold_factor: float,
     max_projection_noisy_fold_factor: float,
     misfit_min_metacells_fraction: float,
@@ -1125,37 +1092,40 @@ def _detect_type_misfit_genes(
     assert max_projection_noisy_fold_factor >= 0
     assert 0 <= misfit_min_metacells_fraction <= 1
 
-    projected_fold_per_gene_per_metacell = ut.get_vo_proper(type_fitted_qdata, "projected_fold", layout="column_major")
-    projected_fold_per_gene_per_metacell = np.abs(projected_fold_per_gene_per_metacell)  # type: ignore
-
-    if ut.has_data(type_fitted_qdata, "projected_noisy_gene"):
+    if ut.has_data(type_common_qdata, "projected_noisy_gene"):
         max_projection_fold_factor_per_gene = np.full(
-            type_fitted_qdata.n_vars, max_projection_fold_factor, dtype="float32"
+            type_common_qdata.n_vars, max_projection_fold_factor, dtype="float32"
         )
-        noisy_per_gene = ut.get_v_numpy(type_fitted_qdata, "projected_noisy_gene")
+        noisy_per_gene = ut.get_v_numpy(type_common_qdata, "projected_noisy_gene")
         max_projection_fold_factor_per_gene[noisy_per_gene] += max_projection_noisy_fold_factor
-        high_projection_fold_per_gene_per_metacell = (
-            projected_fold_per_gene_per_metacell > max_projection_fold_factor_per_gene[np.newaxis, :]
+        high_projection_fold_per_gene_per_metacell_of_type = (
+            projected_fold_per_gene_per_metacell_of_type > max_projection_fold_factor_per_gene[np.newaxis, :]
         )
     else:
-        high_projection_fold_per_gene_per_metacell = (
-            ut.to_numpy_matrix(projected_fold_per_gene_per_metacell) > max_projection_fold_factor
+        high_projection_fold_per_gene_per_metacell_of_type = (
+            ut.to_numpy_matrix(projected_fold_per_gene_per_metacell_of_type) > max_projection_fold_factor
         )
-        ut.log_calc("high_projection_fold_per_gene_per_metacell", high_projection_fold_per_gene_per_metacell)
+    ut.log_calc(
+        "high_projection_fold_per_gene_per_metacell_of_type", high_projection_fold_per_gene_per_metacell_of_type
+    )
 
-    high_projection_cells_per_gene = ut.sum_per(high_projection_fold_per_gene_per_metacell, per="column")
-    ut.log_calc("high_projection_cells_per_gene", high_projection_cells_per_gene, formatter=ut.sizes_description)
+    high_projection_metacells_per_gene = ut.sum_per(
+        ut.to_layout(high_projection_fold_per_gene_per_metacell_of_type, layout="column_major"), per="column"
+    )
+    ut.log_calc(
+        "high_projection_metacells_per_gene", high_projection_metacells_per_gene, formatter=ut.sizes_description
+    )
 
-    min_high_projection_cells = type_fitted_qdata.n_obs * misfit_min_metacells_fraction
-    ut.log_calc("min_high_projection_cells", min_high_projection_cells)
+    min_high_projection_metacells = type_common_qdata.n_obs * misfit_min_metacells_fraction
+    ut.log_calc("min_high_projection_metacells", min_high_projection_metacells)
 
-    type_misfit_genes_mask = high_projection_cells_per_gene >= min_high_projection_cells
+    high_projection_genes_mask = high_projection_metacells_per_gene >= min_high_projection_metacells
+    type_misfit_genes_mask = fitted_genes_mask_of_type & high_projection_genes_mask
     ut.log_calc("type_misfit_genes_mask", type_misfit_genes_mask)
     if not np.any(type_misfit_genes_mask):
         return False
 
-    common_gene_index_of_type_fitted_qdata = ut.get_v_numpy(type_fitted_qdata, "common_gene_index_of_qdata")
-    fitted_genes_mask_of_type[common_gene_index_of_type_fitted_qdata] = ~type_misfit_genes_mask
+    fitted_genes_mask_of_type[type_misfit_genes_mask] = False
     ut.log_calc("fitted_genes_mask_of_type", fitted_genes_mask_of_type)
 
     return True
@@ -1220,24 +1190,21 @@ def _compute_dissimilar_residuals_projection(
     reproducible: bool,
 ) -> None:
     secondary_type = [""] * common_qdata.n_obs
-    dissimilar_mask = ~ut.get_o_numpy(common_qdata, "similar")
-    if not np.any(dissimilar_mask):
+    dissimilar_metacells_mask = ~ut.get_o_numpy(common_qdata, "similar")
+    if not np.any(dissimilar_metacells_mask):
         ut.set_o_data(common_qdata, "projected_secondary_type", np.array(secondary_type))
         return
-
-    dissimilar_qdata = ut.slice(
-        common_qdata, obs=dissimilar_mask, name=".dissimilar", track_var="common_gene_index_of_qdata"
-    )
+    dissimilar_metacell_indices = np.where(dissimilar_metacells_mask)[0]
 
     @ut.timed_call("single_metacell_residuals")
     def _single_metacell_residuals(
-        dissimilar_metacell_index: int,
+        dissimilar_metacell_position: int,
     ) -> Optional[Dict[str, Any]]:
         return _compute_single_metacell_residuals(
             what=what,
-            dissimilar_metacell_index=dissimilar_metacell_index,
+            dissimilar_metacell_index=dissimilar_metacell_indices[dissimilar_metacell_position],
             common_adata=common_adata,
-            dissimilar_qdata=dissimilar_qdata,
+            common_qdata=common_qdata,
             project_fold_normalization=project_fold_normalization,
             project_candidates_count=project_candidates_count,
             project_min_candidates_fraction=project_min_candidates_fraction,
@@ -1253,11 +1220,11 @@ def _compute_dissimilar_residuals_projection(
         )
 
     if top_level_parallel:
-        results = ut.parallel_map(_single_metacell_residuals, dissimilar_qdata.n_obs)
+        results = ut.parallel_map(_single_metacell_residuals, len(dissimilar_metacell_indices))
     else:
         results = [
-            _single_metacell_residuals(dissimilar_metacell_index)
-            for dissimilar_metacell_index in range(dissimilar_qdata.n_obs)
+            _single_metacell_residuals(dissimilar_metacell_position)
+            for dissimilar_metacell_position in range(len(dissimilar_metacell_indices))
         ]
 
     similar_per_metacell = ut.get_o_numpy(common_qdata, "similar").copy()
@@ -1277,25 +1244,26 @@ def _compute_dissimilar_residuals_projection(
         fitted_genes_mask: ut.NumpyVector,
         misfit_genes_mask: ut.NumpyVector,
         projected_correlation: float,
-        projected_fold: ut.NumpyVector,
+        projected_fold_per_gene: ut.NumpyVector,
         weights: ut.ProperMatrix,
     ) -> None:
         similar_per_metacell[dissimilar_metacell_index] = True
         primary_type_per_metacell[dissimilar_metacell_index] = primary_type
         secondary_type_per_metacell[dissimilar_metacell_index] = secondary_type
-        fitted_per_gene_per_metacell[dissimilar_metacell_index, :] = fitted_genes_mask
-        misfit_per_gene_per_metacell[dissimilar_metacell_index, fitted_genes_mask] = misfit_genes_mask
         projected_correlation_per_metacell[dissimilar_metacell_index] = projected_correlation
-        projected_fold_per_gene_per_metacell[dissimilar_metacell_index, fitted_genes_mask] = projected_fold
+
+        fitted_per_gene_per_metacell[dissimilar_metacell_index, :] = fitted_genes_mask
+        misfit_per_gene_per_metacell[dissimilar_metacell_index, :] = misfit_genes_mask
+        projected_fold_per_gene_per_metacell[dissimilar_metacell_index, :] = projected_fold_per_gene
         weights_per_atlas_per_query_metacell[dissimilar_metacell_index, :] = weights
 
-    for dissimilar_metacell_index, result in enumerate(results):
+    for dissimilar_metacell_index, result in zip(dissimilar_metacell_indices, results):
         if result is not None:
             _collect_metacell_residuals(dissimilar_metacell_index, **result)
 
+    ut.set_o_data(common_qdata, "similar", similar_per_metacell)
     ut.set_o_data(common_qdata, "projected_type", primary_type_per_metacell)
     ut.set_o_data(common_qdata, "projected_secondary_type", np.array(secondary_type_per_metacell))
-    ut.set_o_data(common_qdata, "similar", similar_per_metacell)
     ut.set_o_data(common_qdata, "projected_correlation", projected_correlation_per_metacell)
 
     ut.set_vo_data(common_qdata, "fitted", fitted_per_gene_per_metacell)
@@ -1310,7 +1278,7 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
     what: str,
     dissimilar_metacell_index: int,
     common_adata: AnnData,
-    dissimilar_qdata: AnnData,
+    common_qdata: AnnData,
     project_fold_normalization: float,
     project_candidates_count: int,
     project_min_candidates_fraction: float,
@@ -1324,7 +1292,12 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
     atlas_type_property_name: str,
     reproducible: bool,
 ) -> Optional[Dict[str, Any]]:
-    primary_type = ut.get_o_numpy(dissimilar_qdata, "projected_type")[dissimilar_metacell_index]
+    dissimilar_qdata = ut.slice(
+        common_qdata, name=f".dissimilar.{dissimilar_metacell_index}", obs=[dissimilar_metacell_index], top_level=False
+    )
+    corrected_fractions = ut.get_vo_proper(dissimilar_qdata, "corrected_fraction")
+
+    primary_type = ut.get_o_numpy(dissimilar_qdata, "projected_type")[0]
     secondary_type = ""
 
     repeat = 0
@@ -1338,18 +1311,19 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
         if secondary_type != "":
             fitted_genes_mask = fitted_genes_mask | ut.get_v_numpy(dissimilar_qdata, f"fitted_gene_of_{secondary_type}")
 
-        name = f".fitted.{dissimilar_metacell_index}"
-        fitted_adata = ut.slice(common_adata, vars=fitted_genes_mask, name=name)
+        fitted_adata = ut.slice(
+            common_adata,
+            name=f".dissimilar.{dissimilar_metacell_index}.fitted",
+            vars=fitted_genes_mask,
+            top_level=False,
+        )
         _normalize_corrected_fractions(fitted_adata, what)
 
-        metacell_fitted_qdata = ut.slice(
-            dissimilar_qdata, obs=[dissimilar_metacell_index], vars=fitted_genes_mask, name=name
-        )
+        metacell_fitted_qdata = ut.slice(dissimilar_qdata, name=".fitted", vars=fitted_genes_mask, top_level=False)
         _normalize_corrected_fractions(metacell_fitted_qdata, "corrected_fraction")
-        corrected_fractions = ut.get_vo_proper(metacell_fitted_qdata, "corrected_fraction")
 
         second_anchor_indices: List[int] = []
-        weights = tl.compute_projection(
+        weights = tl.compute_projection_weights(
             adata=fitted_adata,
             qdata=metacell_fitted_qdata,
             fold_normalization=project_fold_normalization,
@@ -1361,7 +1335,9 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
             reproducible=reproducible,
             second_anchor_indices=second_anchor_indices,
         )
-        projected_fractions = ut.get_vo_proper(metacell_fitted_qdata, "projected_fraction")
+        tl.compute_projected_fractions(adata=common_adata, qdata=dissimilar_qdata, weights=weights)
+        projected_fractions = ut.get_vo_proper(dissimilar_qdata, "projected_fraction")
+
         first_anchor_weights = weights.copy()
         first_anchor_weights[:, second_anchor_indices] = 0.0
 
@@ -1371,26 +1347,26 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
             second_anchor_weights = weights - first_anchor_weights  # type: ignore
 
             tl.convey_atlas_to_query(
-                adata=fitted_adata,
-                qdata=metacell_fitted_qdata,
+                adata=common_adata,
+                qdata=dissimilar_qdata,
                 weights=second_anchor_weights,
                 property_name=atlas_type_property_name,
                 to_property_name="projected_secondary_type",
             )
-            new_secondary_type = ut.get_o_numpy(metacell_fitted_qdata, "projected_secondary_type")[0]
+            new_secondary_type = ut.get_o_numpy(dissimilar_qdata, "projected_secondary_type")[0]
 
         if np.sum(first_anchor_weights.data) == 0:
             new_primary_type = new_secondary_type
             new_secondary_type = ""
         else:
             tl.convey_atlas_to_query(
-                adata=fitted_adata,
-                qdata=metacell_fitted_qdata,
+                adata=common_adata,
+                qdata=dissimilar_qdata,
                 weights=first_anchor_weights,
                 property_name=atlas_type_property_name,
                 to_property_name="projected_type",
             )
-            new_primary_type = ut.get_o_numpy(metacell_fitted_qdata, "projected_type")[0]
+            new_primary_type = ut.get_o_numpy(dissimilar_qdata, "projected_type")[0]
 
         if repeat > 2 or (new_primary_type == primary_type and new_secondary_type == secondary_type):
             break
@@ -1403,11 +1379,11 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
     )[0]
 
     tl.compute_projected_folds(
-        metacell_fitted_qdata,
+        dissimilar_qdata,
         fold_normalization=project_fold_normalization,
         min_significant_gene_umis=project_min_significant_gene_umis,
     )
-    projected_fold = ut.to_numpy_vector(ut.get_vo_proper(metacell_fitted_qdata, "projected_fold"))
+    projected_fold_per_gene = ut.to_numpy_vector(ut.get_vo_proper(dissimilar_qdata, "projected_fold"))
 
     essential_genes_properties = [f"essential_gene_of_{primary_type}"]
     if secondary_type == "":
@@ -1417,27 +1393,28 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
         essential_genes_properties.append(f"essential_gene_of_{secondary_type}")
 
     tl.compute_similar_query_metacells(
-        metacell_fitted_qdata,
+        dissimilar_qdata,
         max_projection_fold_factor=project_max_projection_fold_factor,
         max_projection_noisy_fold_factor=project_max_projection_noisy_fold_factor,
         max_misfit_genes=project_max_misfit_genes,
         essential_genes_property=essential_genes_properties,
         min_essential_genes=min_essential_genes,
+        fitted_genes_mask=fitted_genes_mask,
     )
 
-    similar = ut.get_o_numpy(metacell_fitted_qdata, "similar")[0]
+    similar = ut.get_o_numpy(dissimilar_qdata, "similar")[0]
     ut.log_return("similar", False)
     if not similar:
         return None
 
-    misfit_genes_mask = ut.to_numpy_vector(ut.get_vo_proper(metacell_fitted_qdata, "misfit")[0, :])
+    misfit_genes_mask = ut.to_numpy_vector(ut.get_vo_proper(dissimilar_qdata, "misfit")[0, :])
 
     ut.log_return("primary_type", primary_type)
     ut.log_return("secondary_type", secondary_type)
     ut.log_return("fitted_genes_mask", fitted_genes_mask)
     ut.log_return("misfit_genes_mask", misfit_genes_mask)
     ut.log_return("projected_correlation", projected_correlation)
-    ut.log_return("projected_fold", projected_fold)
+    ut.log_return("projected_fold_per_gene", projected_fold_per_gene)
 
     return dict(
         primary_type=primary_type,
@@ -1445,7 +1422,7 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
         fitted_genes_mask=fitted_genes_mask,
         misfit_genes_mask=misfit_genes_mask,
         projected_correlation=projected_correlation,
-        projected_fold=projected_fold,
+        projected_fold_per_gene=projected_fold_per_gene,
         weights=ut.to_numpy_vector(weights),
     )
 
@@ -1500,11 +1477,12 @@ def outliers_projection_pipeline(
         common_genes_list = list(sorted(set(atlas_genes_list) & set(query_genes_list)))
         atlas_common_gene_indices = np.array([atlas_genes_list.index(gene) for gene in common_genes_list])
         query_common_gene_indices = np.array([query_genes_list.index(gene) for gene in common_genes_list])
-        common_adata = ut.slice(adata, name=".common", vars=atlas_common_gene_indices)
+        common_adata = ut.slice(adata, name=".common", vars=atlas_common_gene_indices, top_level=False)
         common_odata = ut.slice(
             odata,
             name=".common",
             vars=query_common_gene_indices,
+            top_level=False,
         )
     else:
         common_adata = adata

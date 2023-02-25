@@ -63,11 +63,11 @@ new format is meant to improve the usability of the system in downstream analysi
 list here the results of the new projection pipeline added in version 0.9.
 
 If you have existing metacell data that was computed using version 0.8 (the current published version you will get
-from using ``pip install metacells``, you can use the provided `conversion script
-<https://github.com/tanaylab/metacells/blob/master/bin/convert_0.8_to_0.9.py>`_ script to migrate your data to the
-format described below, while preserving any additional annotations you may have created for your data (e.g.
-metacells type annotations). The script will not modify your existing data files, so you can examine the results and
-tweak them if necessary.
+from using ``pip install metacells``, you can use the provided
+`conversion script <https://github.com/tanaylab/metacells/blob/master/bin/convert_0.8_to_0.9.py>`_
+script to migrate your data to the format described below, while preserving any additional annotations you may have
+created for your data (e.g. metacells type annotations). The script will not modify your existing data files, so you can
+examine the results and tweak them if necessary.
 
 In the upcoming version 0.10 we will migrate from using ``AnnData`` to using ``daf`` to represent the data (``h5ad``
 files will still be supported, either directly through an adapter or via a conversion process). This will again
@@ -364,39 +364,39 @@ significant amount of quality control one needs to apply before accepting these 
     different from the ``projected_fractions`` (that is, whether the gene was not projected well for this metacell). For
     non-``atlas_gene`` this is set to ``False``, to make it easier to identify problematic genes.
 
-    This is expected to be rare for ``fitted_gene`` and common for the rest of the ``atlas_gene``. If too many
-    ``fitted_gene`` are also ``misfit_gene``, then one should be suspicious whether the query metacell is "truly" of the
+    This is expected to be rare for ``fitted`` genes and common for the rest of the ``atlas_gene``. If too many
+    ``fitted`` genes are also ``misfit``, then one should be suspicious whether the query metacell is "truly" of the
     ``projected_type``.
 
 ``essential`` mask per gene per query metacell
     Which of the ``atlas_gene`` were also listed in the ``essential_gene_of_<type>`` for the ``projected_type`` (and
     also the ``projected_secondary_type``, if any) of each query metacell.
 
-    If an ``essential_gene`` is also a ``misfit_gene``, then one should be very suspicious whether the query metacell is
+    If an ``essential`` gene is also a ``misfit`` gene, then one should be very suspicious whether the query metacell is
     "truly" of the ``projected_type``.
 
 ``projected_correlation`` per query metacell
-    The correlation between between the ``corrected_fraction`` and the ``projected_fraction`` for only the
-    ``fitted_gene`` expression levels of each query metacell. This serves as a very rough estimator for the quality of
-    the projection for this query metacell (e.g. can be used to compute R^2 values).
+    The correlation between between the ``corrected_fraction`` and the ``projected_fraction`` for only the ``fitted``
+    genes expression levels of each query metacell. This serves as a very rough estimator for the quality of the
+    projection for this query metacell (e.g. can be used to compute R^2 values).
 
-    In general we expect high correlation (more than 0.9 in most metacells) since we restricted the ``fitted_gene`` mask
-    only to genes we projected well.
+    In general we expect high correlation (more than 0.9 in most metacells) since we restricted the ``fitted`` genes
+    mask only to genes we projected well.
 
 ``projected_fold`` per gene per query metacell
     The fold factor between the ``corrected_fraction`` and the ``projected_fraction`` (0 for non-``atlas_gene``). If
     the absolute value of this is high (3 for 8x ratio) then the gene was not projected well for this metacell. This
     will be 0 for non-``atlas_gene``.
 
-    It is expected this would have low values for most ``fitted_gene`` and high values for the rest of the
+    It is expected this would have low values for most ``fitted`` genes and high values for the rest of the
     ``atlas_gene``, but specific values will vary from one query metacell to another. This allows the analyst to make
     fine-grained determination about the quality of the projection, and/or identify quantitative differences between the
     query and the atlas (e.g., when studying perturbed systems such as knockouts or disease models).
 
 ``similar`` mask per query metacell
     A conservative determination of whether the query metacell is "similar" to its projection on the atlas. This is
-    based on whether the number of ``misfit_gene`` for the query metacell is low enough (by default, up to 3 genes), and
-    also that at least 75% of the ``essential_gene`` of the query metacell were not ``misfit_gene``. Note that this
+    based on whether the number of ``misfit`` for the query metacell is low enough (by default, up to 3 genes), and also
+    that at least 75% of the ``essential`` genes of the query metacell were not ``misfit`` genes. Note that this
     explicitly allows for a ``projected_secondary_type``, that is, a metacell of doublets will be "similar" to the
     atlas, but a metacell of a novel state missing from the atlas will be "dissimilar".
 

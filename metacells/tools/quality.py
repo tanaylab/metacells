@@ -234,6 +234,7 @@ def compute_similar_query_metacells(
     max_misfit_genes: int = pr.project_max_misfit_genes,
     essential_genes_property: Union[None, str, Collection[str]] = None,
     min_essential_genes: Optional[int] = None,
+    fitted_genes_mask: Optional[ut.NumpyVector] = None,
 ) -> None:
     """
     Mark query metacells that are "similar" to their projection on the atlas.
@@ -268,11 +269,13 @@ def compute_similar_query_metacells(
 
     **Computation Parameters**
 
-    1. Mark as dissimilar any query metacells which have more than ``max_misfit_genes`` (default:
+    1. If ``fitted_genes_mask`` is not ``None``, restrict the analysis to the genes listed in it.
+
+    2. Mark as dissimilar any query metacells which have more than ``max_misfit_genes`` (default:
        {max_misfit_genes}) genes whose projection fold is above ``max_projection_fold_factor``,
        or, for genes in ``projected_noisy_gene``, above an additional ``max_projection_noisy_fold_factor``.
 
-    2. If ``essential_genes_property`` and ``min_essential_genes`` are specified, the former should be the name(s) of
+    3. If ``essential_genes_property`` and ``min_essential_genes`` are specified, the former should be the name(s) of
        boolean per-gene property/ies, and we will mark as dissimilar any query metacells which have at least this number
        of essential genes with a low projection fold factor.
     """
@@ -294,7 +297,11 @@ def compute_similar_query_metacells(
         misfit_per_gene_per_metacell = projected_fold_per_gene_per_metacell > max_projection_fold_factor  # type: ignore
     ut.set_vo_data(qdata, "misfit", sp.csr_matrix(misfit_per_gene_per_metacell))
 
-    misfit_per_metacell = ut.sum_per(misfit_per_gene_per_metacell, per="row")
+    if fitted_genes_mask is None:
+        misfit_per_fitted_gene_per_metacell = misfit_per_gene_per_metacell
+    else:
+        misfit_per_fitted_gene_per_metacell = misfit_per_gene_per_metacell[:, fitted_genes_mask]
+    misfit_per_metacell = ut.sum_per(misfit_per_fitted_gene_per_metacell, per="row")
     ut.log_calc("misfit_per_metacell", misfit_per_metacell, formatter=ut.sizes_description)
 
     similar_mask = misfit_per_metacell <= max_misfit_genes

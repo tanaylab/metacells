@@ -493,7 +493,7 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
             value = list(value)
 
     if isinstance(value, list):
-        if len(value) > 20 or (len(value) > 0 and hasattr(value[0], "__len__")):
+        if len(value) > 20 or (len(value) > 0 and hasattr(value[0], "__len__") and not isinstance(value[0], str)):
             return f"{len(value)} {value[0].__class__.__name__}s" + checksum
         texts = [
             element.uns.get("__name__", "unnamed") if isinstance(element, AnnData) else str(element)
@@ -503,7 +503,7 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
 
     if isinstance(value, dict):
         values = list(value.values())
-        if len(values) > 20 or (len(values) > 0 and hasattr(values[0], "__len__")):
+        if len(values) > 20 or (len(values) > 0 and hasattr(values[0], "__len__") and not isinstance(values[0], str)):
             keys = list(value.keys())
             return f"dict {_format_value(keys, 'keys')} => {_format_value(values, 'values')}"
         return str(value) + checksum
