@@ -67,6 +67,8 @@ for name in sorted(cdata.var.keys()):
         LOG.info(f"* purge {name}")
         del cdata.var[name]
         if name.startswith("pre_") and name[4:] in cdata.var:
+            if name[4:] == "feature_gene":
+                continue
             LOG.info(f"* purge {name[4:]}")
             del cdata.var[name[4:]]
 
