@@ -1663,29 +1663,25 @@ def _reduce_matrix(
     axis = utt.PER_OF_AXIS.index(per)
     results_count = matrix.shape[1 - axis]
 
-    compressed = utt.maybe_compressed_matrix(matrix)
-    if compressed is None:
-        timed_step = ".sparse"
-        elements_count: float = matrix.shape[axis]
-    else:
-        _, dense, compressed = utt.to_proper_matrices(matrix, default_layout=utt.LAYOUT_OF_AXIS[axis])
+    _, dense, compressed = utt.to_proper_matrices(matrix, default_layout=utt.LAYOUT_OF_AXIS[axis])
 
-        if dense is not None:
-            elements_count = dense.shape[axis]
-            axis_flag = (dense.flags.c_contiguous, dense.flags.f_contiguous)[axis]
-            if axis_flag:
-                timed_step = ".dense-efficient"
-            else:
-                timed_step = ".dense-inefficient"
-
+    elements_count: float
+    if dense is not None:
+        elements_count = dense.shape[axis]
+        axis_flag = (dense.flags.c_contiguous, dense.flags.f_contiguous)[axis]
+        if axis_flag:
+            timed_step = ".dense-efficient"
         else:
-            assert compressed is not None
-            elements_count = compressed.nnz / results_count
-            axis_format = ("csr", "csc")[axis]
-            if compressed.getformat() == axis_format:
-                timed_step = ".compressed-efficient"
-            else:
-                timed_step = ".compressed-inefficient"
+            timed_step = ".dense-inefficient"
+
+    else:
+        assert compressed is not None
+        elements_count = compressed.nnz / results_count
+        axis_format = ("csr", "csc")[axis]
+        if compressed.getformat() == axis_format:
+            timed_step = ".compressed-efficient"
+        else:
+            timed_step = ".compressed-inefficient"
 
     with utm.timed_step(timed_step):
         utm.timed_parameters(results=results_count, elements=elements_count)

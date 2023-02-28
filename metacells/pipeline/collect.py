@@ -50,6 +50,10 @@ def collect_metacells(  # pylint: disable=too-many-statements
     Annotated metacell data containing for each observation the sum of the data (by of the cells for
     each metacell, which contains the following annotations:
 
+    Unstructured (Scalar)
+        ``outliers``
+            The number of outlier cells (which were not assigned to any metacell).
+
     Variable (Gene) Annotations
         ``*``
             Every per-gene annotations of ``adata`` is copied to the result.
@@ -199,6 +203,11 @@ def collect_metacells(  # pylint: disable=too-many-statements
     ut.set_name(mdata, ut.get_name(adata))
     ut.set_name(mdata, name)
 
+    zero_results = ut.sum_groups((raw_cell_umis == 0).astype("int32"), metacell_of_cells, per="row")  # type: ignore
+    assert zero_results is not None
+    zero_metacell_umis, _cells_of_metacells = zero_results
+    ut.set_vo_data(mdata, "zeros", ut.to_numpy_matrix(zero_metacell_umis))
+
     raw_results = ut.sum_groups(raw_cell_umis, metacell_of_cells, per="row")
     assert raw_results is not None
     total_metacell_umis, _cells_of_metacells = raw_results
@@ -236,7 +245,7 @@ def _obs_names(prefix: str, name_of_members: ut.NumpyVector, group_of_members: u
         hasher = shake_128()
         for member_name in name_of_members[groups_mask]:
             hasher.update(member_name.encode("utf8"))
-        checksum = int(hasher.hexdigest(16), 16) % 10  # pylint: disable=too-many-function-args
+        checksum = int(hasher.hexdigest(16), 16) % 100  # pylint: disable=too-many-function-args
         name_of_groups.append(f"{prefix}{group_index}.{checksum:02d}")
     return name_of_groups
 

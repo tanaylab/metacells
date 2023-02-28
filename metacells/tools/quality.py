@@ -11,6 +11,7 @@ from typing import Union
 
 import numpy as np
 import scipy.sparse as sp  # type: ignore
+import scipy.stats as ss  # type: ignore
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
@@ -25,6 +26,7 @@ __all__ = [
     "compute_inner_folds",
     "compute_type_genes_normalized_variances",
     "compute_outliers_fold_factors",
+    "compute_genes_entropy",
 ]
 
 
@@ -175,7 +177,7 @@ def compute_projected_folds(
     Compute the projected fold factors of genes for each query metacell.
 
     This computes, for each metacell of the query, the fold factors between the corrected and projected gene fractions
-    projection of the metacell onto the atlas (see :py:func:`metacells.tools.project.compute_projection`).
+    projection of the metacell onto the atlas (see :py:func:`metacells.tools.project.compute_projection_weights`).
 
     **Input**
 
@@ -197,7 +199,7 @@ def compute_projected_folds(
 
     1. For each group (metacell), for each gene, compute the gene's fold factor log2((``from_query_layer`` (default:
        {from_query_layer}) + ``fold_normalization``) / (``to_query_layer`` (default: {to_query_layer}) fractions +
-       ``fold_normalization``)), similarly to :py:func:`metacells.tools.project.compute_projection` (the default
+       ``fold_normalization``)), similarly to :py:func:`metacells.tools.project.compute_projection_weights` (the default
        ``fold_normalization`` is {fold_normalization}).
 
     2. Set the fold factor to zero for every case where the total UMIs of the gene in the query metacell are not at
@@ -792,3 +794,24 @@ def compute_outliers_fold_factors(
     fold_factor_per_gene_per_outlier[total_umis_per_gene_per_fold < min_gene_total] = 0.0
 
     ut.set_vo_data(adata, f"{most_similar}_fold", sp.csr_matrix(fold_factor_per_gene_per_outlier))
+
+
+@ut.logged()
+@ut.timed_call()
+def compute_genes_entropy(
+    adata: AnnData,
+    what: Union[str, ut.Matrix] = "__x__",
+) -> None:
+    """
+    Compute the entropy of the fractions of each gene across all metacells in ``adata`` and store it in a
+    ``gene_entropy`` per-gene annotation.
+    """
+    fractions_per_gene_per_metacell = ut.to_numpy_matrix(ut.get_vo_proper(adata, what, layout="column_major"))
+    fractions_per_gene = ut.sum_per(fractions_per_gene_per_metacell, per="column")
+    nnz_genes_mask = fractions_per_gene > 0
+    ut.log_calc("nnz_genes_mask", nnz_genes_mask)
+    fractions_per_nnz_gene_per_metacell = fractions_per_gene_per_metacell[:, nnz_genes_mask]
+    entropy_per_nnz_gene = ss.entropy(fractions_per_nnz_gene_per_metacell, axis=0, base=2)
+    entropy_per_gene = np.zeros(adata.n_vars, dtype="float32")
+    entropy_per_gene[nnz_genes_mask] = entropy_per_nnz_gene
+    ut.set_v_data(adata, "gene_entropy", entropy_per_gene)

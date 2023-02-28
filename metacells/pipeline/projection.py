@@ -609,8 +609,8 @@ def _common_data_to_full(
     type_names: List[str],
 ) -> None:
     if use_essential_genes:
-        primary_type_per_metacell = ut.get_o_numpy(qdata, "projected_type")
-        secondary_type_per_metacell = ut.get_o_numpy(qdata, "projected_secondary_type")
+        primary_type_per_metacell = ut.get_o_numpy(common_qdata, "projected_type")
+        secondary_type_per_metacell = ut.get_o_numpy(common_qdata, "projected_secondary_type")
         essential_per_gene_per_metacell = np.zeros(qdata.shape, dtype="bool")
         essential_gene_per_type = {
             type_name: ut.get_v_numpy(qdata, f"essential_gene_of_{type_name}")
@@ -931,6 +931,8 @@ def _compute_per_type_projection(
 
     ut.set_vo_data(common_qdata, "misfit", misfit_per_gene_per_metacell)
     ut.set_vo_data(common_qdata, "projected_fold", projected_fold_per_gene_per_metacell)
+
+    tl.compute_projected_fractions(adata=common_adata, qdata=common_qdata, weights=weights_per_atlas_per_query_metacell)
 
     return weights_per_atlas_per_query_metacell
 

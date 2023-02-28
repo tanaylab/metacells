@@ -861,6 +861,12 @@ dissolve_min_convincing_gene_fold_factor: float = significant_gene_fold_factor
 #: :py:func:`metacells.tools.distinct.find_distinct_genes`.
 distinct_genes_count: int = 20
 
+#: The maximal number of marker genes to use for UMAP.
+#: See
+#: :py:func:`metacells.pipeline.umap.compute_knn_by_markers` and
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
+umap_max_marker_genes: int = 1000
+
 #: The normalization factor to use if/when computing the fractions of the data for UMAP.
 #: See
 #: :py:const:`metacells.parameters.target_metacell_size`
@@ -933,37 +939,37 @@ quality_min_gene_total: int = 40
 max_gbs: float = -0.1
 
 #: The normalization factor to use when computing fold factors for projecting a query onto an atlas. See
-#: :py:func:`metacells.tools.project.compute_projection`.
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_fold_normalization: float = 1e-5
 
 #: The minimal number of UMIs for a gene to be a potential cause to mark a metacell as dissimilar. See
-#: :py:func:`metacells.tools.project.compute_projection`.
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_min_significant_gene_umis: int = 40
 
 #: The number of atlas candidates to consider when projecting a query onto an atlas. See
-#: :py:func:`metacells.tools.project.compute_projection`.
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_candidates_count: int = 50
 
 #: The minimal number of atlas candidates to use even if they fail the consistency check as a fraction of
 #: ``project_candidates_count``. See
-#: :py:func:`metacells.tools.project.compute_projection`.
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_min_candidates_fraction: float = 1.0 / 3.0
 
 #: The minimal weight of an atlas metacell used for the projection of a query metacell. See
-#: :py:func:`metacells.tools.project.compute_projection`.
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_min_usage_weight: float = 1e-5
 
 #: The maximal fold factor of genes between the projection and the query metacell. See
-#: :py:func:`metacells.tools.project.compute_projection`.
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_max_projection_fold_factor: float = significant_gene_fold_factor
 
 #: The maximal additional fold factor of noisy genes between the projection and the query metacell,
 # in addition to ``project_max_projection_fold_factor``. See
-#: :py:func:`metacells.tools.project.compute_projection`.
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_max_projection_noisy_fold_factor: float = significant_noisy_gene_fold_factor
 
 #: The maximal fold factor of genes between the atlas metacells used for the projection of a query metacell. See
-#: :py:func:`metacells.tools.project.compute_projection`.
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_max_consistency_fold_factor: float = significant_gene_fold_factor - 1.0
 
 #: The normalization factor to use when computing log of fractions for finding the most similar group for outliers. See

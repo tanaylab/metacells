@@ -17,6 +17,7 @@ parser = ap.ArgumentParser(
     description="Convert old metacells to new \"Grand Rename\" format.",
 )
 
+parser.add_argument("-fc", "--full-cells-h5ad", required=False)
 parser.add_argument("-oc", "--old-cells-h5ad", required=True)
 parser.add_argument("-nc", "--new-cells-h5ad", required=True)
 parser.add_argument("-om", "--old-metacells-h5ad", required=True)
@@ -25,6 +26,7 @@ parser.add_argument("-rs", "--random_seed", default="123456")
 
 args = parser.parse_args()
 
+full_cells_path = args.full_cells_h5ad
 old_cells_path = args.old_cells_h5ad
 new_cells_path = args.new_cells_h5ad
 old_metacells_path = args.old_metacells_h5ad
@@ -35,6 +37,12 @@ assert old_cells_path != new_cells_path, f"Cowardly refuse to overwrite the cell
 assert old_metacells_path != new_metacells_path, f"Cowardly refuse to overwrite the metacells file {old_metacells_path}"
 assert old_cells_path != new_metacells_path, f"Old cells file {old_cells_path} is same as new metacells file"
 assert old_metacells_path != new_cells_path, f"Old metacells file {old_metacells_path} is same as new cells file"
+
+if full_cells_path is not None:
+    LOG.info(f"Read {full_cells_path}...")
+    fdata = ad.read_h5ad(full_cells_path)
+else:
+    fdata = None
 
 LOG.info(f"Read {old_cells_path}...")
 cdata = ad.read_h5ad(old_cells_path)
@@ -124,6 +132,13 @@ for name in sorted(old_mdata.obs.keys()):
     LOG.info(f"* copy {name}")
     data = mc.ut.get_o_numpy(old_mdata, name)
     mc.ut.set_o_data(new_mdata, name, data)
+
+if fdata is not None:
+    LOG.info(f"Global MC properties...")
+    excluded_cells = fdata.n_obs - cdata.n_obs
+    excluded_genes = fdata.n_vars - cdata.n_vars
+    mc.ut.set_m_data(new_mdata, "excluded_cells", excluded_cells)
+    mc.ut.set_m_data(new_mdata, "excluded_genes", excluded_genes)
 
 LOG.info(f"Write {new_cells_path}...")
 cdata.write(new_cells_path)
