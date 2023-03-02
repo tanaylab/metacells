@@ -41,8 +41,11 @@ import igraph as ig  # type: ignore
 import numpy as np
 import pandas as pd  # type: ignore
 import scipy.sparse as sp  # type: ignore
+import scipy.stats as ss  # type: ignore
 
 import metacells.utilities.documentation as utd
+import metacells.utilities.logging as utl
+import metacells.utilities.parallel as utp
 import metacells.utilities.timing as utm
 import metacells.utilities.typing as utt
 
@@ -63,6 +66,7 @@ __all__ = [
     "median_per",
     "mean_per",
     "nanmean_per",
+    "geomean_per",
     "max_per",
     "nanmax_per",
     "min_per",
@@ -1075,6 +1079,25 @@ def nanmean_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
 
 
 @utm.timed_call()
+def geomean_per(matrix: utt.NumpyMatrix, *, per: Optional[str]) -> utt.NumpyVector:
+    """
+    Compute the geometric mean value ``per`` (``row`` or ``column``) of some (dense) ``matrix`` (of non-zero values).
+
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most efficient direction is
+    used based on the matrix layout. Otherwise it must be one of ``row`` or ``column``, and the matrix must be in the
+    appropriate layout (``row_major`` operating on rows, ``column_major`` for operating on columns).
+    """
+    per = _ensure_per_for("geomean", matrix, per)
+    axis = utt.PER_OF_AXIS.index(per)
+
+    sparse = utt.maybe_sparse_matrix(matrix)
+    assert sparse is None
+
+    dense = utt.to_numpy_matrix(matrix, only_extract=True)
+    return _reduce_matrix("geomean", dense, per, lambda dense: ss.mstats.gmean(dense, axis=1 - axis))
+
+
+@utm.timed_call()
 def max_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     """
     Compute the maximal value ``per`` (``row`` or ``column``) of some ``matrix``.
@@ -2047,8 +2070,12 @@ def bin_fill(  # pylint: disable=too-many-statements,too-many-branches
 
 @utm.timed_call()
 def sum_groups(
-    matrix: utt.ProperMatrix, groups: utt.Vector, *, per: Optional[str]
-) -> Optional[Tuple[utt.Matrix, utt.NumpyVector]]:
+    matrix: utt.ProperMatrix,
+    groups: utt.Vector,
+    *,
+    per: Optional[str],
+    transform: Optional[Callable[[utt.Matrix], utt.Matrix]] = None,
+) -> Optional[Tuple[utt.NumpyMatrix, utt.NumpyVector]]:
     """
     Given a ``matrix``, and a vector of ``groups`` ``per`` column or row, return a matrix with a
     column or row ``per`` group, containing the sum of the groups columns or rows, and a vector of
@@ -2061,6 +2088,8 @@ def sum_groups(
     efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
     ``column``, and the matrix must be in the appropriate layout (``row_major`` operating on rows,
     ``column_major`` for operating on columns).
+
+    If ``transform`` is not ``None``, it is applied to the data before summing it.
     """
     per = _ensure_per_for("sum_groups", matrix, per)
 
@@ -2088,23 +2117,34 @@ def sum_groups(
     if per == "column":
         matrix = matrix.transpose()
 
-    group_sizes = np.zeros(groups_count, dtype="int32")
-
     with utm.timed_step(timed_step):
         utm.timed_parameters(groups=groups_count, entities=matrix.shape[0], elements=matrix.shape[1])
-        results = np.empty((groups_count, matrix.shape[1]), dtype=utt.shaped_dtype(matrix))
 
-        for group_index in range(groups_count):
-            group_mask = groups == group_index
-            group_size = np.sum(group_mask)
-            assert group_size > 0
-            group_sizes[group_index] = group_size
-            group_matrix = matrix[group_mask, :]
-            results[group_index, :] = utt.to_numpy_vector(group_matrix.sum(axis=0))
+        @utm.timed_call()
+        def _sum_group(group_index: int) -> Tuple[utt.NumpyVector, int]:
+            with utl.log_step(
+                "- group",
+                group_index,
+                formatter=lambda group_index: utl.progress_description(groups_count, group_index, "group"),
+            ):
+                group_mask = groups == group_index
+                utl.log_calc("group_mask", group_mask)
+                group_matrix = matrix[group_mask, :]
+                if transform is not None:
+                    group_matrix = transform(group_matrix)
+                group_size = group_matrix.shape[0]
+                assert group_size > 0
+                group_sum = utt.to_numpy_vector(group_matrix.sum(axis=0))
+                utl.log_calc("group_sum", group_sum, formatter=utl.sizes_description)
+                return (group_sum, group_size)
+
+        results = utp.parallel_map(_sum_group, groups_count)
+        size_per_group = np.array([size_of_group for _, size_of_group in results])
+        sum_per_group = np.vstack([sum_of_group for sum_of_group, _ in results])
 
     if per == "column":
-        results = results.transpose()
-    return results, group_sizes
+        sum_per_group = sum_per_group.transpose()
+    return sum_per_group, size_per_group
 
 
 @utm.timed_call()

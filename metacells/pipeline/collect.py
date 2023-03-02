@@ -200,18 +200,22 @@ def collect_metacells(  # pylint: disable=too-many-statements
     mdata.var_names = adata.var_names
     mdata.obs_names = _obs_names(prefix or "", ut.to_numpy_vector(adata.obs_names), metacell_of_cells)
 
-    ut.set_name(mdata, ut.get_name(adata))
     ut.set_name(mdata, name)
 
-    zero_results = ut.sum_groups((raw_cell_umis == 0).astype("int32"), metacell_of_cells, per="row")  # type: ignore
+    zero_results = ut.sum_groups(
+        raw_cell_umis,
+        metacell_of_cells,
+        per="row",
+        transform=lambda values: ut.to_numpy_matrix(values == 0).astype("int32"),  # type: ignore
+    )
     assert zero_results is not None
     zero_metacell_umis, _cells_of_metacells = zero_results
-    ut.set_vo_data(mdata, "zeros", ut.to_numpy_matrix(zero_metacell_umis))
+    ut.set_vo_data(mdata, "zeros", zero_metacell_umis)
 
     raw_results = ut.sum_groups(raw_cell_umis, metacell_of_cells, per="row")
     assert raw_results is not None
     total_metacell_umis, _cells_of_metacells = raw_results
-    ut.set_vo_data(mdata, "total_umis", ut.to_proper_matrix(total_metacell_umis))
+    ut.set_vo_data(mdata, "total_umis", total_metacell_umis)
 
     raw_metacell_sizes = _metacell_sizes(raw_cell_sizes, metacell_of_cells)
     ut.set_o_data(mdata, "total_umis", raw_metacell_sizes, formatter=ut.sizes_description)

@@ -4,19 +4,12 @@ import logging
 import metacells as mc
 import numpy as np
 
-np.seterr(all='raise')
-LOG = mc.ut.setup_logger(
-    level=logging.INFO,
-    long_level_names=False,
-    time=True,
-    name="convert_old_metacells"
-)
-
 parser = ap.ArgumentParser(
     prog="convert_old_metacells",
     description="Convert old metacells to new \"Grand Rename\" format.",
 )
 
+parser.add_argument("-ll", "--log-level", default="INFO")
 parser.add_argument("-fc", "--full-cells-h5ad", required=False)
 parser.add_argument("-oc", "--old-cells-h5ad", required=True)
 parser.add_argument("-nc", "--new-cells-h5ad", required=True)
@@ -25,6 +18,18 @@ parser.add_argument("-nm", "--new-metacells-h5ad", required=True)
 parser.add_argument("-rs", "--random_seed", default="123456")
 
 args = parser.parse_args()
+
+log_level = getattr(logging, args.log_level.upper(), None)
+if log_level is None:
+    raise ValueError(f"Invalid log level: {args.log_level}")
+
+np.seterr(all='raise')
+LOG = mc.ut.setup_logger(
+    level=log_level,
+    long_level_names=False,
+    time=True,
+    name="convert_old_metacells"
+)
 
 full_cells_path = args.full_cells_h5ad
 old_cells_path = args.old_cells_h5ad
@@ -97,7 +102,7 @@ for name in sorted(cdata.obs.keys()):
     LOG.info(f"* keep {name}")
 
 LOG.info(f"Collect metacells...")
-new_mdata = mc.pl.collect_metacells(cdata)
+new_mdata = mc.pl.collect_metacells(cdata, name=mc.ut.get_name(old_mdata))
 assert new_mdata.shape == old_mdata.shape
 
 LOG.info(f"Compute for MCView...")
