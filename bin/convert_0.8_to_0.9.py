@@ -16,6 +16,7 @@ parser.add_argument("-nc", "--new-cells-h5ad", required=True)
 parser.add_argument("-om", "--old-metacells-h5ad", required=True)
 parser.add_argument("-nm", "--new-metacells-h5ad", required=True)
 parser.add_argument("-rs", "--random_seed", default="123456")
+parser.add_argument("-un", "--unsafe-names", default=False, action="store_true")
 
 args = parser.parse_args()
 
@@ -37,6 +38,7 @@ new_cells_path = args.new_cells_h5ad
 old_metacells_path = args.old_metacells_h5ad
 new_metacells_path = args.new_metacells_h5ad
 random_seed = int(args.random_seed)
+unsafe_names = args.unsafe_names
 
 assert old_cells_path != new_cells_path, f"Cowardly refuse to overwrite the cells file {old_cells_path}"
 assert old_metacells_path != new_metacells_path, f"Cowardly refuse to overwrite the metacells file {old_metacells_path}"
@@ -104,6 +106,9 @@ for name in sorted(cdata.obs.keys()):
 LOG.info(f"Collect metacells...")
 new_mdata = mc.pl.collect_metacells(cdata, name=mc.ut.get_name(old_mdata))
 assert new_mdata.shape == old_mdata.shape
+
+if unsafe_names:
+    new_mdata.obs_names = [obs_name[:-3] for obs_name in new_mdata.obs_names]
 
 LOG.info(f"Compute for MCView...")
 mc.pl.compute_for_mcview(adata=cdata, gdata=new_mdata, random_seed=random_seed)
