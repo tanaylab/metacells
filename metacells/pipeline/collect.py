@@ -14,6 +14,7 @@ from anndata import AnnData  # type: ignore
 import metacells.parameters as pr
 import metacells.tools as tl
 import metacells.utilities as ut
+from metacells import __version__
 
 __all__ = [
     "collect_metacells",
@@ -234,6 +235,7 @@ def collect_metacells(  # pylint: disable=too-many-statements
         tl.convey_obs_to_group(adata=adata, gdata=mdata, group=groups, property_name="metacell_level")
 
     ut.set_m_data(mdata, "outliers", outliers_count)
+    ut.set_m_data(mdata, "metacells_algorithm", f"metacells.{__version__}")
 
     return mdata
 

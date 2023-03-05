@@ -14,6 +14,7 @@ from typing import Tuple
 import numpy as np
 import scipy.sparse as sp  # type: ignore
 from anndata import AnnData  # type: ignore
+from metacells import __version__
 
 import metacells.parameters as pr
 import metacells.tools as tl
@@ -386,6 +387,7 @@ def projection_pipeline(
         use_essential_genes=use_essential_genes,
     )
 
+    ut.set_m_data(qdata, "projection_algorithm", f"metacells.{__version__}")
     return sp.csr_matrix(weights)
 
 
