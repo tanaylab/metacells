@@ -14,7 +14,7 @@ from anndata import AnnData  # type: ignore
 import metacells.parameters as pr
 import metacells.tools as tl
 import metacells.utilities as ut
-from metacells import __version__
+from metacells import __version__  # pylint: disable=cyclic-import
 
 __all__ = [
     "collect_metacells",
@@ -211,7 +211,7 @@ def collect_metacells(  # pylint: disable=too-many-statements
     )
     assert zero_results is not None
     zero_metacell_umis, _cells_of_metacells = zero_results
-    ut.set_vo_data(mdata, "zeros", zero_metacell_umis)
+    ut.set_vo_data(mdata, "zeros", zero_metacell_umis)  # TODOY
 
     raw_results = ut.sum_groups(raw_cell_umis, metacell_of_cells, per="row")
     assert raw_results is not None
@@ -221,6 +221,12 @@ def collect_metacells(  # pylint: disable=too-many-statements
     raw_metacell_sizes = _metacell_sizes(raw_cell_sizes, metacell_of_cells)
     ut.set_o_data(mdata, "total_umis", raw_metacell_sizes, formatter=ut.sizes_description)
     ut.set_o_data(mdata, "grouped", cells_of_metacells, formatter=ut.sizes_description)
+    ut.set_o_data(  # TODOY
+        mdata,
+        "__zeros_downsample_umis",
+        np.round(raw_metacell_sizes / cells_of_metacells).astype("int32"),
+        formatter=ut.sizes_description,
+    )
 
     metacell_names = np.array(["Outliers"] + list(mdata.obs_names), dtype="str")
     metacell_of_cells += 1

@@ -152,7 +152,7 @@ fstrings: .make.fstrings  ## check f-strings in Python code
 isort: .make.isort  ## check imports with isort
 
 .make.isort: $(PY_SOURCE_FILES)
-	isort --line-length $(MAX_LINE_LENGTH) --force-single-line-imports --check $(NAME) tests
+	isort --line-length $(MAX_LINE_LENGTH) --force-single-line-imports --check $(NAME) tests bin
 	touch $@
 
 $(TODO): .make.$(TODO)  ## check there are no leftover TODO-X
@@ -176,7 +176,7 @@ black: .make.black  ## check format with black
 flake8: .make.flake8  ## check format with flake8
 
 .make.flake8: $(PY_SOURCE_FILES)
-	flake8 --max-line-length $(MAX_LINE_LENGTH) --ignore E203,F401,F403,W503 $(NAME) tests
+	flake8 --max-line-length $(MAX_LINE_LENGTH) --ignore E203,F401,F403,W503 $(NAME) tests bin
 	touch $@
 
 clang-format: .make.clang-format  ## check format with clang-format
@@ -200,10 +200,10 @@ stripspaces:  # strip trailing spaces
 	done
 
 isortify:  ## sort imports with isort
-	isort --line-length $(MAX_LINE_LENGTH) --force-single-line-imports $(NAME) tests
+	isort --line-length $(MAX_LINE_LENGTH) --force-single-line-imports $(NAME) tests bin
 
 blackify:  ## reformat with black
-	black --line-length $(MAX_LINE_LENGTH) $(NAME) tests
+	black --line-length $(MAX_LINE_LENGTH) $(NAME) tests bin
 
 clang-reformat: $(H_SOURCE_FILES) $(CPP_SOURCE_FILES)
 	@echo "clang-format -i"
@@ -214,13 +214,13 @@ smells: mypy pylint  ## check for code smells
 pylint: .make.pylint  ## check code with pylint
 
 .make.pylint: $(PY_SOURCE_FILES)
-	pylint --max-line-length $(MAX_LINE_LENGTH) $(NAME) tests
+	pylint --max-line-length $(MAX_LINE_LENGTH) $(NAME) tests bin
 	touch $@
 
 mypy: .make.mypy  ## check code with mypy
 
 .make.mypy: $(PY_SOURCE_FILES)
-	mypy $(NAME) tests
+	mypy $(NAME) tests bin
 	touch $@
 
 pytest: .make.pytest  ## run tests on the active Python with pytest

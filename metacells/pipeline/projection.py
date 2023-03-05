@@ -14,11 +14,11 @@ from typing import Tuple
 import numpy as np
 import scipy.sparse as sp  # type: ignore
 from anndata import AnnData  # type: ignore
-from metacells import __version__
 
 import metacells.parameters as pr
 import metacells.tools as tl
 import metacells.utilities as ut
+from metacells import __version__  # pylint: disable=cyclic-import
 
 __all__ = [
     "projection_pipeline",

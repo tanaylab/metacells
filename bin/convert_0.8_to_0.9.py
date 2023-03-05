@@ -1,12 +1,16 @@
-import anndata as ad
+# pylint: disable=invalid-name,logging-fstring-interpolation
+
 import argparse as ap
 import logging
-import metacells as mc
+
+import anndata as ad  # type: ignore
 import numpy as np
+
+import metacells as mc
 
 parser = ap.ArgumentParser(
     prog="convert_old_metacells",
-    description="Convert old metacells to new \"Grand Rename\" format.",
+    description='Convert old metacells to new "Grand Rename" format.',
 )
 
 parser.add_argument("-ll", "--log-level", default="INFO")
@@ -25,13 +29,8 @@ log_level = getattr(logging, args.log_level.upper(), None)
 if log_level is None:
     raise ValueError(f"Invalid log level: {args.log_level}")
 
-np.seterr(all='raise')
-LOG = mc.ut.setup_logger(
-    level=log_level,
-    long_level_names=False,
-    time=True,
-    name="convert_old_metacells"
-)
+np.seterr(all="raise")
+LOG = mc.ut.setup_logger(level=log_level, long_level_names=False, time=True, name="convert_old_metacells")
 
 full_cells_path = args.full_cells_h5ad
 old_cells_path = args.old_cells_h5ad
@@ -63,14 +62,12 @@ assert not mc.ut.has_data(old_mdata, "metacells_algorithm")
 metacell_of_cells = mc.ut.get_o_numpy(cdata, "metacell")
 metacells_count = np.max(metacell_of_cells) + 1
 
-assert old_mdata.n_obs == metacells_count, \
-    f"Metacells file {old_metacells_path} has wrong number of metacells for cells file {old_cells_path}"
+assert (
+    old_mdata.n_obs == metacells_count
+), f"Metacells file {old_metacells_path} has wrong number of metacells for cells file {old_cells_path}"
 
-LOG.info(f"Rename gene properties...")
-for old_name, new_name in [
-    ("forbidden_gene", "lateral_gene"),
-    ("noisy_lonely_gene", "bursty_lonely_gene")
-]:
+LOG.info("Rename gene properties...")
+for old_name, new_name in [("forbidden_gene", "lateral_gene"), ("noisy_lonely_gene", "bursty_lonely_gene")]:
     if not mc.ut.has_data(cdata, old_name):
         continue
     LOG.info(f"* rename {old_name} to {new_name}")
@@ -78,58 +75,57 @@ for old_name, new_name in [
     del cdata.var[old_name]
     mc.ut.set_v_data(cdata, new_name, genes_mask)
 
-LOG.info(f"Purge old gene properties...")
+LOG.info("Purge old gene properties...")
 for name in sorted(cdata.var.keys()):
-    if name in ("forbidden_gene", "noisy_lonely_gene", "significant_gene") \
-    or name.startswith("pre_"):
+    if name in ("forbidden_gene", "noisy_lonely_gene", "significant_gene") or name.startswith("pre_"):
         LOG.info(f"* purge {name}")
         del cdata.var[name]
         if name.startswith("pre_") and name[4:] in cdata.var:
             LOG.info(f"* purge {name[4:]}")
             del cdata.var[name[4:]]
 
-LOG.info(f"Keep old gene properties...")
+LOG.info("Keep old gene properties...")
 for name in sorted(cdata.var.keys()):
     LOG.info(f"* keep {name}")
 
-LOG.info(f"Purge old cell properties...")
+LOG.info("Purge old cell properties...")
 for name in sorted(cdata.obs.keys()):
-    if name in ("cell_deviant_votes", "cell_directs", "clean_cell", "dissolved", "outlier", "pile") \
-    or name.startswith("pre_"):
+    if name in ("cell_deviant_votes", "cell_directs", "clean_cell", "dissolved", "outlier", "pile") or name.startswith(
+        "pre_"
+    ):
         LOG.info(f"* purge {name}")
         del cdata.obs[name]
         if name != "pre_metacell" and name.startswith("pre_") and name[4:] in cdata.obs:
             LOG.info(f"* purge {name[4:]}")
             del cdata.obs[name[4:]]
 
-LOG.info(f"Keep old cell properties...")
+LOG.info("Keep old cell properties...")
 for name in sorted(cdata.obs.keys()):
     LOG.info(f"* keep {name}")
 
-LOG.info(f"Collect metacells...")
-new_mdata = mc.pl.collect_metacells(cdata, name=mc.ut.get_name(old_mdata))
+LOG.info("Collect metacells...")
+new_mdata = mc.pl.collect_metacells(cdata, name=mc.ut.get_name(old_mdata) or "metacells")
 assert new_mdata.shape == old_mdata.shape
 mc.ut.set_m_data(new_mdata, "metacells_algorithm", metacells_algorithm)
 
 if unsafe_names:
     new_mdata.obs_names = [obs_name[:-3] for obs_name in new_mdata.obs_names]
 
-LOG.info(f"Compute for MCView...")
+LOG.info("Compute for MCView...")
 mc.pl.compute_for_mcview(adata=cdata, gdata=new_mdata, random_seed=random_seed)
 
-LOG.info(f"Skip MC gene properties...")
+LOG.info("Skip MC gene properties...")
 for name in sorted(old_mdata.var.keys()):
     if mc.ut.has_data(new_mdata, name):
         continue
-    if name in ("significant_gene", "forbidden_gene", "noisy_lonely_gene") \
-    or name.startswith("pre_"):
+    if name in ("significant_gene", "forbidden_gene", "noisy_lonely_gene") or name.startswith("pre_"):
         LOG.info(f"* skip {name}")
         del old_mdata.var[name]
         if name.startswith("pre_") and name[4:] in cdata.var:
             LOG.info(f"* skip {name[4:]}")
             del old_mdata.var[name[4:]]
 
-LOG.info(f"Copy MC gene properties...")
+LOG.info("Copy MC gene properties...")
 for name in sorted(old_mdata.var.keys()):
     if mc.ut.has_data(new_mdata, name):
         continue
@@ -137,18 +133,20 @@ for name in sorted(old_mdata.var.keys()):
     data = mc.ut.get_v_numpy(old_mdata, name)
     mc.ut.set_v_data(new_mdata, name, data)
 
-LOG.info(f"Copy MC metacell properties...")
+LOG.info("Copy MC metacell properties...")
 for name in sorted(old_mdata.obs.keys()):
-    if name in ("significant_gene", "forbidden_gene", "pile", "candidate") \
-    or name.startswith("umap_") \
-    or mc.ut.has_data(new_mdata, name):
+    if (
+        name in ("significant_gene", "forbidden_gene", "pile", "candidate")
+        or name.startswith("umap_")
+        or mc.ut.has_data(new_mdata, name)
+    ):
         continue
     LOG.info(f"* copy {name}")
     data = mc.ut.get_o_numpy(old_mdata, name)
     mc.ut.set_o_data(new_mdata, name, data)
 
 if fdata is not None:
-    LOG.info(f"Global MC properties...")
+    LOG.info("Global MC properties...")
     excluded_cells = fdata.n_obs - cdata.n_obs
     excluded_genes = fdata.n_vars - cdata.n_vars
     mc.ut.set_m_data(new_mdata, "excluded_cells", excluded_cells)
@@ -160,4 +158,4 @@ cdata.write(new_cells_path)
 LOG.info(f"Write {new_metacells_path}...")
 new_mdata.write(new_metacells_path)
 
-LOG.info(f"Done")
+LOG.info("Done")
