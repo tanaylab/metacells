@@ -17,6 +17,7 @@ parser.add_argument("-om", "--old-metacells-h5ad", required=True)
 parser.add_argument("-nm", "--new-metacells-h5ad", required=True)
 parser.add_argument("-rs", "--random_seed", default="123456")
 parser.add_argument("-un", "--unsafe-names", default=False, action="store_true")
+parser.add_argument("-ma", "--metacells-algorithm", default="metacells.0.8.0")
 
 args = parser.parse_args()
 
@@ -39,6 +40,7 @@ old_metacells_path = args.old_metacells_h5ad
 new_metacells_path = args.new_metacells_h5ad
 random_seed = int(args.random_seed)
 unsafe_names = args.unsafe_names
+metacells_algorithm = args.metacells_algorithm
 
 assert old_cells_path != new_cells_path, f"Cowardly refuse to overwrite the cells file {old_cells_path}"
 assert old_metacells_path != new_metacells_path, f"Cowardly refuse to overwrite the metacells file {old_metacells_path}"
@@ -56,6 +58,7 @@ cdata = ad.read_h5ad(old_cells_path)
 
 LOG.info(f"Read {old_metacells_path}...")
 old_mdata = ad.read_h5ad(old_metacells_path)
+assert not mc.ut.has_data(old_mdata, "metacells_algorithm")
 
 metacell_of_cells = mc.ut.get_o_numpy(cdata, "metacell")
 metacells_count = np.max(metacell_of_cells) + 1
@@ -106,6 +109,7 @@ for name in sorted(cdata.obs.keys()):
 LOG.info(f"Collect metacells...")
 new_mdata = mc.pl.collect_metacells(cdata, name=mc.ut.get_name(old_mdata))
 assert new_mdata.shape == old_mdata.shape
+mc.ut.set_m_data(new_mdata, "metacells_algorithm", metacells_algorithm)
 
 if unsafe_names:
     new_mdata.obs_names = [obs_name[:-3] for obs_name in new_mdata.obs_names]
