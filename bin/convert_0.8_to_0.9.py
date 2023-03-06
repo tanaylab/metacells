@@ -22,6 +22,7 @@ parser.add_argument("-nm", "--new-metacells-h5ad", required=True)
 parser.add_argument("-rs", "--random_seed", default="123456")
 parser.add_argument("-un", "--unsafe-names", default=False, action="store_true")
 parser.add_argument("-ma", "--metacells-algorithm", default="metacells.0.8.0")
+parser.add_argument("-ku", "--keep-umap", default=False, action="store_true")
 
 args = parser.parse_args()
 
@@ -40,6 +41,7 @@ new_metacells_path = args.new_metacells_h5ad
 random_seed = int(args.random_seed)
 unsafe_names = args.unsafe_names
 metacells_algorithm = args.metacells_algorithm
+keep_umap = args.keep_umap
 
 assert old_cells_path != new_cells_path, f"Cowardly refuse to overwrite the cells file {old_cells_path}"
 assert old_metacells_path != new_metacells_path, f"Cowardly refuse to overwrite the metacells file {old_metacells_path}"
@@ -112,7 +114,21 @@ if unsafe_names:
     new_mdata.obs_names = [obs_name[:-3] for obs_name in new_mdata.obs_names]
 
 LOG.info("Compute for MCView...")
-mc.pl.compute_for_mcview(adata=cdata, gdata=new_mdata, random_seed=random_seed)
+
+if keep_umap:
+    assert mc.ut.has_data(old_mdata, "umap_x")
+    assert mc.ut.has_data(old_mdata, "umap_y")
+    assert mc.ut.has_data(old_mdata, "umap_u")
+    assert mc.ut.has_data(old_mdata, "umap_v")
+    assert mc.ut.has_data(old_mdata, "umap_w")
+
+mc.pl.compute_for_mcview(
+    adata=cdata,
+    gdata=new_mdata,
+    compute_umap_by_markers_2=None if keep_umap else {},
+    compute_umap_by_markers_3=None if keep_umap else {},
+    random_seed=random_seed
+)
 
 LOG.info("Skip MC gene properties...")
 for name in sorted(old_mdata.var.keys()):
@@ -137,13 +153,20 @@ LOG.info("Copy MC metacell properties...")
 for name in sorted(old_mdata.obs.keys()):
     if (
         name in ("significant_gene", "forbidden_gene", "pile", "candidate")
-        or name.startswith("umap_")
+        or (name.startswith("umap_") and not keep_umap)
         or mc.ut.has_data(new_mdata, name)
     ):
         continue
+
+    old_name = name
+    if old_name.startswith("umap_"):
+        new_name = name[5:]
+    else:
+        new_name = name
+
     LOG.info(f"* copy {name}")
-    data = mc.ut.get_o_numpy(old_mdata, name)
-    mc.ut.set_o_data(new_mdata, name, data)
+    data = mc.ut.get_o_numpy(old_mdata, old_name)
+    mc.ut.set_o_data(new_mdata, new_name, data)
 
 if fdata is not None:
     LOG.info("Global MC properties...")

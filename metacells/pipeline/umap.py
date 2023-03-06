@@ -59,8 +59,7 @@ def compute_knn_by_markers(
 
     Annotated ``adata`` where each observation is a metacells and the variables are genes, are genes, where ``what`` is
     a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
-    matrix. Should contain a ``marker_gene`` mask unless explicitly specifying the marker genes. If ``max_marker_genes``
-    is not ``None``, should also contain ``gene_entropy``.
+    matrix. Should contain a ``marker_gene`` mask unless explicitly specifying the marker genes.
 
     **Returns**
 
@@ -80,7 +79,7 @@ def compute_knn_by_markers(
        Otherwise, use the ``marker_gene`` mask.
 
     2. If ``max_marker_genes`` (default: {max_marker_genes}) is not ``None``, then pick this number
-       of marker genes with the highest ``gene_entropy``.
+       of marker genes with the highest variance.
 
     3. Compute the fractions of each ``marker_gene`` in each cell, and add the
        ``similarity_value_normalization`` (default: {similarity_value_normalization}) to it.
@@ -102,38 +101,39 @@ def compute_knn_by_markers(
     """
     assert max_marker_genes is None or max_marker_genes > 0
     if marker_gene_names is None and marker_gene_patterns is None:
-        marker_genes = ut.get_v_numpy(adata, "marker_gene")
+        marker_genes_mask = ut.get_v_numpy(adata, "marker_gene")
     else:
         marker_genes_series = tl.find_named_genes(adata, names=marker_gene_names, patterns=marker_gene_patterns)
         assert marker_genes_series is not None
-        marker_genes = ut.to_numpy_vector(marker_genes_series)
-
-    if max_marker_genes is not None and max_marker_genes < np.sum(marker_genes):
-        gene_entropy = ut.get_v_numpy(adata, "gene_entropy").copy()
-        gene_entropy[~marker_genes] = -1
-        gene_entropy *= -1
-        chosen_gene_indices = np.argpartition(gene_entropy, max_marker_genes)
-        chosen_genes = np.zeros(adata.n_vars, dtype="bool")
-        chosen_genes[chosen_gene_indices[:max_marker_genes]] = True
-        marker_genes = chosen_genes
-        ut.log_calc("marker_genes", marker_genes)
+        marker_genes_mask = ut.to_numpy_vector(marker_genes_series)
 
     all_data = ut.get_vo_proper(adata, what, layout="row_major")
     all_fractions = ut.fraction_by(all_data, by="row")
 
-    marker_genes_fractions = all_fractions[:, marker_genes]
-    marker_genes_fractions = ut.to_layout(marker_genes_fractions, layout="row_major")
-    marker_genes_fractions = ut.to_numpy_matrix(marker_genes_fractions)
+    index_per_marker_gene = np.where(marker_genes_mask)[0]
+    fraction_per_metacell_per_marker_gene = ut.to_numpy_matrix(all_fractions[:, index_per_marker_gene])
 
-    marker_genes_fractions += similarity_value_normalization
+    if max_marker_genes is not None and max_marker_genes < len(index_per_marker_gene):
+        fraction_per_metacell_per_marker_gene = ut.to_layout(
+            fraction_per_metacell_per_marker_gene, layout="column_major"
+        )
+        variance_per_marker_gene = ut.variance_per(fraction_per_metacell_per_marker_gene, per="column")
+        variance_per_marker_gene *= -1
+        chosen_positions = np.argpartition(variance_per_marker_gene, max_marker_genes)[:max_marker_genes]
+        ut.log_calc("chosen_positions", chosen_positions)
+        index_per_marker_gene = index_per_marker_gene[chosen_positions]
+        fraction_per_metacell_per_marker_gene = fraction_per_metacell_per_marker_gene[:, chosen_positions]
+
+    fraction_per_metacell_per_marker_gene = ut.to_layout(fraction_per_metacell_per_marker_gene, layout="row_major")
+    fraction_per_metacell_per_marker_gene += similarity_value_normalization
 
     if similarity_log_data:
-        marker_genes_fractions = ut.log_data(marker_genes_fractions, base=2)
+        fraction_per_metacell_per_marker_gene = ut.log_data(fraction_per_metacell_per_marker_gene, base=2)
 
-    tdata = ut.slice(adata, vars=marker_genes)
+    tdata = ut.slice(adata, vars=index_per_marker_gene)
     similarities = tl.compute_obs_obs_similarity(
         tdata,
-        marker_genes_fractions,
+        fraction_per_metacell_per_marker_gene,
         method=similarity_method,
         reproducible=reproducible,
         logistics_location=logistics_location,

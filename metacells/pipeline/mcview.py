@@ -109,8 +109,6 @@ def compute_for_mcview(
     if find_metacells_marker_genes is not None:
         tl.find_metacells_marker_genes(gdata, what, **find_metacells_marker_genes)
 
-    tl.compute_genes_entropy(gdata, what)
-
     if compute_umap_by_markers_3 is not None:
         compute_umap_by_markers(gdata, what, dimensions=3, random_seed=random_seed, **compute_umap_by_markers_3)
 
