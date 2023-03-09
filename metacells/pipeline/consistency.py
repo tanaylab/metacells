@@ -36,11 +36,9 @@ def split_groups(
     select_min_gene_total: Optional[int] = None,
     select_min_gene_top3: Optional[int] = None,
     select_min_gene_relative_variance: Optional[float] = pr.select_min_gene_relative_variance,
-    cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
+    cells_similarity_value_regularization: float = pr.cells_similarity_value_regularization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_method: str = pr.cells_similarity_method,
-    max_cell_size_quantile: Optional[float] = pr.max_cell_size_quantile,
-    max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     knn_balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     knn_incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     knn_outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
@@ -101,12 +99,10 @@ def split_groups(
             select_min_gene_total=select_min_gene_total,
             select_min_gene_top3=select_min_gene_top3,
             select_min_gene_relative_variance=select_min_gene_relative_variance,
-            cells_similarity_value_normalization=cells_similarity_value_normalization,
+            cells_similarity_value_regularization=cells_similarity_value_regularization,
             cells_similarity_log_data=cells_similarity_log_data,
             cells_similarity_method=cells_similarity_method,
             target_metacell_size=target_metacell_size,
-            max_cell_size_quantile=max_cell_size_quantile,
-            max_cell_size_factor=max_cell_size_factor,
             cell_sizes=None,
             knn_k=target_metacell_size,
             min_knn_k=target_metacell_size,
@@ -148,7 +144,7 @@ def compute_groups_self_consistency(
     group: str = "metacell",
     genes_mask: Optional[ut.NumpyVector] = None,
     self_similarity_log_data: bool = pr.self_similarity_log_data,
-    self_similarity_value_normalization: float = pr.self_similarity_value_normalization,
+    self_similarity_value_regularization: float = pr.self_similarity_value_regularization,
     self_similarity_method: str = pr.self_similarity_method,
     reproducible: bool = pr.reproducible,
     logistics_location: float = pr.logistics_location,
@@ -177,7 +173,7 @@ def compute_groups_self_consistency(
        fractions of the genes of each group in the result will be less than or equal to 1.
 
     3. If ``self_similarity_log_data`` (default: {self_similarity_log_data}), log2 the values using
-       ``self_similarity_value_normalization`` (default: {self_similarity_value_normalization}).
+       ``self_similarity_value_regularization`` (default: {self_similarity_value_regularization}).
 
     4. Compute the ``self_similarity_method`` (default: {self_similarity_method}) between the two
        halves. If this is the ``logistics`` similarity, then this will use ``logistics_location``
@@ -192,8 +188,8 @@ def compute_groups_self_consistency(
     halves_values = ut.to_numpy_matrix(ut.get_vo_proper(hdata, what, layout="row_major"))
     halves_data = ut.mustbe_numpy_matrix(ut.scale_by(halves_values, sum_of_halves, by="row"))
 
-    if self_similarity_value_normalization > 0:
-        halves_data += self_similarity_value_normalization
+    if self_similarity_value_regularization > 0:
+        halves_data += self_similarity_value_regularization
 
     if self_similarity_log_data:
         halves_data = ut.log_data(halves_data, base=2)

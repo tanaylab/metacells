@@ -168,7 +168,7 @@ def compute_projected_folds(
     qdata: AnnData,
     from_query_layer: str = "corrected_fraction",
     to_query_layer: str = "projected_fraction",
-    fold_normalization: float = pr.project_fold_normalization,
+    fold_regularization: float = pr.project_fold_regularization,
     min_significant_gene_umis: float = pr.project_min_significant_gene_umis,
 ) -> None:
     """
@@ -196,14 +196,14 @@ def compute_projected_folds(
     **Computation Parameters**
 
     1. For each group (metacell), for each gene, compute the gene's fold factor log2((``from_query_layer`` (default:
-       {from_query_layer}) + ``fold_normalization``) / (``to_query_layer`` (default: {to_query_layer}) fractions +
-       ``fold_normalization``)), similarly to :py:func:`metacells.tools.project.compute_projection_weights` (the default
-       ``fold_normalization`` is {fold_normalization}).
+       {from_query_layer}) + ``fold_regularization``) / (``to_query_layer`` (default: {to_query_layer}) fractions +
+       ``fold_regularization``)), similarly to :py:func:`metacells.tools.project.compute_projection_weights` (the
+       default ``fold_regularization`` is {fold_regularization}).
 
     2. Set the fold factor to zero for every case where the total UMIs of the gene in the query metacell are not at
        least ``min_significant_gene_umis`` (default: {min_significant_gene_umis}).
     """
-    assert fold_normalization >= 0
+    assert fold_regularization >= 0
 
     corrected_fractions = ut.get_vo_proper(qdata, from_query_layer, layout="row_major")
     projected_fractions = ut.get_vo_proper(qdata, to_query_layer, layout="row_major")
@@ -211,8 +211,8 @@ def compute_projected_folds(
     corrected_fractions = ut.to_numpy_matrix(corrected_fractions, copy=True)
     projected_fractions = ut.to_numpy_matrix(projected_fractions, copy=True)
 
-    corrected_fractions += fold_normalization
-    projected_fractions += fold_normalization
+    corrected_fractions += fold_regularization
+    projected_fractions += fold_regularization
 
     dense_folds = np.log2(corrected_fractions) - np.log2(projected_fractions)
 
@@ -343,7 +343,7 @@ def compute_outliers_matches(
     gdata: AnnData,
     group: Union[str, ut.Vector] = "metacell",
     most_similar: str = "most_similar",
-    value_normalization: float = pr.outliers_fold_normalization,
+    value_regularization: float = pr.outliers_fold_regularization,
     reproducible: bool,
 ) -> None:
     """
@@ -373,7 +373,7 @@ def compute_outliers_matches(
     **Computation Parameters**
 
     1. Compute the log2 of the fraction of each gene in each of the outlier cells and the group metacells using
-       the ``value_normalization`` (default: {value_normalization}).
+       the ``value_regularization`` (default: {value_regularization}).
 
     2. Cross-correlate each of the outlier cells with each of the group metacells, in a ``reproducible`` manner.
     """
@@ -397,8 +397,8 @@ def compute_outliers_matches(
     outliers_fractions = ut.to_numpy_matrix(outliers_fractions)
     metacells_fractions = ut.to_numpy_matrix(metacells_fractions)
 
-    outliers_fractions += value_normalization
-    metacells_fractions += value_normalization
+    outliers_fractions += value_regularization
+    metacells_fractions += value_regularization
 
     outliers_log_fractions = np.log2(outliers_fractions, out=outliers_fractions)
     metacells_log_fractions = np.log2(metacells_fractions, out=metacells_fractions)

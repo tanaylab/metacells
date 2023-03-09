@@ -204,12 +204,10 @@ class DirectParameters:  # pylint: disable=too-many-instance-attributes
     select_min_gene_top3: Optional[int]
     select_min_gene_relative_variance: Optional[float]
     select_correction: Optional[FeatureCorrection]
-    cells_similarity_value_normalization: float
+    cells_similarity_value_regularization: float
     cells_similarity_log_data: bool
     cells_similarity_method: str
     target_metacell_size: float
-    max_cell_size_quantile: Optional[float]
-    max_cell_size_factor: Optional[float]
     cell_sizes: ut.NumpyVector
     knn_k: Optional[int]
     knn_k_size_quantile: float
@@ -379,7 +377,7 @@ def divide_and_conquer_pipeline(
     select_min_gene_top3: Optional[int] = pr.select_min_gene_top3,
     select_min_gene_relative_variance: Optional[float] = pr.select_min_gene_relative_variance,
     select_correction: Optional[FeatureCorrection] = None,
-    cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
+    cells_similarity_value_regularization: float = pr.cells_similarity_value_regularization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_method: str = pr.cells_similarity_method,
     groups_similarity_log_data: bool = pr.groups_similarity_log_data,
@@ -387,8 +385,6 @@ def divide_and_conquer_pipeline(
     min_target_pile_size: int = pr.min_target_pile_size,
     max_target_pile_size: int = pr.max_target_pile_size,
     target_metacells_in_pile: int = pr.target_metacells_in_pile,
-    max_cell_size_quantile: Optional[float] = pr.max_cell_size_quantile,
-    max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     piles_knn_k_size_factor: float = pr.piles_knn_k_size_factor,
     piles_min_split_size_factor: float = pr.piles_min_split_size_factor,
@@ -527,12 +523,10 @@ def divide_and_conquer_pipeline(
             select_min_gene_top3=select_min_gene_top3,
             select_min_gene_relative_variance=select_min_gene_relative_variance,
             select_correction=select_correction,
-            cells_similarity_value_normalization=cells_similarity_value_normalization,
+            cells_similarity_value_regularization=cells_similarity_value_regularization,
             cells_similarity_log_data=cells_similarity_log_data,
             cells_similarity_method=cells_similarity_method,
             target_metacell_size=target_metacell_size,
-            max_cell_size_quantile=max_cell_size_quantile,
-            max_cell_size_factor=max_cell_size_factor,
             cell_sizes=explicit_cell_sizes,
             knn_k=knn_k,
             knn_k_size_quantile=knn_k_size_quantile,
@@ -645,6 +639,7 @@ def divide_and_conquer_pipeline(
                 collected_mask=collected_mask,
                 counts=counts,
                 dac_parameters=dac_parameters,
+                random_seed=random_seed,
             )
 
     _finalize_divide_and_conquer_results(adata)
@@ -664,7 +659,7 @@ def compute_divide_and_conquer_metacells(
     select_min_gene_top3: Optional[int] = pr.select_min_gene_top3,
     select_min_gene_relative_variance: Optional[float] = pr.select_min_gene_relative_variance,
     select_correction: Optional[FeatureCorrection] = None,
-    cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
+    cells_similarity_value_regularization: float = pr.cells_similarity_value_regularization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_method: str = pr.cells_similarity_method,
     groups_similarity_log_data: bool = pr.groups_similarity_log_data,
@@ -672,8 +667,6 @@ def compute_divide_and_conquer_metacells(
     min_target_pile_size: int = pr.min_target_pile_size,
     max_target_pile_size: int = pr.max_target_pile_size,
     target_metacells_in_pile: int = pr.target_metacells_in_pile,
-    max_cell_size_quantile: Optional[float] = pr.max_cell_size_quantile,
-    max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     piles_knn_k_size_factor: float = pr.piles_knn_k_size_factor,
     piles_min_split_size_factor: float = pr.piles_min_split_size_factor,
@@ -820,12 +813,10 @@ def compute_divide_and_conquer_metacells(
             select_min_gene_top3=select_min_gene_top3,
             select_min_gene_relative_variance=select_min_gene_relative_variance,
             select_correction=select_correction,
-            cells_similarity_value_normalization=cells_similarity_value_normalization,
+            cells_similarity_value_regularization=cells_similarity_value_regularization,
             cells_similarity_log_data=cells_similarity_log_data,
             cells_similarity_method=cells_similarity_method,
             target_metacell_size=target_metacell_size,
-            max_cell_size_quantile=max_cell_size_quantile,
-            max_cell_size_factor=max_cell_size_factor,
             cell_sizes=explicit_cell_sizes,
             knn_k=knn_k,
             knn_k_size_quantile=knn_k_size_quantile,
@@ -871,6 +862,7 @@ def compute_divide_and_conquer_metacells(
         metacells_level=0,
         counts=[0],
         dac_parameters=dac_parameters,
+        random_seed=random_seed,
     )
 
     _finalize_divide_and_conquer_results(adata)
@@ -918,6 +910,7 @@ def _compute_divide_and_conquer_subset(
     metacells_level: int,
     counts: List[int],
     dac_parameters: DacParameters,
+    random_seed: int,
 ) -> None:
     preliminary_pile_of_cells = np.full(adata.n_obs, -1, dtype="int32")
     preliminary_pile_of_cells[subset_mask] = ut.random_piles(
@@ -986,6 +979,7 @@ def _compute_divide_and_conquer_subset(
             prefix=prefix + ".groups",
             subset_mask=subset_mask,
             dac_parameters=must_cover_dac_parameters,
+            random_seed=random_seed,
         )
 
     if dac_parameters.quick_and_dirty:
@@ -1038,6 +1032,7 @@ def _compute_divide_and_conquer_subset(
                     metacells_level=metacells_level + 1,
                     counts=counts,
                     dac_parameters=dac_parameters,
+                    random_seed=random_seed,
                 )
                 assert np.all(collected_mask[subset_mask])
 
@@ -1107,7 +1102,13 @@ def _compute_metacells_in_levels(
 @ut.logged()
 @ut.timed_call()
 def _compute_metacell_groups(
-    adata: AnnData, what: str, *, prefix: str, subset_mask: ut.NumpyVector, dac_parameters: DacParameters
+    adata: AnnData,
+    what: str,
+    *,
+    prefix: str,
+    subset_mask: ut.NumpyVector,
+    dac_parameters: DacParameters,
+    random_seed: int,
 ) -> ut.NumpyVector:
     metacell_of_cells = ut.get_o_numpy(adata, "metacell")
     assert not np.any(metacell_of_cells[subset_mask] < 0)
@@ -1121,15 +1122,7 @@ def _compute_metacell_groups(
     )
 
     mdata = collect_metacells(
-        sdata,
-        what,
-        max_cell_size_quantile=None,
-        max_cell_size_factor=None,
-        max_cell_size_noisy_quantile=None,
-        max_cell_size_noisy_factor=None,
-        groups=metacell_of_cells[subset_mask],
-        name=prefix,
-        _metacell_groups=True,
+        sdata, what, groups=metacell_of_cells[subset_mask], name=prefix, _metacell_groups=True, random_seed=random_seed
     )
 
     metacell_sizes = ut.get_o_numpy(mdata, "grouped")
@@ -1173,6 +1166,7 @@ def _compute_metacell_groups(
         metacells_level=0,
         counts=[0],
         dac_parameters=group_dac_parameters,
+        random_seed=random_seed,
     )
 
     _finalize_divide_and_conquer_results(mdata)

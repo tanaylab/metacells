@@ -76,7 +76,7 @@ def test_direct_pipeline() -> None:
 
         mc.pl.compute_direct_metacells(cdata, random_seed=123456, **expected.get("compute_direct_metacells", {}))
 
-        mdata = mc.pl.collect_metacells(cdata)
+        mdata = mc.pl.collect_metacells(cdata, random_seed=123456)
 
         mc.pl.compute_for_mcview(adata=cdata, gdata=mdata, random_seed=123456)
 

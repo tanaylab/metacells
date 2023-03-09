@@ -4,11 +4,15 @@ Collect
 """
 
 from hashlib import shake_128
+from typing import Any
+from typing import Dict
 from typing import List
 from typing import Optional
 from typing import Union
 
 import numpy as np
+import scipy.sparse as sp  # type: ignore
+import scipy.stats as ss  # type: ignore
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
@@ -27,55 +31,54 @@ def collect_metacells(  # pylint: disable=too-many-statements
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
-    max_cell_size_quantile: Optional[float] = pr.max_cell_size_quantile,
-    max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
-    max_cell_size_noisy_quantile: Optional[float] = pr.max_cell_size_noisy_quantile,
-    max_cell_size_noisy_factor: Optional[float] = pr.max_cell_size_noisy_factor,
+    metacell_umis_regularization: float = pr.metacell_umis_regularization,
+    zeros_cell_size_quantile: float = pr.zeros_cell_size_quantile,
     groups: Union[str, ut.Vector] = "metacell",
     name: str = "metacells",
     prefix: Optional[str] = "M",
     top_level: bool = True,
     _metacell_groups: bool = False,
+    random_seed: int,
 ) -> AnnData:
     """
     Collect computed metacells ``what`` (default: {what}) data.
 
     **Input**
 
-    Annotated (presumably "clean") ``adata``, where the observations are cells and the variables are
-    genes, and where ``what`` is a per-variable-per-observation matrix or the name of a
-    per-variable-per-observation annotation containing such a matrix.
+    Annotated (presumably "clean") ``adata``, where the observations are cells and the variables are genes, and where
+    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation
+    containing such a matrix.
 
     **Returns**
 
-    Annotated metacell data containing for each observation the sum of the data (by of the cells for
-    each metacell, which contains the following annotations:
+    Annotated metacell data containing for each observation (metacell) for each variable (gene) the fraction of the gene
+    in the metacell, and the following annotations:
 
     Unstructured (Scalar)
         ``outliers``
             The number of outlier cells (which were not assigned to any metacell).
 
+        ``metacells_algorithm``
+            The version of the algorithm generating the metacell (based on the package version number).
+
     Variable (Gene) Annotations
         ``*``
             Every per-gene annotations of ``adata`` is copied to the result.
 
-        ``noisy_gene`` (optional)
-            Genes which may have inconsistent expression levels in the cells of the same metacell.
-
-    Observations (Cell) Annotations
+    Observations (Metacell) Annotations
         ``grouped``
             The number of ("clean") cells grouped into each metacell.
 
+        ``total_umis``
+            The total of all the UMIs of all the genes of all the cells grouped into the metacell.
+
+    Observations-Variables (Metacell-Gene) Annotations
+        ``total_umis``
+            The total of all the UMIs of each genes in all the cells grouped into the metacell.
+
     Also sets in the full ``adata``:
 
-    Observations-Variables (Cell-Gene) Annotations
-        ``total_umis``
-            The total of all the UMIs for all the cells grouped into each metacell.
-
     Observations (Cell) Annotations
-        ``total_umis``
-            The total of all the UMIs for all the cells grouped into each metacell.
-
         ``metacell_name``
             The string name of the metacell, which is ``prefix`` (default: {prefix}) followed by the metacell index,
             followed by ``.checksum`` where the checksum is a 2 digits, reflecting the (names of the) set of cells
@@ -85,148 +88,173 @@ def collect_metacells(  # pylint: disable=too-many-statements
 
     **Computation Parameters**
 
-    1. Compute the total size of each metacell using the ``cell_sizes`` and the ``groups``.
+    For each metacell:
 
-    2. In each metacell, compute each cell's capped size by invoking
-       :py:func:`metacells.utilities.computation.capped_sizes` using the ``max_cell_size_quantile`` (default:
-       {max_cell_size_quantile}), ``max_cell_size_factor`` (default: {max_cell_size_factor}).
+    1. Compute the fraction of each gene out of each cell grouped into the metacell.
 
-    3. Scale the cells UMIs using these caps, if needed.
+    2. For each cell, add to the fractions the ``metacell_umis_regularization`` divided by the total UMIs of the cell.
 
-    4. Invoke :py:func:`metacells.utilities.computation.sum_groups` to sum the scaled cell UMIs into metacells.
+    3. For each gene, compute the weighted geomean of these fractions across all the cells, where the weight of each
+       cell is the log of its total number of UMIs.
 
-    5. If there are no ``noisy_gene``, skip steps 6-9.
+    4. Subtract the geomean of the per-cell regularization so all-zero genes would have a zero fraction.
 
-    6. In each metacell, compute each cell's noisy capped size by invoking
-       :py:func:`metacells.utilities.computation.capped_sizes` using the ``max_cell_size_noisy_quantile`` (default:
-       {max_cell_size_noisy_quantile}), ``max_cell_size_noisy_factor`` (default: {max_cell_size_noisy_factor}).
+    5. Normalize the per-gene fractions so their sum would be 1.0 in the metacell.
 
-    7. Scale the cells noisy UMIs using these caps, if needed.
+    6. Compute the ``zeros_cell_size_quantile`` of the total UMIs of the cells to pick the number of UMIs to use for
+       zeros computation.
 
-    8. Compute a geo-mean with a normalization factor of 1 UMI for the (scaled) noisy UMIs of the cells in each
-       metacell.
+    7. For each gene in each cell, compute the probability it would be zero if we downsampled the cell to have this
+       number of UMIs.
 
-    9. Finally, scale the geo-mean according to the ratio between the capped size from step 2 and the capped noisy size
-       from step 6, and use the result for the noisy gene UMIs instead of the results from step 5.
+    8. Use these probabilities to decide whether the each gene is "effectively zero" in each cell.
 
-    10. Compute the fraction of each gene effective UMIs out of the total effective metacell UMIs.
+    9. For each gene, count the number of cells in which it is "effectively zero".
 
-    11. Pass all relevant per-gene and per-cell annotations to the result.
+    In addition:
 
-    12. Set the ``metacell_name`` property of each cell in ``adata`` to the name of the group (metacell) it belongs to.
+    10. Pass all relevant per-gene annotations from ``adata`` to the result.
+
+    11. Set the ``metacell_name`` property of each cell in ``adata`` to the name of the group (metacell) it belongs to.
         Cells which do not belong to any metacell are assigned the metacell name ``Outliers``.
     """
     metacell_of_cells = ut.get_o_numpy(adata, groups, formatter=ut.groups_description).copy()
     metacell_of_cells[metacell_of_cells < 0] = -1
     outliers_count = np.sum(metacell_of_cells < 0)
+    metacells_count = np.max(metacell_of_cells) + 1
+    ut.log_calc("outliers_count", outliers_count)
+    ut.log_calc("metacells_count", metacells_count)
 
-    raw_cell_umis = ut.get_vo_proper(adata, what, layout="row_major")
-    raw_cell_sizes = ut.sum_per(raw_cell_umis, per="row")
-    ut.log_calc("raw_cell_sizes", raw_cell_sizes, formatter=ut.sizes_description)
+    umis_per_gene_per_cell = ut.get_vo_proper(adata, what, layout="row_major")
+    umis_per_cell = ut.get_o_numpy(adata, what, sum=True).astype("float64")
 
-    if max_cell_size_quantile is not None and max_cell_size_factor is not None:
-        effective_cell_sizes = ut.capped_sizes(
-            max_size_quantile=max_cell_size_quantile, max_size_factor=max_cell_size_factor, sizes=raw_cell_sizes
-        )
-        normal_cell_factors = effective_cell_sizes / raw_cell_sizes
-        effective_cell_umis = ut.scale_by(raw_cell_umis, normal_cell_factors, by="row")
-        ut.log_calc("effective_cell_sizes", effective_cell_sizes, formatter=ut.sizes_description)
-        ut.log_calc("normal_cell_factors", normal_cell_factors, formatter=ut.sizes_description)
-    else:
-        effective_cell_umis = raw_cell_umis
+    @ut.timed_call()
+    def _collect_metacell(metacell_index: int) -> Dict[str, Any]:
+        with ut.log_step(
+            "- metacell",
+            metacell_index,
+            formatter=lambda metacell_index: ut.progress_description(metacells_count, metacell_index, "metacell"),
+        ):
+            if random_seed != 0:
+                np.random.seed(random_seed + metacell_index)
 
-    if (
-        max_cell_size_noisy_quantile is not None
-        and max_cell_size_noisy_factor is not None
-        and ut.has_data(adata, "noisy_gene")
-    ):
-        noisy_genes_mask = ut.get_v_numpy(adata, "noisy_gene")
-        if np.any(noisy_genes_mask):
-            raw_cell_noisy_umis = ut.to_numpy_matrix(raw_cell_umis[:, noisy_genes_mask])
+            mask_per_cell = metacell_of_cells == metacell_index
+            grouped_of_metacell = np.sum(mask_per_cell)
+            ut.log_calc("grouped_of_metacell", grouped_of_metacell)
+            assert grouped_of_metacell > 0
 
-            noisy_cell_sizes = ut.capped_sizes(
-                max_size_quantile=max_cell_size_noisy_quantile,
-                max_size_factor=max_cell_size_noisy_factor,
-                sizes=raw_cell_sizes,
+            umis_per_cell_of_metacell = umis_per_cell[mask_per_cell]
+            total_umis_of_metacell = np.sum(umis_per_cell_of_metacell)
+            ut.log_calc("total_umis_of_metacell", total_umis_of_metacell)
+
+            regularization_per_cell_of_metacell = metacell_umis_regularization / umis_per_cell_of_metacell
+            regularization_of_metacell = ss.mstats.gmean(regularization_per_cell_of_metacell)
+
+            umis_per_gene_per_cell_of_metacell = ut.to_layout(
+                ut.to_numpy_matrix(umis_per_gene_per_cell[mask_per_cell, :]), layout="column_major"
             )
-            noisy_cell_factors = noisy_cell_sizes / raw_cell_sizes
-            ut.log_calc("noisy_cell_sizes", noisy_cell_sizes, formatter=ut.sizes_description)
-            ut.log_calc("noisy_cell_factors", noisy_cell_factors, formatter=ut.sizes_description)
-
-            effective_cell_noisy_umis = ut.mustbe_numpy_matrix(
-                ut.scale_by(raw_cell_noisy_umis, noisy_cell_factors, by="row")
+            umis_per_gene_of_metacell = ut.sum_per(umis_per_gene_per_cell_of_metacell, per="column").astype("float32")
+            fraction_per_gene_per_cell_of_metacell = ut.to_layout(
+                umis_per_gene_per_cell_of_metacell / ut.to_numpy_matrix(umis_per_cell_of_metacell[:, np.newaxis]),
+                layout="column_major",
             )
-            effective_cell_noisy_umis += 1
-            effective_cell_log2_noisy_umis = np.log2(effective_cell_noisy_umis, out=effective_cell_noisy_umis)
 
-            results = ut.sum_groups(effective_cell_log2_noisy_umis, metacell_of_cells, per="row")
-            assert results is not None
-            effective_metacell_sum_log2_noisy_umis, cells_of_metacells = results
-
-            scale_of_metacells = np.reciprocal(cells_of_metacells, out=cells_of_metacells)
-            effective_metacell_mean_log2_noisy_umis = ut.mustbe_numpy_matrix(
-                ut.scale_by(effective_metacell_sum_log2_noisy_umis, scale_of_metacells, by="row")
+            log_fraction_per_gene_per_cell_of_metacell = np.log2(
+                fraction_per_gene_per_cell_of_metacell + regularization_per_cell_of_metacell[:, np.newaxis]
             )
-            effective_metacell_noisy_umis = np.exp2(
-                effective_metacell_mean_log2_noisy_umis, out=effective_metacell_mean_log2_noisy_umis
+            weight_per_cell_of_metacell = np.log2(umis_per_cell_of_metacell)
+            weighted_log_fraction_per_gene_per_cell_of_metacell = ut.to_layout(
+                log_fraction_per_gene_per_cell_of_metacell * weight_per_cell_of_metacell[:, np.newaxis],
+                layout="column_major",
             )
-            effective_metacell_noisy_umis -= 1
 
-            noisy_scale_factors = effective_cell_sizes / noisy_cell_sizes
-            ut.log_calc("noisy_scale_factors", noisy_scale_factors, formatter=ut.sizes_description)
+            total_weighted_log_fraction_per_gene_of_metacell = ut.sum_per(
+                weighted_log_fraction_per_gene_per_cell_of_metacell, per="column"
+            )
+            total_weight_of_metacell = np.sum(weight_per_cell_of_metacell)
 
-            effective_metacell_noisy_umis *= noisy_scale_factors
-            if effective_cell_umis is raw_cell_umis:
-                effective_cell_umis = raw_cell_umis.copy()
-            effective_cell_umis[:, noisy_genes_mask] = effective_metacell_noisy_umis
+            mean_log_fraction_per_gene_of_metacell = (
+                total_weighted_log_fraction_per_gene_of_metacell / total_weight_of_metacell
+            )
+            fraction_per_gene_of_metacell = 2 ** mean_log_fraction_per_gene_of_metacell
+            fraction_per_gene_of_metacell -= regularization_of_metacell
+            fraction_per_gene_of_metacell[umis_per_gene_of_metacell == 0] = 0
+            fraction_per_gene_of_metacell[fraction_per_gene_of_metacell < 0] = 0
+            assert np.min(fraction_per_gene_of_metacell) >= 0
+            fraction_per_gene_of_metacell /= np.sum(fraction_per_gene_of_metacell)
+            fraction_per_gene_of_metacell = fraction_per_gene_of_metacell.astype("float32")
+            if _metacell_groups:
+                fraction_per_gene_of_metacell *= total_umis_of_metacell
+                ut.log_calc(
+                    "effective_umis_per_gene_of_metacell", fraction_per_gene_of_metacell, formatter=ut.sizes_description
+                )
+            else:
+                ut.log_calc(
+                    "fraction_per_gene_of_metacell", fraction_per_gene_of_metacell, formatter=ut.sizes_description
+                )
 
-    results = ut.sum_groups(effective_cell_umis, metacell_of_cells, per="row")
-    assert results is not None
-    effective_metacell_umis, cells_of_metacells = results
-    ut.log_calc("cells_of_metacells", cells_of_metacells, formatter=ut.sizes_description)
+            zeros_downsample_umis = round(np.quantile(umis_per_cell_of_metacell, zeros_cell_size_quantile))
+            ut.log_calc("zeros_downsample_umis", zeros_downsample_umis)
 
-    if _metacell_groups:
-        mdata = AnnData(effective_metacell_umis)
-    else:
-        effective_metacell_sizes = ut.sum_per(effective_metacell_umis, per="row")
-        ut.log_calc("effective_metacell_sizes", effective_metacell_sizes, formatter=ut.sizes_description)
-        effective_metacell_scale = np.reciprocal(effective_metacell_sizes, out=effective_metacell_sizes)
-        ut.log_calc("effective_metacell_scale", effective_metacell_scale, formatter=ut.sizes_description)
-        effective_metacell_fractions = ut.scale_by(effective_metacell_umis, effective_metacell_scale, by="row")
-        mdata = AnnData(effective_metacell_fractions)
+            fraction_per_gene_per_cell_of_metacell *= -1.0
+            fraction_per_gene_per_cell_of_metacell += 1.0
+            log_fraction_per_gene_per_cell_of_metacell = np.log2(fraction_per_gene_per_cell_of_metacell)
+            log_fraction_per_gene_per_cell_of_metacell *= zeros_downsample_umis
 
+            random_per_gene_per_cell_of_metacell = np.random.uniform(size=fraction_per_gene_per_cell_of_metacell.shape)
+            random_per_gene_per_cell_of_metacell *= -1.0
+            random_per_gene_per_cell_of_metacell += 1.0
+            log_random_per_gene_per_cell_of_metacell = np.log2(random_per_gene_per_cell_of_metacell)
+
+            zeros_per_gene_per_cell_of_metacell = ut.to_layout(
+                log_random_per_gene_per_cell_of_metacell <= log_fraction_per_gene_per_cell_of_metacell,
+                layout="column_major",
+            )
+            zeros_per_gene = ut.sum_per(zeros_per_gene_per_cell_of_metacell, per="column").astype("int32")
+            ut.log_calc("zeros_per_gene", zeros_per_gene, formatter=ut.sizes_description)
+
+            return dict(
+                grouped=grouped_of_metacell,
+                total_umis=total_umis_of_metacell,
+                umis_per_gene=umis_per_gene_of_metacell,
+                fraction_per_gene=fraction_per_gene_of_metacell,
+                zeros_downsample_umis=zeros_downsample_umis,
+                zeros_per_gene=zeros_per_gene,
+            )
+
+    results = ut.parallel_map(_collect_metacell, metacells_count)
+
+    fraction_per_gene_per_metacell = sp.csr_matrix(np.vstack([result["fraction_per_gene"] for result in results]))
+    assert str(fraction_per_gene_per_metacell.dtype) == "float32"
+    assert fraction_per_gene_per_metacell.shape == (metacells_count, adata.n_vars)
+
+    mdata = AnnData(fraction_per_gene_per_metacell)
     if top_level:
         ut.top_level(mdata)
-
+    if name.startswith("."):
+        name = ut.get_name(adata, "unnamed") + name  # type: ignore
+    ut.set_name(mdata, name)
     mdata.var_names = adata.var_names
     mdata.obs_names = _obs_names(prefix or "", ut.to_numpy_vector(adata.obs_names), metacell_of_cells)
 
-    ut.set_name(mdata, name)
+    grouped_per_metacell = np.array([result["grouped"] for result in results])
+    ut.set_o_data(mdata, "grouped", grouped_per_metacell)
 
-    zero_results = ut.sum_groups(
-        raw_cell_umis,
-        metacell_of_cells,
-        per="row",
-        transform=lambda values: ut.to_numpy_matrix(values == 0).astype("int32"),  # type: ignore
-    )
-    assert zero_results is not None
-    zero_metacell_umis, _cells_of_metacells = zero_results
-    ut.set_vo_data(mdata, "zeros", zero_metacell_umis)  # TODOY
+    total_umis_per_metacell = np.array([result["total_umis"] for result in results])
+    ut.set_o_data(mdata, "total_umis", total_umis_per_metacell)
 
-    raw_results = ut.sum_groups(raw_cell_umis, metacell_of_cells, per="row")
-    assert raw_results is not None
-    total_metacell_umis, _cells_of_metacells = raw_results
-    ut.set_vo_data(mdata, "total_umis", total_metacell_umis)
+    umis_per_gene_per_metacell = np.vstack([result["umis_per_gene"] for result in results])
+    assert str(umis_per_gene_per_metacell.dtype) == "float32"
+    assert umis_per_gene_per_metacell.shape == (metacells_count, adata.n_vars)
+    ut.set_vo_data(mdata, "total_umis", umis_per_gene_per_metacell)
 
-    raw_metacell_sizes = _metacell_sizes(raw_cell_sizes, metacell_of_cells)
-    ut.set_o_data(mdata, "total_umis", raw_metacell_sizes, formatter=ut.sizes_description)
-    ut.set_o_data(mdata, "grouped", cells_of_metacells, formatter=ut.sizes_description)
-    ut.set_o_data(  # TODOY
-        mdata,
-        "__zeros_downsample_umis",
-        np.round(raw_metacell_sizes / cells_of_metacells).astype("int32"),
-        formatter=ut.sizes_description,
-    )
+    zeros_downsample_umis_per_metacell = np.array([result["zeros_downsample_umis"] for result in results])
+    ut.set_o_data(mdata, "__zeros_downsample_umis", zeros_downsample_umis_per_metacell)
+
+    zeros_per_gene_per_metacell = np.vstack([result["zeros_per_gene"] for result in results])
+    assert str(zeros_per_gene_per_metacell.dtype) == "int32"
+    assert zeros_per_gene_per_metacell.shape == (metacells_count, adata.n_vars)
+    ut.set_vo_data(mdata, "zeros", zeros_per_gene_per_metacell)
 
     metacell_names = np.array(["Outliers"] + list(mdata.obs_names), dtype="str")
     metacell_of_cells += 1

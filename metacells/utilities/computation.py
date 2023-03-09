@@ -116,7 +116,6 @@ __all__ = [
     "represent",
     "min_cut",
     "sparsify_matrix",
-    "capped_sizes",
 ]
 
 
@@ -2446,21 +2445,3 @@ def sparsify_matrix(
     lil[low_entries] = 0
 
     return sp.csr_matrix(lil)
-
-
-@utm.timed_call()
-def capped_sizes(*, max_size_quantile: float, max_size_factor: float, sizes: utt.NumpyVector) -> utt.NumpyVector:
-    """
-    Given an array of sizes, return an array of capped sizes such that the sizes don't differ too match.
-
-    Compute a maximal size of ``max_size_quantile`` of the sizes multipled by the ``max_size_factor``. Any higher size
-    is reduced to this maximal size.
-
-    Return a new sizes array with these capped sizes.
-    """
-    assert 0 < max_size_quantile < 1
-    assert max_size_factor > 0
-    sizes = sizes.copy()
-    max_size = np.quantile(sizes, max_size_quantile) * max_size_factor
-    sizes[sizes > max_size] = max_size
-    return sizes

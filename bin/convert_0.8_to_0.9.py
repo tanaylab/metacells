@@ -106,7 +106,7 @@ for name in sorted(cdata.obs.keys()):
     LOG.info(f"* keep {name}")
 
 LOG.info("Collect metacells...")
-new_mdata = mc.pl.collect_metacells(cdata, name=mc.ut.get_name(old_mdata) or "metacells")
+new_mdata = mc.pl.collect_metacells(cdata, name=mc.ut.get_name(old_mdata) or "metacells", random_seed=random_seed)
 assert new_mdata.shape == old_mdata.shape
 mc.ut.set_m_data(new_mdata, "metacells_algorithm", metacells_algorithm)
 
@@ -127,7 +127,7 @@ mc.pl.compute_for_mcview(
     gdata=new_mdata,
     compute_umap_by_markers_2=None if keep_umap else {},
     compute_umap_by_markers_3=None if keep_umap else {},
-    random_seed=random_seed
+    random_seed=random_seed,
 )
 
 LOG.info("Skip MC gene properties...")

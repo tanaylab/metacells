@@ -72,12 +72,10 @@ def compute_direct_metacells(
     select_min_gene_top3: Optional[int] = pr.select_min_gene_top3,
     select_min_gene_relative_variance: Optional[float] = pr.select_min_gene_relative_variance,
     select_correction: Optional[FeatureCorrection] = None,
-    cells_similarity_value_normalization: float = pr.cells_similarity_value_normalization,
+    cells_similarity_value_regularization: float = pr.cells_similarity_value_regularization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_method: str = pr.cells_similarity_method,
     target_metacell_size: float = pr.target_metacell_size,
-    max_cell_size_quantile: Optional[float] = pr.max_cell_size_quantile,
-    max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     knn_k: Optional[int] = pr.knn_k,
     knn_k_size_factor: float = pr.candidates_knn_k_size_factor,
@@ -187,7 +185,7 @@ def compute_direct_metacells(
     2. Apply the ``select_correction`` function, if any, to modify the downsampled selects data.
 
     3. Compute the fractions of each variable in each cell, and add the
-       ``cells_similarity_value_normalization`` (default: {cells_similarity_value_normalization}) to
+       ``cells_similarity_value_regularization`` (default: {cells_similarity_value_regularization}) to
        it.
 
     4. If ``cells_similarity_log_data`` (default: {cells_similarity_log_data}), invoke the
@@ -208,8 +206,6 @@ def compute_direct_metacells(
 
     7. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
        the candidate metacells, using the
-       ``max_cell_size_quantile`` (default: {max_cell_size_quantile}),
-       ``max_cell_size_factor`` (default: {max_cell_size_factor}),
        ``min_seed_size_quantile`` (default: {min_seed_size_quantile}),
        ``max_seed_size_quantile`` (default: {max_seed_size_quantile}),
        ``candidates_cooldown_pass`` (default: {candidates_cooldown_pass}),
@@ -266,8 +262,8 @@ def compute_direct_metacells(
     if select_correction is not None:
         select_correction(adata=adata, sdata=sdata, downsampled=data)
 
-    if cells_similarity_value_normalization > 0:
-        data += cells_similarity_value_normalization
+    if cells_similarity_value_regularization > 0:
+        data += cells_similarity_value_regularization
 
     if cells_similarity_log_data:
         data = ut.log_data(data, base=2)
@@ -316,8 +312,6 @@ def compute_direct_metacells(
             sdata,
             target_metacell_size=target_metacell_size,
             cell_sizes=cell_sizes,
-            max_cell_size_quantile=max_cell_size_quantile,
-            max_cell_size_factor=max_cell_size_factor,
             min_seed_size_quantile=min_seed_size_quantile,
             max_seed_size_quantile=max_seed_size_quantile,
             cooldown_pass=candidates_cooldown_pass,
@@ -355,8 +349,6 @@ def compute_direct_metacells(
             deviants=deviants,
             target_metacell_size=target_metacell_size,
             cell_sizes=cell_sizes,
-            max_cell_size_quantile=max_cell_size_quantile,
-            max_cell_size_factor=max_cell_size_factor,
             min_robust_size_factor=dissolve_min_robust_size_factor,
             min_convincing_size_factor=dissolve_min_convincing_size_factor,
             min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,

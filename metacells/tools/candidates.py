@@ -36,8 +36,6 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
     what: Union[str, ut.Matrix] = "obs_outgoing_weights",
     *,
     target_metacell_size: float,
-    max_cell_size_quantile: Optional[float] = pr.max_cell_size_quantile,
-    max_cell_size_factor: Optional[float] = pr.max_cell_size_factor,
     cell_sizes: Optional[Union[str, ut.Vector]] = pr.candidates_cell_sizes,
     min_seed_size_quantile: float = pr.min_seed_size_quantile,
     max_seed_size_quantile: float = pr.max_seed_size_quantile,
@@ -78,11 +76,6 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
     ``None``. Otherwise this is returned as a pandas series (indexed by the variable names).
 
     **Computation Parameters**
-
-    (For steps 4 and 6 below, when computing a community size, use the results of
-    :py:func:`metacells.utilities.computation.capped_sizes` of the sizes of the cells in the community, using
-    ``max_cell_size_quantile`` (default: {max_cell_size_quantile}) and ``max_cell_size_factor`` (default:
-    {max_cell_size_factor}).
 
     1. We are trying to build metacells of ``target_metacell_size``, using the ``cell_sizes``
        (default: {cell_sizes}) to assign a size for each node (cell). This can be a string name of a
@@ -194,8 +187,6 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
             incoming_edge_weights=incoming_edge_weights,
             community_of_nodes=community_of_nodes,
             node_sizes=node_sizes,
-            max_cell_size_quantile=max_cell_size_quantile,
-            max_cell_size_factor=max_cell_size_factor,
             target_metacell_size=target_metacell_size,
             min_metacell_cells=min_metacell_cells,
             min_metacell_size=min_metacell_size,
@@ -217,8 +208,6 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
         small_communities, small_nodes_count = _find_small_communities(
             community_of_nodes=community_of_nodes,
             node_sizes=node_sizes,
-            max_cell_size_quantile=max_cell_size_quantile,
-            max_cell_size_factor=max_cell_size_factor,
             min_metacell_size=min_metacell_size,
             min_metacell_cells=min_metacell_cells,
         )
@@ -271,8 +260,6 @@ def _reduce_communities(
     community_of_nodes: ut.NumpyVector,
     node_sizes: ut.NumpyVector,
     target_metacell_size: float,
-    max_cell_size_quantile: Optional[float],
-    max_cell_size_factor: Optional[float],
     min_metacell_cells: Optional[int],
     min_metacell_size: float,
     max_metacell_size: float,
@@ -314,8 +301,6 @@ def _reduce_communities(
             outgoing_edge_weights=outgoing_edge_weights,
             community_of_nodes=community_of_nodes,
             node_sizes=node_sizes,
-            max_cell_size_quantile=max_cell_size_quantile,
-            max_cell_size_factor=max_cell_size_factor,
             min_metacell_cells=min_metacell_cells,
             max_metacell_size=max_metacell_size,
             max_split_min_cut_strength=max_split_min_cut_strength,
@@ -346,8 +331,6 @@ def _cut_split_communities(
     outgoing_edge_weights: ut.CompressedMatrix,
     community_of_nodes: ut.NumpyVector,
     node_sizes: ut.NumpyVector,
-    max_cell_size_quantile: Optional[float],
-    max_cell_size_factor: Optional[float],
     min_metacell_cells: Optional[int],
     max_metacell_size: Optional[float],
     max_split_min_cut_strength: Optional[float],
@@ -369,12 +352,6 @@ def _cut_split_communities(
     for community_index in range(communities_count):
         community_mask = community_of_nodes == community_index
         community_node_sizes = node_sizes[community_mask]
-        if max_cell_size_quantile is not None and max_cell_size_factor is not None:
-            community_node_sizes = ut.capped_sizes(
-                max_size_quantile=max_cell_size_quantile,
-                max_size_factor=max_cell_size_factor,
-                sizes=community_node_sizes,
-            )
         community_size = np.sum(community_node_sizes)
 
         if (
@@ -501,8 +478,6 @@ def _find_small_communities(
     *,
     community_of_nodes: ut.NumpyVector,
     node_sizes: ut.NumpyVector,
-    max_cell_size_quantile: Optional[float],
-    max_cell_size_factor: Optional[float],
     min_metacell_size: Optional[float],
     min_metacell_cells: Optional[int],
 ) -> Tuple[Set[int], int]:
@@ -520,12 +495,6 @@ def _find_small_communities(
         community_mask = community_of_nodes == community_index
         community_nodes_count = np.sum(community_mask)
         community_node_sizes = node_sizes[community_mask]
-        if max_cell_size_quantile is not None and max_cell_size_factor is not None:
-            community_node_sizes = ut.capped_sizes(
-                max_size_quantile=max_cell_size_quantile,
-                max_size_factor=max_cell_size_factor,
-                sizes=community_node_sizes,
-            )
         community_size = np.sum(community_node_sizes)
 
         if min_metacell_cells is not None and community_nodes_count < min_metacell_cells:

@@ -41,7 +41,7 @@ def projection_pipeline(
     consider_atlas_noisy_genes: bool = pr.consider_atlas_noisy_genes,
     consider_query_noisy_genes: bool = pr.consider_query_noisy_genes,
     misfit_min_metacells_fraction: float = pr.misfit_min_metacells_fraction,
-    project_fold_normalization: float = pr.project_fold_normalization,
+    project_fold_regularization: float = pr.project_fold_regularization,
     project_candidates_count: int = pr.project_candidates_count,
     project_min_candidates_fraction: float = pr.project_min_candidates_fraction,
     project_min_significant_gene_umis: int = pr.project_min_significant_gene_umis,
@@ -211,8 +211,8 @@ def projection_pipeline(
        the atlas. Normalize the fractions of the fitted gene fractions to sum to 1 in each metacell.
 
     2. Invoke :py:func:`metacells.tools.project.compute_projection_weights`
-       to project each query metacell onto the atlas, using the ``project_fold_normalization`` (default:
-       {project_fold_normalization}), ``project_min_significant_gene_umis`` (default:
+       to project each query metacell onto the atlas, using the ``project_fold_regularization`` (default:
+       {project_fold_regularization}), ``project_min_significant_gene_umis`` (default:
        {project_min_significant_gene_umis}), ``project_max_consistency_fold_factor`` (default:
        {project_max_consistency_fold_factor}), ``project_candidates_count`` (default: {project_candidates_count}),
        ``project_min_usage_weight`` (default: {project_min_usage_weight}), and ``reproducible``.
@@ -327,7 +327,7 @@ def projection_pipeline(
         common_adata=common_adata,
         common_qdata=common_qdata,
         preliminary_fitted_genes_mask=preliminary_fitted_genes_mask,
-        project_fold_normalization=project_fold_normalization,
+        project_fold_regularization=project_fold_regularization,
         project_min_significant_gene_umis=project_min_significant_gene_umis,
         project_max_consistency_fold_factor=project_max_consistency_fold_factor,
         project_candidates_count=project_candidates_count,
@@ -345,7 +345,7 @@ def projection_pipeline(
         type_names=type_names,
         preliminary_fitted_genes_mask=preliminary_fitted_genes_mask,
         misfit_min_metacells_fraction=misfit_min_metacells_fraction,
-        project_fold_normalization=project_fold_normalization,
+        project_fold_regularization=project_fold_regularization,
         project_candidates_count=project_candidates_count,
         project_min_significant_gene_umis=project_min_significant_gene_umis,
         project_min_usage_weight=project_min_usage_weight,
@@ -364,7 +364,7 @@ def projection_pipeline(
         weights_per_atlas_per_query_metacell=weights,
         common_adata=common_adata,
         common_qdata=common_qdata,
-        project_fold_normalization=project_fold_normalization,
+        project_fold_regularization=project_fold_regularization,
         project_candidates_count=project_candidates_count,
         project_min_candidates_fraction=project_min_candidates_fraction,
         project_min_significant_gene_umis=project_min_significant_gene_umis,
@@ -675,7 +675,7 @@ def _compute_preliminary_projection(
     common_adata: AnnData,
     common_qdata: AnnData,
     preliminary_fitted_genes_mask: ut.NumpyVector,
-    project_fold_normalization: float,
+    project_fold_regularization: float,
     project_min_significant_gene_umis: float,
     project_max_consistency_fold_factor: float,
     project_candidates_count: int,
@@ -708,7 +708,7 @@ def _compute_preliminary_projection(
         weights = tl.compute_projection_weights(
             adata=fitted_adata,
             qdata=fitted_qdata,
-            fold_normalization=project_fold_normalization,
+            fold_regularization=project_fold_regularization,
             min_significant_gene_umis=project_min_significant_gene_umis,
             max_consistency_fold_factor=project_max_consistency_fold_factor,
             candidates_count=project_candidates_count,
@@ -812,7 +812,7 @@ def _compute_per_type_projection(
     type_names: List[str],
     preliminary_fitted_genes_mask: ut.NumpyVector,
     misfit_min_metacells_fraction: float,
-    project_fold_normalization: float,
+    project_fold_regularization: float,
     project_candidates_count: int,
     project_min_significant_gene_umis: float,
     project_min_usage_weight: float,
@@ -860,7 +860,7 @@ def _compute_per_type_projection(
                 common_qdata=common_qdata,
                 fitted_genes_mask_per_type=fitted_genes_mask_per_type,
                 misfit_min_metacells_fraction=misfit_min_metacells_fraction,
-                project_fold_normalization=project_fold_normalization,
+                project_fold_regularization=project_fold_regularization,
                 project_candidates_count=project_candidates_count,
                 project_min_significant_gene_umis=project_min_significant_gene_umis,
                 project_min_usage_weight=project_min_usage_weight,
@@ -964,7 +964,7 @@ def _compute_single_type_projection(
     common_qdata: AnnData,
     fitted_genes_mask_per_type: Dict[str, ut.NumpyVector],
     misfit_min_metacells_fraction: float,
-    project_fold_normalization: float,
+    project_fold_regularization: float,
     project_candidates_count: int,
     project_min_significant_gene_umis: float,
     project_min_usage_weight: float,
@@ -1008,7 +1008,7 @@ def _compute_single_type_projection(
         type_weights = tl.compute_projection_weights(
             adata=type_fitted_adata,
             qdata=type_fitted_qdata,
-            fold_normalization=project_fold_normalization,
+            fold_regularization=project_fold_regularization,
             min_significant_gene_umis=project_min_significant_gene_umis,
             max_consistency_fold_factor=project_max_consistency_fold_factor,
             candidates_count=project_candidates_count,
@@ -1021,7 +1021,7 @@ def _compute_single_type_projection(
 
         tl.compute_projected_folds(
             type_common_qdata,
-            fold_normalization=project_fold_normalization,
+            fold_regularization=project_fold_regularization,
             min_significant_gene_umis=project_min_significant_gene_umis,
         )
         projected_fold_per_gene_per_metacell_of_type = ut.get_vo_proper(type_common_qdata, "projected_fold")
@@ -1179,7 +1179,7 @@ def _compute_dissimilar_residuals_projection(
     common_adata: AnnData,
     common_qdata: AnnData,
     weights_per_atlas_per_query_metacell: ut.NumpyMatrix,
-    project_fold_normalization: float,
+    project_fold_regularization: float,
     project_candidates_count: int,
     project_min_candidates_fraction: float,
     project_min_significant_gene_umis: float,
@@ -1209,7 +1209,7 @@ def _compute_dissimilar_residuals_projection(
             dissimilar_metacell_index=dissimilar_metacell_indices[dissimilar_metacell_position],
             common_adata=common_adata,
             common_qdata=common_qdata,
-            project_fold_normalization=project_fold_normalization,
+            project_fold_regularization=project_fold_regularization,
             project_candidates_count=project_candidates_count,
             project_min_candidates_fraction=project_min_candidates_fraction,
             project_min_significant_gene_umis=project_min_significant_gene_umis,
@@ -1283,7 +1283,7 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
     dissimilar_metacell_index: int,
     common_adata: AnnData,
     common_qdata: AnnData,
-    project_fold_normalization: float,
+    project_fold_regularization: float,
     project_candidates_count: int,
     project_min_candidates_fraction: float,
     project_min_significant_gene_umis: float,
@@ -1330,7 +1330,7 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
         weights = tl.compute_projection_weights(
             adata=fitted_adata,
             qdata=metacell_fitted_qdata,
-            fold_normalization=project_fold_normalization,
+            fold_regularization=project_fold_regularization,
             min_significant_gene_umis=project_min_significant_gene_umis,
             max_consistency_fold_factor=project_max_consistency_fold_factor,
             candidates_count=project_candidates_count,
@@ -1384,7 +1384,7 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
 
     tl.compute_projected_folds(
         dissimilar_qdata,
-        fold_normalization=project_fold_normalization,
+        fold_regularization=project_fold_regularization,
         min_significant_gene_umis=project_min_significant_gene_umis,
     )
     projected_fold_per_gene = ut.to_numpy_vector(ut.get_vo_proper(dissimilar_qdata, "projected_fold"))
@@ -1445,7 +1445,7 @@ def outliers_projection_pipeline(
     *,
     adata: AnnData,
     odata: AnnData,
-    fold_normalization: float = pr.outliers_fold_normalization,
+    fold_regularization: float = pr.outliers_fold_regularization,
     project_min_significant_gene_umis: int = pr.project_min_significant_gene_umis,
     reproducible: bool,
 ) -> None:
@@ -1469,11 +1469,11 @@ def outliers_projection_pipeline(
 
     **Computation Parameters**
 
-    1. Invoke :py:func:`metacells.tools.quality.compute_outliers_matches` using the ``fold_normalization``
-       (default: {fold_normalization}) and ``reproducible``.
+    1. Invoke :py:func:`metacells.tools.quality.compute_outliers_matches` using the ``fold_regularization``
+       (default: {fold_regularization}) and ``reproducible``.
 
-    2. Invoke :py:func:`metacells.tools.quality.compute_outliers_fold_factors` using the ``fold_normalization``
-       (default: {fold_normalization}).
+    2. Invoke :py:func:`metacells.tools.quality.compute_outliers_fold_factors` using the ``fold_regularization``
+       (default: {fold_regularization}).
     """
     if list(odata.var_names) != list(adata.var_names):
         atlas_genes_list = list(adata.var_names)
@@ -1497,7 +1497,7 @@ def outliers_projection_pipeline(
         adata=common_odata,
         gdata=common_adata,
         most_similar="atlas_most_similar",
-        value_normalization=fold_normalization,
+        value_regularization=fold_regularization,
         reproducible=reproducible,
     )
 

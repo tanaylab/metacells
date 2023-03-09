@@ -54,7 +54,7 @@ significant_noisy_gene_fold_factor: float = 2.0
 #: :py:const:`rare_min_gene_maximum`,
 #: :py:const:`rare_min_cell_module_total`,
 #: and
-#: :py:const:`cells_similarity_value_normalization`.
+#: :py:const:`cells_similarity_value_regularization`.
 significant_value: int = 7
 
 #: The generic minimal samples to use for downsampling the cells for some purpose. See
@@ -136,38 +136,14 @@ target_metacells_in_pile: int = 100
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 target_metacell_size: float = 160000
 
-#: The quantile of the cell sizes to use for reducing the impact of cell size variance. See
-#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
-#: and
-#: :py:func:`metacells.pipeline.collect.collect_metacells`.
-max_cell_size_quantile: Optional[float] = 0.5
+#: The number of UMIs to use for regularization when computing metacell gene fractions.
+#: See :py:func:`metacells.pipeline.collect.collect_metacells`.
+metacell_umis_regularization: float = 1 / 16.0
 
-#: The maximal cell size to use for reducing the impact of cell size variance as a factor of the quantile cell size. See
-#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
-#: and
+#: The quantile of the cell sizes to use for computing the number of zero-valued cells.
+#: See
 #: :py:func:`metacells.pipeline.collect.collect_metacells`.
-max_cell_size_factor: Optional[float] = 2.0
-
-#: The quantile of the cell sizes to use for reducing the impact of cell size variance for noisy genes. See
-#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
-#: and
-#: :py:func:`metacells.pipeline.collect.collect_metacells`.
-max_cell_size_noisy_quantile: Optional[float] = 0.1
-
-#: The maximal cell size to use for reducing the impact of cell size variance as a factor of the quantile cell size for
-#: noisy genes. See
-#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
-#: and
-#: :py:func:`metacells.pipeline.collect.collect_metacells`.
-max_cell_size_noisy_factor: Optional[float] = 1.0
+zeros_cell_size_quantile: float = 0.1
 
 #: The genetic size of each cell for computing each metacell's size. See
 #: :py:const:`candidates_cell_sizes`,
@@ -549,14 +525,14 @@ select_min_gene_top3: Optional[int] = 4
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 cells_similarity_log_data: bool = True
 
-#: The normalization factor to use if/when computing the fractions of the data for directly
+#: The regularization factor to use if/when computing the fractions of the data for directly
 #: computing the metacells. See
 #: :py:const:`significant_value`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-cells_similarity_value_normalization: float = 1 / significant_value
+cells_similarity_value_regularization: float = 1 / significant_value
 
 #: The method to use to compute cell-cell similarity. See
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
@@ -582,10 +558,10 @@ groups_similarity_method: str = similarity_method
 #: :py:func:`metacells.pipeline.consistency.compute_groups_self_consistency`.
 self_similarity_log_data: bool = True
 
-#: The normalization factor to use after computing the fractions of the data for
+#: The regularization factor to use after computing the fractions of the data for
 #: computing group self similarity. See
 #: :py:func:`metacells.pipeline.consistency.compute_groups_self_consistency`.
-self_similarity_value_normalization: float = 1e-5
+self_similarity_value_regularization: float = 1e-5
 
 #: The method to use to compute group self-consistency. See
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
@@ -867,12 +843,12 @@ distinct_genes_count: int = 20
 #: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
 umap_max_marker_genes: int = 1000
 
-#: The normalization factor to use if/when computing the fractions of the data for UMAP.
+#: The regularization factor to use if/when computing the fractions of the data for UMAP.
 #: See
 #: :py:const:`metacells.parameters.target_metacell_size`
 #: and
 #: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
-umap_similarity_value_normalization: float = 1 / target_metacell_size
+umap_similarity_value_regularization: float = 1 / target_metacell_size
 
 #: Whether to compute metacell-metacell similarity using the log (base 2) of the data for UMAP. See
 #: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
@@ -912,7 +888,7 @@ skeleton_k: int = 4
 
 #: The value to add to gene fractions before applying the log function. See
 #: See :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
-umap_fraction_normalization: float = 1e-5
+umap_fraction_regularization: float = 1e-5
 
 #: The fraction of the UMAP plot area to cover with points. See
 #: :py:func:`metacells.utilities.computation.cover_diameter`,
@@ -938,9 +914,9 @@ quality_min_gene_total: int = 40
 #: :py:func:`metacells.pipeline.divide_and_conquer.guess_max_parallel_piles`.
 max_gbs: float = -0.1
 
-#: The normalization factor to use when computing fold factors for projecting a query onto an atlas. See
+#: The regularization factor to use when computing fold factors for projecting a query onto an atlas. See
 #: :py:func:`metacells.tools.project.compute_projection_weights`.
-project_fold_normalization: float = 1e-5
+project_fold_regularization: float = 1e-5
 
 #: The minimal number of UMIs for a gene to be a potential cause to mark a metacell as dissimilar. See
 #: :py:func:`metacells.tools.project.compute_projection_weights`.
@@ -972,9 +948,9 @@ project_max_projection_noisy_fold_factor: float = significant_noisy_gene_fold_fa
 #: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_max_consistency_fold_factor: float = significant_gene_fold_factor - 1.0
 
-#: The normalization factor to use when computing log of fractions for finding the most similar group for outliers. See
+#: The regularization factor to use when computing log of fractions for finding the most similar group for outliers. See
 #: :py:func:`metacells.tools.quality.compute_outliers_matches`.
-outliers_fold_normalization: float = 1e-5
+outliers_fold_regularization: float = 1e-5
 
 #: Whether to ignore the lateral genes of the atlas when computing projections. See
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
@@ -1008,14 +984,14 @@ misfit_min_metacells_fraction: float = 0.5
 #: See :py:func:`metacells.tools.high.find_metacells_marker_genes`.
 min_marker_metacells_gene_range_fold_factor: float = 2.0
 
-#: The normalization factor to use after computing the fractions of the data for
+#: The regularization factor to use after computing the fractions of the data for
 #: computing metacell gene range folds. See
 #: :py:func:`metacells.tools.high.find_metacells_marker_genes`.
-metacells_gene_range_normalization: float = 1e-5
+metacells_gene_range_regularization: float = 1e-5
 
-#: The normalization factor to use after computing the normalized inner variance of metacell. See
+#: The regularization factor to use after computing the normalized inner variance of metacell. See
 #: :py:func:`metacells.tools.quality.compute_inner_variance_folds`.
-normalized_inner_variance_gene_normalization: float = 1e-5
+normalized_inner_variance_gene_regularization: float = 1e-5
 
 #: The minimal maximal gene expression in metacells to be a "marker".
 #: See :py:func:`metacells.tools.high.find_metacells_marker_genes`.

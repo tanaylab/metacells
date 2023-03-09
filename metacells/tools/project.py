@@ -34,7 +34,7 @@ def compute_projection_weights(
     from_atlas_layer: str = "corrected_fraction",
     from_query_layer: str = "corrected_fraction",
     to_query_layer: str = "projected_fraction",
-    fold_normalization: float = pr.project_fold_normalization,
+    fold_regularization: float = pr.project_fold_regularization,
     min_significant_gene_umis: float = pr.project_min_significant_gene_umis,
     max_consistency_fold_factor: float = pr.project_max_consistency_fold_factor,
     candidates_count: int = pr.project_candidates_count,
@@ -75,8 +75,8 @@ def compute_projection_weights(
 
     **Computation Parameters**
 
-    0. All fold computations (log2 of the ratio between gene fractions) use the ``fold_normalization`` (default:
-       {fold_normalization}).
+    0. All fold computations (log2 of the ratio between gene fractions) use the ``fold_regularization`` (default:
+       {fold_regularization}).
 
     For each query metacell:
 
@@ -108,7 +108,7 @@ def compute_projection_weights(
         from_atlas_layer=from_atlas_layer,
         from_query_layer=from_query_layer,
         to_query_layer=to_query_layer,
-        fold_normalization=fold_normalization,
+        fold_regularization=fold_regularization,
         min_significant_gene_umis=min_significant_gene_umis,
         max_consistency_fold_factor=max_consistency_fold_factor,
         candidates_count=candidates_count,
@@ -177,7 +177,7 @@ def _project_query_atlas_data_arguments(
     from_atlas_layer: str,
     from_query_layer: str,
     to_query_layer: str,
-    fold_normalization: float,
+    fold_regularization: float,
     min_significant_gene_umis: float,
     max_consistency_fold_factor: float,
     candidates_count: int,
@@ -186,7 +186,7 @@ def _project_query_atlas_data_arguments(
     second_anchor_indices: Optional[List[int]],
     reproducible: bool,
 ) -> Dict[str, Any]:
-    assert fold_normalization > 0
+    assert fold_regularization > 0
     assert candidates_count > 0
     assert 0 <= min_candidates_fraction <= 1.0
     assert min_usage_weight >= 0
@@ -211,8 +211,8 @@ def _project_query_atlas_data_arguments(
         atlas_residual_fractions = atlas_fractions - ut.to_numpy_vector(query_residual_fractions)[np.newaxis, :]
         atlas_residual_fractions[atlas_residual_fractions < 0] = 0
 
-        atlas_residual_fractions += fold_normalization
-        query_residual_fractions += fold_normalization
+        atlas_residual_fractions += fold_regularization
+        query_residual_fractions += fold_regularization
 
         atlas_project_residual_data = np.log2(atlas_residual_fractions)
         query_project_residual_data = np.log2(query_residual_fractions)
@@ -224,14 +224,14 @@ def _project_query_atlas_data_arguments(
     else:
         query_atlas_corr_residual = None
 
-    atlas_fractions += fold_normalization
-    query_fractions += fold_normalization
+    atlas_fractions += fold_regularization
+    query_fractions += fold_regularization
 
     atlas_log_fractions = np.log2(atlas_fractions)
     query_log_fractions = np.log2(query_fractions)
 
-    atlas_fractions -= fold_normalization
-    query_fractions -= fold_normalization
+    atlas_fractions -= fold_regularization
+    query_fractions -= fold_regularization
 
     query_atlas_corr = ut.cross_corrcoef_rows(query_log_fractions, atlas_log_fractions, reproducible=reproducible)
 

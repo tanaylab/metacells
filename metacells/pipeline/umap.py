@@ -38,7 +38,7 @@ def compute_knn_by_markers(
     marker_gene_names: Optional[Collection[str]] = None,
     marker_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     max_marker_genes: Optional[int] = pr.umap_max_marker_genes,
-    similarity_value_normalization: float = pr.umap_similarity_value_normalization,
+    similarity_value_regularization: float = pr.umap_similarity_value_regularization,
     similarity_log_data: bool = pr.umap_similarity_log_data,
     similarity_method: str = pr.umap_similarity_method,
     logistics_location: float = pr.logistics_location,
@@ -82,7 +82,7 @@ def compute_knn_by_markers(
        of marker genes with the highest variance.
 
     3. Compute the fractions of each ``marker_gene`` in each cell, and add the
-       ``similarity_value_normalization`` (default: {similarity_value_normalization}) to it.
+       ``similarity_value_regularization`` (default: {similarity_value_regularization}) to it.
 
     4. If ``similarity_log_data`` (default: {similarity_log_data}), invoke the
        :py:func:`metacells.utilities.computation.log_data` function to compute the log (base 2) of
@@ -125,7 +125,7 @@ def compute_knn_by_markers(
         fraction_per_metacell_per_marker_gene = fraction_per_metacell_per_marker_gene[:, chosen_positions]
 
     fraction_per_metacell_per_marker_gene = ut.to_layout(fraction_per_metacell_per_marker_gene, layout="row_major")
-    fraction_per_metacell_per_marker_gene += similarity_value_normalization
+    fraction_per_metacell_per_marker_gene += similarity_value_regularization
 
     if similarity_log_data:
         fraction_per_metacell_per_marker_gene = ut.log_data(fraction_per_metacell_per_marker_gene, base=2)
@@ -164,7 +164,7 @@ def compute_umap_by_markers(
     marker_gene_names: Optional[Collection[str]] = None,
     marker_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     max_marker_genes: Optional[int] = pr.umap_max_marker_genes,
-    similarity_value_normalization: float = pr.umap_similarity_value_normalization,
+    similarity_value_regularization: float = pr.umap_similarity_value_regularization,
     similarity_log_data: bool = pr.umap_similarity_log_data,
     similarity_method: str = pr.umap_similarity_method,
     logistics_location: float = pr.logistics_location,
@@ -207,8 +207,8 @@ def compute_umap_by_markers(
 
     1. Invoke :py:func:`metacells.pipeline.umap.compute_knn_by_markers` using
        ``marker_gene_names`` (default: {marker_gene_names}), ``marker_gene_patterns`` (default: {marker_gene_patterns}),
-       ``max_marker_genes`` (default: {max_marker_genes}), ``similarity_value_normalization`` (default:
-       {similarity_value_normalization}), ``similarity_log_data`` (default: {similarity_log_data}),
+       ``max_marker_genes`` (default: {max_marker_genes}), ``similarity_value_regularization`` (default:
+       {similarity_value_regularization}), ``similarity_log_data`` (default: {similarity_log_data}),
        ``similarity_method`` (default: {similarity_method}), ``logistics_location`` (default: {logistics_location}),
        ``logistics_slope`` (default: {logistics_slope}), ``skeleton_k`` (default: {skeleton_k}),
        ``balanced_ranks_factor`` (default: {balanced_ranks_factor}), ``incoming_degree_factor`` (default:
@@ -233,7 +233,7 @@ def compute_umap_by_markers(
         marker_gene_names=marker_gene_names,
         marker_gene_patterns=marker_gene_patterns,
         max_marker_genes=max_marker_genes,
-        similarity_value_normalization=similarity_value_normalization,
+        similarity_value_regularization=similarity_value_regularization,
         similarity_log_data=similarity_log_data,
         similarity_method=similarity_method,
         logistics_location=logistics_location,

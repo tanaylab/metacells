@@ -307,7 +307,7 @@ def find_metacells_marker_genes(
     what: Union[str, ut.Matrix] = "__x__",
     *,
     min_gene_range_fold: float = pr.min_marker_metacells_gene_range_fold_factor,
-    normalization: float = pr.metacells_gene_range_normalization,
+    regularization: float = pr.metacells_gene_range_regularization,
     min_max_gene_fraction: float = pr.min_marker_max_metacells_gene_fraction,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
@@ -338,13 +338,13 @@ def find_metacells_marker_genes(
 
     1. Compute the minimal and maximal expression level of each gene.
 
-    2. Select the genes whose fold factor (log2 of maximal over minimal value, using the ``normalization``
-       (default: {normalization}) is at least ``min_gene_range_fold`` (default: {min_gene_range_fold}).
+    2. Select the genes whose fold factor (log2 of maximal over minimal value, using the ``regularization``
+       (default: {regularization}) is at least ``min_gene_range_fold`` (default: {min_gene_range_fold}).
 
     3. Select the genes whose maximal expression is at least ``min_max_gene_fraction`` (default:
        {min_max_gene_fraction}).
     """
-    assert normalization >= 0
+    assert regularization >= 0
 
     data = ut.get_vo_proper(adata, what, layout="row_major")
     fractions_of_genes = ut.to_layout(ut.fraction_by(data, by="row"), layout="column_major")
@@ -355,8 +355,8 @@ def find_metacells_marker_genes(
     high_max_fraction_genes_mask = max_fraction_of_genes >= min_max_gene_fraction
     ut.log_calc("high max fraction genes", high_max_fraction_genes_mask)
 
-    min_fraction_of_genes += normalization
-    max_fraction_of_genes += normalization
+    min_fraction_of_genes += regularization
+    max_fraction_of_genes += regularization
 
     max_fraction_of_genes /= min_fraction_of_genes
     range_fold_of_genes = np.log2(max_fraction_of_genes, out=max_fraction_of_genes)
