@@ -21,6 +21,7 @@ parser.add_argument("-om", "--old-metacells-h5ad", required=True)
 parser.add_argument("-nm", "--new-metacells-h5ad", required=True)
 parser.add_argument("-rs", "--random_seed", default="123456")
 parser.add_argument("-un", "--unsafe-names", default=False, action="store_true")
+parser.add_argument("-u,", "--umsafe-names", default=False, action="store_true")
 parser.add_argument("-ma", "--metacells-algorithm", default="metacells.0.8.0")
 parser.add_argument("-ku", "--keep-umap", default=False, action="store_true")
 
@@ -40,6 +41,8 @@ old_metacells_path = args.old_metacells_h5ad
 new_metacells_path = args.new_metacells_h5ad
 random_seed = int(args.random_seed)
 unsafe_names = args.unsafe_names
+umsafe_names = args.umsafe_names
+assert not unsafe_names or not umsafe_names
 metacells_algorithm = args.metacells_algorithm
 keep_umap = args.keep_umap
 
@@ -111,6 +114,8 @@ assert new_mdata.shape == old_mdata.shape
 mc.ut.set_m_data(new_mdata, "metacells_algorithm", metacells_algorithm)
 
 if unsafe_names:
+    new_mdata.obs_names = [obs_name[1:-3] for obs_name in new_mdata.obs_names]
+if umsafe_names:
     new_mdata.obs_names = [obs_name[:-3] for obs_name in new_mdata.obs_names]
 
 LOG.info("Compute for MCView...")

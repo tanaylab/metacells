@@ -181,6 +181,9 @@ def parallel_map(
         It is currently only possible to invoke :py:func:`parallel_map` from the main application thread (that is, it
         does not nest).
     """
+    if invocations == 0:
+        return []
+
     assert function.__is_timed__  # type: ignore
 
     global IS_MAIN_PROCESS

@@ -72,6 +72,7 @@ PYBIND11_MODULE(extensions, module) {
     metacells::register_cover(module);
     metacells::register_downsample(module);
     metacells::register_folds(module);
+    metacells::register_gaps(module);
     metacells::register_logistics(module);
     metacells::register_partitions(module);
     metacells::register_prune_per(module);

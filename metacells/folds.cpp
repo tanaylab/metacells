@@ -129,7 +129,7 @@ top_distinct(pybind11::array_t<int32_t>& gene_indices_array,
                                fold_in_cells.get_row(cell_index));
     });
 }
-//
+
 /// See the Python `metacell.utilities.computation._median_sparse` function.
 template<typename D, typename I, typename P>
 static void

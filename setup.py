@@ -69,6 +69,7 @@ setup(
                 "metacells/downsample.cpp",
                 "metacells/extensions.cpp",
                 "metacells/folds.cpp",
+                "metacells/gaps.cpp",
                 "metacells/logistics.cpp",
                 "metacells/partitions.cpp",
                 "metacells/prune_per.cpp",

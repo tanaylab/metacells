@@ -34,9 +34,12 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
     *,
     candidates: Union[str, ut.Vector] = "candidate",
     min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
+    gap_skip_cells: int = pr.deviants_gap_skip_cells,
     min_noisy_gene_fold_factor: float = pr.deviants_min_noisy_gene_fold_factor,
-    max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
+    max_gene_fraction: float = pr.deviants_max_gene_fraction,
     max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
+    max_deviant_cells_count: int = pr.max_deviant_cells_count,
+    max_deviant_cells_fraction: float = pr.max_deviant_cells_fraction,
     policy: str = pr.deviants_policy,
 ) -> ut.Vector:
     """
@@ -93,15 +96,29 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
     7. If the total fraction of deviants is below the ``max_cell_fraction``, repeats steps 1-5 to account for the mean
        expression in each candidate metacell having been modified due to the removal of deviant cells.
     """
-    assert policy in ("votes", "count", "max", "sum")
+    assert 1 <= gap_skip_cells <= 3
+    assert policy in ("votes", "count", "max", "sum", "gaps")
     if policy == "votes":
         return _votes_deviant_cells(
             adata,
             what,
             candidates=candidates,
             min_gene_fold_factor=min_gene_fold_factor,
-            max_gene_fraction=max_gene_fraction,
-            max_cell_fraction=max_cell_fraction,
+            max_gene_fraction=max_gene_fraction or 1.0,
+            max_cell_fraction=max_cell_fraction or 1.0,
+        )
+
+    if policy == "gaps":
+        return _gaps_deviant_cells(
+            adata,
+            what,
+            candidates=candidates,
+            min_gene_fold_factor=min_gene_fold_factor,
+            gap_skip_cells=gap_skip_cells,
+            min_noisy_gene_fold_factor=min_noisy_gene_fold_factor,
+            max_deviant_cells_count=max_deviant_cells_count,
+            max_deviant_cells_fraction=max_deviant_cells_fraction,
+            max_cell_fraction=max_cell_fraction or 1.0,
         )
 
     cells_count, genes_count = adata.shape
@@ -195,7 +212,7 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
         assert False
     ut.log_calc(f"{policy}_per_gene_per_cell", policy_per_cell)
 
-    if max_cell_fraction is None:
+    if max_cell_fraction is None or max_cell_fraction == 1.0:
         policy_threshold = 0
     else:
         policy_threshold = np.quantile(policy_per_cell, 1.0 - max_cell_fraction)
@@ -206,21 +223,75 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
     return deviant_cells_mask
 
 
-def _votes_deviant_cells(  # pylint: disable=too-many-statements
+def _gaps_deviant_cells(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
-    candidates: Union[str, ut.Vector] = "candidate",
-    min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
-    max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
-    max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
+    candidates: Union[str, ut.Vector],
+    min_gene_fold_factor: float,
+    gap_skip_cells: int,
+    min_noisy_gene_fold_factor: float,
+    max_cell_fraction: float,
+    max_deviant_cells_count: int,
+    max_deviant_cells_fraction: float,
 ) -> ut.Vector:
-    if max_gene_fraction is None:
-        max_gene_fraction = 1
+    assert min_gene_fold_factor > 0
+    assert 0 < max_cell_fraction < 1
 
-    if max_cell_fraction is None:
-        max_cell_fraction = 1
+    min_gap_per_gene = np.full(adata.n_vars, min_gene_fold_factor, dtype="float32")
+    if ut.has_data(adata, "noisy_gene"):
+        noisy_genes_mask = ut.get_v_numpy(adata, "noisy_gene")
+        min_gap_per_gene[noisy_genes_mask] += min_noisy_gene_fold_factor
 
+    candidate_per_cell = ut.get_o_numpy(adata, candidates, formatter=ut.groups_description).astype("int32")
+    candidates_count = np.max(candidate_per_cell) + 1
+
+    max_cells_count_in_candidates = 0
+    for candidate_index in range(candidates_count):
+        cells_count_of_candidate = np.sum(candidate_per_cell == candidate_index)
+        max_cells_count_in_candidates = max(cells_count_of_candidate, max_cells_count_in_candidates)
+
+    umis_per_gene_per_cell = ut.to_numpy_matrix(ut.get_vo_proper(adata, what, layout="row_major"))
+    total_umis_per_cell = ut.get_o_numpy(adata, what, sum=True).copy()
+    regularization_per_cell = np.reciprocal(total_umis_per_cell, out=total_umis_per_cell)
+    fraction_per_gene_per_cell = ut.mustbe_numpy_matrix(ut.fraction_by(umis_per_gene_per_cell, by="row"))
+    fraction_per_gene_per_cell += regularization_per_cell[:, np.newaxis]
+    log_fraction_per_gene_per_cell = np.log2(fraction_per_gene_per_cell, out=fraction_per_gene_per_cell)
+
+    max_gap_per_cell = np.zeros(adata.n_obs, dtype="float32")
+
+    with ut.timed_step("extensions.compute_cell_gaps"):
+        extension = getattr(xt, "compute_cell_gaps")
+        extension(
+            log_fraction_per_gene_per_cell,
+            candidate_per_cell,
+            min_gap_per_gene,
+            candidates_count,
+            gap_skip_cells,
+            max_deviant_cells_count,
+            max_deviant_cells_fraction,
+            max_gap_per_cell,
+        )
+    ut.log_calc("max_gap_per_cell", max_gap_per_cell, formatter=ut.sizes_description)
+
+    gap_threshold = np.quantile(max_gap_per_cell, 1 - max_cell_fraction)
+    ut.log_calc("gap_threshold", gap_threshold)
+
+    deviant_cells_mask = max_gap_per_cell > gap_threshold
+    ut.log_return("deviant_cells_mask", deviant_cells_mask)
+
+    return deviant_cells_mask
+
+
+def _votes_deviant_cells(
+    adata: AnnData,
+    what: Union[str, ut.Matrix] = "__x__",
+    *,
+    candidates: Union[str, ut.Vector],
+    min_gene_fold_factor: float,
+    max_gene_fraction: float,
+    max_cell_fraction: float,
+) -> ut.Vector:
     assert min_gene_fold_factor > 0
     assert 0 < max_gene_fraction < 1
     assert 0 < max_cell_fraction < 1

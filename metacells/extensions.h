@@ -276,6 +276,14 @@ public:
         FastAssertCompareWhat(m_columns_count, <=, m_rows_offset, name);
     }
 
+    T operator()(size_t row_index, size_t column_index) const {
+        SlowAssertCompareWhat(0, <=, row_index, m_name);
+        SlowAssertCompareWhat(row_index, <, m_rows_count, m_name);
+        SlowAssertCompareWhat(0, <=, column_index, m_name);
+        SlowAssertCompareWhat(column_index, <, m_columns_count, m_name);
+        return m_data[row_index * m_rows_offset + column_index];
+    }
+
     ConstArraySlice<T> get_row(size_t row_index) const {
         FastAssertCompareWhat(0, <=, row_index, m_name);
         FastAssertCompareWhat(row_index, <, m_rows_count, m_name);
@@ -316,6 +324,14 @@ public:
             FastAssertCompareWhat(array.data(0, 1) - array.data(0, 0), ==, 1, name);
         }
         FastAssertCompareWhat(m_columns_count, <=, m_rows_offset, name);
+    }
+
+    T& operator()(size_t row_index, size_t column_index) {
+        SlowAssertCompareWhat(0, <=, row_index, m_name);
+        SlowAssertCompareWhat(row_index, <, m_rows_count, m_name);
+        SlowAssertCompareWhat(0, <=, column_index, m_name);
+        SlowAssertCompareWhat(column_index, <, m_columns_count, m_name);
+        return m_data[row_index * m_rows_offset + column_index];
     }
 
     ArraySlice<T> get_row(size_t row_index) const {
@@ -537,6 +553,8 @@ extern void
 register_downsample(pybind11::module& module);
 extern void
 register_folds(pybind11::module& module);
+extern void
+register_gaps(pybind11::module& module);
 extern void
 register_logistics(pybind11::module& module);
 extern void

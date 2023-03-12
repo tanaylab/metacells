@@ -97,8 +97,9 @@ def compute_direct_metacells(
     must_complete_cover: bool = False,
     deviants_policy: str = pr.deviants_policy,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
+    deviants_gap_skip_cells: int = pr.deviants_gap_skip_cells,
     deviants_min_noisy_gene_fold_factor: float = pr.deviants_min_noisy_gene_fold_factor,
-    deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
+    deviants_max_gene_fraction: float = pr.deviants_max_gene_fraction,
     deviants_max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
     dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
@@ -223,7 +224,9 @@ def compute_direct_metacells(
     8. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
        :py:func:`metacells.tools.deviants.find_deviant_cells` to remove deviants from the candidate
        metacells, using the
+       ``deviants_policy`` (default: {deviants_policy}),
        ``deviants_min_gene_fold_factor`` (default: {deviants_min_gene_fold_factor}),
+       ``deviants_gap_skip_cells`` (default: {deviants_gap_skip_cells}),
        ``deviants_min_noisy_gene_fold_factor`` (default: {deviants_min_noisy_gene_fold_factor}),
        ``deviants_max_gene_fraction`` (default: {deviants_max_gene_fraction})
        and
@@ -255,6 +258,8 @@ def compute_direct_metacells(
     )
 
     cell_sizes = ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
+    if cell_sizes is not None:
+        ut.log_calc("cell_sizes", cell_sizes, formatter=ut.sizes_description)
 
     data = ut.get_vo_proper(sdata, "downsampled", layout="row_major")
     data = ut.to_numpy_matrix(data, copy=True)
@@ -338,6 +343,7 @@ def compute_direct_metacells(
             candidates=candidate_of_cells,
             policy=deviants_policy,
             min_gene_fold_factor=deviants_min_gene_fold_factor,
+            gap_skip_cells=deviants_gap_skip_cells,
             min_noisy_gene_fold_factor=deviants_min_noisy_gene_fold_factor,
             max_gene_fraction=deviants_max_gene_fraction,
             max_cell_fraction=deviants_max_cell_fraction,

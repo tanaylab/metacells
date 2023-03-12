@@ -228,6 +228,7 @@ class DirectParameters:  # pylint: disable=too-many-instance-attributes
     candidates_min_cut_seed_cells: Optional[int]
     must_complete_cover: bool
     deviants_policy: str
+    deviants_gap_skip_cells: int
     deviants_min_gene_fold_factor: float
     deviants_min_noisy_gene_fold_factor: float
     deviants_max_gene_fraction: Optional[float]
@@ -410,6 +411,7 @@ def divide_and_conquer_pipeline(
     candidates_min_cut_seed_cells: int = pr.min_cut_seed_cells,
     must_complete_cover: bool = False,
     deviants_policy: str = pr.deviants_policy,
+    deviants_gap_skip_cells: int = pr.deviants_gap_skip_cells,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     deviants_min_noisy_gene_fold_factor: float = pr.deviants_min_noisy_gene_fold_factor,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
@@ -547,6 +549,7 @@ def divide_and_conquer_pipeline(
             candidates_min_cut_seed_cells=candidates_min_cut_seed_cells,
             must_complete_cover=must_complete_cover,
             deviants_policy=deviants_policy,
+            deviants_gap_skip_cells=deviants_gap_skip_cells,
             deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
             deviants_min_noisy_gene_fold_factor=deviants_min_noisy_gene_fold_factor,
             deviants_max_gene_fraction=deviants_max_gene_fraction,
@@ -692,6 +695,7 @@ def compute_divide_and_conquer_metacells(
     candidates_min_cut_seed_cells: int = pr.min_cut_seed_cells,
     must_complete_cover: bool = False,
     deviants_policy: str = pr.deviants_policy,
+    deviants_gap_skip_cells: int = pr.deviants_gap_skip_cells,
     deviants_min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
     deviants_min_noisy_gene_fold_factor: float = pr.deviants_min_noisy_gene_fold_factor,
     deviants_max_gene_fraction: Optional[float] = pr.deviants_max_gene_fraction,
@@ -837,6 +841,7 @@ def compute_divide_and_conquer_metacells(
             candidates_min_cut_seed_cells=candidates_min_cut_seed_cells,
             must_complete_cover=must_complete_cover,
             deviants_policy=deviants_policy,
+            deviants_gap_skip_cells=deviants_gap_skip_cells,
             deviants_min_gene_fold_factor=deviants_min_gene_fold_factor,
             deviants_min_noisy_gene_fold_factor=deviants_min_noisy_gene_fold_factor,
             deviants_max_gene_fraction=deviants_max_gene_fraction,
@@ -952,7 +957,7 @@ def _compute_divide_and_conquer_subset(
                 counts=counts,
                 metacells_level=metacells_level,
                 max_metacells_level=1000,
-                dac_parameters=must_cover_dac_parameters,
+                dac_parameters=dac_parameters,
             )
         return
 
