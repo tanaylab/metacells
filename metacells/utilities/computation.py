@@ -82,6 +82,7 @@ __all__ = [
     "scale_by",
     "fraction_by",
     "fraction_per",
+    "stdev_per",
     "variance_per",
     "normalized_variance_per",
     "relative_variance_per",
@@ -1493,6 +1494,22 @@ def fraction_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
 
 
 @utm.timed_call()
+def stdev_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
+    """
+    Get the standard deviantion ``per`` (``row`` or ``column``) of some ``matrix``.
+
+    If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
+    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
+    ``column``, and the matrix must be in the appropriate layout (``row_major`` operating on rows,
+    ``column_major`` for operating on columns).
+    """
+    per = _ensure_per_for("stdev", matrix, per)
+    result = variance_per(matrix, per=per)
+    np.sqrt(result, out=result)
+    return result
+
+
+@utm.timed_call()
 def variance_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     """
     Get the variance ``per`` (``row`` or ``column``) of some ``matrix``.
@@ -1511,6 +1528,7 @@ def variance_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     result /= -size
     result += sum_squared_per_element
     result /= size
+    result[result < 0] = 0
     return result
 
 

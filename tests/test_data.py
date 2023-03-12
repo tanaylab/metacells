@@ -80,10 +80,10 @@ def test_direct_pipeline() -> None:
 
         mc.pl.compute_for_mcview(adata=cdata, gdata=mdata, random_seed=123456)
 
-        expected_results = expected["inner_variance_fold"]
+        expected_results = expected["inner_stdev_log"]
 
         actual_results = np.mean(
-            mc.ut.to_numpy_matrix(mc.ut.get_vo_proper(mdata, "inner_variance_fold", layout="column_major"))
+            mc.ut.to_numpy_matrix(mc.ut.get_vo_proper(mdata, "inner_stdev_log", layout="column_major"))
         )
 
         # mc.ut.log_calc('PATH', path)

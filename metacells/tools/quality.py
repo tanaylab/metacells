@@ -17,7 +17,7 @@ import metacells.parameters as pr
 import metacells.utilities as ut
 
 __all__ = [
-    "compute_inner_variance_folds",
+    "compute_stdev_logs",
     "compute_projected_folds",
     "compute_similar_query_metacells",
     "compute_outliers_matches",
@@ -33,8 +33,7 @@ T = TypeVar("T")
 
 @ut.logged()
 @ut.timed_call()
-@ut.expand_doc()
-def compute_inner_variance_folds(
+def compute_stdev_logs(
     what: Union[str, ut.Matrix] = "__x__",
     *,
     min_gene_total: int = pr.quality_min_gene_total,
@@ -43,12 +42,10 @@ def compute_inner_variance_folds(
     group: Union[str, ut.Vector] = "metacell",
 ) -> None:
     """
-    Compute the inner normalized variance (variance / mean) for each gene in each metacell.
+    Compute the standard deviation of the log (base 2) of the fraction of each gene in the cells of the metacell.
 
-    This is also known as the "index of dispersion" and can serve as a quality measure for the groups. An ideal metacell
-    would contain only cells with "the same" biological state and all remaining inner variance would be due to technical
-    sampling noise, so the inner normalized variance should be 1. In practice we see higher values - the lower, the
-    better.
+    Ideally, the standard deviation should be ~1/3rd of the ``deviants_min_gene_fold_factor`` (which is ``3`` by
+    default), indicating that (all)most cells are within that maximal fold factor. In practice we may see higher values.
 
     **Input**
 
@@ -65,7 +62,7 @@ def compute_inner_variance_folds(
 
     Per-Variable Per-Observation (Gene-Cell) Annotations
 
-        ``inner_variance_fold``
+        ``inner_stdev_log``
             For each gene and metacell, the normalized variance (variance over mean) of the gene in the metacell,
             if it has a sufficient number of UMIs to make this meaningful (otherwise, is 0).
 
@@ -73,14 +70,9 @@ def compute_inner_variance_folds(
 
     For each metacell:
 
-    1. Compute the median number of UMIs for a cell in the metacell. Scale all the UMIs so that the total number per
-       cell is this median.
+    1. Compute the log (base 2) of the fractions of the UMIs of each gene in each cell, regularized by 1 UMI.
 
-    2. Compute the ratio between the variance of these normalized UMIs, and the expected number of UMIs if using
-       the metacells overall per-gene fractions.
-
-    3. Set the ratio to 1.0 for genes that do not have at least ``min_gene_total`` (default: {min_gene_total}) UMIs in
-       the metacell.
+    2. Compute the standard deviation of these logs for each gene across all cells of each metacell.
     """
     assert list(adata.var_names) == list(gdata.var_names)
 
@@ -88,25 +80,17 @@ def compute_inner_variance_folds(
     assert gdata.n_obs == np.max(metacell_of_cells) + 1
 
     umis_per_gene_per_cell = ut.get_vo_proper(adata, what, layout="row_major")
-    total_umis_per_metacell = ut.get_o_numpy(gdata, "total_umis")
-    fraction_per_gene_per_metacell = ut.to_numpy_matrix(ut.get_vo_proper(gdata, what, layout="row_major"), copy=True)
-    umis_per_gene_per_metacell = ut.to_numpy_matrix(
-        ut.get_vo_proper(gdata, "total_umis", layout="row_major"), copy=True
-    )
 
     @ut.timed_call()
-    def _single_metacell_inner_variance(metacell_index: int) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
-        return _compute_metacell_inner_variance(
+    def _single_metacell_stdev_log(metacell_index: int) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
+        return _compute_metacell_stdev_log(
             metacell_index=metacell_index,
             metacell_of_cells=metacell_of_cells,
             umis_per_gene_per_cell=umis_per_gene_per_cell,
-            fraction_per_gene_per_metacell=fraction_per_gene_per_metacell,
-            umis_per_gene_per_metacell=umis_per_gene_per_metacell,
-            total_umis_per_metacell=total_umis_per_metacell,
             min_gene_total=min_gene_total,
         )
 
-    results = list(ut.parallel_map(_single_metacell_inner_variance, gdata.n_obs))
+    results = list(ut.parallel_map(_single_metacell_stdev_log, gdata.n_obs))
     data = np.concatenate([metacell_fold_factors for _metacell_gene_indices, metacell_fold_factors in results])
     indices = np.concatenate([metacell_gene_indices for metacell_gene_indices, _metacell_fold_factors in results])
     indptr = np.array(
@@ -118,47 +102,40 @@ def compute_inner_variance_folds(
     assert indices.dtype == "int32"
     assert indptr.dtype == "int32"
 
-    fold_per_gene_per_metacell = sp.csr_matrix((data, indices, indptr), shape=gdata.shape)
-    ut.set_vo_data(gdata, "inner_variance_fold", sp.csr_matrix(fold_per_gene_per_metacell))
+    inner_stdev_log_per_gene_per_metacell = sp.csr_matrix((data, indices, indptr), shape=gdata.shape)
+    ut.set_vo_data(gdata, "inner_stdev_log", inner_stdev_log_per_gene_per_metacell)
 
 
 @ut.logged()
-def _compute_metacell_inner_variance(
+def _compute_metacell_stdev_log(
     *,
     metacell_index: int,
     metacell_of_cells: ut.NumpyVector,
     umis_per_gene_per_cell: ut.ProperMatrix,
-    fraction_per_gene_per_metacell: ut.NumpyMatrix,
-    umis_per_gene_per_metacell: ut.NumpyMatrix,
-    total_umis_per_metacell: ut.NumpyVector,
     min_gene_total: int,
 ) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
+    ut.log_calc("metacell_index", metacell_index)
     cell_indices = np.where(metacell_of_cells == metacell_index)[0]
+    umis_per_gene_per_cell_by_rows = ut.to_numpy_matrix(umis_per_gene_per_cell[cell_indices, :])
+    umis_per_gene_per_cell_by_columns = ut.to_layout(umis_per_gene_per_cell_by_rows, layout="column_major")
+    umis_per_gene = ut.sum_per(umis_per_gene_per_cell_by_columns, per="column")
+    genes_mask = umis_per_gene > min_gene_total
+    ut.log_calc("genes_mask", genes_mask)
+    genes_indices = np.where(genes_mask)[0].astype("int32")
+    if len(genes_indices) == 0:
+        return (genes_indices, genes_indices.astype("float32"))
 
-    umis_per_gene_per_cell = ut.to_numpy_matrix(umis_per_gene_per_cell[cell_indices, :])
-    total_umis_per_cell = ut.sum_per(umis_per_gene_per_cell, per="row")
-    median_total_umis = np.median(total_umis_per_cell)
+    regularized_umis_per_gene_per_cell = ut.to_layout(
+        umis_per_gene_per_cell_by_rows[:, genes_indices] + 1, layout="row_major"
+    )
+    fraction_per_gene_per_cell = ut.fraction_by(regularized_umis_per_gene_per_cell, by="row")
+    log_fraction_per_gene_per_cell = np.log2(fraction_per_gene_per_cell, out=fraction_per_gene_per_cell)  # type: ignore
+    log_fraction_per_gene_per_cell = ut.to_layout(log_fraction_per_gene_per_cell, layout="column_major")
+    stdev_per_gene = ut.stdev_per(log_fraction_per_gene_per_cell, per="column").astype("float32")
+    ut.log_calc("stdev_per_gene", stdev_per_gene, formatter=ut.sizes_description)
 
-    total_umis_per_cell[total_umis_per_cell == 0] = 1
-    scale_per_cell = median_total_umis / total_umis_per_cell
-    scaled_umis_per_gene_per_cell = ut.scale_by(umis_per_gene_per_cell, by="row", scale=scale_per_cell)
-    scaled_umis_per_gene_per_cell = ut.to_layout(scaled_umis_per_gene_per_cell, "column_major")
-    variance_per_gene_of_metacell = ut.variance_per(scaled_umis_per_gene_per_cell, per="column")
-
-    mean_per_gene_of_metacell = ut.to_numpy_vector(fraction_per_gene_per_metacell[metacell_index, :], copy=True)
-    mean_per_gene_of_metacell *= median_total_umis
-
-    mean_per_gene_of_metacell += 1
-    variance_per_gene_of_metacell += 1
-    fold_per_gene_of_metacell = np.log2(variance_per_gene_of_metacell) - np.log2(mean_per_gene_of_metacell)
-
-    umis_per_gene_of_metacell = umis_per_gene_per_metacell[metacell_index, :]
-    mask_per_gene_of_metacell = umis_per_gene_of_metacell < min_gene_total / total_umis_per_metacell[metacell_index]
-    fold_per_gene_of_metacell[mask_per_gene_of_metacell] = 0.0
-
-    gene_indices = np.where(fold_per_gene_of_metacell != 0)[0]
-    ut.log_calc("nnz_fold_genes_count", len(gene_indices))
-    return (gene_indices.astype("int32"), fold_per_gene_of_metacell[gene_indices].astype("float32"))
+    gene_indices = np.where(genes_mask)[0].astype("int32")
+    return (gene_indices, stdev_per_gene)
 
 
 @ut.logged()

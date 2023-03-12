@@ -931,7 +931,7 @@ spread_cover_fraction: float = 1 / 3.0
 spread_noise_fraction: float = 0.1
 
 #: The minimal total number of UMIs for a gene to compute meaningful quality statistics for it.
-#: See :py:func:`metacells.tools.quality.compute_inner_variance_folds`,
+#: See :py:func:`metacells.tools.quality.compute_stdev_logs`,
 #: :py:func:`metacells.tools.quality.compute_inner_folds`, and
 #: :py:func:`metacells.tools.quality.compute_outliers_fold_factors`.
 quality_min_gene_total: int = 40
@@ -1015,10 +1015,6 @@ min_marker_metacells_gene_range_fold_factor: float = 2.0
 #: computing metacell gene range folds. See
 #: :py:func:`metacells.tools.high.find_metacells_marker_genes`.
 metacells_gene_range_regularization: float = 1e-5
-
-#: The regularization factor to use after computing the normalized inner variance of metacell. See
-#: :py:func:`metacells.tools.quality.compute_inner_variance_folds`.
-normalized_inner_variance_gene_regularization: float = 1e-5
 
 #: The minimal maximal gene expression in metacells to be a "marker".
 #: See :py:func:`metacells.tools.high.find_metacells_marker_genes`.

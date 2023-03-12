@@ -40,7 +40,7 @@ def compute_for_mcview(
     compute_outliers_matches: Optional[Dict[str, Any]] = {},
     compute_deviant_folds: Optional[Dict[str, Any]] = {},
     compute_inner_folds: Optional[Dict[str, Any]] = {},
-    compute_inner_variance_folds: Optional[Dict[str, Any]] = {},
+    compute_stdev_logs: Optional[Dict[str, Any]] = {},
     compute_var_var_similarity: Optional[Dict[str, Any]] = dict(top=50, bottom=50),
 ) -> None:
     """
@@ -91,8 +91,8 @@ def compute_for_mcview(
     5. Compute for each gene for each metacell the maximal of the above using
        :py:func:`metacells.tools.quality.compute_inner_folds`.
 
-    6. Compute for each gene for each metacell the fold factor between its variance and mean using
-       :py:func:`metacells.tools.quality.compute_inner_variance_folds`.
+    6. Compute for each gene for each metacell the standard deviation of the log (base 2) of the fractions of each gene
+       across the cells of the metacell using :py:func:`metacells.tools.quality.compute_stdev_logs`.
 
     6. Compute the gene-gene (variable-variable) similarity matrix. Note by default this will use
        {compute_var_var_similarity} which aren't the normal defaults for ``compute_var_var_similarity``, in order to
@@ -126,8 +126,8 @@ def compute_for_mcview(
     if compute_inner_folds is not None:
         tl.compute_inner_folds(adata=adata, gdata=gdata, group=group)
 
-    if compute_inner_variance_folds is not None:
-        tl.compute_inner_variance_folds(what, adata=adata, gdata=gdata, group=group, **compute_inner_variance_folds)
+    if compute_stdev_logs is not None:
+        tl.compute_stdev_logs(what, adata=adata, gdata=gdata, group=group, **compute_stdev_logs)
 
     if compute_var_var_similarity is not None:
         tl.compute_var_var_similarity(gdata, what, **compute_var_var_similarity)
