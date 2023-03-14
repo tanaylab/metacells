@@ -447,6 +447,7 @@ def compute_deviant_folds(
 
     metacell_per_cell = ut.get_o_numpy(adata, group, formatter=ut.groups_description)
     combined_per_cell = metacell_per_cell.copy()
+    outliers_mask: Optional[ut.NumpyVector] = None
     if most_similar is not None:
         most_similar_per_cell = ut.get_o_numpy(adata, most_similar, formatter=ut.groups_description)
         outliers_mask = metacell_per_cell < 0
@@ -490,7 +491,7 @@ def _compute_cell_deviant_folds(
     fraction_per_gene_per_metacell: ut.Matrix,
     umis_per_gene_per_metacell: ut.Matrix,
     metacell_per_cell: ut.NumpyVector,
-    outliers_mask: ut.NumpyVector,
+    outliers_mask: Optional[ut.NumpyVector],
     min_gene_total: int,
 ) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
     actual_umis_per_gene = ut.to_numpy_vector(umis_per_gene_per_cell[cell_index, :], copy=True)
@@ -505,7 +506,7 @@ def _compute_cell_deviant_folds(
     fold_factors = np.log2(actual_umis_per_gene) - np.log2(expected_umis_per_gene)
 
     metacell_umis_per_gene = ut.to_numpy_vector(umis_per_gene_per_metacell[metacell_index, :])
-    if outliers_mask[cell_index]:
+    if outliers_mask is not None and outliers_mask[cell_index]:
         total_umis_per_gene = actual_umis_per_gene + metacell_umis_per_gene
     else:
         total_umis_per_gene = metacell_umis_per_gene
