@@ -168,7 +168,6 @@ min_split_size_factor: float = 2.0
 min_robust_size_factor: float = 0.5
 
 #: The generic maximal group size factor, below which we should merge it. See
-#: :py:const:`rare_min_modules_size_factor`,
 #: :py:const:`piles_max_merge_size_factor`,
 #: :py:const:`candidates_max_merge_size_factor`,
 #: and

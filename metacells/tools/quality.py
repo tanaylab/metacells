@@ -451,6 +451,7 @@ def compute_deviant_folds(
     if most_similar is not None:
         most_similar_per_cell = ut.get_o_numpy(adata, most_similar, formatter=ut.groups_description)
         outliers_mask = metacell_per_cell < 0
+        assert outliers_mask is not None
         assert np.all(most_similar_per_cell[outliers_mask] >= 0)
         assert np.all(most_similar_per_cell[~outliers_mask] < 0)
         combined_per_cell[outliers_mask] = most_similar_per_cell[outliers_mask]
