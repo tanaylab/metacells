@@ -399,7 +399,7 @@ def compute_deviant_folds(
     adata: AnnData,
     gdata: AnnData,
     group: Union[str, ut.Vector] = "metacell",
-    most_similar: Union[str, ut.Vector] = "most_similar",
+    most_similar: Union[str, ut.Vector, None] = "most_similar",
     min_gene_total: int = pr.quality_min_gene_total,
 ) -> None:
     """
@@ -446,12 +446,13 @@ def compute_deviant_folds(
     umis_per_gene_per_metacell = ut.get_vo_proper(gdata, "total_umis", layout="row_major")
 
     metacell_per_cell = ut.get_o_numpy(adata, group, formatter=ut.groups_description)
-    most_similar_per_cell = ut.get_o_numpy(adata, most_similar, formatter=ut.groups_description)
-    outliers_mask = metacell_per_cell < 0
-    assert np.all(most_similar_per_cell[outliers_mask] >= 0)
-    assert np.all(most_similar_per_cell[~outliers_mask] < 0)
     combined_per_cell = metacell_per_cell.copy()
-    combined_per_cell[outliers_mask] = most_similar_per_cell[outliers_mask]
+    if most_similar is not None:
+        most_similar_per_cell = ut.get_o_numpy(adata, most_similar, formatter=ut.groups_description)
+        outliers_mask = metacell_per_cell < 0
+        assert np.all(most_similar_per_cell[outliers_mask] >= 0)
+        assert np.all(most_similar_per_cell[~outliers_mask] < 0)
+        combined_per_cell[outliers_mask] = most_similar_per_cell[outliers_mask]
 
     @ut.timed_call()
     def _single_cell_deviant_folds(cell_index: int) -> Tuple[ut.NumpyVector, ut.NumpyVector]:

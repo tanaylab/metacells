@@ -361,7 +361,6 @@ def divide_and_conquer_pipeline(
     rare_genes_cluster_method: str = pr.rare_genes_cluster_method,
     rare_min_genes_of_modules: int = pr.rare_min_genes_of_modules,
     rare_min_cells_of_modules: int = pr.rare_min_cells_of_modules,
-    rare_min_modules_size_factor: float = pr.rare_min_modules_size_factor,
     rare_min_module_correlation: float = pr.rare_min_module_correlation,
     rare_min_related_gene_fold_factor: float = pr.rare_min_related_gene_fold_factor,
     rare_max_related_gene_increase_factor: float = pr.rare_max_related_gene_increase_factor,
@@ -480,7 +479,6 @@ def divide_and_conquer_pipeline(
        ``rare_genes_cluster_method`` (default: {rare_genes_cluster_method}),
        ``rare_min_genes_of_modules`` (default: {rare_min_genes_of_modules}),
        ``rare_min_cells_of_modules`` (default: {rare_min_cells_of_modules}),
-       ``rare_min_modules_size_factor`` (default: {rare_min_modules_size_factor}),
        ``rare_min_module_correlation`` (default: {rare_min_module_correlation}),
        ``rare_min_related_gene_fold_factor`` (default: {rare_min_related_gene_fold_factor})
        ``rare_max_related_gene_increase_factor`` (default: {rare_max_related_gene_increase_factor})
@@ -586,7 +584,6 @@ def divide_and_conquer_pipeline(
             min_genes_of_modules=rare_min_genes_of_modules,
             min_cells_of_modules=rare_min_cells_of_modules,
             target_metacell_size=target_metacell_size,
-            min_modules_size_factor=rare_min_modules_size_factor,
             min_module_correlation=rare_min_module_correlation,
             min_related_gene_fold_factor=rare_min_related_gene_fold_factor,
             max_related_gene_increase_factor=rare_max_related_gene_increase_factor,

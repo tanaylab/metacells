@@ -41,7 +41,6 @@ def find_rare_gene_modules(
     target_pile_size: int = pr.min_target_pile_size,
     max_cells_factor_of_random_pile: float = pr.rare_max_cells_factor_of_random_pile,
     target_metacell_size: float = pr.target_metacell_size,
-    min_modules_size_factor: float = pr.rare_min_modules_size_factor,
     min_module_correlation: float = pr.rare_min_module_correlation,
     min_related_gene_fold_factor: float = pr.rare_min_related_gene_fold_factor,
     max_related_gene_increase_factor: float = pr.rare_max_related_gene_increase_factor,
@@ -115,7 +114,7 @@ def find_rare_gene_modules(
        such cells in each random pile of size ``target_pile_size`` (default: {target_pile_size}), whose total number of
        UMIs of the rare gene module is at least ``min_cell_module_total`` (default: {min_cell_module_total}), is more
        than the ``max_cells_factor_of_random_pile`` (default: {max_cells_factor_of_random_pile}) as a fraction of the
-       mean metacells size, then discard the rare gene module as not that rare after all.
+       target metacells size, then discard the rare gene module as not that rare after all.
 
     6. Add to the gene module all genes whose fraction in cells expressing any of the genes in the
        rare gene module is at least 2^``min_related_gene_fold_factor`` (default:
@@ -130,21 +129,11 @@ def find_rare_gene_modules(
        (default: {min_cell_module_total}) UMIs of the expanded rare gene module. If a cell meets the
        above threshold for several rare gene modules, it is associated with the one for which it
        contains more UMIs.
-
-    8. Discard modules which have less than ``min_cells_of_modules`` (default:
-       {min_cells_of_modules}) cells or whose total UMIs are less than the ``target_metacell_size``
-       (default: {target_metacell_size}) times the ``min_modules_size_factor`` (default:
-       {min_modules_size_factor}).
     """
     assert min_cells_of_modules > 0
     assert min_genes_of_modules > 0
 
-    umis_per_gene = ut.get_v_numpy(adata, what, sum=True)
-    total_umis = np.sum(umis_per_gene)
-    mean_umis_per_cell = total_umis / adata.n_obs
-    mean_metacells_size = target_metacell_size / mean_umis_per_cell
-    ut.log_calc("mean_metacells_size", mean_metacells_size)
-    max_cells_of_random_pile = mean_metacells_size * max_cells_factor_of_random_pile
+    max_cells_of_random_pile = target_metacell_size * max_cells_factor_of_random_pile
     ut.log_calc("max_cells_of_random_pile", max_cells_of_random_pile)
 
     allowed_genes_mask = np.full(adata.n_vars, True, dtype="bool")
@@ -220,11 +209,8 @@ def find_rare_gene_modules(
 
     list_of_rare_gene_indices_of_modules = _compress_modules(
         adata_of_all_genes_of_all_cells=adata,
-        what=what,
         min_cells_of_modules=min_cells_of_modules,
         max_cells_of_modules=max_cells_of_modules,
-        target_metacell_size=target_metacell_size,
-        min_modules_size_factor=min_modules_size_factor,
         related_gene_indices_of_modules=related_gene_indices_of_modules,
         rare_module_of_cells=rare_module_of_cells,
     )
@@ -573,21 +559,13 @@ def _identify_cells(
 def _compress_modules(
     *,
     adata_of_all_genes_of_all_cells: AnnData,
-    what: Union[str, ut.Matrix] = "__x__",
     min_cells_of_modules: int,
     max_cells_of_modules: int,
-    target_metacell_size: float,
-    min_modules_size_factor: float,
     related_gene_indices_of_modules: List[List[int]],
     rare_module_of_cells: ut.NumpyVector,
 ) -> List[List[int]]:
     list_of_rare_gene_indices_of_modules: List[List[int]] = []
     list_of_names_of_genes_of_modules: List[List[str]] = []
-
-    min_umis_of_modules = target_metacell_size * min_modules_size_factor
-    ut.log_calc("min_umis_of_modules", min_umis_of_modules)
-
-    total_all_genes_of_all_cells = ut.get_o_numpy(adata_of_all_genes_of_all_cells, what, sum=True)
 
     cell_counts_of_modules: List[int] = []
 
@@ -604,7 +582,6 @@ def _compress_modules(
         ):
             module_cells_mask = rare_module_of_cells == module_index
             module_cells_count = np.sum(module_cells_mask)
-            module_umis_count = np.sum(total_all_genes_of_all_cells[module_cells_mask])
 
             if module_cells_count < min_cells_of_modules:
                 if ut.logging_calc():
@@ -619,14 +596,6 @@ def _compress_modules(
                 continue
 
             ut.log_calc("cells", module_cells_count)
-
-            if module_umis_count < min_umis_of_modules:
-                if ut.logging_calc():
-                    ut.log_calc("UMIs", str(module_umis_count) + " (too few)")
-                rare_module_of_cells[module_cells_mask] = -1
-                continue
-
-            ut.log_calc("UMIs", module_umis_count)
 
             next_module_index = len(list_of_rare_gene_indices_of_modules)
             if module_index != next_module_index:

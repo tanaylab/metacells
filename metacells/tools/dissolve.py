@@ -88,8 +88,10 @@ def dissolve_metacells(
     deviant_of_cells = ut.maybe_o_numpy(adata, deviants, formatter=ut.mask_description)
     if deviant_of_cells is not None:
         deviant_of_cells = deviant_of_cells > 0
-    cell_sizes = ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
-    ut.log_calc("cell_sizes", cell_sizes, formatter=ut.sizes_description)
+
+    if cell_sizes is not None:
+        cell_sizes = ut.get_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
+        ut.log_calc("cell_sizes", cell_sizes, formatter=ut.sizes_description)
 
     if deviant_of_cells is not None:
         candidate_of_cells[deviant_of_cells > 0] = -1

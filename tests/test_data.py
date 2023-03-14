@@ -56,7 +56,6 @@ def test_find_rare_gene_modules() -> None:
             actual_rare_gene_modules.append(sorted(adata.var_names[rare_gene_modules == module_index]))
 
         expected_rare_gene_modules = expected["rare_gene_modules"]
-
         assert actual_rare_gene_modules == expected_rare_gene_modules
 
 

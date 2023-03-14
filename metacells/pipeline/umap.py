@@ -107,8 +107,7 @@ def compute_knn_by_markers(
         assert marker_genes_series is not None
         marker_genes_mask = ut.to_numpy_vector(marker_genes_series)
 
-    all_data = ut.get_vo_proper(adata, what, layout="row_major")
-    all_fractions = ut.fraction_by(all_data, by="row")
+    all_fractions = ut.get_vo_proper(adata, what, layout="row_major")
 
     index_per_marker_gene = np.where(marker_genes_mask)[0]
     fraction_per_metacell_per_marker_gene = ut.to_numpy_matrix(all_fractions[:, index_per_marker_gene])

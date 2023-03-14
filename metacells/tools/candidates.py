@@ -133,10 +133,10 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
     assert incoming_edge_weights.indices.dtype == "int32"
     assert incoming_edge_weights.indptr.dtype == "int32"
 
-    cell_sizes = ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
     if cell_sizes is None:
         node_sizes = np.full(size, 1.0, dtype="float32")
     else:
+        cell_sizes = ut.get_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
         node_sizes = cell_sizes.astype("float32")
     ut.log_calc("node_sizes", node_sizes, formatter=ut.sizes_description)
 

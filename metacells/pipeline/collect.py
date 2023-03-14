@@ -288,16 +288,3 @@ def _obs_names(prefix: str, name_of_members: ut.NumpyVector, group_of_members: u
         checksum = int(hasher.hexdigest(16), 16) % 100  # pylint: disable=too-many-function-args
         name_of_groups.append(f"{prefix}{group_index}.{checksum:02d}")
     return name_of_groups
-
-
-def _metacell_sizes(
-    cell_sizes: ut.NumpyVector,
-    metacell_of_cells: ut.NumpyVector,
-) -> ut.NumpyVector:
-    metacells_count = np.max(metacell_of_cells) + 1
-    metacell_sizes = np.empty(metacells_count, dtype="float32")
-
-    for metacell_index in range(metacells_count):
-        metacell_sizes[metacell_index] = np.sum(cell_sizes[metacell_of_cells == metacell_index])
-
-    return metacell_sizes
