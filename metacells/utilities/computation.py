@@ -713,10 +713,10 @@ def log_data(  # pylint: disable=too-many-branches
     if base is None:
         log_function = np.log
     elif base == 2:
-        log_function = np.log2
+        log_function = np.log2  # type: ignore
         base = None
     elif base == 10:
-        log_function = np.log10
+        log_function = np.log10  # type: ignore
         base = None
     else:
         assert base > 0
@@ -1851,7 +1851,7 @@ def sliding_window_function(
     utm.timed_parameters(function=function, size=dense.size, window=window_size)
 
     if window_size >= len(vector):
-        value = FULL_FUNCTIONS[function](vector)
+        value = FULL_FUNCTIONS[function](vector)  # type: ignore
         return np.full(len(vector), value)
 
     if order_by is not None:
@@ -2447,7 +2447,7 @@ def sparsify_matrix(
     if abs_values:
         comparable = np.abs(full)  # type: ignore
     else:
-        comparable = full
+        comparable = full  # type: ignore
 
     max_per_column = max_per(comparable, per="column")
     low_columns = max_per_column < min_column_max_value

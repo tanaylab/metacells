@@ -92,7 +92,8 @@ def umap_by_distances(
     except ValueError:
         # UMAP implementation doesn't know how to handle too few edges.
         # However, it considers structural zeros as real edges.
-        distances_matrix = distances_matrix + 1.0  # type: ignore
+        distances_matrix = ut.to_numpy_matrix(distances_matrix, copy=True)
+        distances_matrix += 1.0
         np.fill_diagonal(distances_matrix, 0.0)
         distances_csr = sp.csr_matrix(distances_matrix)
         distances_csr.data -= 1.0

@@ -764,39 +764,72 @@ def _correct_correlated_genes(
         ut.get_vo_proper(common_qdata, "projected_fraction", layout="column_major")
     )
 
-    correlation_per_gene = np.full(common_qdata.n_vars, -2, dtype="float32")
-    correlation_per_gene[preliminary_fitted_genes_mask] = ut.pairs_corrcoef_rows(
-        corrected_fractions_per_gene_per_metacell[:, preliminary_fitted_genes_mask].transpose(),
-        projected_fractions_per_gene_per_metacell[:, preliminary_fitted_genes_mask].transpose(),
+    preliminary_fitted_genes_indices = np.where(preliminary_fitted_genes_mask)[0]
+    corrected_fractions_per_fitted_gene_per_metacell = corrected_fractions_per_gene_per_metacell[
+        :, preliminary_fitted_genes_indices
+    ]
+    projected_fractions_per_fitted_gene_per_metacell = projected_fractions_per_gene_per_metacell[
+        :, preliminary_fitted_genes_indices
+    ]
+
+    correlation_per_fitted_gene = np.full(len(preliminary_fitted_genes_indices), -2, dtype="float32")
+    correlation_per_fitted_gene = ut.pairs_corrcoef_rows(
+        corrected_fractions_per_fitted_gene_per_metacell.transpose(),
+        projected_fractions_per_fitted_gene_per_metacell.transpose(),
         reproducible=reproducible,
     )
 
-    correlated_genes_mask = correlation_per_gene >= project_min_corrected_gene_correlation
-    ut.log_calc("correlated_genes_mask", correlated_genes_mask)
-    if not np.any(correlated_genes_mask):
+    correlated_fitted_genes_mask = correlation_per_fitted_gene >= project_min_corrected_gene_correlation
+    ut.log_calc("correlated_fitted_genes_mask", correlated_fitted_genes_mask)
+    if not np.any(correlated_fitted_genes_mask):
         return False
 
-    total_corrected_fractions_per_gene = ut.sum_per(corrected_fractions_per_gene_per_metacell, per="row")
-    total_projected_fractions_per_gene = ut.sum_per(projected_fractions_per_gene_per_metacell, per="row")
-    current_correction_factor_per_gene = total_projected_fractions_per_gene / total_corrected_fractions_per_gene
+    total_corrected_fractions_per_fitted_gene = ut.sum_per(
+        corrected_fractions_per_fitted_gene_per_metacell, per="column"
+    )
+    total_projected_fractions_per_fitted_gene = ut.sum_per(
+        projected_fractions_per_fitted_gene_per_metacell, per="column"
+    )
+
+    zero_fitted_genes_mask = (total_projected_fractions_per_fitted_gene == 0) | (
+        total_corrected_fractions_per_fitted_gene == 0
+    )
+    ut.log_calc("zero_fitted_genes_mask", zero_fitted_genes_mask)
+    total_corrected_fractions_per_fitted_gene[zero_fitted_genes_mask] = 1.0
+    total_projected_fractions_per_fitted_gene[zero_fitted_genes_mask] = 1.0
+
+    current_correction_factor_per_fitted_gene = (
+        total_projected_fractions_per_fitted_gene / total_corrected_fractions_per_fitted_gene
+    )
 
     high_factor = 1 + project_min_corrected_gene_factor
     low_factor = 1.0 / high_factor
-    corrected_genes_mask = correlated_genes_mask & (
-        (current_correction_factor_per_gene <= low_factor) | (current_correction_factor_per_gene >= high_factor)
+    factor_fitted_genes_mask = (current_correction_factor_per_fitted_gene <= low_factor) | (
+        current_correction_factor_per_fitted_gene >= high_factor
     )
-
-    ut.log_calc("corrected_genes_mask", corrected_genes_mask)
-    if not np.any(corrected_genes_mask):
+    factor_genes_mask = np.zeros(common_adata.n_vars, dtype="bool")
+    factor_genes_mask[preliminary_fitted_genes_indices] = factor_fitted_genes_mask
+    ut.log_calc("factor_fitted_genes_mask", factor_fitted_genes_mask)
+    if not np.any(factor_fitted_genes_mask):
         return False
 
-    correction_factor_per_corrected_gene = current_correction_factor_per_gene[corrected_genes_mask]
+    corrected_fitted_genes_mask = correlated_fitted_genes_mask & factor_fitted_genes_mask
+    ut.log_calc("corrected_fitted_genes_mask", corrected_fitted_genes_mask)
+    if not np.any(corrected_fitted_genes_mask):
+        return False
+
+    corrected_genes_mask = np.zeros(common_adata.n_vars, dtype="bool")
+    corrected_genes_mask[preliminary_fitted_genes_indices] = corrected_fitted_genes_mask
+    ut.log_calc("corrected_genes_mask", corrected_genes_mask)
+
+    correction_factor_per_corrected_gene = current_correction_factor_per_fitted_gene[corrected_fitted_genes_mask]
     correction_factor_per_gene[corrected_genes_mask] *= correction_factor_per_corrected_gene
+
     corrected_fractions_per_gene_per_metacell[:, corrected_genes_mask] *= correction_factor_per_corrected_gene[
         np.newaxis, :
     ]
     corrected_fractions_per_gene_per_metacell = ut.fraction_by(  # type: ignore
-        corrected_fractions_per_gene_per_metacell, by="row"
+        ut.to_layout(corrected_fractions_per_gene_per_metacell, layout="row_major"), by="row"
     )
     ut.set_vo_data(common_qdata, "corrected_fraction", sp.csr_matrix(corrected_fractions_per_gene_per_metacell))
 

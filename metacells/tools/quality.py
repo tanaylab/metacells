@@ -271,7 +271,7 @@ def compute_similar_query_metacells(
             projected_fold_per_gene_per_metacell > max_projection_fold_factor_per_gene[np.newaxis, :]
         )
     else:
-        misfit_per_gene_per_metacell = projected_fold_per_gene_per_metacell > max_projection_fold_factor  # type: ignore
+        misfit_per_gene_per_metacell = projected_fold_per_gene_per_metacell > max_projection_fold_factor
     ut.set_vo_data(qdata, "misfit", sp.csr_matrix(misfit_per_gene_per_metacell))
 
     if fitted_genes_mask is None:
