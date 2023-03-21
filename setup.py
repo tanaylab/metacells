@@ -3,6 +3,7 @@
 import os
 import platform
 from setuptools import Extension, setup, find_packages
+from glob import glob
 
 if os.name == "nt":
     raise NotImplementedError(
@@ -37,6 +38,8 @@ with open("HISTORY.rst") as history_file:
 requirements = open("requirements.txt").read().split()
 test_requirements = open("requirements_test.txt").read().split()
 dev_requirements = open("requirements_dev.txt").read().split()
+
+packages = ['metacells'] + [sub_dir for sub_dir in glob('metacells/*') if '.' not in sub_dir and '__' not in sub_dir]
 
 setup(
     author="Oren Ben-Kiki",
@@ -94,7 +97,7 @@ setup(
     include_package_data=True,
     keywords="metacells",
     name="metacells",
-    packages=find_packages(include=["metacells"]),
+    packages=packages,
     test_suite="tests",
     tests_require=test_requirements,
     extras_require={"dev": dev_requirements},

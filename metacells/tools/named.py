@@ -28,12 +28,16 @@ def find_named_genes(
     patterns: Optional[Collection[Union[str, Pattern]]] = None,
     to: Optional[str] = None,
     invert: bool = False,
+    op: str = "set",  # pylint: disable=invalid-name
 ) -> Optional[ut.PandasSeries]:
     """
     Find genes by their (case-insensitive) name.
 
-    This creates a mask of all the genes whose name appears in ``names`` or matches any of the ``patterns``. If
+    This computes a mask of all the genes whose name appears in ``names`` or matches any of the ``patterns``. If
     ``invert`` (default: {invert}), invert the resulting mask.
+
+    Depending on ``op``, this will ``set`` a (compute a brand new) mask, ``add`` the result to a mask (which must
+    exist), or ``remove`` genes from a mask (which must exist).
 
     If ``to`` (default: {to}) is specified, this is stored as a per-variable (gene) annotation with that name, and
     returns ``None``. This is useful to fill gene masks such as ``excluded_genes`` (genes which should be excluded from
@@ -42,6 +46,13 @@ def find_named_genes(
 
     Otherwise, it returns it as a pandas series (indexed by the variable, that is gene, names).
     """
+    assert op in ("set", "add", "remove")
+    if op in ("add", "remove"):
+        assert to is not None
+        base_mask = ut.get_v_numpy(adata, to)
+    else:
+        base_mask = np.zeros(adata.n_vars, dtype="bool")
+
     if names is None or len(names) == 0:
         names_mask = np.zeros(adata.n_vars, dtype="bool")
     else:
@@ -58,9 +69,17 @@ def find_named_genes(
     if invert:
         genes_mask = ~genes_mask
 
+    if op == "add":
+        result_mask = base_mask | genes_mask
+    elif op == "remove":
+        result_mask = base_mask & ~genes_mask
+    else:
+        assert op == "set"
+        result_mask = genes_mask
+
     if to is not None:
-        ut.set_v_data(adata, to, genes_mask)
+        ut.set_v_data(adata, to, result_mask)
         return None
 
-    ut.log_return("named_genes", genes_mask)
-    return ut.to_pandas_series(genes_mask, index=adata.var_names)
+    ut.log_return("named_genes", result_mask)
+    return ut.to_pandas_series(result_mask, index=adata.var_names)

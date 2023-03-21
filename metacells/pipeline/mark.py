@@ -37,6 +37,7 @@ def mark_lateral_genes(
     *,
     lateral_gene_names: Optional[Collection[str]] = None,
     lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    op: str = "set",  # pylint: disable=invalid-name
 ) -> None:
     """
     Mark a subset of the genes as "lateral", that is, prevent them from being selected for computing metacells.
@@ -44,7 +45,8 @@ def mark_lateral_genes(
     Lateral genes are still used to detect outliers, that is, the cells in resulting metacells should still have
     similar expression level for such genes.
 
-    You can also just manually set the ``lateral_gene`` mask, or further manipulate it after calling this function.
+    Depending on ``op``, this will either ``set`` (override/create) the mask, ``add`` (to an existing mask), or
+    ``remove`` (from an existing mask).
 
     **Input**
 
@@ -61,10 +63,10 @@ def mark_lateral_genes(
     **Computation Parameters**
 
     1. Invoke :py:func:`metacells.tools.named.find_named_genes` to also mark lateral genes based on their name, using
-       the ``lateral_gene_names`` (default: {lateral_gene_names}) and ``lateral_gene_patterns`` (default:
-       {lateral_gene_patterns}).
+       the ``lateral_gene_names`` (default: {lateral_gene_names}), ``lateral_gene_patterns`` (default:
+       {lateral_gene_patterns}) and ``op`` (default: {op}).
     """
-    tl.find_named_genes(adata, names=lateral_gene_names, patterns=lateral_gene_patterns, to="lateral_gene")
+    tl.find_named_genes(adata, names=lateral_gene_names, patterns=lateral_gene_patterns, to="lateral_gene", op=op)
 
 
 @ut.logged()
@@ -75,12 +77,14 @@ def mark_noisy_genes(
     *,
     noisy_gene_names: Optional[Collection[str]] = None,
     noisy_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    op: str = "set",  # pylint: disable=invalid-name
 ) -> None:
     """
     Mark a subset of the genes as "noisy", that is, prevent them from both being selected for computing metacells and
     for detecting deviant (outlier) cells.
 
-    You can also just manually set the ``noisy_gene`` mask, or further manipulate it after calling this function.
+    Depending on ``op``, this will either ``set`` (override/create) the mask, ``add`` (to an existing mask), or
+    ``remove`` (from an existing mask).
 
     **Input**
 
@@ -97,10 +101,10 @@ def mark_noisy_genes(
     **Computation Parameters**
 
     1. Invoke :py:func:`metacells.tools.named.find_named_genes` to also mark noisy genes based on their name, using
-       the ``noisy_gene_names`` (default: {noisy_gene_names}) and ``noisy_gene_patterns`` (default:
-       {noisy_gene_patterns}).
+       the ``noisy_gene_names`` (default: {noisy_gene_names}), ``noisy_gene_patterns`` (default:
+       {noisy_gene_patterns}) and ``op`` (default: {op}).
     """
-    tl.find_named_genes(adata, names=noisy_gene_names, patterns=noisy_gene_patterns, to="noisy_gene")
+    tl.find_named_genes(adata, names=noisy_gene_names, patterns=noisy_gene_patterns, to="noisy_gene", op=op)
 
 
 @ut.logged()
@@ -111,6 +115,7 @@ def mark_select_genes(
     *,
     select_gene_names: Optional[Collection[str]] = None,
     select_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    op: str = "set",  # pylint: disable=invalid-name
 ) -> None:
     """
     Mark a subset of the genes as "select", that is, force them to be used when computing metacell.
@@ -119,7 +124,8 @@ def mark_select_genes(
     genes. In general, this will result in lower-quality metacells, especially when using the divide-and-conquer
     algorithm, so **do not use this unless you really know what you are doing**.
 
-    You can also just manually set the ``select_gene`` mask, or further manipulate it after calling this function.
+    Depending on ``op``, this will either ``set`` (override/create) the mask, ``add`` (to an existing mask), or
+    ``remove`` (from an existing mask).
 
     **Input**
 
@@ -136,10 +142,10 @@ def mark_select_genes(
     **Computation Parameters**
 
     1. Invoke :py:func:`metacells.tools.named.find_named_genes` to select genes based on their name, using
-       the ``select_gene_names`` (default: {select_gene_names}) and ``select_gene_patterns`` (default:
-       {select_gene_patterns}).
+       the ``select_gene_names`` (default: {select_gene_names}), ``select_gene_patterns`` (default:
+       {select_gene_patterns}) and ``op`` (default: {op}).
     """
-    tl.find_named_genes(adata, names=select_gene_names, patterns=select_gene_patterns, to="select_gene")
+    tl.find_named_genes(adata, names=select_gene_names, patterns=select_gene_patterns, to="select_gene", op=op)
 
 
 @ut.logged()
@@ -152,13 +158,14 @@ def mark_ignored_genes(
     ignored_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     ignored_gene_names_of_types: Optional[Dict[str, Collection[str]]] = None,
     ignored_gene_patterns_of_types: Optional[Dict[str, Collection[str]]] = None,
+    op: str = "set",  # pylint: disable=invalid-name
 ) -> None:
     """
     Mark a subset of the genes as "ignored", that is, do not attempt to match them when projecting this (query)
     data onto an atlas.
 
-    You can also just manually set the ``ignored_gene`` and/or ``ignored_gene_of_<type>`` masks, or further manipulate
-    them after calling this function.
+    Depending on ``op``, this will either ``set`` (override/create) the mask(s), ``add`` (to an existing mask(s)), or
+    ``remove`` (from an existing mask(s)).
 
     **Input**
 
@@ -178,12 +185,12 @@ def mark_ignored_genes(
     **Computation Parameters**
 
     1. Invoke :py:func:`metacells.tools.named.find_named_genes` to ignore genes based on their name, using
-       the ``ignored_gene_names`` (default: {ignored_gene_names}) and ``ignored_gene_patterns`` (default:
-       {ignored_gene_patterns}).
+       the ``ignored_gene_names`` (default: {ignored_gene_names}), ``ignored_gene_patterns`` (default:
+       {ignored_gene_patterns}) and ``op`` (default: {op}).
 
     2. Similarly for each type specified in ``ignored_gene_names_of_types`` and/or ``ignored_gene_patterns_of_types``.
     """
-    tl.find_named_genes(adata, names=ignored_gene_names, patterns=ignored_gene_patterns, to="ignored_gene")
+    tl.find_named_genes(adata, names=ignored_gene_names, patterns=ignored_gene_patterns, to="ignored_gene", op=op)
 
     ignored_gene_names_of_types = ignored_gene_names_of_types or {}
     ignored_gene_patterns_of_types = ignored_gene_patterns_of_types or {}
@@ -195,4 +202,5 @@ def mark_ignored_genes(
             names=ignored_gene_names_of_types.get(type_name),
             patterns=ignored_gene_patterns_of_types.get(type_name),
             to=f"ignored_gene_of_{type_name}",
+            op=op,
         )
