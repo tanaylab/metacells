@@ -246,11 +246,13 @@ def _gaps_deviant_cells(
     candidate_per_cell = ut.get_o_numpy(adata, candidates, formatter=ut.groups_description).astype("int32")
     candidates_count = np.max(candidate_per_cell) + 1
 
-    umis_per_gene_per_cell = ut.to_numpy_matrix(ut.get_vo_proper(adata, what, layout="row_major"))
+    umis_per_gene_per_cell = ut.to_numpy_matrix(ut.get_vo_proper(adata, what, layout="row_major"), copy=True)
     total_umis_per_cell = ut.get_o_numpy(adata, what, sum=True).copy()
-    regularization_per_cell = np.reciprocal(total_umis_per_cell, out=total_umis_per_cell)
-    fraction_per_gene_per_cell = ut.mustbe_numpy_matrix(ut.fraction_by(umis_per_gene_per_cell, by="row"))
-    fraction_per_gene_per_cell += regularization_per_cell[:, np.newaxis]
+
+    umis_per_gene_per_cell += 1
+    total_umis_per_cell += 1
+
+    fraction_per_gene_per_cell = umis_per_gene_per_cell / total_umis_per_cell[:, np.newaxis]
     log_fraction_per_gene_per_cell = np.log2(fraction_per_gene_per_cell, out=fraction_per_gene_per_cell)
 
     max_gap_per_cell = np.zeros(adata.n_obs, dtype="float32")
