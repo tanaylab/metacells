@@ -34,12 +34,14 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
     *,
     candidates: Union[str, ut.Vector] = "candidate",
     min_gene_fold_factor: float = pr.deviants_min_gene_fold_factor,
+    min_compare_umis: int = pr.deviants_min_compare_umis,
     gap_skip_cells: int = pr.deviants_gap_skip_cells,
     min_noisy_gene_fold_factor: float = pr.deviants_min_noisy_gene_fold_factor,
     max_gene_fraction: float = pr.deviants_max_gene_fraction,
     max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
     max_deviant_cells_count: int = pr.max_deviant_cells_count,
     max_deviant_cells_fraction: float = pr.max_deviant_cells_fraction,
+    cells_regularization_quantile: float = pr.deviant_cells_regularization_quantile,
     policy: str = pr.deviants_policy,
 ) -> ut.Vector:
     """
@@ -119,6 +121,8 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
             max_deviant_cells_count=max_deviant_cells_count,
             max_deviant_cells_fraction=max_deviant_cells_fraction,
             max_cell_fraction=max_cell_fraction or 1.0,
+            cells_regularization_quantile=cells_regularization_quantile,
+            min_compare_umis=min_compare_umis,
         )
 
     cells_count, genes_count = adata.shape
@@ -223,7 +227,7 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
     return deviant_cells_mask
 
 
-def _gaps_deviant_cells(
+def _gaps_deviant_cells(  # pylint: disable=too-many-statements
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
@@ -234,11 +238,15 @@ def _gaps_deviant_cells(
     max_cell_fraction: float,
     max_deviant_cells_count: int,
     max_deviant_cells_fraction: float,
+    cells_regularization_quantile: float,
+    min_compare_umis: int,
 ) -> ut.Vector:
     assert min_gene_fold_factor > 0
     assert 0 < max_cell_fraction < 1
+    cells_count = adata.n_obs
+    genes_count = adata.n_vars
 
-    min_gap_per_gene = np.full(adata.n_vars, min_gene_fold_factor, dtype="float32")
+    min_gap_per_gene = np.full(genes_count, min_gene_fold_factor, dtype="float32")
     if ut.has_data(adata, "noisy_gene"):
         noisy_genes_mask = ut.get_v_numpy(adata, "noisy_gene")
         min_gap_per_gene[noisy_genes_mask] += min_noisy_gene_fold_factor
@@ -246,38 +254,93 @@ def _gaps_deviant_cells(
     candidate_per_cell = ut.get_o_numpy(adata, candidates, formatter=ut.groups_description).astype("int32")
     candidates_count = np.max(candidate_per_cell) + 1
 
-    umis_per_gene_per_cell = ut.to_numpy_matrix(ut.get_vo_proper(adata, what, layout="row_major"), copy=True)
+    umis_per_gene_per_cell = ut.to_numpy_matrix(ut.get_vo_proper(adata, what, layout="row_major"), copy=True).astype(
+        "float32"
+    )
+
+    regularization_per_cell = np.empty(cells_count, dtype="float32")
+    max_gap_per_cell = np.empty(cells_count, dtype="float32")
+    new_deviant_per_cell = np.empty(cells_count, dtype="bool")
+    deviant_per_cell = np.empty(cells_count, dtype="bool")
+
     total_umis_per_cell = ut.get_o_numpy(adata, what, sum=True).copy()
-
-    umis_per_gene_per_cell += 1
-    total_umis_per_cell += 1
-
     fraction_per_gene_per_cell = umis_per_gene_per_cell / total_umis_per_cell[:, np.newaxis]
-    log_fraction_per_gene_per_cell = np.log2(fraction_per_gene_per_cell, out=fraction_per_gene_per_cell)
 
-    max_gap_per_cell = np.zeros(adata.n_obs, dtype="float32")
-
-    with ut.timed_step("extensions.compute_cell_gaps"):
-        extension = getattr(xt, "compute_cell_gaps")
-        extension(
-            log_fraction_per_gene_per_cell,
-            candidate_per_cell,
-            min_gap_per_gene,
-            candidates_count,
-            gap_skip_cells,
-            max_deviant_cells_count,
-            max_deviant_cells_fraction,
-            max_gap_per_cell,
+    for candidate_index in range(candidates_count):
+        mask_per_cell = candidate_per_cell == candidate_index
+        total_umis_per_cell_of_candidate = total_umis_per_cell[mask_per_cell]
+        regularization_of_candidate = max(
+            1.0, np.quantile(total_umis_per_cell_of_candidate, cells_regularization_quantile)
         )
-    ut.log_calc("max_gap_per_cell", max_gap_per_cell, formatter=ut.sizes_description)
+        regularization_per_cell_of_candidate = np.maximum(total_umis_per_cell_of_candidate, regularization_of_candidate)
+        regularization_per_cell[mask_per_cell] = 1.0 / regularization_per_cell_of_candidate
+    ut.log_calc("regularization_per_cell", regularization_per_cell, formatter=ut.sizes_description)
 
-    gap_threshold = np.quantile(max_gap_per_cell, 1 - max_cell_fraction)
-    ut.log_calc("gap_threshold", gap_threshold)
+    log_fraction_per_gene_per_cell = np.log2(fraction_per_gene_per_cell + regularization_per_cell[:, np.newaxis])
 
-    deviant_cells_mask = max_gap_per_cell > gap_threshold
-    ut.log_return("deviant_cells_mask", deviant_cells_mask)
+    outer_repeat = 0
+    while True:
+        outer_repeat += 1
+        ut.log_calc(f"min_gene_fold_factor ({outer_repeat}.*)", min_gene_fold_factor)
 
-    return deviant_cells_mask
+        new_deviant_per_cell[:] = True
+        deviant_per_cell[:] = False
+        deviants_fraction = 0.0
+
+        inner_repeat = 0
+        while deviants_fraction <= max_cell_fraction:
+            inner_repeat += 1
+            max_gap_per_cell[:] = 0.0
+            with ut.timed_step("extensions.compute_cell_gaps"):
+                extension = getattr(xt, "compute_cell_gaps")
+                extension(
+                    umis_per_gene_per_cell,
+                    fraction_per_gene_per_cell,
+                    log_fraction_per_gene_per_cell,
+                    candidate_per_cell,
+                    deviant_per_cell,
+                    new_deviant_per_cell,
+                    min_gap_per_gene,
+                    candidates_count,
+                    gap_skip_cells,
+                    max_deviant_cells_count,
+                    max_deviant_cells_fraction,
+                    float(min_compare_umis),
+                    max_gap_per_cell,
+                )
+            ut.log_calc(
+                f"max_gap_per_cell ({outer_repeat}.{inner_repeat})", max_gap_per_cell, formatter=ut.sizes_description
+            )
+
+            large_gap_count = np.sum(max_gap_per_cell > 0.0)
+            ut.log_calc(
+                f"large_gap_count ({outer_repeat}.{inner_repeat})",
+                large_gap_count,
+                formatter=lambda count: ut.ratio_description(adata.n_obs, "cell", count, "large-gap"),
+            )
+            remaining_cell_fraction = 1 - max(max_cell_fraction - deviants_fraction, 0.0)
+            if large_gap_count / adata.n_obs <= remaining_cell_fraction:
+                gap_threshold = 0.0
+            else:
+                gap_threshold = np.quantile(max_gap_per_cell, remaining_cell_fraction)
+            ut.log_calc(f"gap_threshold ({outer_repeat}.{inner_repeat})", gap_threshold)
+
+            new_deviant_per_cell = (max_gap_per_cell > gap_threshold) & ~deviant_per_cell
+            ut.log_calc(f"new_deviant_per_cell ({outer_repeat}.{inner_repeat})", new_deviant_per_cell)
+            new_deviants_count = np.sum(new_deviant_per_cell)
+            if new_deviants_count == 0:
+                break
+            deviants_fraction += new_deviants_count / adata.n_obs
+            deviant_per_cell = deviant_per_cell | new_deviant_per_cell
+            ut.log_calc(f"deviants_fraction ({outer_repeat}.{inner_repeat})", deviants_fraction)
+            ut.log_calc(f"deviant_per_cell ({outer_repeat}.{inner_repeat})", deviant_per_cell)
+
+        if deviants_fraction <= max_cell_fraction:
+            ut.log_calc(f"final min_gene_fold_factor ({outer_repeat}.*)", min_gene_fold_factor)
+            return deviant_per_cell
+
+        min_gap_per_gene += 1 / 8
+        min_gene_fold_factor += 1 / 8
 
 
 def _votes_deviant_cells(

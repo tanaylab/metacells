@@ -753,6 +753,15 @@ max_deviant_cells_count: int = 3
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 max_deviant_cells_fraction: float = 0.1
 
+#: Use this quantile to pick the minimal cell size for the regularization factor when
+# computing deviants. See
+#: :py:func:`metacells.tools.deviants.find_deviant_cells`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+deviant_cells_regularization_quantile: float = 0.25
+
 #: The minimal fold factor for a gene to indicate a cell is "deviant". See
 #: :py:const:`significant_gene_fold_factor`,
 #: :py:func:`metacells.tools.deviants.find_deviant_cells`,
@@ -761,6 +770,16 @@ max_deviant_cells_fraction: float = 0.1
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 deviants_min_gene_fold_factor: float = significant_gene_fold_factor
+
+#: The minimal number of UMIs in the gene for two cells for using it as a certificate for a gap between
+#: the expression level of the gene in the cells for computinng deviants. See
+#: :py:const:`significant_gene_fold_factor`,
+#: :py:func:`metacells.tools.deviants.find_deviant_cells`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+deviants_min_compare_umis: int = 8
 
 #: The minimal additional fold factor for a noisy gene to indicate a cell is "deviant",
 # in addition to :py:const:`deviants_min_gene_fold_factor`. See

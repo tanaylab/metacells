@@ -147,17 +147,31 @@ def collect_metacells(  # pylint: disable=too-many-statements
             total_umis_of_metacell = np.sum(umis_per_cell_of_metacell)
             ut.log_calc("total_umis_of_metacell", total_umis_of_metacell)
 
-            regularization_per_cell_of_metacell = metacell_umis_regularization / umis_per_cell_of_metacell
-            regularization_of_metacell = ss.mstats.gmean(regularization_per_cell_of_metacell)
+            umis_per_gene_per_cell_of_metacell = ut.to_numpy_matrix(umis_per_gene_per_cell[mask_per_cell, :])
 
-            umis_per_gene_per_cell_of_metacell = ut.to_layout(
-                ut.to_numpy_matrix(umis_per_gene_per_cell[mask_per_cell, :]), layout="column_major"
+            zeros_downsample_umis = round(np.quantile(umis_per_cell_of_metacell, zeros_cell_size_quantile))
+            ut.log_calc("zeros_downsample_umis", zeros_downsample_umis)
+
+            downsampled_umis_per_gene_per_cell_of_metacell = ut.downsample_matrix(
+                umis_per_gene_per_cell_of_metacell, per="row", samples=zeros_downsample_umis
             )
+            zeros_per_gene_per_cell_of_metacell = downsampled_umis_per_gene_per_cell_of_metacell == 0
+            zeros_per_gene_per_cell_of_metacell = ut.to_layout(
+                zeros_per_gene_per_cell_of_metacell, layout="column_major"  # type: ignore
+            )
+
+            zeros_per_gene = ut.sum_per(zeros_per_gene_per_cell_of_metacell, per="column").astype("int32")
+            ut.log_calc("zeros_per_gene", zeros_per_gene, formatter=ut.sizes_description)
+
+            umis_per_gene_per_cell_of_metacell = ut.to_layout(umis_per_gene_per_cell_of_metacell, layout="column_major")
             umis_per_gene_of_metacell = ut.sum_per(umis_per_gene_per_cell_of_metacell, per="column").astype("float32")
             fraction_per_gene_per_cell_of_metacell = ut.to_layout(
                 umis_per_gene_per_cell_of_metacell / ut.to_numpy_matrix(umis_per_cell_of_metacell[:, np.newaxis]),
                 layout="column_major",
             )
+
+            regularization_per_cell_of_metacell = metacell_umis_regularization / umis_per_cell_of_metacell
+            regularization_of_metacell = ss.mstats.gmean(regularization_per_cell_of_metacell)
 
             log_fraction_per_gene_per_cell_of_metacell = np.log2(
                 fraction_per_gene_per_cell_of_metacell + regularization_per_cell_of_metacell[:, np.newaxis]
@@ -192,26 +206,6 @@ def collect_metacells(  # pylint: disable=too-many-statements
                 ut.log_calc(
                     "fraction_per_gene_of_metacell", fraction_per_gene_of_metacell, formatter=ut.sizes_description
                 )
-
-            zeros_downsample_umis = round(np.quantile(umis_per_cell_of_metacell, zeros_cell_size_quantile))
-            ut.log_calc("zeros_downsample_umis", zeros_downsample_umis)
-
-            fraction_per_gene_per_cell_of_metacell *= -1.0
-            fraction_per_gene_per_cell_of_metacell += 1.0
-            log_fraction_per_gene_per_cell_of_metacell = np.log2(fraction_per_gene_per_cell_of_metacell)
-            log_fraction_per_gene_per_cell_of_metacell *= zeros_downsample_umis
-
-            random_per_gene_per_cell_of_metacell = np.random.uniform(size=fraction_per_gene_per_cell_of_metacell.shape)
-            random_per_gene_per_cell_of_metacell *= -1.0
-            random_per_gene_per_cell_of_metacell += 1.0
-            log_random_per_gene_per_cell_of_metacell = np.log2(random_per_gene_per_cell_of_metacell)
-
-            zeros_per_gene_per_cell_of_metacell = ut.to_layout(
-                log_random_per_gene_per_cell_of_metacell <= log_fraction_per_gene_per_cell_of_metacell,
-                layout="column_major",
-            )
-            zeros_per_gene = ut.sum_per(zeros_per_gene_per_cell_of_metacell, per="column").astype("int32")
-            ut.log_calc("zeros_per_gene", zeros_per_gene, formatter=ut.sizes_description)
 
             return dict(
                 grouped=grouped_of_metacell,
