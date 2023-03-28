@@ -135,6 +135,10 @@ mc.pl.compute_for_mcview(
     random_seed=random_seed,
 )
 
+if keep_umap:
+    obs_outgoing_weights = mc.ut.get_oo_proper(old_mdata, "obs_outgoing_weights")
+    mc.ut.set_oo_data(new_mdata, "obs_outgoing_weights", obs_outgoing_weights)
+
 LOG.info("Skip MC gene properties...")
 for name in sorted(old_mdata.var.keys()):
     if mc.ut.has_data(new_mdata, name):
