@@ -366,6 +366,7 @@ def divide_and_conquer_pipeline(
     rare_max_related_gene_increase_factor: float = pr.rare_max_related_gene_increase_factor,
     rare_min_cell_module_total: int = pr.rare_min_cell_module_total,
     rare_max_cells_factor_of_random_pile: float = pr.rare_max_cells_factor_of_random_pile,
+    rare_deviants_max_cell_fraction: Optional[float] = pr.rare_deviants_max_cell_fraction,
     rare_dissolve_min_robust_size_factor: Optional[float] = pr.rare_dissolve_min_robust_size_factor,
     rare_dissolve_min_convincing_size_factor: Optional[float] = pr.rare_dissolve_min_convincing_size_factor,
     rare_dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
@@ -617,6 +618,7 @@ def divide_and_conquer_pipeline(
                     metacells_level=0,
                     direct_parameters=replace(
                         dac_parameters.direct_parameters,
+                        deviants_max_cell_fraction=rare_deviants_max_cell_fraction,
                         dissolve_min_robust_size_factor=rare_dissolve_min_robust_size_factor,
                         dissolve_min_convincing_size_factor=rare_dissolve_min_convincing_size_factor,
                         dissolve_min_convincing_gene_fold_factor=rare_dissolve_min_convincing_gene_fold_factor,

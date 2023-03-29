@@ -444,6 +444,14 @@ rare_max_related_gene_increase_factor: float = 4.0
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 rare_min_cell_module_total: int = int((significant_value + 1) / 2)
 
+#: The maximal fraction of cells to mark as "deviants" in rare gene module piles. See
+#: :py:func:`metacells.tools.deviants.find_deviant_cells`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+rare_deviants_max_cell_fraction: Optional[float] = 0.25
+
 #: Whether to compute metacells more quickly with lower quality. See
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
