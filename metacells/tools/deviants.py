@@ -39,8 +39,8 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
     min_noisy_gene_fold_factor: float = pr.deviants_min_noisy_gene_fold_factor,
     max_gene_fraction: float = pr.deviants_max_gene_fraction,
     max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
-    max_deviant_cells_count: int = pr.max_deviant_cells_count,
-    max_deviant_cells_fraction: float = pr.max_deviant_cells_fraction,
+    max_gap_cells_count: int = pr.deviants_max_gap_cells_count,
+    max_gap_cells_fraction: float = pr.deviants_max_gap_cells_fraction,
     cells_regularization_quantile: float = pr.deviant_cells_regularization_quantile,
     policy: str = pr.deviants_policy,
 ) -> ut.Vector:
@@ -56,49 +56,60 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
 
     Obeys (ignores the genes of) the ``noisy_gene`` per-gene (variable) annotation, if any.
 
+    The exact method depends on the ``policy`` (one of ``gaps`` or ``max``). By default we use the ``gaps`` policy as it
+    gives a much lower fraction of deviants at a minor cost in the variance inside each metacell. The ``max`` policy
+    provides the inverse trade-off, giving slightly more consistent metacells at the cost of a much higher fraction of
+    deviants.
+
     **Returns**
 
     A boolean mask of all the cells which should be considered "deviant".
 
-    **Computation Parameters**
+    **Gaps Computation Parameters**
 
-    Intuitively, we first select some fraction of the genes which were least predictable compared to
-    the mean expression in the candidate metacells. We then mark as deviants some fraction of the
-    cells whose expression of these genes was least predictable compared to the mean expression in
-    the candidate metacells. Operationally:
+    Intuitively, for each gene for each metacell we can look at the sorted expression level of the gene in all the
+    metacell's cells. We look for a large gap between a few low-expressing or high-expressing cells and the rest of the
+    cells. If we find such a gap, the few cells below or above it are considered to be deviants.
 
-    TODOY
+    1. For each gene in each cell of each metacell, compute the log (base 2) of the fraction of the gene's
+       UMIs out of the total UMIs of the metacell, with a 1-UMI regularization factor.
 
-    1. Compute for each candidate metacell the mean fraction of the UMIs expressed by each gene.
+    2. Sort the expression level of each gene in each metacell.
+
+    3. Look for a gap of at least ``min_gene_fold_factor`` (default: {min_gene_fold_factor}), or for ``noisy_gene``,
+       an additional ``min_noisy_gene_fold_factor`` (default: {min_noisy_gene_fold_factor}) between the sorted gene
+       expressions. If ``gap_skip_cells`` (default: {gap_skip_cells}) is 0, look for a gap between consecutive sorted
+       cell expression levels. If it is 1 or 2, skip this number of entries. Ignore gaps if the total number of UMIs
+       of the gene in the two compared cells is less than ``min_compare_umis`` (default: {min_compare_umis}).
+
+    4. Ignore gaps that cause more than ``max_gap_cells_fraction`` (default: {max_gap_cells_fraction}) and also
+       more than ``max_gap_cells_count`` (default: {max_gap_cells_count}) to be separated. That is, a single gene
+       can only mark as deviants  "a few" cells of the metacell.
+
+    5. If any cells were marked as deviants, re-run the above, ignoring any cells previously marked as deviants.
+
+    6. If the total number of cells is more than ``max_cell_fraction`` (default: {max_cell_fraction}) of the cells,
+       increase ``min_gene_fold_factor`` by 0.15 (~x1.1) and try again from the top.
+
+    **Max Computation Parameters**
+
+    1. Compute for each candidate metacell the median fraction of the UMIs expressed by each gene.
        Scale this by each cell's total UMIs to compute the expected number of UMIs for each cell.
        Compute the fold factor log2((actual UMIs + 1) / (expected UMIs + 1)) for each gene for each
        cell.
 
-    2. If a ``noisy_gene`` mask exists, then ignore all the genes it contains.
+    2. Compute the excess fold factor for each gene in each cell by subtracting ``min_gene_fold_factor`` (default:
+       {min_gene_fold_factor}) from the above. For ``noisy_gene``, also subtract ``min_noisy_gene_fold_factor`` to the
+       threshold.
 
-    3. Ignore all fold factors less than the ``min_gene_fold_factor`` (default: {min_gene_fold_factor}). Count the
-       number of genes which have an absolute fold factor above this minimum in at least one cell. If the fraction of
-       such genes is above ``max_gene_fraction`` (default: {max_gene_fraction}), then raise the minimal gene fold factor
-       such that at most this fraction of genes remain.
-
-    4. For each remaining gene, rank all the cells where it is expressed above the min fold
-       factor. Give an artificial maximum rank to all cells with fold factor 0, that is, below the
-       minimum.
-
-    5. For each cell, compute the minimal rank it has in any of these genes. That is, if a cell has
-       a rank of 1, it means that it has at least one gene whose expression fold factor is the worst
-       (highest) across all cells (and is also above the minimum).
-
-    6. Select as deviants all cells whose minimal rank is below the artificial maximum rank, that
-       is, which contain at least one gene whose expression fold factor is high relative to the rest
-       of the cells. If the fraction of such cells is higher than ``max_cell_fraction`` (default:
-       {max_cell_fraction}), reduce the maximal rank such that at most this fraction of cells are
-       selected as deviants.
-
-    7. If the total fraction of deviants is below the ``max_cell_fraction``, repeats steps 1-5 to account for the mean
-       expression in each candidate metacell having been modified due to the removal of deviant cells.
+    4. For each cell, consider the maximal gene excess fold factor. Consider all
+       cells with a positive maximal threshold as deviants. If more than ``max_cell_fraction`` (default:
+       {max_cell_fraction}) of the cells have a positive maximal excess fold factor, increase the threshold from 0 so
+       that only this fraction are marked as deviants.
     """
-    assert 1 <= gap_skip_cells <= 3
+    assert 0 <= gap_skip_cells <= 2
+    gap_skip_cells += 1
+    # assert policy in ("max", "gaps")
     assert policy in ("votes", "count", "max", "sum", "gaps")
     if policy == "votes":
         return _votes_deviant_cells(
@@ -118,8 +129,8 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
             min_gene_fold_factor=min_gene_fold_factor,
             gap_skip_cells=gap_skip_cells,
             min_noisy_gene_fold_factor=min_noisy_gene_fold_factor,
-            max_deviant_cells_count=max_deviant_cells_count,
-            max_deviant_cells_fraction=max_deviant_cells_fraction,
+            max_gap_cells_count=max_gap_cells_count,
+            max_gap_cells_fraction=max_gap_cells_fraction,
             max_cell_fraction=max_cell_fraction or 1.0,
             cells_regularization_quantile=cells_regularization_quantile,
             min_compare_umis=min_compare_umis,
@@ -236,8 +247,8 @@ def _gaps_deviant_cells(  # pylint: disable=too-many-statements
     gap_skip_cells: int,
     min_noisy_gene_fold_factor: float,
     max_cell_fraction: float,
-    max_deviant_cells_count: int,
-    max_deviant_cells_fraction: float,
+    max_gap_cells_count: int,
+    max_gap_cells_fraction: float,
     cells_regularization_quantile: float,
     min_compare_umis: int,
 ) -> ut.Vector:
@@ -303,8 +314,8 @@ def _gaps_deviant_cells(  # pylint: disable=too-many-statements
                     min_gap_per_gene,
                     candidates_count,
                     gap_skip_cells,
-                    max_deviant_cells_count,
-                    max_deviant_cells_fraction,
+                    max_gap_cells_count,
+                    max_gap_cells_fraction,
                     float(min_compare_umis),
                     max_gap_per_cell,
                 )

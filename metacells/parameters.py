@@ -732,34 +732,34 @@ candidates_min_metacell_cells: int = min_metacell_cells
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-deviants_policy: str = "votes"
+deviants_policy: str = "gaps"
 
 #: If using the ``gaps`` deviants policy, how many cells to skip ahead when computing gap sizes
-#: (either ``1`` or ``2``). See
+#: (``0``, ``1``, ``2``). See
 #: :py:func:`metacells.tools.deviants.find_deviant_cells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-deviants_gap_skip_cells: int = 2
+deviants_gap_skip_cells: int = 1
 
 #: Do not mark deviants by a gene in a metacell if it causes more than this number of cells to become deviant
-#: (unless the count is no more than :py:const:`max_deviant_cells_fraction`). See
+#: (unless the count is no more than :py:const:`deviants_max_cells_fraction`). See
 #: :py:func:`metacells.tools.deviants.find_deviant_cells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-max_deviant_cells_count: int = 3
+deviants_max_gap_cells_count: int = 3
 
 #: Do not mark deviants by a gene in a metacell if it causes more than this fraction of cells to become deviant
-#: (unless the count is no more than :py:const:`max_deviant_cells_count`). See
+#: (unless the count is no more than :py:const:`deviants_max_cells_count`). See
 #: :py:func:`metacells.tools.deviants.find_deviant_cells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-max_deviant_cells_fraction: float = 0.1
+deviants_max_gap_cells_fraction: float = 0.1
 
 #: Use this quantile to pick the minimal cell size for the regularization factor when
 # computing deviants. See

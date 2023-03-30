@@ -261,6 +261,21 @@ def collect_metacells(  # pylint: disable=too-many-statements
 
     if isinstance(groups, str) and ut.has_data(adata, "metacells_level"):
         tl.convey_obs_to_group(adata=adata, gdata=mdata, group=groups, property_name="metacell_level")
+    if isinstance(groups, str) and ut.has_data(adata, "rare_cell"):
+        tl.convey_obs_to_group(
+            adata=adata,
+            gdata=mdata,
+            group=groups,
+            property_name="cells_rare_gene_module",
+            to_property_name="metacells_rare_gene_module",
+        )
+        tl.convey_obs_to_group(
+            adata=adata,
+            gdata=mdata,
+            group=groups,
+            property_name="rare_cell",
+            to_property_name="rare_metacell",
+        )
 
     ut.set_m_data(mdata, "outliers", outliers_count)
     ut.set_m_data(mdata, "metacells_algorithm", f"metacells.{__version__}")

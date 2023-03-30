@@ -101,6 +101,8 @@ def compute_direct_metacells(
     deviants_min_noisy_gene_fold_factor: float = pr.deviants_min_noisy_gene_fold_factor,
     deviants_max_gene_fraction: float = pr.deviants_max_gene_fraction,
     deviants_max_cell_fraction: Optional[float] = pr.deviants_max_cell_fraction,
+    deviants_max_gap_cells_count: int = pr.deviants_max_gap_cells_count,
+    deviants_max_gap_cells_fraction: float = pr.deviants_max_gap_cells_fraction,
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
     dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
@@ -347,6 +349,8 @@ def compute_direct_metacells(
             min_noisy_gene_fold_factor=deviants_min_noisy_gene_fold_factor,
             max_gene_fraction=deviants_max_gene_fraction,
             max_cell_fraction=deviants_max_cell_fraction,
+            max_gap_cells_count=deviants_max_gap_cells_count,
+            max_gap_cells_fraction=deviants_max_gap_cells_fraction,
         )
 
         tl.dissolve_metacells(
