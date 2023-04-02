@@ -26,6 +26,7 @@ __all__ = [
     "mark_noisy_genes",
     "mark_select_genes",
     "mark_ignored_genes",
+    "mark_essential_genes",
 ]
 
 
@@ -202,5 +203,54 @@ def mark_ignored_genes(
             names=ignored_gene_names_of_types.get(type_name),
             patterns=ignored_gene_patterns_of_types.get(type_name),
             to=f"ignored_gene_of_{type_name}",
+            op=op,
+        )
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def mark_essential_genes(
+    adata: AnnData,
+    *,
+    essential_gene_names_of_types: Optional[Dict[str, Collection[str]]] = None,
+    essential_gene_patterns_of_types: Optional[Dict[str, Collection[str]]] = None,
+    op: str = "set",  # pylint: disable=invalid-name
+) -> None:
+    """
+    Mark a subset of the genes as "essential", that is, require that (most of them) will be projected "well" to accept a
+    query metacell as having the same type as the atlas projection.
+
+    Depending on ``op``, this will either ``set`` (override/create) the mask(s), ``add`` (to an existing mask(s)), or
+    ``remove`` (from an existing mask(s)).
+
+    **Input**
+
+    Annotated ``adata``, where the observations are cells and the variables are genes.
+
+    **Returns**
+
+    Sets the following in the data:
+
+    Variable (gene) annotations:
+        ``essential_gene_of_<type>``
+            A mask of the "essential" genes for query metacells to be assigned a specific type.
+
+    **Computation Parameters**
+
+    1. Invoke :py:func:`metacells.tools.named.find_named_genes` to ignore genes based on their name, using the
+       ``essential_gene_names_of_types`` (default: {essential_gene_names_of_types}),
+       ``essential_gene_patterns_of_types`` (default: {essential_gene_patterns_of_types}) and ``op`` (default: {op}).
+    """
+    essential_gene_names_of_types = essential_gene_names_of_types or {}
+    essential_gene_patterns_of_types = essential_gene_patterns_of_types or {}
+    types = set(essential_gene_names_of_types.keys()) | set(essential_gene_patterns_of_types.keys())
+
+    for type_name in types:
+        tl.find_named_genes(
+            adata,
+            names=essential_gene_names_of_types.get(type_name),
+            patterns=essential_gene_patterns_of_types.get(type_name),
+            to=f"essential_gene_of_{type_name}",
             op=op,
         )
