@@ -744,7 +744,7 @@ deviants_policy: str = "gaps"
 deviants_gap_skip_cells: int = 1
 
 #: Do not mark deviants by a gene in a metacell if it causes more than this number of cells to become deviant
-#: (unless the count is no more than :py:const:`deviants_max_cells_fraction`). See
+#: (unless the count is no more than :py:const:`deviants_max_gap_cells_fraction`). See
 #: :py:func:`metacells.tools.deviants.find_deviant_cells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
@@ -753,7 +753,7 @@ deviants_gap_skip_cells: int = 1
 deviants_max_gap_cells_count: int = 3
 
 #: Do not mark deviants by a gene in a metacell if it causes more than this fraction of cells to become deviant
-#: (unless the count is no more than :py:const:`deviants_max_cells_count`). See
+#: (unless the count is no more than :py:const:`deviants_max_gap_cells_count`). See
 #: :py:func:`metacells.tools.deviants.find_deviant_cells`,
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
