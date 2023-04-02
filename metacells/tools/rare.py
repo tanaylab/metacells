@@ -146,6 +146,11 @@ def find_rare_gene_modules(
     rare_module_of_cells = np.full(adata.n_obs, -1, dtype="int32")
     list_of_rare_gene_indices_of_modules: List[List[int]] = []
 
+    umis_per_gene_per_cell_by_rows = ut.get_vo_proper(adata, what, layout="row_major")
+    ut.log_calc("umis_per_gene_per_cell_by_rows", umis_per_gene_per_cell_by_rows)
+    umis_per_gene_per_cell_by_columns = ut.get_vo_proper(adata, what, layout="column_major")
+    ut.log_calc("umis_per_gene_per_cell_by_columns", umis_per_gene_per_cell_by_columns)
+
     candidates = _pick_candidates(
         adata_of_all_genes_of_all_cells=adata,
         what=what,
@@ -185,7 +190,8 @@ def find_rare_gene_modules(
 
     related_gene_indices_of_modules = _related_genes(
         adata_of_all_genes_of_all_cells=adata,
-        what=what,
+        umis_per_gene_per_cell_by_columns=umis_per_gene_per_cell_by_columns,
+        umis_per_gene_per_cell_by_rows=umis_per_gene_per_cell_by_rows,
         rare_gene_indices_of_modules=rare_gene_indices_of_modules,
         allowed_genes_mask=allowed_genes_mask,
         min_genes_of_modules=min_genes_of_modules,
@@ -199,7 +205,7 @@ def find_rare_gene_modules(
 
     _identify_cells(
         adata_of_all_genes_of_all_cells=adata,
-        what=what,
+        umis_per_gene_per_cell_by_columns=umis_per_gene_per_cell_by_columns,
         related_gene_indices_of_modules=related_gene_indices_of_modules,
         min_cells_of_modules=min_cells_of_modules,
         max_cells_of_modules=max_cells_of_modules,
@@ -339,7 +345,8 @@ def _identify_genes(
 def _related_genes(  # pylint: disable=too-many-statements,too-many-branches
     *,
     adata_of_all_genes_of_all_cells: AnnData,
-    what: Union[str, ut.Matrix] = "__x__",
+    umis_per_gene_per_cell_by_rows: ut.ProperMatrix,
+    umis_per_gene_per_cell_by_columns: ut.ProperMatrix,
     rare_gene_indices_of_modules: List[List[int]],
     allowed_genes_mask: ut.NumpyVector,
     min_genes_of_modules: int,
@@ -350,7 +357,8 @@ def _related_genes(  # pylint: disable=too-many-statements,too-many-branches
     min_related_gene_fold_factor: float,
     max_related_gene_increase_factor: float,
 ) -> List[List[int]]:
-    total_all_cells_umis_of_all_genes = ut.get_v_numpy(adata_of_all_genes_of_all_cells, what, sum=True)
+    total_umis_per_gene = ut.sum_per(umis_per_gene_per_cell_by_columns, per="column")
+    ut.log_calc("total_umis_per_gene", total_umis_per_gene)
 
     ut.log_calc("genes for modules:")
     modules_count = 0
@@ -373,17 +381,19 @@ def _related_genes(  # pylint: disable=too-many-statements,too-many-branches
                 "rare_gene_names", sorted(adata_of_all_genes_of_all_cells.var_names[rare_gene_indices_of_module])
             )
 
-            adata_of_module_genes_of_all_cells = ut.slice(
-                adata_of_all_genes_of_all_cells,
-                name=f".module{module_index}.rare_gene",
-                vars=rare_gene_indices_of_module,
-                top_level=False,
+            umis_per_module_gene_per_cell_by_columns = umis_per_gene_per_cell_by_columns[:, rare_gene_indices_of_module]
+            ut.log_calc("umis_per_module_gene_per_cell_by_columns", umis_per_module_gene_per_cell_by_columns)
+            assert ut.is_layout(umis_per_module_gene_per_cell_by_columns, "column_major")
+
+            umis_per_module_gene_per_cell_by_rows = ut.to_layout(
+                umis_per_module_gene_per_cell_by_columns, layout="row_major"
             )
+            ut.log_calc("umis_per_module_gene_per_cell_by_rows", umis_per_module_gene_per_cell_by_rows)
 
-            total_module_genes_umis_of_all_cells = ut.get_o_numpy(adata_of_module_genes_of_all_cells, what, sum=True)
+            total_module_umis_per_cell = ut.sum_per(umis_per_module_gene_per_cell_by_rows, per="row")
+            ut.log_calc("total_module_umis_per_cell", total_module_umis_per_cell)
 
-            mask_of_expressed_cells = total_module_genes_umis_of_all_cells > 0
-
+            mask_of_expressed_cells = total_module_umis_per_cell > 0
             expressed_cells_count = np.sum(mask_of_expressed_cells)
 
             if expressed_cells_count > max_cells_of_modules:
@@ -398,56 +408,44 @@ def _related_genes(  # pylint: disable=too-many-statements,too-many-branches
 
             ut.log_calc("expressed_cells", mask_of_expressed_cells)
 
-            adata_of_all_genes_of_expressed_cells_of_module = ut.slice(
-                adata_of_all_genes_of_all_cells,
-                name=f".module{module_index}.rare_cell",
-                obs=mask_of_expressed_cells,
-                top_level=False,
-            )
+            umis_per_gene_per_expressed_cell_by_rows = umis_per_gene_per_cell_by_rows[mask_of_expressed_cells, :]
+            ut.log_calc("umis_per_gene_per_expressed_cell_by_rows", umis_per_gene_per_expressed_cell_by_rows)
+            assert ut.is_layout(umis_per_gene_per_expressed_cell_by_rows, "row_major")
 
-            total_expressed_cells_umis_of_all_genes = ut.get_v_numpy(
-                adata_of_all_genes_of_expressed_cells_of_module, what, sum=True
+            umis_per_gene_per_expressed_cell_by_columns = ut.to_layout(
+                umis_per_gene_per_expressed_cell_by_rows, layout="column_major"
             )
+            ut.log_calc("umis_per_module_gene_per_cell_by_columns", umis_per_module_gene_per_cell_by_columns)
 
-            data = ut.get_vo_proper(adata_of_all_genes_of_expressed_cells_of_module, what, layout="column_major")
-            max_expressed_cells_umis_of_all_genes = ut.max_per(data, per="column")
+            max_expressed_umis_per_gene = ut.max_per(umis_per_gene_per_expressed_cell_by_columns, per="column")
+            ut.log_calc("max_expressed_umis_per_gene", max_expressed_umis_per_gene)
 
-            total_background_cells_umis_of_all_genes = (
-                total_all_cells_umis_of_all_genes - total_expressed_cells_umis_of_all_genes
-            )
+            total_expressed_umis_per_gene = ut.sum_per(umis_per_gene_per_expressed_cell_by_columns, per="column")
+            expressed_fraction_per_gene = total_expressed_umis_per_gene / sum(total_expressed_umis_per_gene)
+            ut.log_calc("expressed_fraction_per_gene", expressed_fraction_per_gene)
 
-            expressed_cells_fraction_of_all_genes = total_expressed_cells_umis_of_all_genes / sum(
-                total_expressed_cells_umis_of_all_genes
-            )
-
-            background_cells_fraction_of_all_genes = total_background_cells_umis_of_all_genes / sum(
-                total_background_cells_umis_of_all_genes
-            )
+            total_background_umis_per_gene = total_umis_per_gene - total_expressed_umis_per_gene
+            background_fraction_per_gene = total_background_umis_per_gene / sum(total_background_umis_per_gene)
+            ut.log_calc("background_fraction_per_gene", background_fraction_per_gene)
 
             mask_of_related_genes = (
                 allowed_genes_mask
-                & (max_expressed_cells_umis_of_all_genes >= min_gene_maximum)
-                & (
-                    expressed_cells_fraction_of_all_genes
-                    >= background_cells_fraction_of_all_genes * (2 ** min_related_gene_fold_factor)
-                )
+                & (max_expressed_umis_per_gene >= min_gene_maximum)
+                & (expressed_fraction_per_gene >= background_fraction_per_gene * (2 ** min_related_gene_fold_factor))
             )
+            ut.log_calc("mask_of_related_genes", mask_of_related_genes)
 
             related_gene_indices = np.where(mask_of_related_genes)[0]
             assert np.all(mask_of_related_genes[rare_gene_indices_of_module])
 
-            base_genes_of_all_cells_adata = ut.slice(
-                adata_of_all_genes_of_all_cells, name=f".module{module_index}.base", vars=rare_gene_indices_of_module
-            )
-            total_base_genes_of_all_cells = ut.get_o_numpy(base_genes_of_all_cells_adata, what, sum=True)
-            mask_of_strong_base_cells = total_base_genes_of_all_cells >= min_cell_module_total
+            mask_of_strong_base_cells = total_module_umis_per_cell >= min_cell_module_total
             count_of_strong_base_cells = np.sum(mask_of_strong_base_cells)
 
             if ut.logging_calc():
                 ut.log_calc(
                     "candidate_gene_names", sorted(adata_of_all_genes_of_all_cells.var_names[related_gene_indices])
                 )
-                ut.log_calc("base_strong_genes", count_of_strong_base_cells)
+                ut.log_calc("mask_of_strong_base_cells", mask_of_strong_base_cells)
 
             related_gene_indices_of_module = list(rare_gene_indices_of_module)
             for gene_index in related_gene_indices:
@@ -461,28 +459,23 @@ def _related_genes(  # pylint: disable=too-many-statements,too-many-branches
                     )
                     continue
 
-                if gene_index not in rare_gene_indices_of_module:
-                    related_gene_of_all_cells_adata = ut.slice(
-                        adata_of_all_genes_of_all_cells,
-                        name=f".{adata_of_all_genes_of_all_cells.var_names[gene_index]}",
-                        vars=np.array([gene_index]),
-                    )
-                    assert related_gene_of_all_cells_adata.n_vars == 1
-                    total_related_genes_of_all_cells = ut.get_o_numpy(related_gene_of_all_cells_adata, what, sum=True)
-                    total_related_genes_of_all_cells += total_base_genes_of_all_cells
-                    mask_of_strong_related_cells = total_related_genes_of_all_cells >= min_cell_module_total
-                    count_of_strong_related_cells = np.sum(mask_of_strong_related_cells)
-                    ut.log_calc(
-                        f"- candidate gene {adata_of_all_genes_of_all_cells.var_names[gene_index]} "
-                        f"strong cells: {count_of_strong_related_cells} "
-                        f"factor: {count_of_strong_related_cells / count_of_strong_base_cells}"
-                    )
-                    if count_of_strong_related_cells > max_related_gene_increase_factor * count_of_strong_base_cells:
-                        continue
+                umis_of_related_gene_per_cell = ut.to_numpy_vector(
+                    umis_per_gene_per_cell_by_columns[:, gene_index], copy=True
+                )
+                umis_of_related_gene_per_cell += total_module_umis_per_cell
+                mask_of_strong_related_cells = umis_of_related_gene_per_cell >= min_cell_module_total
+                count_of_strong_related_cells = np.sum(mask_of_strong_related_cells)
+                ut.log_calc(
+                    f"- candidate gene {adata_of_all_genes_of_all_cells.var_names[gene_index]} "
+                    f"strong cells: {count_of_strong_related_cells} "
+                    f"factor: {count_of_strong_related_cells / count_of_strong_base_cells}"
+                )
+                if count_of_strong_related_cells > max_related_gene_increase_factor * count_of_strong_base_cells:
+                    continue
 
                 related_gene_indices_of_module.append(gene_index)
 
-            related_gene_indices_of_modules.append(related_gene_indices_of_module)  #
+            related_gene_indices_of_modules.append(related_gene_indices_of_module)
 
     if ut.logging_calc():
         ut.log_calc("related genes for modules:")
@@ -499,7 +492,7 @@ def _related_genes(  # pylint: disable=too-many-statements,too-many-branches
 def _identify_cells(
     *,
     adata_of_all_genes_of_all_cells: AnnData,
-    what: Union[str, ut.Matrix] = "__x__",
+    umis_per_gene_per_cell_by_columns: ut.ProperMatrix,
     related_gene_indices_of_modules: List[List[int]],
     min_cell_module_total: int,
     min_cells_of_modules: int,
@@ -519,17 +512,21 @@ def _identify_cells(
             module_index,
             formatter=lambda module_index: ut.progress_description(modules_count, module_index, "module"),
         ):
-            adata_of_related_genes_of_all_cells = ut.slice(
-                adata_of_all_genes_of_all_cells,
-                name=f".module{module_index}.related_genes",
-                vars=related_gene_indices_of_module,
-                top_level=False,
+            umis_per_related_gene_per_cell_by_columns = umis_per_gene_per_cell_by_columns[
+                :, related_gene_indices_of_module
+            ]
+            ut.log_calc("umis_per_related_gene_per_cell_by_columns", umis_per_related_gene_per_cell_by_columns)
+
+            umis_per_related_gene_per_cell_by_rows = ut.to_layout(
+                umis_per_related_gene_per_cell_by_columns, layout="row_major"
             )
-            total_related_genes_of_all_cells = ut.get_o_numpy(adata_of_related_genes_of_all_cells, what, sum=True)
+            ut.log_calc("umis_per_related_gene_per_cell_by_rows", umis_per_related_gene_per_cell_by_rows)
 
-            mask_of_strong_cells_of_module = total_related_genes_of_all_cells >= min_cell_module_total
+            total_related_umis_per_cell = ut.sum_per(umis_per_related_gene_per_cell_by_rows, per="row")
 
-            median_strength_of_module = np.median(total_related_genes_of_all_cells[mask_of_strong_cells_of_module])  #
+            mask_of_strong_cells_of_module = total_related_umis_per_cell >= min_cell_module_total
+
+            median_strength_of_module = np.median(total_related_umis_per_cell[mask_of_strong_cells_of_module])  #
             strong_cells_count = np.sum(mask_of_strong_cells_of_module)
 
             if strong_cells_count > max_cells_of_modules:
@@ -546,7 +543,7 @@ def _identify_cells(
 
             ut.log_calc("strong_cells", mask_of_strong_cells_of_module)
 
-            strength_of_all_cells = total_related_genes_of_all_cells / median_strength_of_module
+            strength_of_all_cells = total_related_umis_per_cell / median_strength_of_module
             mask_of_strong_cells_of_module &= strength_of_all_cells >= max_strength_of_cells
             max_strength_of_cells[mask_of_strong_cells_of_module] = strength_of_all_cells[
                 mask_of_strong_cells_of_module
