@@ -246,6 +246,9 @@ def compute_direct_metacells(
        and
        ``dissolve_min_metacell_cells`` (default: ``dissolve_min_metacell_cells``).
     """
+    assert (
+        target_metacell_size < 1000 or cell_sizes is not None
+    ), f"target_metacell_size: {target_metacell_size} seems to be in UMIs, should be in cells"
     sdata = extract_selected_data(
         adata,
         what,

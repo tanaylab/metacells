@@ -329,6 +329,9 @@ def compute_derived_parameters(
     """
     Compute the value of parameters derived from the low-level ones given to the exposed API.
     """
+    assert (
+        target_metacell_size < 1000 or cell_sizes is not None
+    ), f"target_metacell_size: {target_metacell_size} seems to be in UMIs, should be in cells"
     if cell_sizes is None:
         explicit_cell_sizes = np.full(adata.n_obs, 1, dtype="float32")
     elif isinstance(cell_sizes, str):
