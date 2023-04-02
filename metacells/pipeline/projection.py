@@ -284,7 +284,7 @@ def projection_pipeline(
         results as they were at the end of step 9.
     """
     assert project_min_corrected_gene_factor >= 0
-    use_essential_genes = project_min_essential_genes_fraction is not None
+    use_essential_genes = project_min_essential_genes_fraction is not None and _has_any_essential_genes(adata)
 
     ut.set_m_data(qdata, "project_max_projection_fold_factor", project_max_projection_fold_factor)
     ut.set_m_data(qdata, "project_max_projection_noisy_fold_factor", project_max_projection_noisy_fold_factor)
@@ -403,6 +403,13 @@ def _common_gene_indices(adata: AnnData, qdata: AnnData) -> Tuple[ut.NumpyVector
         query_common_gene_indices = np.array([query_genes_list.index(gene) for gene in common_genes_list])
 
     return atlas_common_gene_indices, query_common_gene_indices
+
+
+def _has_any_essential_genes(adata: AnnData) -> bool:
+    for property_name in adata.var.keys():
+        if property_name.startswith("essential_gene_of_"):
+            return True
+    return False
 
 
 def _initialize_atlas_data_in_query(
