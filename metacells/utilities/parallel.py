@@ -206,8 +206,9 @@ def parallel_map(
     global MAP_INDEX
     MAP_INDEX += 1
 
-    os.environ["OMP_NUM_THREADS"] = str(ceil(PROCESSES_COUNT / invocations))
-    os.environ["MKL_NUM_THREADS"] = str(ceil(PROCESSES_COUNT / invocations))
+    num_threads = str(ceil(PROCESSES_COUNT / invocations))
+    os.environ["OMP_NUM_THREADS"] = num_threads
+    os.environ["MKL_NUM_THREADS"] = num_threads
 
     PARALLEL_FUNCTION = function
     IS_MAIN_PROCESS = None
@@ -256,4 +257,5 @@ def _invocation(index: int) -> Tuple[int, Any]:
         os.environ["MKL_NUM_THREADS"] = str(PROCESSORS_COUNT)
 
     assert PARALLEL_FUNCTION is not None
-    return index, PARALLEL_FUNCTION(index)
+    result = PARALLEL_FUNCTION(index)
+    return index, result

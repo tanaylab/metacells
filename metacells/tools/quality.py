@@ -94,15 +94,17 @@ def compute_stdev_logs(
     data = np.concatenate([metacell_fold_factors for _metacell_gene_indices, metacell_fold_factors in results])
     indices = np.concatenate([metacell_gene_indices for metacell_gene_indices, _metacell_fold_factors in results])
     indptr = np.array(
-        [0] + [len(metacell_gene_indices) for metacell_gene_indices, _metacell_fold_factors in results], dtype="int32"
+        [0] + [len(metacell_gene_indices) for metacell_gene_indices, _metacell_fold_factors in results], dtype="int64"
     )
     np.cumsum(indptr, out=indptr)
 
     assert data.dtype == "float32"
     assert indices.dtype == "int32"
-    assert indptr.dtype == "int32"
+    assert indptr.dtype == "int64"
 
     inner_stdev_log_per_gene_per_metacell = sp.csr_matrix((data, indices, indptr), shape=gdata.shape)
+    inner_stdev_log_per_gene_per_metacell.has_sorted_indices = True
+    inner_stdev_log_per_gene_per_metacell.has_canonical_format = True
     ut.set_vo_data(gdata, "inner_stdev_log", inner_stdev_log_per_gene_per_metacell)
 
 
@@ -199,6 +201,8 @@ def compute_projected_folds(
 
     dense_folds[insignificant_folds_mask] = 0.0
     sparse_folds = sp.csr_matrix(dense_folds)
+    sparse_folds.has_sorted_indices = True
+    sparse_folds.has_canonical_format = True
     ut.set_vo_data(qdata, "projected_fold", sparse_folds)
 
 
@@ -272,7 +276,10 @@ def compute_similar_query_metacells(
         )
     else:
         misfit_per_gene_per_metacell = projected_fold_per_gene_per_metacell > max_projection_fold_factor
-    ut.set_vo_data(qdata, "misfit", sp.csr_matrix(misfit_per_gene_per_metacell))
+    misfit_per_gene_per_metacell = sp.csr_matrix(misfit_per_gene_per_metacell)
+    misfit_per_gene_per_metacell.has_sorted_indices = True
+    misfit_per_gene_per_metacell.has_canonical_format = True
+    ut.set_vo_data(qdata, "misfit", misfit_per_gene_per_metacell)
 
     if fitted_genes_mask is None:
         misfit_per_fitted_gene_per_metacell = misfit_per_gene_per_metacell
@@ -472,15 +479,17 @@ def compute_deviant_folds(
     data = np.concatenate([cell_fold_factors for _cell_gene_indices, cell_fold_factors in results])
     indices = np.concatenate([cell_gene_indices for cell_gene_indices, _cell_fold_factors in results])
     indptr = np.array(
-        [0] + [len(cell_gene_indices) for cell_gene_indices, _cell_fold_factors in results], dtype="int32"
+        [0] + [len(cell_gene_indices) for cell_gene_indices, _cell_fold_factors in results], dtype="int64"
     )
     np.cumsum(indptr, out=indptr)
 
     assert data.dtype == "float32"
     assert indices.dtype == "int32"
-    assert indptr.dtype == "int32"
+    assert indptr.dtype == "int64"
 
     fold_factors_per_gene_per_cell = sp.csr_matrix((data, indices, indptr), shape=adata.shape)
+    fold_factors_per_gene_per_cell.has_sorted_indices = True
+    fold_factors_per_gene_per_cell.has_canonical_format = True
     ut.set_vo_data(adata, "deviant_fold", fold_factors_per_gene_per_cell)
 
 
@@ -546,15 +555,17 @@ def compute_inner_folds(
     indices = np.concatenate([metacell_gene_indices for metacell_gene_indices, _metacell_fold_factors in results])
     assert len(data) == len(indices)
     indptr = np.array(
-        [0] + [len(metacell_gene_indices) for metacell_gene_indices, _metacell_fold_factors in results], dtype="int32"
+        [0] + [len(metacell_gene_indices) for metacell_gene_indices, _metacell_fold_factors in results], dtype="int64"
     )
     np.cumsum(indptr, out=indptr)
 
     assert data.dtype == "float32"
     assert indices.dtype == "int32"
-    assert indptr.dtype == "int32"
+    assert indptr.dtype == "int64"
 
     fold_factors_per_gene_per_metacell = sp.csr_matrix((data, indices, indptr), shape=gdata.shape)
+    fold_factors_per_gene_per_metacell.has_sorted_indices = True
+    fold_factors_per_gene_per_metacell.has_canonical_format = True
     ut.set_vo_data(gdata, "inner_fold", fold_factors_per_gene_per_metacell)
 
 
@@ -771,4 +782,7 @@ def compute_outliers_fold_factors(
     total_umis_per_gene_per_fold = actual_umis_per_gene_per_outlier + total_umis_per_gene_per_most_similar
     fold_factor_per_gene_per_outlier[total_umis_per_gene_per_fold < min_gene_total] = 0.0
 
-    ut.set_vo_data(adata, f"{most_similar}_fold", sp.csr_matrix(fold_factor_per_gene_per_outlier))
+    fold_factor_per_gene_per_outlier = sp.csr_matrix(fold_factor_per_gene_per_outlier)
+    fold_factor_per_gene_per_outlier.has_sorted_indices = True
+    fold_factor_per_gene_per_outlier.has_canonical_format = True
+    ut.set_vo_data(adata, f"{most_similar}_fold", fold_factor_per_gene_per_outlier)

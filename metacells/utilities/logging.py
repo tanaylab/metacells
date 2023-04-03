@@ -433,6 +433,14 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
     # elif utt.is_2d(value):
     #    checksum = ' checksum: %.20e' % utt.shaped_checksum(value)
 
+    # import psutil
+    # vm = psutil.virtual_memory()
+    # used = int(round(vm.used / (1024 * 1024 * 1024)))
+    # avail = int(round(vm.available / (1024 * 1024 * 1024)))
+    # free = int(round(vm.free / (1024 * 1024 * 1024)))
+    # avail -= free
+    # checksum += f" (M: {used}U {avail}A {free}F)"
+
     if formatter is not None:
         value = formatter(value)
         if value is None:
