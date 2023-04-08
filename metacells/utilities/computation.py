@@ -2268,6 +2268,7 @@ def random_piles(
 
     Specify a non-zero ``random_seed`` to make this replicable.
     """
+    assert elements_count > 0
     assert target_pile_size > 0
     piles_count = elements_count / target_pile_size
 

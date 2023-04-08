@@ -61,7 +61,7 @@ except ModuleNotFoundError:
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def compute_direct_metacells(
+def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-statements
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
@@ -249,94 +249,103 @@ def compute_direct_metacells(
     assert (
         target_metacell_size < 1000 or cell_sizes is not None
     ), f"target_metacell_size: {target_metacell_size} seems to be in UMIs, should be in cells"
-    sdata = extract_selected_data(
-        adata,
-        what,
-        top_level=False,
-        downsample_min_samples=select_downsample_min_samples,
-        downsample_min_cell_quantile=select_downsample_min_cell_quantile,
-        downsample_max_cell_quantile=select_downsample_max_cell_quantile,
-        min_gene_relative_variance=select_min_gene_relative_variance,
-        min_gene_total=select_min_gene_total,
-        min_gene_top3=select_min_gene_top3,
-        random_seed=random_seed,
-    )
 
     cell_sizes = ut.maybe_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
     if cell_sizes is not None:
         ut.log_calc("cell_sizes", cell_sizes, formatter=ut.sizes_description)
+        is_small = np.sum(cell_sizes) <= target_metacell_size * candidates_min_split_size_factor
+    else:
+        is_small = adata.n_obs <= target_metacell_size * candidates_min_split_size_factor
+    ut.log_calc("is_small", is_small)
 
-    data = ut.get_vo_proper(sdata, "downsampled", layout="row_major")
-    data = ut.to_numpy_matrix(data, copy=True)
-
-    if select_correction is not None:
-        select_correction(adata=adata, sdata=sdata, downsampled=data)
-
-    if cells_similarity_value_regularization > 0:
-        data += cells_similarity_value_regularization
-
-    if cells_similarity_log_data:
-        data = ut.log_data(data, base=2)
-
-    if knn_k is None:
-        if cell_sizes is None:
-            median_cell_size = 1.0
-            quantile_cell_size = 1.0
-        else:
-            median_cell_size = float(np.median(cell_sizes))
-            quantile_cell_size = np.quantile(cell_sizes, knn_k_size_quantile)
-        knn_k_of_median = int(round(target_metacell_size / median_cell_size))
-        knn_k_median = int(round(knn_k_size_factor * target_metacell_size / median_cell_size))
-        knn_k_quantile = int(round(target_metacell_size / quantile_cell_size))
-        ut.log_calc("median_cell_size", median_cell_size)
-        ut.log_calc("knn_k by median_cell_size", knn_k_median)
-        ut.log_calc("quantile_cell_size", quantile_cell_size)
-        ut.log_calc("knn_k by quantile_cell_size", knn_k_quantile)
-        knn_k = max(
-            int(round(knn_k_size_factor * target_metacell_size / median_cell_size)),
-            int(round(target_metacell_size / quantile_cell_size)),
-            min_knn_k or 0,
-        )
-
-    if knn_k == 0:
-        ut.log_calc("knn_k: 0 (too small, trying a single metacell)")
-        ut.set_o_data(sdata, "candidate", np.full(sdata.n_obs, 0, dtype="int32"), formatter=lambda _: "* <- 0")
-    elif knn_k_of_median >= sdata.n_obs:
-        ut.log_calc(f"knn_k of median: {knn_k_of_median} (too large, trying a single metacell)")
-        ut.set_o_data(sdata, "candidate", np.full(sdata.n_obs, 0, dtype="int32"), formatter=lambda _: "* <- 0")
+    if is_small:
+        candidate_of_cells = np.zeros(adata.n_obs, dtype="int32")
 
     else:
-        ut.log_calc("knn_k", knn_k)
-
-        tl.compute_obs_obs_similarity(sdata, data, method=cells_similarity_method, reproducible=(random_seed != 0))
-
-        tl.compute_obs_obs_knn_graph(
-            sdata,
-            k=knn_k,
-            balanced_ranks_factor=knn_balanced_ranks_factor,
-            incoming_degree_factor=knn_incoming_degree_factor,
-            outgoing_degree_factor=knn_outgoing_degree_factor,
-        )
-
-        tl.compute_candidate_metacells(
-            sdata,
-            target_metacell_size=target_metacell_size,
-            cell_sizes=cell_sizes,
-            min_seed_size_quantile=min_seed_size_quantile,
-            max_seed_size_quantile=max_seed_size_quantile,
-            cooldown_pass=candidates_cooldown_pass,
-            cooldown_node=candidates_cooldown_node,
-            cooldown_phase=candidates_cooldown_phase,
-            min_split_size_factor=candidates_min_split_size_factor,
-            max_merge_size_factor=candidates_max_merge_size_factor,
-            min_metacell_cells=candidates_min_metacell_cells,
-            max_split_min_cut_strength=candidates_max_split_min_cut_strength,
-            min_cut_seed_cells=candidates_min_cut_seed_cells,
-            must_complete_cover=must_complete_cover,
+        sdata = extract_selected_data(
+            adata,
+            what,
+            top_level=False,
+            downsample_min_samples=select_downsample_min_samples,
+            downsample_min_cell_quantile=select_downsample_min_cell_quantile,
+            downsample_max_cell_quantile=select_downsample_max_cell_quantile,
+            min_gene_relative_variance=select_min_gene_relative_variance,
+            min_gene_total=select_min_gene_total,
+            min_gene_top3=select_min_gene_top3,
             random_seed=random_seed,
         )
 
-    candidate_of_cells = ut.get_o_numpy(sdata, "candidate", formatter=ut.groups_description)
+        data = ut.get_vo_proper(sdata, "downsampled", layout="row_major")
+        data = ut.to_numpy_matrix(data, copy=True)
+
+        if select_correction is not None:
+            select_correction(adata=adata, sdata=sdata, downsampled=data)
+
+        if cells_similarity_value_regularization > 0:
+            data += cells_similarity_value_regularization
+
+        if cells_similarity_log_data:
+            data = ut.log_data(data, base=2)
+
+        if knn_k is None:
+            if cell_sizes is None:
+                median_cell_size = 1.0
+                quantile_cell_size = 1.0
+            else:
+                median_cell_size = float(np.median(cell_sizes))
+                quantile_cell_size = np.quantile(cell_sizes, knn_k_size_quantile)
+            knn_k_of_median = int(round(target_metacell_size / median_cell_size))
+            knn_k_median = int(round(knn_k_size_factor * target_metacell_size / median_cell_size))
+            knn_k_quantile = int(round(target_metacell_size / quantile_cell_size))
+            ut.log_calc("median_cell_size", median_cell_size)
+            ut.log_calc("knn_k by median_cell_size", knn_k_median)
+            ut.log_calc("quantile_cell_size", quantile_cell_size)
+            ut.log_calc("knn_k by quantile_cell_size", knn_k_quantile)
+            knn_k = max(
+                int(round(knn_k_size_factor * target_metacell_size / median_cell_size)),
+                int(round(target_metacell_size / quantile_cell_size)),
+                min_knn_k or 0,
+            )
+
+        if knn_k == 0:
+            ut.log_calc("knn_k: 0 (too small, trying a single metacell)")
+            ut.set_o_data(sdata, "candidate", np.full(sdata.n_obs, 0, dtype="int32"), formatter=lambda _: "* <- 0")
+        elif knn_k_of_median >= sdata.n_obs:
+            ut.log_calc(f"knn_k of median: {knn_k_of_median} (too large, trying a single metacell)")
+            ut.set_o_data(sdata, "candidate", np.full(sdata.n_obs, 0, dtype="int32"), formatter=lambda _: "* <- 0")
+
+        else:
+            ut.log_calc("knn_k", knn_k)
+
+            tl.compute_obs_obs_similarity(sdata, data, method=cells_similarity_method, reproducible=(random_seed != 0))
+
+            tl.compute_obs_obs_knn_graph(
+                sdata,
+                k=knn_k,
+                balanced_ranks_factor=knn_balanced_ranks_factor,
+                incoming_degree_factor=knn_incoming_degree_factor,
+                outgoing_degree_factor=knn_outgoing_degree_factor,
+            )
+
+            tl.compute_candidate_metacells(
+                sdata,
+                target_metacell_size=target_metacell_size,
+                cell_sizes=cell_sizes,
+                min_seed_size_quantile=min_seed_size_quantile,
+                max_seed_size_quantile=max_seed_size_quantile,
+                cooldown_pass=candidates_cooldown_pass,
+                cooldown_node=candidates_cooldown_node,
+                cooldown_phase=candidates_cooldown_phase,
+                min_split_size_factor=candidates_min_split_size_factor,
+                max_merge_size_factor=candidates_max_merge_size_factor,
+                min_metacell_cells=candidates_min_metacell_cells,
+                max_split_min_cut_strength=candidates_max_split_min_cut_strength,
+                min_cut_seed_cells=candidates_min_cut_seed_cells,
+                must_complete_cover=must_complete_cover,
+                random_seed=random_seed,
+            )
+
+        candidate_of_cells = ut.get_o_numpy(sdata, "candidate", formatter=ut.groups_description)
 
     if must_complete_cover:
         assert np.min(candidate_of_cells) == 0

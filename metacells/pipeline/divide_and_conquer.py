@@ -929,6 +929,9 @@ def _compute_divide_and_conquer_subset(
     dac_parameters: DacParameters,
     random_seed: int,
 ) -> None:
+    if not np.any(subset_mask):
+        return
+
     preliminary_pile_of_cells = np.full(adata.n_obs, -1, dtype="int32")
     preliminary_pile_of_cells[subset_mask] = ut.random_piles(
         np.sum(subset_mask),
