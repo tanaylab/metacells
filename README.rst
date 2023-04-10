@@ -227,12 +227,16 @@ In addition, one should compute and look at the following (an easy way to comput
     any of the cells contained in the metacell. Both this and the ``inner_stdev_log`` below can be used for quality
     control over the consistency of the gene expression in the metacell.
 
+``significant_inner_folds_count`` per gene
+    For each gene, the number of metacells in which there's at least one cell with a high ``deviant_fold`` (that is,
+    where the ``inner_fold`` is high). This helps in identifying troublesome genes, which can be then marked as noisy,
+    lateral or even excluded, depending on their biological significance.
+
 ``inner_stdev_log`` per gene per metacell (computed by ``compute_inner_stdev_logs``)
     For each metacell, for each gene, the standard deviation of the log (base 2) of the fraction of the gene across the
     cells of the metacell. Ideally, the standard deviation should be ~1/3rd of the ``deviants_min_gene_fold_factor``
     (which is ``3`` by default), indicating that (all)most cells are within that maximal fold factor. In practice we may
-    see higher values - the lower, the better. Both this and the ``inner_fold`` above can be used for quality control
-    over the consistency of the gene expression in the metacell.
+    see higher values - the lower, the better. Both this and the ``inner_fold`` above can be used for quality control over the consistency of the gene expression in the metacell.
 
 ``marker_gene`` mask (computed by ``find_metacells_marker_genes``)
     Given the computed metacells, we can identify genes that have a sufficient number of effective UMIs (in some
