@@ -137,18 +137,24 @@ def start_progress_bar_slice(fraction: float) -> Tuple[int, int]:
     """
     assert PROGRESS_BAR is not None
     assert TQDM_KWARGS is None
-    assert 0.0 < fraction < 1.0
+    assert 0.0 < fraction <= 1.0, f"invalid progress fraction: {fraction} (1 + {fraction - 1})"
 
     global PROGRESS_END
     global PROGRESS_SIZE
 
     old_progress_size = PROGRESS_SIZE
-    PROGRESS_SIZE = int(round(PROGRESS_SIZE * fraction))
-    assert 0 < PROGRESS_SIZE < old_progress_size
-
     old_progress_end = PROGRESS_END
+
+    PROGRESS_SIZE = int(round(PROGRESS_SIZE * fraction))
     PROGRESS_END = PROGRESS_POSITION + PROGRESS_SIZE
-    assert PROGRESS_END <= old_progress_end
+
+    assert (
+        0 < PROGRESS_SIZE <= old_progress_size
+    ), f"invalid progress size: {PROGRESS_SIZE} ({old_progress_size} + {PROGRESS_SIZE - old_progress_size})"
+
+    assert (
+        PROGRESS_END <= old_progress_end
+    ), f"invalid progress end: {PROGRESS_END} ({old_progress_end} + {PROGRESS_END - old_progress_end})"
 
     return old_progress_size, old_progress_end
 
@@ -182,7 +188,7 @@ def did_progress(fraction: float) -> Any:
     Report progress of some fraction of the current (slice of) progress bar.
     """
     _show_progress_bar()
-    assert 0 < fraction <= 1.0
+    assert 0.0 < fraction <= 1.0, f"invalid progress fraction: {fraction} (1 + {fraction - 1})"
     assert PROGRESS_BAR is not None
     assert TQDM_KWARGS is None
 

@@ -992,10 +992,21 @@ def _compute_divide_and_conquer_subset(
         )
 
     ut.log_calc(f"# {prefix}.groups")
-    with ut.progress_bar_slice(time_fractions.pop()):
+    collect_time = time_fractions.pop()
+    groups_time = time_fractions.pop()
+    if collect_time is None or groups_time is None:
+        total_time = None
+    else:
+        total_time = collect_time + groups_time
+        collect_time /= total_time
+        groups_time /= total_time
+
+    with ut.progress_bar_slice(total_time):
         final_pile_of_cells = _compute_metacell_groups(
             adata,
             what,
+            collect_time=collect_time,
+            groups_time=groups_time,
             prefix=prefix + ".groups",
             subset_mask=subset_mask,
             dac_parameters=must_cover_dac_parameters,
@@ -1125,6 +1136,8 @@ def _compute_metacell_groups(
     adata: AnnData,
     what: str,
     *,
+    collect_time: Optional[float],
+    groups_time: Optional[float],
     prefix: str,
     subset_mask: ut.NumpyVector,
     dac_parameters: DacParameters,
@@ -1133,70 +1146,77 @@ def _compute_metacell_groups(
     metacell_of_cells = ut.get_o_numpy(adata, "metacell")
     assert not np.any(metacell_of_cells[subset_mask] < 0)
 
-    sdata = ut.slice(
-        adata,
-        name=f"{prefix}.grouped",
-        top_level=False,
-        obs=subset_mask,
-        track_obs="__full_cell_index__",
-    )
+    with ut.progress_bar_slice(collect_time):
+        sdata = ut.slice(
+            adata,
+            name=f"{prefix}.grouped",
+            top_level=False,
+            obs=subset_mask,
+            track_obs="__full_cell_index__",
+        )
 
-    mdata = collect_metacells(
-        sdata, what, groups=metacell_of_cells[subset_mask], name=prefix, _metacell_groups=True, random_seed=random_seed
-    )
+        mdata = collect_metacells(
+            sdata,
+            what,
+            groups=metacell_of_cells[subset_mask],
+            name=prefix,
+            _metacell_groups=True,
+            random_seed=random_seed,
+        )
 
-    metacell_sizes = ut.get_o_numpy(mdata, "grouped")
-    target_pile_size = compute_target_pile_size(
-        mdata,
-        cell_sizes=metacell_sizes,
-        target_metacell_size=dac_parameters.target_pile_size,
-        min_target_pile_size=dac_parameters.min_target_pile_size,
-        max_target_pile_size=dac_parameters.max_target_pile_size,
-        target_metacells_in_pile=dac_parameters.target_metacells_in_pile,
-    )
-
-    group_dac_parameters = replace(
-        dac_parameters,
-        target_pile_size=target_pile_size,
-        direct_parameters=replace(
-            dac_parameters.direct_parameters,
-            target_metacell_size=dac_parameters.target_pile_size,
-            select_correction=None,
+    with ut.progress_bar_slice(groups_time):
+        metacell_sizes = ut.get_o_numpy(mdata, "grouped")
+        target_pile_size = compute_target_pile_size(
+            mdata,
             cell_sizes=metacell_sizes,
-            knn_k_size_factor=dac_parameters.piles_knn_k_size_factor,
-            candidates_min_split_size_factor=dac_parameters.piles_min_split_size_factor,
-            candidates_max_merge_size_factor=dac_parameters.piles_max_merge_size_factor,
-            candidates_min_metacell_cells=None,
-            cells_similarity_log_data=dac_parameters.groups_similarity_log_data,
-            cells_similarity_method=dac_parameters.groups_similarity_method,
-            dissolve_min_robust_size_factor=dac_parameters.piles_min_robust_size_factor,
-            must_complete_cover=True,
-        ),
-    )
+            target_metacell_size=dac_parameters.target_pile_size,
+            min_target_pile_size=dac_parameters.min_target_pile_size,
+            max_target_pile_size=dac_parameters.max_target_pile_size,
+            target_metacells_in_pile=dac_parameters.target_metacells_in_pile,
+        )
 
-    _initialize_divide_and_conquer_results(mdata)
-    collected_mask = np.zeros(mdata.n_obs, dtype="bool")
+        group_dac_parameters = replace(
+            dac_parameters,
+            target_pile_size=target_pile_size,
+            direct_parameters=replace(
+                dac_parameters.direct_parameters,
+                target_metacell_size=dac_parameters.target_pile_size,
+                select_correction=None,
+                cell_sizes=metacell_sizes,
+                knn_k_size_factor=dac_parameters.piles_knn_k_size_factor,
+                candidates_min_split_size_factor=dac_parameters.piles_min_split_size_factor,
+                candidates_max_merge_size_factor=dac_parameters.piles_max_merge_size_factor,
+                candidates_min_metacell_cells=None,
+                cells_similarity_log_data=dac_parameters.groups_similarity_log_data,
+                cells_similarity_method=dac_parameters.groups_similarity_method,
+                dissolve_min_robust_size_factor=dac_parameters.piles_min_robust_size_factor,
+                must_complete_cover=True,
+            ),
+        )
 
-    _compute_divide_and_conquer_subset(
-        mdata,
-        what,
-        prefix=prefix,
-        subset_mask=np.full(mdata.n_obs, True, dtype="bool"),
-        collected_mask=collected_mask,
-        metacells_level=0,
-        counts=[0],
-        dac_parameters=group_dac_parameters,
-        random_seed=random_seed,
-    )
+        _initialize_divide_and_conquer_results(mdata)
+        collected_mask = np.zeros(mdata.n_obs, dtype="bool")
 
-    _finalize_divide_and_conquer_results(mdata)
-    assert np.all(collected_mask)
+        _compute_divide_and_conquer_subset(
+            mdata,
+            what,
+            prefix=prefix,
+            subset_mask=np.full(mdata.n_obs, True, dtype="bool"),
+            collected_mask=collected_mask,
+            metacells_level=0,
+            counts=[0],
+            dac_parameters=group_dac_parameters,
+            random_seed=random_seed,
+        )
 
-    pile_of_metacells = ut.get_o_numpy(mdata, "metacell", formatter=ut.groups_description)
-    assert not np.any(pile_of_metacells < 0)
+        _finalize_divide_and_conquer_results(mdata)
+        assert np.all(collected_mask)
 
-    pile_of_cells = np.full(adata.n_obs, -1, dtype="int32")
-    pile_of_cells[subset_mask] = pile_of_metacells[metacell_of_cells[subset_mask]]
+        pile_of_metacells = ut.get_o_numpy(mdata, "metacell", formatter=ut.groups_description)
+        assert not np.any(pile_of_metacells < 0)
+
+        pile_of_cells = np.full(adata.n_obs, -1, dtype="int32")
+        pile_of_cells[subset_mask] = pile_of_metacells[metacell_of_cells[subset_mask]]
 
     return pile_of_cells
 
@@ -1294,6 +1314,7 @@ def _divide_and_conquer_times(
                 dac_parameters=must_cover_dac_parameters,
             )
         ),
+        1.0,
         np.sum(
             _group_times(
                 prefix=prefix + ".groups",

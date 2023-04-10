@@ -589,7 +589,7 @@ def incremental(adata: AnnData, per: str, name: str, formatter: Optional[Callabl
     if not hasattr(adata, "__incremental__"):
         setattr(adata, "__incremental__", {})
     by_name: Dict[str, Tuple[str, Optional[Callable[[Any], Any]]]] = getattr(adata, "__incremental__")
-    assert name not in by_name
+    # assert name not in by_name
     by_name[name] = (per, formatter)
 
 

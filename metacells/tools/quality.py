@@ -814,6 +814,6 @@ def count_significant_inner_folds(
     estimated overall gene expression in the metacell.
     """
     inner_fold_per_gene_per_metacell = ut.get_vo_proper(adata, "inner_fold", layout="column_major")
-    significant_per_gene_per_metacell = inner_fold_per_gene_per_metacell >= min_gene_fold_factor
-    significant_per_gene = ut.sum_per(significant_per_gene_per_metacell, per="column")
+    significant_per_gene_per_metacell = inner_fold_per_gene_per_metacell >= min_gene_fold_factor  # type: ignore
+    significant_per_gene = ut.sum_per(significant_per_gene_per_metacell, per="column")  # type: ignore
     ut.set_v_data(adata, "significant_inner_folds_count", significant_per_gene, formatter=ut.sizes_description)
