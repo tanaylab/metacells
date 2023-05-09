@@ -235,20 +235,20 @@ def _project_query_atlas_data_arguments(
 
     query_atlas_corr = ut.cross_corrcoef_rows(query_log_fractions, atlas_log_fractions, reproducible=reproducible)
 
-    return dict(
-        atlas_umis=atlas_umis,
-        query_atlas_corr=query_atlas_corr,
-        atlas_fractions=atlas_fractions,
-        atlas_log_fractions=atlas_log_fractions,
-        query_log_fractions=query_log_fractions,
-        candidates_count=candidates_count,
-        min_candidates_fraction=min_candidates_fraction,
-        min_significant_gene_umis=min_significant_gene_umis,
-        min_usage_weight=min_usage_weight,
-        max_consistency_fold_factor=max_consistency_fold_factor,
-        second_anchor_indices=second_anchor_indices,
-        query_atlas_corr_residual=query_atlas_corr_residual,
-    )
+    return {
+        "atlas_umis": atlas_umis,
+        "query_atlas_corr": query_atlas_corr,
+        "atlas_fractions": atlas_fractions,
+        "atlas_log_fractions": atlas_log_fractions,
+        "query_log_fractions": query_log_fractions,
+        "candidates_count": candidates_count,
+        "min_candidates_fraction": min_candidates_fraction,
+        "min_significant_gene_umis": min_significant_gene_umis,
+        "min_usage_weight": min_usage_weight,
+        "max_consistency_fold_factor": max_consistency_fold_factor,
+        "second_anchor_indices": second_anchor_indices,
+        "query_atlas_corr_residual": query_atlas_corr_residual,
+    }
 
 
 @ut.logged()

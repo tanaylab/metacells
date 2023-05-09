@@ -11,12 +11,27 @@ from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
 import metacells.utilities as ut
-from metacells.tools.filter import filter_data
 
 __all__ = [
+    "compute_excluded_gene_umis",
     "find_properly_sampled_cells",
     "find_properly_sampled_genes",
 ]
+
+
+def compute_excluded_gene_umis(
+    adata: AnnData,
+    what: Union[str, ut.Matrix] = "__x__",
+) -> None:
+    """
+    Given an ``excluded_gene`` mask, compute the total ``excluded_umis`` of each cell.
+    """
+    umis_per_gene_per_cell = ut.get_vo_proper(adata, what, layout="column_major")
+    excluded_genes_mask = ut.get_v_numpy(adata, "excluded_gene")
+    umis_per_excluded_gene_per_cell = umis_per_gene_per_cell[:, excluded_genes_mask]
+    umis_per_excluded_gene_per_cell = ut.to_layout(umis_per_excluded_gene_per_cell, layout="row_major")
+    excluded_umis_per_cell = ut.sum_per(umis_per_excluded_gene_per_cell, per="row")
+    ut.set_o_data(adata, "excluded_umis", excluded_umis_per_cell)
 
 
 @ut.logged()
@@ -65,30 +80,22 @@ def find_properly_sampled_cells(
     3. If ``max_excluded_genes_fraction`` (no default) is not ``None``, then exclude all cells whose sum of the excluded
        data (as defined by the ``excluded_gene`` mask) divided by the total data is more than the specified threshold.
     """
-    total_of_cells = ut.get_o_numpy(adata, what, sum=True)
+    total_umis_per_cell = ut.get_o_numpy(adata, what, sum=True)
 
     cells_mask = np.full(adata.n_obs, True, dtype="bool")
 
     if min_cell_total is not None:
-        cells_mask = cells_mask & (total_of_cells >= min_cell_total)
+        cells_mask = cells_mask & (total_umis_per_cell >= min_cell_total)
 
     if max_cell_total is not None:
-        cells_mask = cells_mask & (total_of_cells <= max_cell_total)
+        cells_mask = cells_mask & (total_umis_per_cell <= max_cell_total)
 
     if max_excluded_genes_fraction is not None:
-        excluded_results = filter_data(
-            adata,
-            name=".excluded",
-            var_masks=["excluded_gene?"],
-        )
-        if excluded_results is not None:
-            excluded_data = ut.get_vo_proper(excluded_results[0], layout="row_major")
-            excluded_of_cells = ut.sum_per(excluded_data, per="row")
-            if np.min(total_of_cells) == 0:
-                total_of_cells = np.copy(total_of_cells)
-                total_of_cells[total_of_cells == 0] = 1
-            excluded_fraction = excluded_of_cells / total_of_cells
-            cells_mask = cells_mask & (excluded_fraction <= max_excluded_genes_fraction)
+        if not ut.has_data(adata, "excluded_umis"):
+            compute_excluded_gene_umis(adata, what)
+        excluded_umis_per_cell = ut.get_o_numpy(adata, "excluded_umis")
+        excluded_umis_fraction_per_cell = excluded_umis_per_cell / total_umis_per_cell
+        cells_mask = cells_mask & (excluded_umis_fraction_per_cell <= max_excluded_genes_fraction)
 
     if inplace:
         ut.set_o_data(adata, "properly_sampled_cell", cells_mask)

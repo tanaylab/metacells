@@ -207,14 +207,14 @@ def collect_metacells(  # pylint: disable=too-many-statements
                     "fraction_per_gene_of_metacell", fraction_per_gene_of_metacell, formatter=ut.sizes_description
                 )
 
-            return dict(
-                grouped=grouped_of_metacell,
-                total_umis=total_umis_of_metacell,
-                umis_per_gene=umis_per_gene_of_metacell,
-                fraction_per_gene=fraction_per_gene_of_metacell,
-                zeros_downsample_umis=zeros_downsample_umis,
-                zeros_per_gene=zeros_per_gene,
-            )
+            return {
+                "grouped": grouped_of_metacell,
+                "total_umis": total_umis_of_metacell,
+                "umis_per_gene": umis_per_gene_of_metacell,
+                "fraction_per_gene": fraction_per_gene_of_metacell,
+                "zeros_downsample_umis": zeros_downsample_umis,
+                "zeros_per_gene": zeros_per_gene,
+            }
 
     results = ut.parallel_map(_collect_metacell, metacells_count)
 
@@ -294,6 +294,6 @@ def _obs_names(prefix: str, name_of_members: ut.NumpyVector, group_of_members: u
         hasher = shake_128()
         for member_name in name_of_members[groups_mask]:
             hasher.update(member_name.encode("utf8"))
-        checksum = int(hasher.hexdigest(16), 16) % 100  # pylint: disable=too-many-function-args
+        checksum = int(hasher.hexdigest(16), 16) % 100
         name_of_groups.append(f"{prefix}{group_index}.{checksum:02d}")
     return name_of_groups

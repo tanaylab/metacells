@@ -28,8 +28,8 @@ def downsample_cells(
     downsample_min_cell_quantile: float = pr.downsample_min_cell_quantile,
     downsample_min_samples: float = pr.downsample_min_samples,
     downsample_max_cell_quantile: float = pr.downsample_max_cell_quantile,
-    random_seed: int = pr.random_seed,
     inplace: bool = True,
+    random_seed: int,
 ) -> Optional[Tuple[int, ut.PandasFrame]]:
     """
     Downsample the values of ``what`` (default: {what}) data.
@@ -77,8 +77,8 @@ def downsample_cells(
        decrease the number of samples to ensure at most ``downsample_max_cell_quantile`` (default:
        {downsample_max_cell_quantile}) cells will have a lower number of samples.
 
-    3. Downsample each cell so that it has at most the selected number of samples. Use the
-       ``random_seed`` to allow making this replicable.
+    3. Downsample each cell so that it has at most the selected number of samples. Specify a non-zero
+       ``random_seed`` to make this reproducible.
     """
     total_per_cell = ut.get_o_numpy(adata, what, sum=True)
 

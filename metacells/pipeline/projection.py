@@ -1112,15 +1112,15 @@ def _compute_single_type_projection(
     ut.log_return("projected_fold_per_gene_per_metacell_of_type", projected_fold_per_gene_per_metacell_of_type)
     ut.log_return("weights", type_weights)
 
-    return dict(
-        query_metacell_indices_of_type=np.where(query_metacell_mask_of_type)[0],
-        fitted_genes_indices_of_type=np.where(fitted_genes_mask_of_type)[0],
-        similar_per_metacell_of_type=similar_per_metacell_of_type,
-        misfit_per_gene_per_metacell_of_type=misfit_per_gene_per_metacell_of_type,
-        projected_correlation_per_metacell_of_type=projected_correlation_per_metacell_of_type,
-        projected_fold_per_gene_per_metacell_of_type=projected_fold_per_gene_per_metacell_of_type,
-        weights_per_atlas_per_query_metacell_of_type=type_weights,
-    )
+    return {
+        "query_metacell_indices_of_type": np.where(query_metacell_mask_of_type)[0],
+        "fitted_genes_indices_of_type": np.where(fitted_genes_mask_of_type)[0],
+        "similar_per_metacell_of_type": similar_per_metacell_of_type,
+        "misfit_per_gene_per_metacell_of_type": misfit_per_gene_per_metacell_of_type,
+        "projected_correlation_per_metacell_of_type": projected_correlation_per_metacell_of_type,
+        "projected_fold_per_gene_per_metacell_of_type": projected_fold_per_gene_per_metacell_of_type,
+        "weights_per_atlas_per_query_metacell_of_type": type_weights,
+    }
 
 
 def _detect_type_misfit_genes(
@@ -1460,15 +1460,15 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
     ut.log_return("projected_correlation", projected_correlation)
     ut.log_return("projected_fold_per_gene", projected_fold_per_gene)
 
-    return dict(
-        primary_type=primary_type,
-        secondary_type=secondary_type,
-        fitted_genes_mask=fitted_genes_mask,
-        misfit_genes_mask=misfit_genes_mask,
-        projected_correlation=projected_correlation,
-        projected_fold_per_gene=projected_fold_per_gene,
-        weights=ut.to_numpy_vector(weights),
-    )
+    return {
+        "primary_type": primary_type,
+        "secondary_type": secondary_type,
+        "fitted_genes_mask": fitted_genes_mask,
+        "misfit_genes_mask": misfit_genes_mask,
+        "projected_correlation": projected_correlation,
+        "projected_fold_per_gene": projected_fold_per_gene,
+        "weights": ut.to_numpy_vector(weights),
+    }
 
 
 def _normalize_corrected_fractions(adata: AnnData, what: str) -> None:

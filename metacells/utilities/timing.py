@@ -326,11 +326,11 @@ def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branche
     step_timing = StepTiming(name, parent_timing)
     steps_stack.append(step_timing)
 
-    try:
-        if LOG_ALL_STEPS:
-            utl.logger().debug(f"{{[( {step_timing.context}")  # pylint: disable=logging-fstring-interpolation
+    if LOG_ALL_STEPS:
+        utl.logger().debug(f"{{[( {step_timing.context}")  # pylint: disable=logging-fstring-interpolation
 
-        yield_point = Counters.now()
+    yield_point = Counters.now()
+    try:
         yield None
 
     finally:

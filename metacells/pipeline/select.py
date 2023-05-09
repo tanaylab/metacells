@@ -3,6 +3,7 @@ Selection
 ---------
 """
 
+from typing import List
 from typing import Optional
 from typing import Union
 
@@ -15,6 +16,9 @@ import metacells.utilities as ut
 __all__ = [
     "extract_selected_data",
 ]
+
+
+# pylint: disable=dangerous-default-value
 
 
 @ut.logged()
@@ -31,6 +35,7 @@ def extract_selected_data(
     min_gene_relative_variance: Optional[float] = pr.select_min_gene_relative_variance,
     min_gene_total: Optional[int] = pr.select_min_gene_total,
     min_gene_top3: Optional[int] = pr.select_min_gene_top3,
+    additional_gene_masks: List[str] = ["&~lateral_gene"],
     random_seed: int = 0,
     top_level: bool = True,
 ) -> AnnData:
@@ -99,7 +104,7 @@ def extract_selected_data(
        the downsampled data), using ``min_gene_relative_variance``.
 
     4. Invoke :py:func:`metacells.tools.filter.filter_data` to slice just the selected genes using the ``name``
-       (default: {name}).
+       (default: {name}) with following ``additional_gene_masks`` (default: {additional_gene_masks}).
     """
 
     tl.downsample_cells(
@@ -113,11 +118,11 @@ def extract_selected_data(
 
     if ut.has_data(adata, "select_gene"):
         results = tl.filter_data(
-            adata, name=name, top_level=top_level, track_var="full_gene_index", var_masks=["select_gene"]
+            adata, name=name, top_level=top_level, track_var="full_gene_index", var_masks=["&select_gene"]
         )
 
     else:
-        var_masks = ["&~lateral_gene?"]
+        var_masks = []
 
         if min_gene_top3 is not None:
             var_masks.append("&high_top3_gene")
@@ -139,7 +144,7 @@ def extract_selected_data(
             top_level=top_level,
             track_var="full_gene_index",
             mask_var="select_gene",
-            var_masks=var_masks,
+            var_masks=var_masks + additional_gene_masks,
         )
 
     if results is None:

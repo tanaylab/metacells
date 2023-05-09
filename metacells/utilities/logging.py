@@ -173,28 +173,28 @@ class ShortLoggingFormatter(LoggingFormatter):
     """
 
     #: Map the long level names to the fixed-width short level names.
-    SHORT_LEVEL_NAMES = dict(
-        CRITICAL="CRT",
-        CRT="CRT",
-        ERROR="ERR",
-        ERR="ERR",
-        WARNING="WRN",
-        WRN="WRN",
-        INFO="INF",
-        INF="INF",
-        STEP="STP",
-        STP="STP",
-        PARAM="PRM",
-        PRM="PRM",
-        HINT="PRM",
-        HNT="PRM",
-        CALC="CLC",
-        CLC="CLC",
-        DEBUG="DBG",
-        DBG="DBG",
-        NOTSET="NOT",
-        NOT="NOT",
-    )
+    SHORT_LEVEL_NAMES = {
+        "CRITICAL": "CRT",
+        "CRT": "CRT",
+        "ERROR": "ERR",
+        "ERR": "ERR",
+        "WARNING": "WRN",
+        "WRN": "WRN",
+        "INFO": "INF",
+        "INF": "INF",
+        "STEP": "STP",
+        "STP": "STP",
+        "PARAM": "PRM",
+        "PRM": "PRM",
+        "HINT": "PRM",
+        "HNT": "PRM",
+        "CALC": "CLC",
+        "CLC": "CLC",
+        "DEBUG": "DBG",
+        "DBG": "DBG",
+        "NOTSET": "NOT",
+        "NOT": "NOT",
+    }
 
     def format(self, record: LogRecord) -> Any:
         record.levelname = self.SHORT_LEVEL_NAMES[record.levelname]
@@ -345,10 +345,10 @@ def logged(**kwargs: Callable[[Any], Any]) -> Callable[[CALLABLE], CALLABLE]:
             adatas = _collect_adatas(values)
             new_adatas: List[AnnData] = []
 
-            try:
-                global IS_TOP_LEVEL
-                old_is_top_level = IS_TOP_LEVEL
+            global IS_TOP_LEVEL
+            old_is_top_level = IS_TOP_LEVEL
 
+            try:
                 for adata in adatas:
                     IS_TOP_LEVEL = False
                     if hasattr(adata, "__is_top_level__"):
@@ -424,7 +424,7 @@ def _collect_adatas(values: List[Any]) -> List[AnnData]:
 def _format_value(  # pylint: disable=too-many-return-statements,too-many-branches
     value: Any, name: str, formatter: Optional[Callable[[Any], Any]] = None
 ) -> Optional[str]:
-    if isinstance(value, Parameter.empty.__class__):
+    if isinstance(value, Parameter.empty.__class__):  # type: ignore
         return None
 
     checksum = ""
@@ -578,7 +578,16 @@ def log_step(name: str, value: Any = None, *, formatter: Optional[Callable[[Any]
 
 
 #: Convert ``per`` to the name of the ``AnnData`` data member holding it.
-MEMBER_OF_PER = dict(m="uns", o="obs", v="var", oo="obsp", vv="varp", oa="obsm", va="varm", vo="layers")
+MEMBER_OF_PER = {
+    "m": "uns",
+    "o": "obs",
+    "v": "var",
+    "oo": "obsp",
+    "vv": "varp",
+    "oa": "obsm",
+    "va": "varm",
+    "vo": "layers",
+}
 
 
 def incremental(adata: AnnData, per: str, name: str, formatter: Optional[Callable[[Any], Any]] = None) -> None:

@@ -25,17 +25,17 @@ def compute_obs_obs_similarity(
     what: Union[str, ut.Matrix] = "__x__",
     *,
     method: str = pr.similarity_method,
-    reproducible: bool = pr.reproducible,
     logistics_location: float = pr.logistics_location,
     logistics_slope: float = pr.logistics_slope,
     top: Optional[int] = None,
     bottom: Optional[int] = None,
     inplace: bool = True,
+    reproducible: bool,
 ) -> Optional[ut.PandasFrame]:
     """
     Compute a measure of the similarity between the observations (cells) of ``what`` (default: {what}).
 
-    If ``reproducible`` (default: {reproducible}) is ``True``, a slower (still parallel) but
+    If ``reproducible`` is ``True``, a slower (still parallel) but
     reproducible algorithm will be used to compute Pearson correlations.
 
     The ``method`` (default: {method}) can be one of:
@@ -100,18 +100,18 @@ def compute_var_var_similarity(
     what: Union[str, ut.Matrix] = "__x__",
     *,
     method: str = pr.similarity_method,
-    reproducible: bool = pr.reproducible,
     logistics_location: float = pr.logistics_location,
     logistics_slope: float = pr.logistics_slope,
     top: Optional[int] = None,
     bottom: Optional[int] = None,
     inplace: bool = True,
+    reproducible: bool,
 ) -> Optional[ut.PandasFrame]:
     """
     Compute a measure of the similarity between the variables (genes) of ``what`` (default: {what}).
 
-    If ``reproducible`` (default: {reproducible}) is ``True``, a slower (still parallel) but
-    reproducible algorithm will be used to compute pearson correlations.
+    If ``reproducible`` is ``True``, a slower (still parallel) but
+    reproducible algorithm will be used to compute Pearson correlations.
 
     **Input**
 

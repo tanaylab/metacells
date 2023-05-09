@@ -3,6 +3,7 @@ Layout
 ------
 """
 
+import warnings
 from typing import Optional
 from typing import Union
 
@@ -32,7 +33,7 @@ def umap_by_distances(
     dimensions: int = 2,
     min_dist: float = pr.umap_min_dist,
     spread: float = pr.umap_spread,
-    random_seed: int = pr.random_seed,
+    random_seed: int,
 ) -> None:
     """
     Compute layout for the observations using UMAP, based on a distances matrix.
@@ -58,8 +59,8 @@ def umap_by_distances(
 
     1. Invoke UMAP to compute a layout of some ``dimensions`` (default: {dimensions}D) using
        ``min_dist`` (default: {min_dist}), ``spread`` (default: {spread}) and ``k`` (default: {k}).
-       If the spread is lower than the minimal distance, it is raised. If ``random_seed`` (default:
-       {random_seed}) is not zero, then it is passed to UMAP to force the computation to be
+       If the spread is lower than the minimal distance, it is raised. If ``random_seed``
+       is not zero, then it is passed to UMAP to force the computation to be
        reproducible. However, this means UMAP will use a single-threaded implementation that will be
        slower.
     """
@@ -81,14 +82,16 @@ def umap_by_distances(
         random_state = random_seed
 
     try:
-        coordinates = umap.UMAP(
-            metric="precomputed",
-            n_neighbors=n_neighbors,
-            spread=spread,
-            min_dist=min_dist,
-            n_components=dimensions,
-            random_state=random_state,
-        ).fit_transform(distances_csr)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            coordinates = umap.UMAP(
+                metric="precomputed",
+                n_neighbors=n_neighbors,
+                spread=spread,
+                min_dist=min_dist,
+                n_components=dimensions,
+                random_state=random_state,
+            ).fit_transform(distances_csr)
     except ValueError:
         # UMAP implementation doesn't know how to handle too few edges.
         # However, it considers structural zeros as real edges.
@@ -134,7 +137,7 @@ def spread_coordinates(
     suffix: str = "_spread",
     cover_fraction: float = pr.spread_cover_fraction,
     noise_fraction: float = pr.spread_noise_fraction,
-    random_seed: int = pr.random_seed,
+    random_seed: int,
 ) -> None:
     """
     Move UMAP points so they cover some fraction of the plot area without overlapping.
@@ -157,7 +160,7 @@ def spread_coordinates(
 
     1. Move the points so they cover ``cover_fraction`` (default: {cover_fraction}) of the total
        plot area. Also add a noise of the ``noise_fraction`` (default: {noise_fraction}) of the
-       minimal distance between the points, using the ``random_seed`` (default: {random_seed}).
+       minimal distance between the points. A non-zero ``random_seed`` will make this reproducible.
     """
     assert 0 < cover_fraction < 1
     assert noise_fraction >= 0

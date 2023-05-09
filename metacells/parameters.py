@@ -9,16 +9,6 @@ from typing import Union
 
 import metacells.utilities.typing as utt
 
-#: The generic random seed. The default of ``0`` makes for a different result each time the code is
-#: run. For reproducible results, provide a non-zero value, and also see
-#: :py:func:`metacells.parameters.reproducible`. Used by too many functions to list here.
-random_seed: int = 0
-
-#: Whether to make the results reproducible, possibly at the cost of some slowdown. For reproducible
-#: results, specify a ``True`` values, and also see :py:func:`metacells.parameters.random_seed`.
-#: Used by too many functions to list here.
-reproducible: bool = False
-
 #: The generic minimal "significant" gene fraction. See
 #: :py:func:`metacells.tools.high.find_high_fraction_genes`.
 significant_gene_fraction: float = 1e-5
@@ -857,7 +847,7 @@ rare_dissolve_min_robust_size_factor: float = max_merge_size_factor
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-dissolve_min_convincing_size_factor: Optional[float] = max_merge_size_factor
+dissolve_min_convincing_size_factor: Optional[float] = 0.125
 
 #: The minimal size factor for a metacell to be kept if it is "convincing" when grouping rare gene
 #: module cells. See

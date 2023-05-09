@@ -1,12 +1,12 @@
 [MASTER]
 persistent=no
-load_plugins=pylint_strict_informational
+#load_plugins=pylint_strict_informational
 
 [MESSAGES CONTROL]
 
 enable=useless-suppression
 
-disable=C0330,R0801,
+disable=R0801,
         c-extension-no-member,
         fixme,
         global-statement,

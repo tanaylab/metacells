@@ -60,9 +60,18 @@ else:
 LOG.info(f"Read {old_cells_path}...")
 cdata = ad.read_h5ad(old_cells_path)
 
+if fdata is not None:
+    assert (
+        len(fdata.var_names) == len(cdata.var_names) and fdata.var_names == cdata.var_names
+    ), f"different genes in: {full_cells_path} and: {old_cells_path}"
+
 LOG.info(f"Read {old_metacells_path}...")
 old_mdata = ad.read_h5ad(old_metacells_path)
 assert not mc.ut.has_data(old_mdata, "metacells_algorithm")
+
+assert (
+    len(cdata.var_names) == len(old_mdata.var_names) and cdata.var_names == old_mdata.var_names
+), f"different genes in: {old_cells_path} and: {old_metacells_path}"
 
 metacell_of_cells = mc.ut.get_o_numpy(cdata, "metacell")
 metacells_count = np.max(metacell_of_cells) + 1
@@ -110,7 +119,7 @@ for name in sorted(cdata.obs.keys()):
 
 LOG.info("Collect metacells...")
 new_mdata = mc.pl.collect_metacells(cdata, name=mc.ut.get_name(old_mdata) or "metacells", random_seed=random_seed)
-assert new_mdata.shape == old_mdata.shape
+assert new_mdata.shape == old_mdata.shape, f"NEW SHAPE {new_mdata.shape} != OLD SHAPE {old_mdata.shape}"
 mc.ut.set_m_data(new_mdata, "metacells_algorithm", metacells_algorithm)
 
 if unsafe_names:

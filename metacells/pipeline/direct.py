@@ -107,7 +107,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
     dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
     dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
-    random_seed: int = pr.random_seed,
+    random_seed: int,
 ) -> None:
     """
     Directly compute metacells using ``what`` (default: {what}) data.
@@ -183,7 +183,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        ``select_min_gene_total`` (default: {select_min_gene_total}),
        ``select_min_gene_top3`` (default: {select_min_gene_top3}),
        ``select_min_gene_relative_variance`` (default: {select_min_gene_relative_variance}) and
-       ``random_seed`` (default: {random_seed}) to make this replicable.
+       ``random_seed``.
 
     2. Apply the ``select_correction`` function, if any, to modify the downsampled selects data.
 
@@ -218,8 +218,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        ``candidates_max_merge_size_factor`` (default: {candidates_max_merge_size_factor}),
        ``candidates_min_metacell_cells`` (default: {candidates_min_metacell_cells}),
        and
-       ``random_seed`` (default: {random_seed})
-       to make this replicable. This tries to build metacells of the
+       ``random_seed``. This tries to build metacells of the
        ``target_metacell_size`` (default: {target_metacell_size})
        using the effective cell sizes.
 
@@ -317,7 +316,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
         else:
             ut.log_calc("knn_k", knn_k)
 
-            tl.compute_obs_obs_similarity(sdata, data, method=cells_similarity_method, reproducible=(random_seed != 0))
+            tl.compute_obs_obs_similarity(sdata, data, method=cells_similarity_method, reproducible=random_seed != 0)
 
             tl.compute_obs_obs_knn_graph(
                 sdata,

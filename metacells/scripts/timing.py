@@ -231,9 +231,9 @@ def _flame_main(input_path: Optional[str], output_path: Optional[str], focus: st
 
     for name, data in data_by_name.items():
         if seconds:
-            datum = dict(invocations=data[0], elapsed=data[1] / 1_000_000_000, cpu=data[2] / 1_000_000_000)
+            datum = {"invocations": data[0], "elapsed": data[1] / 1_000_000_000, "cpu": data[2] / 1_000_000_000}
         else:
-            datum = dict(invocations=data[0], elapsed=int(round(data[1])), cpu=int(round(data[2])))
+            datum = {"invocations": data[0], "elapsed": int(round(data[1])), "cpu": int(round(data[2]))}
         html = (
             "Elapsed Time: %.2f<br/>"  # pylint: disable=consider-using-f-string
             "CPU Time: %.2f<br/>"

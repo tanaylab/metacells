@@ -36,8 +36,8 @@ def find_bursty_lonely_genes(  # pylint: disable=too-many-statements
     min_gene_total: int = pr.bursty_lonely_min_gene_total,
     min_gene_normalized_variance: float = pr.bursty_lonely_min_gene_normalized_variance,
     max_gene_similarity: float = pr.bursty_lonely_max_gene_similarity,
-    random_seed: int = pr.random_seed,
     inplace: bool = True,
+    random_seed: int,
 ) -> Optional[ut.PandasSeries]:
     """
     Detect "bursty lonely" genes based on ``what`` (default: {what}) data.
@@ -75,13 +75,13 @@ def find_bursty_lonely_genes(  # pylint: disable=too-many-statements
     **Computation Parameters**
 
     1. If we have more than ``max_sampled_cells`` (default: {max_sampled_cells}), pick this number
-       of random cells from the data using the ``random_seed``.
+       of random cells. Specify a non-zero random seed to make this reproducible.
 
     2. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the cells to the
        same total number of UMIs, using the ``downsample_min_samples`` (default:
        {downsample_min_samples}), ``downsample_min_cell_quantile`` (default:
        {downsample_min_cell_quantile}), ``downsample_max_cell_quantile`` (default:
-       {downsample_max_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
+       {downsample_max_cell_quantile}) and the ``random_seed``.
 
     3. Find "bursty" genes which have a total number of UMIs of at least ``min_gene_total`` (default:
        {min_gene_total}) and a normalized variance of at least ``min_gene_normalized_variance``
@@ -112,7 +112,9 @@ def find_bursty_lonely_genes(  # pylint: disable=too-many-statements
 
     find_high_total_genes(sdata, "downsampled", min_gene_total=min_gene_total)
 
-    results = filter_data(sdata, name="high_total", top_level=False, track_var=track_var, var_masks=["high_total_gene"])
+    results = filter_data(
+        sdata, name="high_total", top_level=False, track_var=track_var, var_masks=["&high_total_gene"]
+    )
     track_var = None
     assert results is not None
     ht_data = results[0]

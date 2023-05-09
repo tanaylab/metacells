@@ -16,6 +16,7 @@ __all__ = [
     "convey_group_to_obs",
     "convey_obs_to_obs",
     "convey_obs_to_group",
+    "convey_obs_fractions_to_group",
     "convey_obs_obs_to_group_group",
 ]
 
@@ -26,7 +27,7 @@ def convey_group_to_obs(
     *,
     adata: AnnData,
     gdata: AnnData,
-    group: str,
+    group: str = "metacell",
     property_name: str,
     formatter: Optional[Callable[[Any], Any]] = None,
     to_property_name: Optional[str] = None,
@@ -91,7 +92,7 @@ def convey_obs_to_group(
     *,
     adata: AnnData,
     gdata: AnnData,
-    group: str,
+    group: str = "metacell",
     property_name: str,
     formatter: Optional[Callable[[Any], Any]] = None,
     to_property_name: Optional[str] = None,
@@ -123,11 +124,50 @@ def convey_obs_to_group(
 
 @ut.logged()
 @ut.timed_call()
+def convey_obs_fractions_to_group(
+    *,
+    adata: AnnData,
+    gdata: AnnData,
+    group: str = "metacell",
+    property_name: str,
+    formatter: Optional[Callable[[Any], Any]] = None,
+    to_property_name: Optional[str] = None,
+) -> None:
+    """
+    Similar to ``convey_obs_to_group``, but create a per-metacell property for each value of the
+    per-cell property, storing the fraction of cells of the metacell that had that value.
+
+    The input annotated ``adata`` is expected to contain a per-observation (cell) annotation named
+    ``property_name`` and also a per-observation annotation named ``group`` which identifies the
+    group each observation (cell) belongs to, which must be an integer.
+
+    This will generate multiple new per-observation (group) annotation in ``gdata``, named
+    ``<to_property_name>_fraction_of_<value>`` (by default, the ``to_property_name`` is the same as ``property_name``),
+    containing the fraction of the metacell cells containing the specific property value.
+    """
+    if to_property_name is None:
+        to_property_name = property_name
+
+    property_of_obs = ut.get_o_numpy(adata, property_name, formatter=formatter)
+    unique_values = sorted(np.unique(property_of_obs))
+    for value in unique_values:
+        convey_obs_to_group(
+            adata=adata,
+            gdata=gdata,
+            group=group,
+            property_name=property_name,
+            to_property_name=f"{to_property_name}_fraction_of_{value}",
+            method=ut.fraction_of_grouped(value),
+        )
+
+
+@ut.logged()
+@ut.timed_call()
 def convey_obs_obs_to_group_group(
     *,
     adata: AnnData,
     gdata: AnnData,
-    group: str,
+    group: str = "metacell",
     property_name: str,
     formatter: Optional[Callable[[Any], Any]] = None,
     to_property_name: Optional[str] = None,

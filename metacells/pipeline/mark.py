@@ -38,7 +38,7 @@ def mark_lateral_genes(
     *,
     lateral_gene_names: Optional[Collection[str]] = None,
     lateral_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    op: str = "set",  # pylint: disable=invalid-name
+    op: str = "set",
 ) -> None:
     """
     Mark a subset of the genes as "lateral", that is, prevent them from being selected for computing metacells.
@@ -78,7 +78,7 @@ def mark_noisy_genes(
     *,
     noisy_gene_names: Optional[Collection[str]] = None,
     noisy_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    op: str = "set",  # pylint: disable=invalid-name
+    op: str = "set",
 ) -> None:
     """
     Mark a subset of the genes as "noisy", that is, prevent them from both being selected for computing metacells and
@@ -116,7 +116,7 @@ def mark_select_genes(
     *,
     select_gene_names: Optional[Collection[str]] = None,
     select_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
-    op: str = "set",  # pylint: disable=invalid-name
+    op: str = "set",
 ) -> None:
     """
     Mark a subset of the genes as "select", that is, force them to be used when computing metacell.
@@ -159,7 +159,7 @@ def mark_ignored_genes(
     ignored_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     ignored_gene_names_of_types: Optional[Dict[str, Collection[str]]] = None,
     ignored_gene_patterns_of_types: Optional[Dict[str, Collection[str]]] = None,
-    op: str = "set",  # pylint: disable=invalid-name
+    op: str = "set",
 ) -> None:
     """
     Mark a subset of the genes as "ignored", that is, do not attempt to match them when projecting this (query)
@@ -215,7 +215,7 @@ def mark_essential_genes(
     *,
     essential_gene_names_of_types: Optional[Dict[str, Collection[str]]] = None,
     essential_gene_patterns_of_types: Optional[Dict[str, Collection[str]]] = None,
-    op: str = "set",  # pylint: disable=invalid-name
+    op: str = "set",
 ) -> None:
     """
     Mark a subset of the genes as "essential", that is, require that (most of them) will be projected "well" to accept a

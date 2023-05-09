@@ -268,7 +268,7 @@ class CompressedMatrix(SparseMatrix, Protocol):
         ...
 
 
-class PandasIndex(ShapedProtocol, Collection, Sized, Protocol):  # pylint: disable=abstract-method
+class PandasIndex(ShapedProtocol, Collection, Sized, Protocol):
     """
     A ``mypy`` type for a pandas index.
     """
@@ -763,7 +763,7 @@ def to_numpy_vector(
         if isinstance(shaped, pd.core.arrays.categorical.Categorical):
             shaped = np.array(shaped)
 
-        dense = shaped  # type: ignore
+        dense = shaped
 
     else:
         assert is_2d(shaped)
@@ -778,13 +778,13 @@ def to_numpy_vector(
 
 
 #: Which flag indicates efficient 2D dense matrix layout.
-DENSE_FAST_FLAG = dict(column_major="F_CONTIGUOUS", row_major="C_CONTIGUOUS")
+DENSE_FAST_FLAG = {"column_major": "F_CONTIGUOUS", "row_major": "C_CONTIGUOUS"}
 
 #: Which format indicates efficient 2D sparse matrix layout.
-SPARSE_FAST_FORMAT = dict(column_major="csc", row_major="csr")
+SPARSE_FAST_FORMAT = {"column_major": "csc", "row_major": "csr"}
 
 #: Which format indicates inefficient 2D sparse matrix layout.
-SPARSE_SLOW_FORMAT = dict(column_major="csr", row_major="csc")
+SPARSE_SLOW_FORMAT = {"column_major": "csr", "row_major": "csc"}
 
 #: The layout by the ``axis`` parameter.
 LAYOUT_OF_AXIS = ("row_major", "column_major")

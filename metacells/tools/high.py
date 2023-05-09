@@ -82,8 +82,8 @@ def find_high_topN_genes(  # pylint: disable=invalid-name
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
-    topN: int,  # pylint: disable=invalid-name
-    min_gene_topN: int,  # pylint: disable=invalid-name
+    topN: int,
+    min_gene_topN: int,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     """

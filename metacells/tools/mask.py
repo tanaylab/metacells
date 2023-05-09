@@ -39,21 +39,18 @@ def combine_masks(  # pylint: disable=too-many-branches,too-many-statements
 
     **Computation Parameters**
 
-    1. For each of the mask in ``masks``, fetch it. Silently ignore missing masks if the name has a
-       ``?`` suffix. Invert the mask if the name has a ``~`` prefix. If the name has a ``|`` prefix
-       (before the ``~`` prefix, if any), then bitwise-OR the mask into the OR mask, otherwise (or if
-       it has a ``&`` prefix), bitwise-AND the mask into the AND mask.
+    1. For each of the mask in ``masks``, in order (left to right), fetch it. Silently ignore missing masks if the name
+       has a ``?`` suffix. If the first character of the mask name is ``&``, restrict the current mask, otherwise the
+       first character must be ``|`` and we'll expand the mask (for the 1st mask, the mask becomes the current mask
+       regardless of the 1st character). If the following character is ``~``, first invert the mask before applying it.
 
-    2. Combine (bitwise-AND) the AND mask and the OR mask into a single mask.
-
-    3. If ``invert`` (default: {invert}), invert the result combined mask.
+    3. If ``invert`` (default: {invert}), invert the final result mask.
     """
     assert len(masks) > 0
 
     per: Optional[str] = None
 
-    and_mask: Optional[ut.NumpyVector] = None
-    or_mask: Optional[ut.NumpyVector] = None
+    result_mask: Optional[ut.NumpyVector] = None
 
     for mask_name in masks:
         log_mask_name = mask_name
@@ -61,10 +58,11 @@ def combine_masks(  # pylint: disable=too-many-branches,too-many-statements
         if mask_name[0] == "|":
             is_or = True
             mask_name = mask_name[1:]
-        else:
+        elif mask_name[0] == "&":
             is_or = False
-            if mask_name[0] == "&":
-                mask_name = mask_name[1:]
+            mask_name = mask_name[1:]
+        else:
+            raise ValueError(f"invalid mask name: {mask_name} (does not start with & or |)")
 
         if mask_name[0] == "~":
             invert_mask = True
@@ -104,41 +102,29 @@ def combine_masks(  # pylint: disable=too-many-branches,too-many-statements
             if mask_per != per:
                 raise ValueError("mixing per-observation and per-variable masks")
 
-        if is_or:
-            if or_mask is None:
-                or_mask = mask
-            else:
-                or_mask = or_mask | mask
+        if result_mask is None:
+            result_mask = mask
+        elif is_or:
+            result_mask = result_mask | mask
         else:
-            if and_mask is None:
-                and_mask = mask
-            else:
-                and_mask = and_mask & mask
+            result_mask = result_mask & mask
 
-    if and_mask is not None:
-        if or_mask is not None:
-            combined_mask = and_mask & or_mask
-        else:
-            combined_mask = and_mask
-    else:
-        if or_mask is not None:
-            combined_mask = or_mask
-        else:
-            raise ValueError("no masks to combine")
+    if result_mask is None:
+        raise ValueError("no masks to combine")
 
     if invert:
-        combined_mask = ~combined_mask
+        result_mask = ~result_mask
 
     if to is None:
-        ut.log_return("combined", combined_mask)
+        ut.log_return("result", result_mask)
         if per == "o":
-            return ut.to_pandas_series(combined_mask, index=adata.obs_names)
+            return ut.to_pandas_series(result_mask, index=adata.obs_names)
         assert per == "v"
-        return ut.to_pandas_series(combined_mask, index=adata.var_names)
+        return ut.to_pandas_series(result_mask, index=adata.var_names)
 
     if per == "o":
-        ut.set_o_data(adata, to, combined_mask)
+        ut.set_o_data(adata, to, result_mask)
     else:
-        ut.set_v_data(adata, to, combined_mask)
+        ut.set_v_data(adata, to, result_mask)
 
     return None

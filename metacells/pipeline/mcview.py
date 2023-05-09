@@ -13,7 +13,6 @@ from typing import Union
 import numpy as np
 from anndata import AnnData  # type: ignore
 
-import metacells.parameters as pr
 import metacells.tools as tl
 import metacells.utilities as ut
 
@@ -22,6 +21,9 @@ from .umap import compute_umap_by_markers
 __all__ = [
     "compute_for_mcview",
 ]
+
+
+# pylint: disable=dangerous-default-value
 
 
 @ut.logged()
@@ -33,7 +35,6 @@ def compute_for_mcview(
     adata: AnnData,
     gdata: AnnData,
     group: Union[str, ut.Vector] = "metacell",
-    random_seed: int = pr.random_seed,
     find_metacells_marker_genes: Optional[Dict[str, Any]] = {},
     compute_umap_by_markers_2: Optional[Dict[str, Any]] = {},
     compute_umap_by_markers_3: Optional[Dict[str, Any]] = {},
@@ -42,14 +43,15 @@ def compute_for_mcview(
     compute_inner_folds: Optional[Dict[str, Any]] = {},
     count_significant_inner_folds: Optional[Dict[str, Any]] = {},
     compute_stdev_logs: Optional[Dict[str, Any]] = {},
-    compute_var_var_similarity: Optional[Dict[str, Any]] = dict(top=50, bottom=50),
+    compute_var_var_similarity: Optional[Dict[str, Any]] = {"top": 50, "bottom": 50},
+    random_seed: int,
 ) -> None:
     """
     Compute metacell analysis in preparation for exporting the data to MCView.
 
     This simply invokes a series of tools (which you can also invoke independently), using the default parameters,
     except for the ``group`` (default: {group}) which allows applying this to any clustering (not only metacells) and
-    the ``random_seed`` (default: {random_seed}) needed for reproducibility.
+    the ``random_seed`` (non-zero for reproducibility).
 
     If specific tool parameters need to be specified, you can pass them as a dictionary using the specific tool name
     (e.g., ``compute_umap_by_markers_2 = dict(spread = 0.5)``. If this parameter is set to ``None``, running the tool
@@ -71,8 +73,8 @@ def compute_for_mcview(
     **Computation Parameters**
 
     0. Use the default parameters for each tool, unless a parameter with the same name provides specific parameter
-       overrides for it. In addition, the special parameters ``group`` (default: {group}) and ``random_seed`` (default:
-       {random_seed}) and the ``reproducible`` flag derived from it (true if the seed is not zero) are automatically
+       overrides for it. In addition, the special parameters ``group`` (default: {group}) and ``random_seed``,
+       and the ``reproducible`` flag derived from it (true if the seed is not zero) are automatically
        passed to all relevant tools.
 
     1. Compute the "marker" metacell genes using :py:func:`metacells.tools.high.find_metacells_marker_genes`.
@@ -110,31 +112,55 @@ def compute_for_mcview(
     metacell_of_cells = ut.get_o_numpy(adata, "metacell")
     ut.set_m_data(gdata, "outliers", np.sum(metacell_of_cells < 0))
 
+    step_is_not_none = [
+        find_metacells_marker_genes is not None,
+        compute_umap_by_markers_3 is not None,
+        compute_umap_by_markers_2 is not None,
+        compute_outliers_matches is not None,
+        compute_deviant_folds is not None,
+        compute_inner_folds is not None,
+        count_significant_inner_folds is not None,
+        compute_stdev_logs is not None,
+        compute_var_var_similarity is not None,
+    ]
+    steps_count = len([is_not_none for is_not_none in step_is_not_none if is_not_none])
+
+    step_time = 1 / steps_count if ut.has_progress_bar() else None
+
     if find_metacells_marker_genes is not None:
-        tl.find_metacells_marker_genes(gdata, what, **find_metacells_marker_genes)
+        with ut.progress_bar_slice(step_time):
+            tl.find_metacells_marker_genes(gdata, what, **find_metacells_marker_genes)
 
     if compute_umap_by_markers_3 is not None:
-        compute_umap_by_markers(gdata, what, dimensions=3, random_seed=random_seed, **compute_umap_by_markers_3)
+        with ut.progress_bar_slice(step_time):
+            compute_umap_by_markers(gdata, what, dimensions=3, random_seed=random_seed, **compute_umap_by_markers_3)
 
     if compute_umap_by_markers_2 is not None:
-        compute_umap_by_markers(gdata, what, dimensions=2, random_seed=random_seed, **compute_umap_by_markers_2)
+        with ut.progress_bar_slice(step_time):
+            compute_umap_by_markers(gdata, what, dimensions=2, random_seed=random_seed, **compute_umap_by_markers_2)
 
     if compute_outliers_matches is not None:
-        tl.compute_outliers_matches(
-            what, adata=adata, gdata=gdata, group=group, reproducible=reproducible, **compute_outliers_matches
-        )
+        with ut.progress_bar_slice(step_time):
+            tl.compute_outliers_matches(
+                what, adata=adata, gdata=gdata, group=group, reproducible=reproducible, **compute_outliers_matches
+            )
 
     if compute_deviant_folds is not None:
-        tl.compute_deviant_folds(what, adata=adata, gdata=gdata, group=group, **compute_deviant_folds)
+        with ut.progress_bar_slice(step_time):
+            tl.compute_deviant_folds(what, adata=adata, gdata=gdata, group=group, **compute_deviant_folds)
 
     if compute_inner_folds is not None:
-        tl.compute_inner_folds(adata=adata, gdata=gdata, group=group)
+        with ut.progress_bar_slice(step_time):
+            tl.compute_inner_folds(adata=adata, gdata=gdata, group=group)
 
     if count_significant_inner_folds is not None:
-        tl.count_significant_inner_folds(gdata, **count_significant_inner_folds)
+        with ut.progress_bar_slice(step_time):
+            tl.count_significant_inner_folds(gdata, **count_significant_inner_folds)
 
     if compute_stdev_logs is not None:
-        tl.compute_stdev_logs(what, adata=adata, gdata=gdata, group=group, **compute_stdev_logs)
+        with ut.progress_bar_slice(step_time):
+            tl.compute_stdev_logs(what, adata=adata, gdata=gdata, group=group, **compute_stdev_logs)
 
     if compute_var_var_similarity is not None:
-        tl.compute_var_var_similarity(gdata, what, **compute_var_var_similarity)
+        with ut.progress_bar_slice(step_time):
+            tl.compute_var_var_similarity(gdata, what, reproducible=reproducible, **compute_var_var_similarity)

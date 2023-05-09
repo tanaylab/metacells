@@ -25,6 +25,9 @@ __all__ = [
 ]
 
 
+# pylint: disable=dangerous-default-value
+
+
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
@@ -42,6 +45,7 @@ def relate_genes(
     genes_similarity_method: str = pr.related_genes_similarity_method,
     genes_cluster_method: str = pr.related_genes_cluster_method,
     target_genes_of_modules: int = pr.related_target_genes_of_modules,
+    additional_gene_masks: List[str] = [],
     random_seed: int = 0,
 ) -> None:
     """
@@ -72,7 +76,8 @@ def relate_genes(
        of random cells from the data using the ``random_seed``.
 
     2. Pick candidate genes using :py:func:`metacells.pipeline.select.extract_selected_data`. You may want to call
-       :py:func:`metacells.pipeline.mark.mark_lateral_genes` first.
+       :py:func:`metacells.pipeline.mark.mark_lateral_genes` first. Include any genes marked as ``lateral_gene``
+       as well.
 
     3. Compute the similarity between the "select" genes using
        :py:func:`metacells.tools.similarity.compute_var_var_similarity` using the
@@ -103,6 +108,7 @@ def relate_genes(
         min_gene_total=min_gene_total,
         min_gene_top3=min_gene_top3,
         random_seed=random_seed,
+        additional_gene_masks=additional_gene_masks,
     )
     assert sdata is not None
 

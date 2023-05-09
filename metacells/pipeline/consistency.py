@@ -46,7 +46,7 @@ def split_groups(
     max_seed_size_quantile: float = pr.max_seed_size_quantile,
     candidates_cooldown_pass: float = pr.cooldown_pass,
     candidates_cooldown_node: float = pr.cooldown_node,
-    random_seed: int = pr.random_seed,
+    random_seed: int,
 ) -> None:
     """
     Split each metacell into two parts using ``what`` (default: {what}) data.
@@ -146,7 +146,7 @@ def compute_groups_self_consistency(
     self_similarity_log_data: bool = pr.self_similarity_log_data,
     self_similarity_value_regularization: float = pr.self_similarity_value_regularization,
     self_similarity_method: str = pr.self_similarity_method,
-    reproducible: bool = pr.reproducible,
+    reproducible: bool,
     logistics_location: float = pr.logistics_location,
     logistics_slope: float = pr.logistics_slope,
 ) -> ut.NumpyVector:
@@ -178,7 +178,7 @@ def compute_groups_self_consistency(
     4. Compute the ``self_similarity_method`` (default: {self_similarity_method}) between the two
        halves. If this is the ``logistics`` similarity, then this will use ``logistics_location``
        (default: {logistics_location}) and ``logistics_slope`` (default: {logistics_slope}). If this
-       is ``pearson``, and if ``reproducible`` (default: {reproducible}) is ``True``, a slower
+       is ``pearson``, and if ``reproducible`` is ``True``, a slower
        (still parallel) but reproducible algorithm will be used to compute Pearson correlations.
     """
     hdata = tl.group_obs_data(adata, what, groups=f"half_{group}", name=".halves")

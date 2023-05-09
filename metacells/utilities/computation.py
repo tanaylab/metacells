@@ -698,7 +698,7 @@ def log_data(  # pylint: disable=too-many-branches
         The result is always dense, as even for sparse data, the log is rarely zero.
     """
     dense: np.ndarray
-    if shaped.ndim == 1:
+    if shaped.ndim == 1:  # type: ignore
         dense = utt.to_numpy_vector(shaped, copy=True)
     else:
         dense = utt.to_numpy_matrix(shaped, copy=True)  # type: ignore
@@ -1911,7 +1911,7 @@ def patterns_matches(
             + ")"
         )
         pattern: Pattern = re.compile(unified_pattern, re.IGNORECASE)
-        mask = np.array([bool(pattern.match(string)) for string in strings])
+        mask = np.array([bool(pattern.fullmatch(string)) for string in strings])
 
     if invert:
         mask = ~mask

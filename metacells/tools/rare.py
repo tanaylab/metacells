@@ -45,8 +45,8 @@ def find_rare_gene_modules(
     min_related_gene_fold_factor: float = pr.rare_min_related_gene_fold_factor,
     max_related_gene_increase_factor: float = pr.rare_max_related_gene_increase_factor,
     min_cell_module_total: int = pr.rare_min_cell_module_total,
-    reproducible: bool = pr.reproducible,
     inplace: bool = True,
+    reproducible: bool,
 ) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame]]:
     """
     Detect rare genes modules based on ``what`` (default: {what}) data.
@@ -59,8 +59,8 @@ def find_rare_gene_modules(
     express such rare gene modules. Once identified, these cells can be exempt from the global
     algorithm, or the global algorithm can be tweaked in some way to pay extra attention to them.
 
-    If ``reproducible`` (default: {reproducible}) is ``True``, a slower (still parallel) but
-    reproducible algorithm will be used to compute pearson correlations.
+    If ``reproducible`` is ``True``, a slower (still parallel) but reproducible algorithm will be used to compute
+    pearson correlations.
 
     **Input**
 

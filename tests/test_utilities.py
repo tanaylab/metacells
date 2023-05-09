@@ -346,7 +346,7 @@ def test_sliding_window_function() -> None:
 
 def test_patterns_matches() -> None:
     strings = ["foo", "bar", "baz"]
-    actual = ut.patterns_matches("ba?", strings)
+    actual = ut.patterns_matches("ba[a-z]?", strings)
     expected = np.array([False, True, True])
     assert np.allclose(actual, expected)
 

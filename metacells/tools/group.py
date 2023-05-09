@@ -100,7 +100,7 @@ def _obs_names(prefix: str, name_of_members: ut.NumpyVector, group_of_members: u
         hasher = shake_128()
         for member_name in name_of_members[groups_mask]:
             hasher.update(member_name.encode("utf8"))
-        checksum = int(hasher.hexdigest(16), 16) % 10  # pylint: disable=too-many-function-args
+        checksum = int(hasher.hexdigest(16), 16) % 10
         name_of_groups.append(f"{prefix}{group_index}.{checksum:02d}")
     return name_of_groups
 

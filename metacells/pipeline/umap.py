@@ -47,13 +47,13 @@ def compute_knn_by_markers(
     balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
-    reproducible: bool = pr.reproducible,
+    reproducible: bool,
 ) -> ut.PandasFrame:
     """
     Compute KNN graph between metacells based on marker genes.
 
-    If ``reproducible`` (default: {reproducible}) is ``True``, a slower (still parallel) but
-    reproducible algorithm will be used to compute pearson correlations.
+    If ``reproducible`` is ``True``, a slower (still parallel) but
+    reproducible algorithm will be used to compute Pearson correlations.
 
     **Input**
 
@@ -176,7 +176,7 @@ def compute_umap_by_markers(
     dimensions: int = 2,
     min_dist: float = pr.umap_min_dist,
     spread: float = pr.umap_spread,
-    random_seed: int = pr.random_seed,
+    random_seed: int,
 ) -> None:
     """
     Compute a UMAP projection of the (meta)cells.
@@ -211,12 +211,13 @@ def compute_umap_by_markers(
        ``similarity_method`` (default: {similarity_method}), ``logistics_location`` (default: {logistics_location}),
        ``logistics_slope`` (default: {logistics_slope}), ``skeleton_k`` (default: {skeleton_k}),
        ``balanced_ranks_factor`` (default: {balanced_ranks_factor}), ``incoming_degree_factor`` (default:
-       {incoming_degree_factor}), ``outgoing_degree_factor`` (default: {outgoing_degree_factor}) to compute a "skeleton"
-       graph to overlay on top of the UMAP graph.
+       {incoming_degree_factor}) and ``outgoing_degree_factor`` (default: {outgoing_degree_factor}) to compute a
+       "skeleton" graph to overlay on top of the UMAP graph. Specify a non-zero ``random_seed`` to make this
+       reproducible.
 
     2. Invoke :py:func:`metacells.tools.layout.umap_by_distances` using the distances, ``umap_k``
        (default: {umap_k}), ``min_dist`` (default: {min_dist}), ``spread`` (default: {spread}),
-       dimensions (default: {dimensions})
+       dimensions (default: {dimensions}) and ``random_seed``.
 
     .. note::
 

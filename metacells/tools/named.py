@@ -28,7 +28,7 @@ def find_named_genes(
     patterns: Optional[Collection[Union[str, Pattern]]] = None,
     to: Optional[str] = None,
     invert: bool = False,
-    op: str = "set",  # pylint: disable=invalid-name
+    op: str = "set",
 ) -> Optional[ut.PandasSeries]:
     """
     Find genes by their (case-insensitive) name.

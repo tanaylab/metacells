@@ -427,7 +427,7 @@ def divide_and_conquer_pipeline(
     dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
     dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
-    random_seed: int = pr.random_seed,
+    random_seed: int,
 ) -> None:
     """
     Complete pipeline using divide-and-conquer to compute the metacells for the ``what`` (default: {what}) data.
@@ -492,7 +492,8 @@ def divide_and_conquer_pipeline(
        ``rare_max_related_gene_increase_factor`` (default: {rare_max_related_gene_increase_factor})
        ``rare_max_cells_factor_of_random_pile`` (default: {rare_max_cells_factor_of_random_pile})
        and
-       ``rare_min_cell_module_total`` (default: {rare_min_cell_module_total}).
+       ``rare_min_cell_module_total`` (default: {rare_min_cell_module_total}). Use a non-zero
+       ``random_seed`` to make this reproducible.
 
     2. For each detected rare gene module, collect all cells that express the module, and apply
        :py:func:`metacells.pipeline.direct.compute_direct_metacells` to them.
@@ -714,7 +715,7 @@ def compute_divide_and_conquer_metacells(
     dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
     dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
-    random_seed: int = pr.random_seed,
+    random_seed: int,
     _fdata: Optional[AnnData] = None,
     _counts: Optional[Dict[str, int]] = None,
 ) -> None:
