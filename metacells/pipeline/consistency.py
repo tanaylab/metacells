@@ -128,7 +128,7 @@ def split_groups(
         assert one_count > 0
         return (group_cells_mask, group_index + groups_count * direct_groups)
 
-    for (group_cells_mask, group_cells_halves) in ut.parallel_map(split_group, groups_count):
+    for group_cells_mask, group_cells_halves in ut.parallel_map(split_group, groups_count):
         half_groups_of_cells[group_cells_mask] = group_cells_halves
 
     ut.set_o_data(adata, f"half_{group}", half_groups_of_cells, formatter=ut.groups_description)

@@ -12,7 +12,7 @@ from warnings import warn
 
 HAS_AVX2 = None
 try:
-    with (open("/proc/cpuinfo", encoding="utf8") if os.path.exists("/proc/cpuinfo") else os.popen("sysctl -a")) as file:
+    with open("/proc/cpuinfo", encoding="utf8") if os.path.exists("/proc/cpuinfo") else os.popen("sysctl -a") as file:
         for line in file.readlines():
             if line.startswith("flags"):
                 features = line.split(" ")

@@ -277,6 +277,9 @@ class SubsetResults:
         #: The full index of each cell.
         self.full_cell_indices = ut.get_o_numpy(sdata, "__full_cell_index__")
 
+        #: The mask of the genes that were selected to compute metacells by for the subset.
+        self.selected_mask = ut.get_v_numpy(sdata, "selected_gene")
+
     @ut.logged()
     def collect(
         self,
@@ -315,6 +318,9 @@ class SubsetResults:
 
         assert not np.any(collected_mask[self.full_cell_indices])
         collected_mask[self.full_cell_indices] = True
+
+        selected_genes_mask = ut.get_v_numpy(adata, "selected_gene")
+        ut.set_v_data(adata, "selected_gene", selected_genes_mask | self.selected_mask)
 
 
 def compute_derived_parameters(
@@ -654,6 +660,11 @@ def divide_and_conquer_pipeline(
                 random_seed=random_seed,
             )
 
+    if rare_cells_count > 0:
+        selected_genes = ut.get_v_numpy(adata, "selected_gene")
+        rare_genes = ut.get_v_numpy(adata, "rare_gene")
+        ut.set_v_data(adata, "selected_gene", selected_genes | rare_genes)
+
     _finalize_divide_and_conquer_results(adata)
     assert np.all(collected_mask)
 
@@ -889,6 +900,13 @@ def compute_divide_and_conquer_metacells(
 
 @ut.logged()
 def _initialize_divide_and_conquer_results(adata: AnnData) -> None:
+    ut.set_v_data(
+        adata,
+        "selected_gene",
+        np.zeros(adata.n_vars, dtype="bool"),
+        formatter=lambda _: "* -> False",  # pylint: disable=cell-var-from-loop
+    )
+
     for name, value, dtype in (
         ("metacell", -1, "int32"),
         ("dissolved", False, "bool"),
@@ -1118,7 +1136,7 @@ def _compute_metacells_in_levels(
         metacells_level += 1
         metacell_of_cells = ut.get_o_numpy(adata, "metacell")
         subset_mask = subset_mask & (metacell_of_cells < 0)
-        subset_count = np.sum(subset_mask)
+        subset_count = int(np.sum(subset_mask))
         if subset_count == 0:
             return
 
@@ -1218,6 +1236,10 @@ def _compute_metacell_groups(
 
         pile_of_cells = np.full(adata.n_obs, -1, dtype="int32")
         pile_of_cells[subset_mask] = pile_of_metacells[metacell_of_cells[subset_mask]]
+
+    groups_selected_genes_mask = ut.get_v_numpy(mdata, "selected_gene")
+    metacells_selected_genes_mask = ut.get_v_numpy(adata, "selected_gene")
+    ut.set_v_data(adata, "selected_gene", groups_selected_genes_mask | metacells_selected_genes_mask)
 
     return pile_of_cells
 

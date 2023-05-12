@@ -338,7 +338,9 @@ def _identify_genes(
         del combined_candidate_indices[left_index]
         del combined_candidate_indices[right_index]
 
-    return [candidate_genes_indices[candidate_indices] for candidate_indices in combined_candidate_indices.values()]
+    return [
+        list(candidate_genes_indices[candidate_indices]) for candidate_indices in combined_candidate_indices.values()
+    ]
 
 
 @ut.timed_call()
@@ -431,7 +433,7 @@ def _related_genes(  # pylint: disable=too-many-statements,too-many-branches
             mask_of_related_genes = (
                 allowed_genes_mask
                 & (max_expressed_umis_per_gene >= min_gene_maximum)
-                & (expressed_fraction_per_gene >= background_fraction_per_gene * (2 ** min_related_gene_fold_factor))
+                & (expressed_fraction_per_gene >= background_fraction_per_gene * (2**min_related_gene_fold_factor))
             )
             ut.log_calc("mask_of_related_genes", mask_of_related_genes)
 

@@ -207,7 +207,6 @@ def slice(  # pylint: disable=redefined-builtin,too-many-branches,too-many-state
             delattr(bdata, "__derived__")
 
         if share_derived and (is_same_obs or is_same_obs is None) and (is_same_vars or is_same_vars is None):
-
             if is_same_obs is None:
                 is_same_obs = bdata.n_obs == adata.n_obs and bool(np.all(bdata.obs_names == adata.obs_names))
 

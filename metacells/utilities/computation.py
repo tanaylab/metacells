@@ -746,7 +746,7 @@ def downsample_matrix(
     samples: Union[int, utt.Vector],
     eliminate_zeros: bool = True,
     inplace: bool = False,
-    random_seed: int = 0,
+    random_seed: int,
 ) -> utt.ProperMatrix:
     """
     Downsample the data ``per`` (one of ``row`` and ``column``) such that the sum of each one
@@ -760,7 +760,7 @@ def downsample_matrix(
     If ``inplace`` (default: {inplace}), modify the matrix in-place, otherwise, return a modified
     copy.
 
-    A non-zero ``random_seed`` (default: {random_seed}) will make the operation replicable.
+    A non-zero ``random_seed`` will make the operation replicable.
     """
     assert per in ("row", "column")
     if isinstance(samples, (int, float)):
@@ -894,7 +894,11 @@ def _downsample_compressed_matrix(
 @utm.timed_call()
 @utd.expand_doc(data_types=",".join([f"``{data_type}``" for data_type in utt.CPP_DATA_TYPES]))
 def downsample_vector(
-    vector: utt.Vector, samples: int, *, output: Optional[utt.NumpyVector] = None, random_seed: int = 0
+    vector: utt.Vector,
+    samples: int,
+    *,
+    output: Optional[utt.NumpyVector] = None,
+    random_seed: int,
 ) -> None:
     """
     Downsample a vector of sample counters.
@@ -907,8 +911,7 @@ def downsample_vector(
 
     * An optional numpy array ``output`` to hold the results (otherwise, the input is overwritten).
 
-    * A ``random_seed`` (default: {random_seed}) which, if non-zero, will make the operation
-      replicable.
+    * A ``random_seed`` (non-zero for reproducible results).
 
     The arrays may have any of the data types: {data_types}.
 
@@ -1618,7 +1621,7 @@ def max_matrix(matrix: utt.Matrix) -> Any:
     """
     Compute the maximum of all the values in a ``matrix``.
     """
-    return np.max(matrix)
+    return np.max(matrix)  # type: ignore
 
 
 @utm.timed_call()
@@ -1626,7 +1629,7 @@ def min_matrix(matrix: utt.Matrix) -> Any:
     """
     Compute the minimum of all the values in a ``matrix``.
     """
-    return np.min(matrix)
+    return np.min(matrix)  # type: ignore
 
 
 @utm.timed_call()
@@ -1654,7 +1657,7 @@ def nanmax_matrix(matrix: utt.Matrix) -> Any:
 
         _, dense, compressed = utt.to_proper_matrices(matrix)
         if compressed is not None:
-            return np.nanmax(dense)
+            return np.nanmax(dense)  # type: ignore
         assert dense is not None
         return np.nanmax(dense)
 
@@ -1669,7 +1672,7 @@ def nanmin_matrix(matrix: utt.Matrix) -> Any:
 
         _, dense, compressed = utt.to_proper_matrices(matrix)
         if compressed is not None:
-            return np.nanmin(dense)
+            return np.nanmin(dense)  # type: ignore
         assert dense is not None
         return np.nanmin(dense)
 
@@ -1775,7 +1778,7 @@ def highest_weight(weights: utt.Vector, vector: utt.Vector) -> Any:
     This is useful for :py:func:`metacells.tools.project.convey_atlas_to_query`.
     """
     unique, positions = np.unique(utt.to_numpy_vector(vector), return_inverse=True)
-    counts = np.bincount(positions, weights=weights)
+    counts = np.bincount(positions, weights=weights)  # type: ignore
     maxpos = np.argmax(counts)
     return unique[maxpos]
 
@@ -1787,7 +1790,7 @@ def weighted_mean(weights: utt.Vector, vector: utt.Vector) -> Any:
 
     This is useful for :py:func:`metacells.tools.project.convey_atlas_to_query`.
     """
-    return np.average(vector, weights=weights)
+    return np.average(vector, weights=weights)  # type: ignore
 
 
 @utm.timed_call()
@@ -1975,7 +1978,7 @@ def bin_pack(element_sizes: utt.Vector, max_bin_size: float) -> utt.NumpyVector:
 
             current_bin_space = max_bin_size - size_of_bins[current_bin_index]
             assert current_bin_space >= 0
-            remove_loss = (element_size + current_bin_space) ** 2 - current_bin_space ** 2
+            remove_loss = (element_size + current_bin_space) ** 2 - current_bin_space**2
 
             for bin_index in range(len(size_of_bins)):  # pylint: disable=consider-using-enumerate
                 if bin_index == current_bin_index:
@@ -1983,7 +1986,7 @@ def bin_pack(element_sizes: utt.Vector, max_bin_size: float) -> utt.NumpyVector:
                 bin_space = max_bin_size - size_of_bins[bin_index]
                 if bin_space < element_size:
                     continue
-                insert_gain = bin_space ** 2 - (bin_space - element_size) ** 2
+                insert_gain = bin_space**2 - (bin_space - element_size) ** 2
                 if insert_gain > remove_loss:
                     size_of_bins[current_bin_index] -= element_size
                     current_bin_index = bin_of_elements[element_index] = bin_index
@@ -2067,13 +2070,13 @@ def bin_fill(  # pylint: disable=too-many-statements,too-many-branches
             if current_bin_waste < element_size:
                 continue
 
-            remove_gain = current_bin_waste ** 2 - (current_bin_waste - element_size) ** 2
+            remove_gain = current_bin_waste**2 - (current_bin_waste - element_size) ** 2
 
             for bin_index in range(len(size_of_bins)):  # pylint: disable=consider-using-enumerate
                 if bin_index == current_bin_index:
                     continue
                 bin_waste = size_of_bins[bin_index] - min_bin_size
-                insert_loss = (bin_waste + element_size) ** 2 - bin_waste ** 2
+                insert_loss = (bin_waste + element_size) ** 2 - bin_waste**2
                 if insert_loss < remove_gain:
                     size_of_bins[current_bin_index] -= element_size
                     current_bin_index = bin_of_elements[element_index] = bin_index
@@ -2169,7 +2172,7 @@ def shuffle_matrix(
     matrix: utt.Matrix,
     *,
     per: str,
-    random_seed: int = 0,
+    random_seed: int,
 ) -> None:
     """
     Shuffle (in-place) the ``matrix`` data ``per`` column or row.
@@ -2177,7 +2180,7 @@ def shuffle_matrix(
     The matrix must be in the appropriate layout (``row_major`` for shuffling data in each row,
     ``column_major`` for shuffling data in each column).
 
-    A non-zero ``random_seed`` (default: {random_seed}) will make the operation replicable.
+    A non-zero ``random_seed`` (non-zero for reproducible results) will make the operation replicable.
     """
     _ensure_layout_for("shuffle", matrix, per, allow_inefficient=False)
     axis = utt.PER_OF_AXIS.index(per)
@@ -2219,13 +2222,14 @@ def cover_coordinates(
     *,
     cover_fraction: float = 1 / 3,
     noise_fraction: float = 1.0,
-    random_seed: int = 0,
+    random_seed: int,
 ) -> Tuple[utt.NumpyVector, utt.NumpyVector]:
     """
     Given x/y coordinates of points, move them so that the total area covered by them is
     ``cover_fraction`` (default: {cover_fraction}) of the total area of their bounding box, assuming
     each has the diameter of their minimal distance. The points are jiggled around by the
-    ``noise_fraction`` of their minimal distance using the ``random_seed`` (default: {random_seed}).
+    ``noise_fraction`` of their minimal distance using the ``random_seed`` (non-zero for reproducible
+    results).
 
     Returns new x/y coordinates vectors.
     """
@@ -2259,7 +2263,7 @@ def random_piles(
     elements_count: int,
     target_pile_size: int,
     *,
-    random_seed: int = 0,
+    random_seed: int,
 ) -> utt.NumpyVector:
     """
     Split ``elements_count`` elements into piles of a size roughly equal to ``target_pile_size``.
@@ -2397,7 +2401,7 @@ def min_cut(  # pylint: disable=too-many-branches,too-many-statements
     cut_total_weight = 0.0
     first_total_weight = 0.0
     second_total_weight = 0.0
-    for ((source, target), weight) in zip(edges, weight_of_edges):
+    for (source, target), weight in zip(edges, weight_of_edges):
         if is_second[source]:
             if is_second[target]:
                 second_total_weight += weight

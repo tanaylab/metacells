@@ -36,7 +36,7 @@ def extract_selected_data(
     min_gene_total: Optional[int] = pr.select_min_gene_total,
     min_gene_top3: Optional[int] = pr.select_min_gene_top3,
     additional_gene_masks: List[str] = ["&~lateral_gene"],
-    random_seed: int = 0,
+    random_seed: int,
     top_level: bool = True,
 ) -> AnnData:
     """
@@ -87,15 +87,15 @@ def extract_selected_data(
             A boolean mask of genes with "high" normalized variance, relative to other genes with a similar expression
             level (unless a ``select_gene`` mask exists).
 
-        ``select_gene``
-            A boolean mask of the "select" genes.
+        ``selected_gene``
+            A boolean mask of the actually selected genes.
 
     **Computation Parameters**
 
     1. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the cells to the same total number of
        UMIs, using the ``downsample_min_samples`` (default: {downsample_min_samples}), ``downsample_min_cell_quantile``
        (default: {downsample_min_cell_quantile}), ``downsample_max_cell_quantile`` (default:
-       {downsample_max_cell_quantile}) and the ``random_seed`` (default: {random_seed}).
+       {downsample_max_cell_quantile}) and the ``random_seed`` (non-zero for reproducible results).
 
     2. Invoke :py:func:`metacells.tools.high.find_high_total_genes` to select high-expression genes (based on the
        downsampled data), using ``min_gene_total``.
@@ -118,7 +118,12 @@ def extract_selected_data(
 
     if ut.has_data(adata, "select_gene"):
         results = tl.filter_data(
-            adata, name=name, top_level=top_level, track_var="full_gene_index", var_masks=["&select_gene"]
+            adata,
+            name=name,
+            top_level=top_level,
+            track_var="full_gene_index",
+            var_masks=["&select_gene"],
+            mask_var="selected_gene",
         )
 
     else:
@@ -143,8 +148,8 @@ def extract_selected_data(
             name=name,
             top_level=top_level,
             track_var="full_gene_index",
-            mask_var="select_gene",
             var_masks=var_masks + additional_gene_masks,
+            mask_var="selected_gene",
         )
 
     if results is None:

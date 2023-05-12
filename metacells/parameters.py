@@ -15,7 +15,7 @@ significant_gene_fraction: float = 1e-5
 
 #: The generic minimal "significant" gene normalized variance. See
 #: :py:func:`metacells.tools.high.find_high_normalized_variance_genes`.
-significant_gene_normalized_variance: float = 2 ** 2.5
+significant_gene_normalized_variance: float = 2**2.5
 
 #: The generic minimal "significant" gene relative variance. See
 #: :py:func:`metacells.tools.high.find_high_relative_variance_genes`.

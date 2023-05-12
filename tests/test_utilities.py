@@ -210,13 +210,13 @@ def test_downsample_matrix() -> None:
     assert matrix.nnz == matrix.shape[0] * matrix.shape[1] * 0.01
     old_row_sums = ut.sum_per(matrix, per="row")
     min_sum = np.min(old_row_sums)
-    result = ut.downsample_matrix(matrix, per="row", samples=int(min_sum))
+    result = ut.downsample_matrix(matrix, per="row", samples=int(min_sum), random_seed=123456)
     assert result.shape == matrix.shape
     new_row_sums = ut.sum_per(result, per="row")
     assert np.all(new_row_sums == min_sum)
 
     matrix = matrix.toarray()
-    result = ut.downsample_matrix(matrix, per="row", samples=int(min_sum))
+    result = ut.downsample_matrix(matrix, per="row", samples=int(min_sum), random_seed=123456)
     assert result.shape == matrix.shape
     new_row_sums = ut.sum_per(result, per="row")
     assert np.all(new_row_sums == min_sum)

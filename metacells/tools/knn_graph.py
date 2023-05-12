@@ -290,13 +290,13 @@ def _balance_ranks(outgoing_ranks: ut.NumpyMatrix, k: int, balanced_ranks_factor
     ut.log_calc("max_rank", max_rank)
 
     dense_balanced_ranks *= -1
-    dense_balanced_ranks += 2 ** 21
+    dense_balanced_ranks += 2**21
 
     with ut.timed_step("numpy.argmax"):
         ut.timed_parameters(size=size)
         max_index_of_each = ut.to_numpy_vector(dense_balanced_ranks.argmax(axis=1))  #
 
-    dense_balanced_ranks += max_rank + 1 - 2 ** 21
+    dense_balanced_ranks += max_rank + 1 - 2**21
 
     preserved_row_indices = np.arange(size)
     preserved_column_indices = max_index_of_each

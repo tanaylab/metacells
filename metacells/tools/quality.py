@@ -272,12 +272,12 @@ def compute_similar_query_metacells(
         max_projection_fold_factor_per_gene = np.full(qdata.n_vars, max_projection_fold_factor, dtype="float32")
         noisy_per_gene = ut.get_v_numpy(qdata, "projected_noisy_gene")
         max_projection_fold_factor_per_gene[noisy_per_gene] += max_projection_noisy_fold_factor
-        misfit_per_gene_per_metacell = (
+        misfit_per_gene_per_metacell_proper = (
             projected_fold_per_gene_per_metacell > max_projection_fold_factor_per_gene[np.newaxis, :]
         )
     else:
-        misfit_per_gene_per_metacell = projected_fold_per_gene_per_metacell > max_projection_fold_factor
-    misfit_per_gene_per_metacell = sp.csr_matrix(misfit_per_gene_per_metacell)
+        misfit_per_gene_per_metacell_proper = projected_fold_per_gene_per_metacell > max_projection_fold_factor
+    misfit_per_gene_per_metacell = sp.csr_matrix(misfit_per_gene_per_metacell_proper)
     misfit_per_gene_per_metacell.has_sorted_indices = True
     misfit_per_gene_per_metacell.has_canonical_format = True
     ut.set_vo_data(qdata, "misfit", misfit_per_gene_per_metacell)
@@ -683,7 +683,7 @@ def compute_type_genes_normalized_variances(
             type_gene_normalized_variances_per_metacell, quantile=type_gene_normalized_variance_quantile, per="column"
         )
 
-    for (type_name, type_gene_normalized_variances) in list(
+    for type_name, type_gene_normalized_variances in list(
         ut.parallel_map(_compute_single_type_genes_normalized_variances, len(unique_types))
     ):
         ut.set_v_data(gdata, f"normalized_variance_in_{type_name}", type_gene_normalized_variances)

@@ -48,7 +48,7 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
     max_split_min_cut_strength: Optional[float] = pr.max_split_min_cut_strength,
     min_cut_seed_cells: int = pr.min_cut_seed_cells,
     must_complete_cover: bool = False,
-    random_seed: int = 0,
+    random_seed: int,
     inplace: bool = True,
 ) -> Optional[ut.PandasSeries]:
     """
@@ -362,8 +362,10 @@ def _cut_split_communities(
             ut.logger().debug(
                 "community: %s nodes: %s size: %s is too large", community_index, np.sum(community_mask), community_size
             )
-            community_indices = np.where(community_mask)[0]
-            second_partition_indices = community_indices[np.random.choice([False, True], size=len(community_indices))]
+            large_community_indices = np.where(community_mask)[0]
+            second_partition_indices = large_community_indices[
+                np.random.choice([False, True], size=len(large_community_indices))
+            ]
             community_of_nodes[second_partition_indices] = next_new_community_index
             next_new_community_index += 1
             split_communities_count += 1

@@ -833,10 +833,10 @@ def fold_description(fold: float) -> str:
         return "None"
 
     if fold >= 0:
-        value = 2 ** fold
+        value = 2**fold
         char = "X"
     else:
-        value = 2 ** -fold
+        value = 2**-fold
         char = "/"
 
     return f"{fold:.4g} ({char} {value:.4g})"

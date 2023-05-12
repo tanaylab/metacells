@@ -164,8 +164,8 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
             A boolean mask of genes with "high" normalized variance, relative to other genes with a similar expression
             level (unless a ``select_gene`` mask exists).
 
-        ``select_gene``
-            A boolean mask of the "select" genes.
+        ``selected_gene``
+            A boolean mask of the actually selected genes.
 
     Observation (Cell) Annotations
         ``metacell``
@@ -259,6 +259,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
 
     if is_small:
         candidate_of_cells = np.zeros(adata.n_obs, dtype="int32")
+        ut.set_v_data(adata, "selected_gene", np.zeros(adata.n_vars, dtype="bool"))
 
     else:
         sdata = extract_selected_data(

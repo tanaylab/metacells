@@ -98,12 +98,6 @@ terminology for these lists:
     cells (e.g. using ``extract_clean_data``). When we switch to ``daf`` we'll just stay with the original data set and
     apply the exclusion masks to the rest of the algorithm.
 
-``select_gene`` mask
-    When computing metacells, we only consider the similarity between cells using a select subset of the genes. When we
-    employ the divide-and-conquer algorithm this happens several times with different subsets being selected in
-    different steps, so this mask is only a result of the simple direct (single-pile) algorithm. In general it shouldn't
-    be used for downstream analysis of the results.
-
 ``lateral_gene`` mask
     Lateral genes are forbidden from being selected for computing cells similarity (e.g., cell cycle genes). In version
     0.8 these were called "forbidden" genes. Lateral genes are still counted towards the total UMIs count when computing
@@ -149,6 +143,13 @@ typically runs ``divide_and_conquer_pipeline`` to obtain the following:
     Whether the cell was in a candidate matecall that was dissolved due to being too small (too few cells and/or total
     UMIs). This may aid quality control when there are a large number of outliers; lowering the ``target_metacell_size``
     may help avoid this.
+
+``selected_gene`` mask
+    Whether each gene was ever selected to be used to compute the similarity between cells to compute the metacells.
+    When using the divide-and-conquer algorithm, this mask is different for each pile (especially in the second phase
+    when piles are homogeneous). This mask is the union of all the masks used in all the piles. It is useful for
+    ensuring no should-be-lateral genes were selected as this would reduce the quality of the metacells. If such genes
+    exist, add them to the ``lateral_gene`` mask and recompute the metacells.
 
 Having computed the metacells, the next step is to run ``collect_metacells`` to create a new ``AnnData`` object for them
 (when using ``daf``, they will be created in the same dataset for easier analysis), which will contain all the per-gene

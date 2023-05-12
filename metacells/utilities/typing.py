@@ -810,7 +810,7 @@ def is_layout(matrix: Matrix, layout: Optional[str]) -> bool:
         return sparse.getformat() == SPARSE_FAST_FORMAT[layout]
 
     dense = to_numpy_matrix(matrix, only_extract=True)
-    return dense.flags[DENSE_FAST_FLAG[layout]]
+    return dense.flags[DENSE_FAST_FLAG[layout]]  # type: ignore
 
 
 def shaped_dtype(shaped: Shaped) -> str:
@@ -853,7 +853,7 @@ def matrix_layout(matrix: Matrix) -> Optional[str]:
 
     dense = to_numpy_matrix(matrix, only_extract=True)
     for layout, flag in DENSE_FAST_FLAG.items():
-        if dense.flags[flag]:
+        if dense.flags[flag]:  # type: ignore
             return layout
 
     return None

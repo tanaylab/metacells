@@ -153,7 +153,7 @@ def collect_metacells(  # pylint: disable=too-many-statements
             ut.log_calc("zeros_downsample_umis", zeros_downsample_umis)
 
             downsampled_umis_per_gene_per_cell_of_metacell = ut.downsample_matrix(
-                umis_per_gene_per_cell_of_metacell, per="row", samples=zeros_downsample_umis
+                umis_per_gene_per_cell_of_metacell, per="row", samples=zeros_downsample_umis, random_seed=random_seed
             )
             zeros_per_gene_per_cell_of_metacell = downsampled_umis_per_gene_per_cell_of_metacell == 0
             zeros_per_gene_per_cell_of_metacell = ut.to_layout(
@@ -190,7 +190,7 @@ def collect_metacells(  # pylint: disable=too-many-statements
             mean_log_fraction_per_gene_of_metacell = (
                 total_weighted_log_fraction_per_gene_of_metacell / total_weight_of_metacell
             )
-            fraction_per_gene_of_metacell = 2 ** mean_log_fraction_per_gene_of_metacell
+            fraction_per_gene_of_metacell = 2**mean_log_fraction_per_gene_of_metacell
             fraction_per_gene_of_metacell -= regularization_of_metacell
             fraction_per_gene_of_metacell[umis_per_gene_of_metacell == 0] = 0
             fraction_per_gene_of_metacell[fraction_per_gene_of_metacell < 0] = 0
