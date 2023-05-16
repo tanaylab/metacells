@@ -145,7 +145,7 @@ def start_progress_bar_slice(fraction: float) -> Tuple[int, int]:
     old_progress_size = PROGRESS_SIZE
     old_progress_end = PROGRESS_END
 
-    PROGRESS_SIZE = int(round(PROGRESS_SIZE * fraction))
+    PROGRESS_SIZE = int(PROGRESS_SIZE * fraction)
     PROGRESS_END = PROGRESS_POSITION + PROGRESS_SIZE
 
     assert (
@@ -194,7 +194,7 @@ def did_progress(fraction: float) -> Any:
 
     global PROGRESS_POSITION
 
-    step = int(round(PROGRESS_SIZE * fraction))
+    step = int(PROGRESS_SIZE * fraction)
     step = min(step, PROGRESS_END - PROGRESS_POSITION)
 
     if step > 0:

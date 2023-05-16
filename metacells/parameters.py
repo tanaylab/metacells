@@ -80,7 +80,7 @@ relative_variance_window_size: int = 100
 #: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
 #: and
 #: :py:func:`metacells.tools.similarity.compute_var_var_similarity`.
-similarity_method: str = "pearson"
+similarity_method: str = "abs_pearson"
 
 #: The default location for the logistics function. See
 #: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`,
@@ -242,67 +242,28 @@ properly_sampled_min_gene_total: int = 1
 properly_sampled_max_excluded_genes_fraction: Optional[float] = None
 
 #: The number of randomly selected cells to use for computing related genes. See
-#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
+#: :py:func:`metacells.pipeline.related_genes.relate_to_lateral_genes`.
 related_max_sampled_cells: int = 10000
 
 #: How to compute gene-gene similarity for computing the related genes. See
-#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
-related_genes_similarity_method: str = "repeated_pearson"
+#: :py:func:`metacells.pipeline.related_genes.relate_to_lateral_genes`.
+related_genes_similarity_method: str = "abs_pearson"
 
 #: The hierarchical clustering method to use for computing the related genes. See
-#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
+#: :py:func:`metacells.pipeline.related_genes.relate_to_lateral_genes`.
 related_genes_cluster_method: str = "ward"
 
-#: The target number of genes in a related gene module. See
-#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
-related_target_genes_of_modules: int = 16
+#: The maximal number of genes in a related gene module. See
+#: :py:func:`metacells.pipeline.related_genes.relate_to_lateral_genes`.
+related_max_genes_of_modules: int = 64
 
-#: The minimal samples to use for downsampling the cells for computing related genes. See
-#: :py:const:`downsample_min_samples`,
-#: :py:func:`metacells.tools.downsample.downsample_cells`,
-#: :py:func:`metacells.pipeline.select.extract_selected_data`,
-#: and
-#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
-related_downsample_min_samples: int = downsample_min_samples
+#: The minimal mean fraction of a related gene. See
+#: :py:func:`metacells.pipeline.related_genes.relate_to_lateral_genes`.
+related_min_mean_gene_fraction: float = 1e-5
 
-#: The minimal quantile of the cells total size to use for downsampling the cells for computing
-#: "select" genes. See
-#: :py:const:`downsample_min_cell_quantile`,
-#: :py:func:`metacells.tools.downsample.downsample_cells`,
-#: :py:func:`metacells.pipeline.select.extract_selected_data`,
-#: and
-#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
-related_downsample_min_cell_quantile: float = downsample_min_cell_quantile
-
-#: The maximal quantile of the cells total size to use for downsampling the cells for computing
-#: "select" genes. See
-#: :py:const:`downsample_max_cell_quantile`,
-#: :py:func:`metacells.tools.downsample.downsample_cells`,
-#: :py:func:`metacells.pipeline.select.extract_selected_data`,
-#: and
-#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
-related_downsample_max_cell_quantile: float = downsample_max_cell_quantile
-
-#: The minimal relative variance of a gene to be considered a "select". See
-#: :py:func:`metacells.tools.high.find_high_relative_variance_genes`,
-#: :py:func:`metacells.pipeline.select.extract_selected_data`,
-#: and
-#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
-related_min_gene_relative_variance: float = 0.1
-
-#: The minimal number of downsampled UMIs of a gene to be considered a "select". See
-#: :py:func:`metacells.tools.high.find_high_total_genes`,
-#: :py:func:`metacells.pipeline.select.extract_selected_data`,
-#: and
-#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
-related_min_gene_total: int = 50
-
-#: The minimal number of the top-3rd downsampled UMIs of a gene to be considered a "select". See
-#: :py:func:`metacells.tools.high.find_high_topN_genes`,
-#: :py:func:`metacells.pipeline.select.extract_selected_data`,
-#: and
-#: :py:func:`metacells.pipeline.related_genes.relate_genes`.
-related_min_gene_top3: int = 1
+#: The minimal correlation of a related gene to the base gene(s). See
+#: :py:func:`metacells.pipeline.related_genes.relate_to_lateral_genes`.
+related_min_gene_correlation: float = 0.1
 
 #: The number of randomly selected cells to use for computing "bursty lonely" genes. See
 #: :py:func:`metacells.tools.bursty_lonely.find_bursty_lonely_genes`
@@ -894,7 +855,7 @@ umap_similarity_log_data: bool = True
 #: :py:func:`metacells.tools.similarity.compute_var_var_similarity`,
 #: and
 #: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
-umap_similarity_method: str = "logistics_pearson"
+umap_similarity_method: str = "logistics_abs_pearson"
 
 #: The minimal UMAP point distance. See :py:const:`umap_spread` and
 #: :py:func:`metacells.tools.layout.umap_by_distances`

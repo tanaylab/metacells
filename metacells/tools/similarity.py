@@ -6,6 +6,7 @@ Cross-Similarity
 from typing import Optional
 from typing import Union
 
+import numpy as np
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
@@ -40,9 +41,12 @@ def compute_obs_obs_similarity(
 
     The ``method`` (default: {method}) can be one of:
     * ``pearson`` for computing Pearson correlation.
+    * ``abs_pearson`` for computing the absolute Pearson correlation.
     * ``repeated_pearson`` for computing correlations-of-correlations.
+    * ``repeated_abs_pearson`` for computing absolute correlations-of-correlations.
     * ``logistics`` for computing the logistics function.
     * ``logistics_pearson`` for computing correlations-of-logistics.
+    * ``logistics_abs_pearson`` for computing absolute correlations-of-logistics.
 
     If using the logistics function, use the ``logistics_slope`` (default: {logistics_slope}) and
     ``logistics_location`` (default: {logistics_location}).
@@ -121,9 +125,12 @@ def compute_var_var_similarity(
 
     The ``method`` (default: {method}) can be one of:
     * ``pearson`` for computing Pearson correlation.
+    * ``abs_pearson`` for computing the absolute Pearson correlation.
     * ``repeated_pearson`` for computing correlations-of-correlations.
+    * ``repeated_abs_pearson`` for computing absolute correlations-of-correlations.
     * ``logistics`` for computing the logistics function.
     * ``logistics_pearson`` for computing correlations-of-logistics.
+    * ``logistics_abs_pearson`` for computing absolute correlations-of-logistics.
 
     If using the logistics function, use the ``logistics_slope`` (default: {logistics_slope}) and
     ``logistics_location`` (default: {logistics_location}).
@@ -183,21 +190,33 @@ def _compute_elements_similarity(  # pylint: disable=too-many-branches
 ) -> Optional[ut.PandasFrame]:
     assert elements in ("obs", "var")
 
-    assert method in ("pearson", "repeated_pearson", "logistics", "logistics_pearson")
+    assert method in (
+        "logistics",
+        "logistics_pearson",
+        "logistics_abs_pearson",
+        "pearson",
+        "abs_pearson",
+        "repeated_pearson",
+        "repeated_abs_pearson",
+    ), f"invalid similarity method: {method}"
 
     data = ut.get_vo_proper(adata, what, layout=f"{per}_major")
     dense = ut.to_numpy_matrix(data)
 
     similarity: ut.ProperMatrix
-    if method.startswith("logistics"):
+    if method in ("logistics", "logistics_pearson", "logistics_abs_pearson"):
         similarity = ut.logistics(dense, location=logistics_location, slope=logistics_slope, per=per)
         similarity *= -1
         similarity += 1
     else:
         similarity = ut.corrcoef(dense, per=per, reproducible=reproducible)
+        if method in ("abs_pearson", "repeated_abs_pearson"):
+            np.absolute(similarity, out=similarity)
 
-    if method.endswith("_pearson"):
+    if method in ("repeated_pearson", "repeated_abs_pearson", "logistics_pearson", "logistics_abs_pearson"):
         similarity = ut.corrcoef(similarity, per=None, reproducible=reproducible)
+        if method in ("repeated_abs_pearson", "logistics_abs_pearson"):
+            np.absolute(similarity, out=similarity)
 
     if top is not None:
         top_similarity = ut.top_per(similarity, top, per="row")

@@ -904,8 +904,9 @@ def _initialize_divide_and_conquer_results(adata: AnnData) -> None:
         adata,
         "selected_gene",
         np.zeros(adata.n_vars, dtype="bool"),
-        formatter=lambda _: "* -> False",  # pylint: disable=cell-var-from-loop
+        formatter=lambda _: "* -> False",
     )
+    ut.incremental(adata, "v", "selected_gene")
 
     for name, value, dtype in (
         ("metacell", -1, "int32"),
@@ -1180,6 +1181,7 @@ def _compute_metacell_groups(
             groups=metacell_of_cells[subset_mask],
             name=prefix,
             _metacell_groups=True,
+            top_level=False,
             random_seed=random_seed,
         )
 

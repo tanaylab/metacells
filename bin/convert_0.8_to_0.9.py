@@ -61,16 +61,16 @@ LOG.info(f"Read {old_cells_path}...")
 cdata = ad.read_h5ad(old_cells_path)
 
 if fdata is not None:
-    assert (
-        len(fdata.var_names) == len(cdata.var_names) and fdata.var_names == cdata.var_names
+    assert len(fdata.var_names) == len(cdata.var_names) and list(fdata.var_names) == list(
+        cdata.var_names
     ), f"different genes in: {full_cells_path} and: {old_cells_path}"
 
 LOG.info(f"Read {old_metacells_path}...")
 old_mdata = ad.read_h5ad(old_metacells_path)
 assert not mc.ut.has_data(old_mdata, "metacells_algorithm")
 
-assert (
-    len(cdata.var_names) == len(old_mdata.var_names) and cdata.var_names == old_mdata.var_names
+assert len(cdata.var_names) == len(old_mdata.var_names) and list(cdata.var_names) == list(
+    old_mdata.var_names
 ), f"different genes in: {old_cells_path} and: {old_metacells_path}"
 
 metacell_of_cells = mc.ut.get_o_numpy(cdata, "metacell")

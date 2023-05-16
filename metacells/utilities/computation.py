@@ -506,17 +506,24 @@ def cross_corrcoef_rows(
     assert first_matrix.shape[1] == second_matrix.shape[1]
     assert first_matrix.dtype == second_matrix.dtype
 
-    workaround = first_matrix.shape[0] == 1
-    if workaround:
+    first_workaround = first_matrix.shape[0] == 1
+    if first_workaround:
         first_matrix = np.concatenate([first_matrix, first_matrix])
+
+    second_workaround = second_matrix.shape[0] == 1
+    if second_workaround:
+        second_matrix = np.concatenate([second_matrix, second_matrix])
 
     extension_name = f"cross_correlate_dense_{first_matrix.dtype}_t"
     result = np.empty((first_matrix.shape[0], second_matrix.shape[0]), dtype="float32")
     extension = getattr(xt, extension_name)
     extension(first_matrix, second_matrix, result)
 
-    if workaround:
+    if first_workaround:
         result = result[0:1, :]
+
+    if second_workaround:
+        result = result[:, 0:1]
 
     return result
 
