@@ -1110,8 +1110,15 @@ def _compute_metacells_in_levels(
     remaining_time_fraction = 1.0 if ut.has_progress_bar() else None
     outliers_fraction = max(dac_parameters.direct_parameters.deviants_max_cell_fraction or 0.0, 0.05)
 
+    was_last = False
     while True:
-        is_last = piles_count == 1 or metacells_level + 1 > max_metacells_level
+        if metacells_level + 1 > max_metacells_level:
+            is_last = True
+        elif piles_count == 1:
+            is_last = was_last
+            was_last = True
+        else:
+            is_last = False
 
         time_fraction = remaining_time_fraction
         if remaining_time_fraction is not None and not is_last:
