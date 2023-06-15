@@ -608,7 +608,7 @@ def done_incrementals(adata: AnnData) -> None:
     """
     assert hasattr(adata, "__incremental__")
     by_name: Dict[str, Tuple[str, Optional[Callable[[Any], Any]]]] = getattr(adata, "__incremental__")
-    setattr(adata, "__incremental__", [])
+    setattr(adata, "__incremental__", {})
 
     for name, (per, formatter) in by_name.items():
         if name == "__x__":

@@ -81,8 +81,7 @@ def mark_noisy_genes(
     op: str = "set",
 ) -> None:
     """
-    Mark a subset of the genes as "noisy", that is, prevent them from both being selected for computing metacells and
-    for detecting deviant (outlier) cells.
+    Mark a subset of the genes as "noisy", that is, prevent them from being used for detecting deviant (outlier) cells.
 
     Depending on ``op``, this will either ``set`` (override/create) the mask, ``add`` (to an existing mask), or
     ``remove`` (from an existing mask).
