@@ -575,11 +575,16 @@ def get_oo_frame(
     If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
     ``column_major``. If this requires relayout of the data, the result is cached in a hidden data
     member for future reuse.
+
+    .. note::
+
+        Since Pandas frames do not play well with sparse representations, this will **always** return the
+        data as a dense matrix. For very large data, this may consume much more memory, so use with care.
     """
     data = _get_oo_data(adata, name, layout=layout, formatter=formatter)
     frame = utt.maybe_pandas_frame(data)
     if frame is None:
-        frame = utt.to_pandas_frame(utt.to_proper_matrix(data), index=adata.obs_names, columns=adata.obs_names)
+        frame = utt.to_pandas_frame(utt.to_numpy_matrix(data), index=adata.obs_names, columns=adata.obs_names)
     return frame
 
 
@@ -625,11 +630,16 @@ def get_vv_frame(
     If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
     ``column_major``. If this requires relayout of the data, the result is cached in a hidden data
     member for future reuse.
+
+    .. note::
+
+        Since Pandas frames do not play well with sparse representations, this will **always** return the
+        data as a dense matrix. For very large data, this may consume much more memory, so use with care.
     """
     data = _get_vv_data(adata, name, layout=layout, formatter=formatter)
     frame = utt.maybe_pandas_frame(data)
     if frame is None:
-        frame = utt.to_pandas_frame(utt.to_proper_matrix(data), index=adata.var_names, columns=adata.var_names)
+        frame = utt.to_pandas_frame(utt.to_numpy_matrix(data), index=adata.var_names, columns=adata.var_names)
     return frame
 
 
@@ -679,11 +689,16 @@ def get_oa_frame(
     If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
     ``column_major``. If this requires relayout of the data, the result is cached in a hidden data
     member for future reuse.
+
+    .. note::
+
+        Since Pandas frames do not play well with sparse representations, this will **always** return the
+        data as a dense matrix. For very large data, this may consume much more memory, so use with care.
     """
     data = _get_oa_data(adata, name, layout=layout, formatter=formatter)
     frame = utt.maybe_pandas_frame(data)
     if frame is None:
-        frame = utt.to_pandas_frame(utt.to_proper_matrix(data), index=adata.obs_names, columns=columns)
+        frame = utt.to_pandas_frame(utt.to_numpy_matrix(data), index=adata.obs_names, columns=columns)
     return frame
 
 
@@ -733,11 +748,16 @@ def get_va_frame(
     If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
     ``column_major``. If this requires relayout of the data, the result is cached in a hidden data
     member for future reuse.
+
+    .. note::
+
+        Since Pandas frames do not play well with sparse representations, this will **always** return the
+        data as a dense matrix. For very large data, this may consume much more memory, so use with care.
     """
     data = _get_va_data(adata, name, layout=layout, formatter=formatter)
     frame = utt.maybe_pandas_frame(data)
     if frame is None:
-        frame = utt.to_pandas_frame(utt.to_proper_matrix(data), index=adata.var_names, columns=columns)
+        frame = utt.to_pandas_frame(utt.to_numpy_matrix(data), index=adata.var_names, columns=columns)
     return frame
 
 
@@ -789,11 +809,16 @@ def get_vo_frame(
     If ``layout`` (default: {layout}) is specified, it must be one of ``row_major`` or
     ``column_major``. If this requires relayout of the data, the result is cached in a hidden data
     member for future reuse.
+
+    .. note::
+
+        Since Pandas frames do not play well with sparse representations, this will **always** return the
+        data as a dense matrix. For very large data, this may consume much more memory, so use with care.
     """
     data = _get_vo_data(adata, name, layout=layout, formatter=formatter)
     frame = utt.maybe_pandas_frame(data)
     if frame is None:
-        frame = utt.to_pandas_frame(utt.to_proper_matrix(data), index=adata.obs_names, columns=adata.var_names)
+        frame = utt.to_pandas_frame(utt.to_numpy_matrix(data), index=adata.obs_names, columns=adata.var_names)
     return frame
 
 
