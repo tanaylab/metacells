@@ -839,6 +839,12 @@ distinct_genes_count: int = 20
 #: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
 umap_max_marker_genes: int = 1000
 
+#: Whether to ignore lateral genes when computing the UMAP.
+#: See
+#: :py:func:`metacells.pipeline.umap.compute_knn_by_markers` and
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
+umap_ignore_lateral_genes: bool = True
+
 #: The regularization factor to use if/when computing the fractions of the data for UMAP.
 #: See
 #: :py:const:`metacells.parameters.significant_gene_fraction`

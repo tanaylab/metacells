@@ -38,6 +38,7 @@ def compute_knn_by_markers(
     marker_gene_names: Optional[Collection[str]] = None,
     marker_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     max_marker_genes: Optional[int] = pr.umap_max_marker_genes,
+    ignore_lateral_genes: bool = pr.umap_ignore_lateral_genes,
     similarity_value_regularization: float = pr.umap_similarity_value_regularization,
     similarity_log_data: bool = pr.umap_similarity_log_data,
     similarity_method: str = pr.umap_similarity_method,
@@ -78,22 +79,25 @@ def compute_knn_by_markers(
     1. If ``marker_gene_names`` and/or ``marker_gene_patterns`` were specified, use the matching genes.
        Otherwise, use the ``marker_gene`` mask.
 
-    2. If ``max_marker_genes`` (default: {max_marker_genes}) is not ``None``, then pick this number
+    2. If `ignore_lateral_genes` (default: {ignore_lateral_genes}), then remove any genes marked as lateral
+       from the mask.
+
+    3. If ``max_marker_genes`` (default: {max_marker_genes}) is not ``None``, then pick this number
        of marker genes with the highest variance.
 
-    3. Compute the fractions of each ``marker_gene`` in each cell, and add the
+    4. Compute the fractions of each ``marker_gene`` in each cell, and add the
        ``similarity_value_regularization`` (default: {similarity_value_regularization}) to it.
 
-    4. If ``similarity_log_data`` (default: {similarity_log_data}), invoke the
+    5. If ``similarity_log_data`` (default: {similarity_log_data}), invoke the
        :py:func:`metacells.utilities.computation.log_data` function to compute the log (base 2) of
        the data.
 
-    5. Invoke :py:func:`metacells.tools.similarity.compute_obs_obs_similarity` using
+    6. Invoke :py:func:`metacells.tools.similarity.compute_obs_obs_similarity` using
        ``similarity_method`` (default: {similarity_method}), ``logistics_location`` (default:
        {logistics_slope}) and ``logistics_slope`` (default: {logistics_slope}) and convert this
        to distances.
 
-    6. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` using the distances,
+    7. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` using the distances,
        ``k`` (no default!), ``balanced_ranks_factor`` (default: {balanced_ranks_factor}),
        ``incoming_degree_factor`` (default: {incoming_degree_factor}), ``outgoing_degree_factor``
        (default: {outgoing_degree_factor}) to compute a "skeleton" graph to overlay on top of the
@@ -106,6 +110,11 @@ def compute_knn_by_markers(
         marker_genes_series = tl.find_named_genes(adata, names=marker_gene_names, patterns=marker_gene_patterns)
         assert marker_genes_series is not None
         marker_genes_mask = ut.to_numpy_vector(marker_genes_series)
+
+    if ignore_lateral_genes:
+        lateral_genes_mask = ut.get_v_numpy(adata, "lateral_gene")
+        marker_genes_mask = marker_genes_mask & ~lateral_genes_mask
+        ut.log_calc("marker_genes_mask", marker_genes_mask)
 
     all_fractions = ut.get_vo_proper(adata, what, layout="row_major")
 
@@ -163,6 +172,7 @@ def compute_umap_by_markers(
     marker_gene_names: Optional[Collection[str]] = None,
     marker_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     max_marker_genes: Optional[int] = pr.umap_max_marker_genes,
+    ignore_lateral_genes: bool = pr.umap_ignore_lateral_genes,
     similarity_value_regularization: float = pr.umap_similarity_value_regularization,
     similarity_log_data: bool = pr.umap_similarity_log_data,
     similarity_method: str = pr.umap_similarity_method,
@@ -206,11 +216,11 @@ def compute_umap_by_markers(
 
     1. Invoke :py:func:`metacells.pipeline.umap.compute_knn_by_markers` using
        ``marker_gene_names`` (default: {marker_gene_names}), ``marker_gene_patterns`` (default: {marker_gene_patterns}),
-       ``max_marker_genes`` (default: {max_marker_genes}), ``similarity_value_regularization`` (default:
-       {similarity_value_regularization}), ``similarity_log_data`` (default: {similarity_log_data}),
-       ``similarity_method`` (default: {similarity_method}), ``logistics_location`` (default: {logistics_location}),
-       ``logistics_slope`` (default: {logistics_slope}), ``skeleton_k`` (default: {skeleton_k}),
-       ``balanced_ranks_factor`` (default: {balanced_ranks_factor}), ``incoming_degree_factor`` (default:
+       ``max_marker_genes`` (default: {max_marker_genes}), ``ignore_lateral_genes`` (default: {ignore_lateral_genes}),
+       ``similarity_value_regularization`` (default: {similarity_value_regularization}), ``similarity_log_data``
+       (default: {similarity_log_data}), ``similarity_method`` (default: {similarity_method}), ``logistics_location``
+       (default: {logistics_location}), ``logistics_slope`` (default: {logistics_slope}), ``skeleton_k`` (default:
+       {skeleton_k}), ``balanced_ranks_factor`` (default: {balanced_ranks_factor}), ``incoming_degree_factor`` (default:
        {incoming_degree_factor}) and ``outgoing_degree_factor`` (default: {outgoing_degree_factor}) to compute a
        "skeleton" graph to overlay on top of the UMAP graph. Specify a non-zero ``random_seed`` to make this
        reproducible.
@@ -233,6 +243,7 @@ def compute_umap_by_markers(
         marker_gene_names=marker_gene_names,
         marker_gene_patterns=marker_gene_patterns,
         max_marker_genes=max_marker_genes,
+        ignore_lateral_genes=ignore_lateral_genes,
         similarity_value_regularization=similarity_value_regularization,
         similarity_log_data=similarity_log_data,
         similarity_method=similarity_method,
