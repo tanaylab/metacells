@@ -23,6 +23,7 @@ from metacells import __version__  # pylint: disable=cyclic-import
 __all__ = [
     "projection_pipeline",
     "outliers_projection_pipeline",
+    "write_projection_weights",
 ]
 
 
@@ -1557,3 +1558,16 @@ def outliers_projection_pipeline(
         atlas_most_similar_fold = np.zeros(odata.shape, dtype="float32")
         atlas_most_similar_fold[:, query_common_gene_indices] = common_folds
         ut.set_vo_data(odata, "atlas_most_similar_fold", sp.csr_matrix(atlas_most_similar_fold))
+
+
+def write_projection_weights(path: str, adata: AnnData, qdata: AnnData, weights: ut.CompressedMatrix) -> None:
+    """
+    Write into the `path` the `weights` computed for the projection of the query `qdata` on the atlas `adata`.
+
+    Since the weights are (very) sparse, we just write them as a CSV file. This is also what `MCView` expect.
+    """
+    with open(path, "w", encoding="utf8") as file:
+        file.write("query,atlas,weight\n")
+        for query_index, atlas_index in zip(*weights.nonzero()):
+            weight = weights[query_index, atlas_index]
+            file.write(f"{qdata.obs_names[query_index]},{adata.obs_names[atlas_index]},{weight}\n")
