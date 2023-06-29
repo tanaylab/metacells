@@ -37,16 +37,8 @@ def find_named_genes(
     This computes a mask of all the genes whose name appears in ``names`` or matches any of the ``patterns``. If
     ``invert`` (default: {invert}), invert the resulting mask.
 
-<<<<<<< HEAD
-<<<<<<< HEAD
     Depending on ``op``, this will ``set`` a (compute a brand new) mask, ``add`` the result to a mask (which must
     exist), or ``remove`` genes from a mask (which must exist).
-=======
-    If ``name_property`` is specified the mask will be based on a column in the ``adata.var`` DataFrame
->>>>>>> 94f57f0 (Fixed naming convention. Using ut.get_v_numpy instead of bracket access DataFrame column)
-=======
-    If ``name_property`` is specified the mask will be based on this per-variable (gene) property.
->>>>>>> d99bd63 (wording in documentation)
 
     If ``name_property`` is specified the mask will be based on this per-variable (gene) property.
 
@@ -57,7 +49,6 @@ def find_named_genes(
 
     Otherwise, it returns it as a pandas series (indexed by the variable, that is gene, names).
     """
-<<<<<<< HEAD
     assert op in ("set", "add", "remove")
     if op in ("add", "remove"):
         assert to is not None
@@ -66,12 +57,8 @@ def find_named_genes(
         base_mask = np.zeros(adata.n_vars, dtype="bool")
 
 
-    if col is None:
-        var_names_col = adata.var_names
-=======
     if name_property is None:
         var_names = adata.var_names
->>>>>>> 94f57f0 (Fixed naming convention. Using ut.get_v_numpy instead of bracket access DataFrame column)
     else:
         var_names = ut.get_v_numpy(adata, name_property)
 
