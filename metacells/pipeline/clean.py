@@ -46,6 +46,7 @@ def analyze_clean_genes(
     noisy_lonely_max_gene_similarity: float = pr.noisy_lonely_max_gene_similarity,
     excluded_gene_names: Optional[Collection[str]] = None,
     excluded_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
+    col: Optional[str] = None,
     random_seed: int = pr.random_seed,
 ) -> None:
     """
@@ -85,7 +86,7 @@ def analyze_clean_genes(
        ``noisy_lonely_max_gene_similarity`` (default: {noisy_lonely_max_gene_similarity}).
 
     3. Invoke :py:func:`metacells.tools.named.find_named_genes` to exclude genes based on their
-       name, using the ``excluded_gene_names`` (default: {excluded_gene_names}) and
+       name or the supplied ``col``, using the ``excluded_gene_names`` (default: {excluded_gene_names}) and
        ``excluded_gene_patterns`` (default: {excluded_gene_patterns}). This is stored in a
        per-variable (gene) ``excluded_genes`` boolean mask.
     """
@@ -94,7 +95,7 @@ def analyze_clean_genes(
     excluded_genes_mask: Optional[str]
     if excluded_gene_names is not None or excluded_gene_patterns is not None:
         excluded_genes_mask = "excluded_gene"
-        tl.find_named_genes(adata, to="excluded_gene", names=excluded_gene_names, patterns=excluded_gene_patterns)
+        tl.find_named_genes(adata, to="excluded_gene", col=col, names=excluded_gene_names, patterns=excluded_gene_patterns)
     else:
         excluded_genes_mask = None
 
