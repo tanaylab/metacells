@@ -24,6 +24,7 @@ __all__ = [
 def find_named_genes(
     adata: AnnData,
     *,
+    name_property: optional[str] = None,
     names: Optional[Collection[str]] = None,
     patterns: Optional[Collection[Union[str, Pattern]]] = None,
     to: Optional[str] = None,
@@ -39,6 +40,8 @@ def find_named_genes(
     Depending on ``op``, this will ``set`` a (compute a brand new) mask, ``add`` the result to a mask (which must
     exist), or ``remove`` genes from a mask (which must exist).
 
+    If ``name_property`` is specified the mask will be based on this per-variable (gene) property.
+
     If ``to`` (default: {to}) is specified, this is stored as a per-variable (gene) annotation with that name, and
     returns ``None``. This is useful to fill gene masks such as ``excluded_genes`` (genes which should be excluded from
     the rest of the processing), ``lateral_genes`` (genes which must not be selected for metacell computation) and
@@ -53,16 +56,21 @@ def find_named_genes(
     else:
         base_mask = np.zeros(adata.n_vars, dtype="bool")
 
+    if name_property is None:
+        var_names = adata.var_names
+    else:
+        var_names = ut.get_v_numpy(adata, name_property)
+
     if names is None or len(names) == 0:
         names_mask = np.zeros(adata.n_vars, dtype="bool")
     else:
         lower_names_set = {name.lower() for name in names}
-        names_mask = np.array([name.lower() in lower_names_set for name in adata.var_names])  #
+        names_mask = np.array([name.lower() in lower_names_set for name in var_names]) #
 
     if patterns is None or len(patterns) == 0:
         patterns_mask = np.zeros(adata.n_vars, dtype="bool")
     else:
-        patterns_mask = ut.patterns_matches(patterns, adata.var_names)
+        patterns_mask = ut.patterns_matches(patterns, var_names)
 
     genes_mask = names_mask | patterns_mask
 
