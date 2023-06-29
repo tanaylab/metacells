@@ -36,7 +36,7 @@ def find_named_genes(
     This creates a mask of all the genes whose name appears in ``names`` or matches any of the
     ``patterns``. If ``invert`` (default: {invert}), invert the resulting mask.
 
-    If ``name_property`` is specified the mask will be based on a column in the ``adata.var`` DataFrame
+    If ``name_property`` is specified the mask will be based on this per-variable (gene) property.
 
     If ``to`` (default: {to}) is specified, this is stored as a per-variable (gene) annotation with
     that name, and returns ``None``. This is useful to fill gene masks such as ``excluded_genes``
