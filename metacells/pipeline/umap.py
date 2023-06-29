@@ -7,6 +7,9 @@ The steps provided here are expected to yield a reasonable such projection, thou
 might need to tweak the parameters or even the overall flow for specific data sets.
 """
 
+from re import Pattern
+from typing import Collection
+from typing import Optional
 from typing import Tuple
 from typing import Union
 
@@ -33,6 +36,8 @@ def compute_knn_by_features(
     what: Union[str, ut.Matrix] = "__x__",
     *,
     max_top_feature_genes: int = pr.max_top_feature_genes,
+    feature_gene_names: Optional[Collection[str]] = None,
+    feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     similarity_value_normalization: float = pr.umap_similarity_value_normalization,
     similarity_log_data: bool = pr.umap_similarity_log_data,
     similarity_method: str = pr.umap_similarity_method,
@@ -71,8 +76,9 @@ def compute_knn_by_features(
     **Computation Parameters**
 
     1. Invoke :py:func:`metacells.tools.high.find_top_feature_genes` using ``max_top_feature_genes``
-       (default: {max_top_feature_genes}) to pick the feature genes to use to compute similarities
-       between the metacells.
+       (default: {max_top_feature_genes}) to pick the feature genes to use to compute similarities between the
+       metacells. If ``feature_gene_names`` and/or ``feature_gene_patterns`` were specified, this is replaced by calling
+       :py:func:`metacells.tools.named.find_named_genes` instead.
 
     2. Compute the fractions of each gene in each cell, and add the
        ``similarity_value_normalization`` (default: {similarity_value_normalization}) to
@@ -93,7 +99,10 @@ def compute_knn_by_features(
        (default: {outgoing_degree_factor}) to compute a "skeleton" graph to overlay on top of the
        UMAP graph.
     """
-    tl.find_top_feature_genes(adata, max_genes=max_top_feature_genes)
+    if feature_gene_names is None and feature_gene_patterns is None:
+        tl.find_top_feature_genes(adata, max_genes=max_top_feature_genes)
+    else:
+        tl.find_named_genes(adata, to="top_feature_gene", names=feature_gene_names, patterns=feature_gene_patterns)
 
     all_data = ut.get_vo_proper(adata, what, layout="row_major")
     all_fractions = ut.fraction_by(all_data, by="row")
@@ -141,6 +150,8 @@ def compute_umap_by_features(
     what: Union[str, ut.Matrix] = "__x__",
     *,
     max_top_feature_genes: int = pr.max_top_feature_genes,
+    feature_gene_names: Optional[Collection[str]] = None,
+    feature_gene_patterns: Optional[Collection[Union[str, Pattern]]] = None,
     similarity_value_normalization: float = pr.umap_similarity_value_normalization,
     similarity_log_data: bool = pr.umap_similarity_log_data,
     similarity_method: str = pr.umap_similarity_method,
@@ -186,12 +197,12 @@ def compute_umap_by_features(
 
     1. Invoke :py:func:`metacells.pipeline.umap.compute_knn_by_features` using
        ``max_top_feature_genes`` (default: {max_top_feature_genes}),
-       ``similarity_value_normalization`` (default: {similarity_value_normalization}),
-       ``similarity_log_data`` (default: {similarity_log_data}), ``similarity_method`` (default:
-       {similarity_method}), ``logistics_location`` (default: {logistics_location}),
-       ``logistics_slope`` (default: {logistics_slope}), ``skeleton_k`` (default: {skeleton_k}),
-       ``balanced_ranks_factor`` (default: {balanced_ranks_factor}), ``incoming_degree_factor``
-       (default: {incoming_degree_factor}), ``outgoing_degree_factor`` (default:
+       ``feature_gene_names`` (default: {feature_gene_names}), ``feature_gene_patterns`` (default:
+       {feature_gene_patterns}), ``similarity_value_normalization`` (default: {similarity_value_normalization}),
+       ``similarity_log_data`` (default: {similarity_log_data}), ``similarity_method`` (default: {similarity_method}),
+       ``logistics_location`` (default: {logistics_location}), ``logistics_slope`` (default: {logistics_slope}),
+       ``skeleton_k`` (default: {skeleton_k}), ``balanced_ranks_factor`` (default: {balanced_ranks_factor}),
+       ``incoming_degree_factor`` (default: {incoming_degree_factor}), ``outgoing_degree_factor`` (default:
        {outgoing_degree_factor}) to compute a "skeleton" graph to overlay on top of the UMAP graph.
 
     2. Invoke :py:func:`metacells.tools.layout.umap_by_distances` using the distances, ``umap_k``
@@ -210,6 +221,8 @@ def compute_umap_by_features(
         adata,
         what,
         max_top_feature_genes=max_top_feature_genes,
+        feature_gene_names=feature_gene_names,
+        feature_gene_patterns=feature_gene_patterns,
         similarity_value_normalization=similarity_value_normalization,
         similarity_log_data=similarity_log_data,
         similarity_method=similarity_method,

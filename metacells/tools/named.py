@@ -50,13 +50,13 @@ def find_named_genes(
     else:
         var_names = ut.get_v_numpy(adata, name_property)
 
-    if names is None:
+    if names is None or len(names) == 0:
         names_mask = np.zeros(adata.n_vars, dtype="bool")
     else:
         lower_names_set = {name.lower() for name in names}
         names_mask = np.array([name.lower() in lower_names_set for name in var_names])
 
-    if patterns is None:
+    if patterns is None or len(patterns) == 0:
         patterns_mask = np.zeros(adata.n_vars, dtype="bool")
     else:
         patterns_mask = ut.patterns_matches(patterns, var_names)

@@ -202,7 +202,7 @@ reasonable quality clusters.
     .list-inline>li {display: inline-block}
     .list-inline>li:not(:last-child)::after {content: "\00b7"; padding: 0 .5ex}
     </style>
-    <ol class=list-inline><li>1549</li><li>715</li></ol>
+    <ol class=list-inline><li>1549</li><li>713</li></ol>
 
 
 

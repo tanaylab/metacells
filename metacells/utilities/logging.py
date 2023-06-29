@@ -45,6 +45,7 @@ the full data.
 import importlib
 import logging
 import sys
+import warnings
 from contextlib import contextmanager
 from datetime import datetime
 from functools import wraps
@@ -106,6 +107,16 @@ __all__ = [
     "fraction_description",
     "fold_description",
 ]
+
+
+warnings.filterwarnings(
+    "ignore", category=FutureWarning, message=r".*Reordering categories will always return a new Categorical object.*"
+)
+warnings.filterwarnings(
+    "ignore",
+    category=FutureWarning,
+    message=r".*is_categorical is deprecated and will be removed in a future version.*",
+)
 
 
 class SynchronizedLogger(Logger):

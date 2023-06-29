@@ -3,7 +3,7 @@ Mask
 ----
 """
 
-from typing import List
+from typing import Collection
 from typing import Optional
 
 from anndata import AnnData  # type: ignore
@@ -20,7 +20,7 @@ __all__ = [
 @ut.expand_doc()
 def combine_masks(  # pylint: disable=too-many-branches,too-many-statements
     adata: AnnData,
-    masks: List[str],
+    masks: Collection[str],
     *,
     invert: bool = False,
     to: Optional[str] = None,

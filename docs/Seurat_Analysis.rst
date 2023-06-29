@@ -45,10 +45,6 @@ non-standard.
 
     Attaching SeuratObject
 
-    Registered S3 method overwritten by 'cli':
-      method     from
-      print.boxx spatstat.geom
-
     Registered S3 method overwritten by 'SeuratDisk':
       method            from
       as.sparse.H5Group Seurat

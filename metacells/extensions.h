@@ -155,8 +155,9 @@ public:
     ConstArraySlice(const pybind11::array_t<T>& array, const char* const name)
       : ConstArraySlice(array.data(), array.size(), name) {
         FastAssertCompareWhat(array.ndim(), ==, 1, name);
-        FastAssertCompareWhat(array.size(), >, 0, name);
-        FastAssertCompareWhat(array.data(1) - array.data(0), ==, 1, name);
+        if (array.size() > 0) {
+            FastAssertCompareWhat(array.data(1) - array.data(0), ==, 1, name);
+        }
     }
 
     std::pair<ConstArraySlice, ConstArraySlice> split(const size_t size) const {
@@ -202,8 +203,9 @@ public:
     ArraySlice(pybind11::array_t<T>& array, const char* const name)
       : ArraySlice(array.mutable_data(), array.size(), name) {
         FastAssertCompareWhat(array.ndim(), ==, 1, name);
-        FastAssertCompareWhat(array.size(), >, 0, name);
-        FastAssertCompareWhat(array.data(1) - array.data(0), ==, 1, name);
+        if (array.size() > 0) {
+            FastAssertCompareWhat(array.data(1) - array.data(0), ==, 1, name);
+        }
     }
 
     std::pair<ArraySlice, ArraySlice> split(const size_t size) {
@@ -236,9 +238,7 @@ template<typename T>
 static size_t
 matrix_step(const pybind11::array_t<T>& array, const char* const name) {
     FastAssertCompareWhat(array.ndim(), ==, 2, name);
-    FastAssertCompareWhat(array.shape(0), >, 0, name);
-    FastAssertCompareWhat(array.shape(1), >, 0, name);
-    if (array.shape(0) == 0) {
+    if (array.shape(0) == 0 || array.shape(1) == 0) {
         return 0;
     } else {
         return array.data(1, 0) - array.data(0, 0);
@@ -270,7 +270,9 @@ public:
     ConstMatrixSlice(const pybind11::array_t<T>& array, const char* const name)
       : ConstMatrixSlice(array.data(), array.shape(0), array.shape(1), matrix_step(array, name), name) {
         FastAssertCompareWhat(array.ndim(), ==, 2, name);
-        FastAssertCompareWhat(array.data(0, 1) - array.data(0, 0), ==, 1, name);
+        if (array.shape(0) > 0 && array.shape(1) > 1) {
+            FastAssertCompareWhat(array.data(0, 1) - array.data(0, 0), ==, 1, name);
+        }
         FastAssertCompareWhat(m_columns_count, <=, m_rows_offset, name);
     }
 
@@ -310,7 +312,9 @@ public:
     MatrixSlice(pybind11::array_t<T>& array, const char* const name)
       : MatrixSlice(array.mutable_data(), array.shape(0), array.shape(1), matrix_step(array, name), name) {
         FastAssertCompareWhat(array.ndim(), ==, 2, name);
-        FastAssertCompareWhat(array.data(0, 1) - array.data(0, 0), ==, 1, name);
+        if (array.shape(0) > 0 && array.shape(1) > 1) {
+            FastAssertCompareWhat(array.data(0, 1) - array.data(0, 0), ==, 1, name);
+        }
         FastAssertCompareWhat(m_columns_count, <=, m_rows_offset, name);
     }
 

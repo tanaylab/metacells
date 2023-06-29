@@ -96,8 +96,13 @@ def compute_for_mcview(
        dense matrix of ~X0K by ~X0K entries, which typically isn't what you want.
 
     6. Compute the significant metacell genes using :py:func:`metacells.tools.find_metacells_significant_genes`.
+
+    7. Compute for each gene and for each outlier cell the fold factor between the cell and the most similar
+       metacell using :py:func:`metacells.tools.compute_outliers_fold_factors`.
     """
     reproducible = random_seed != 0
+    if find_metacells_significant_genes is not None:
+        tl.find_metacells_significant_genes(gdata, what, **find_metacells_significant_genes)
     if compute_umap_by_features_2 is not None:
         compute_umap_by_features(gdata, what, dimensions=2, random_seed=random_seed, **compute_umap_by_features_2)
     if compute_umap_by_features_3 is not None:
@@ -112,8 +117,6 @@ def compute_for_mcview(
         tl.compute_deviant_fold_factors(what, adata=adata, gdata=gdata, group=group, **compute_deviant_fold_factors)
     if compute_var_var_similarity is not None:
         tl.compute_var_var_similarity(gdata, what, **compute_var_var_similarity)
-    if find_metacells_significant_genes is not None:
-        tl.find_metacells_significant_genes(gdata, what, **find_metacells_significant_genes)
 
     if compute_outliers_fold_factors is None:
         return None

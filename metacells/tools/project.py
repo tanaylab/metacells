@@ -21,9 +21,8 @@ import metacells.utilities as ut
 __all__ = [
     "renormalize_query_by_atlas",
     "project_query_onto_atlas",
-    "find_systematic_genes",
     "project_atlas_to_query",
-    "find_biased_genes",
+    "find_misfit_genes",
     "compute_query_projection",
 ]
 
@@ -210,6 +209,7 @@ def project_query_onto_atlas(
     min_significant_gene_value: float = pr.project_min_significant_gene_value,
     max_consistency_fold_factor: float = pr.project_max_consistency_fold_factor,
     candidates_count: int = pr.project_candidates_count,
+    min_candidates_fraction: float = pr.project_min_candidates_fraction,
     min_usage_weight: float = pr.project_min_usage_weight,
     reproducible: bool,
     second_anchor_indices: Optional[List[int]] = None,
@@ -223,8 +223,7 @@ def project_query_onto_atlas(
     ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation
     containing such a matrix.
 
-    Typically this data excludes any genes having a systematic difference between the query and the atlas, e.g. genes
-    detected by by :py:func:`metacells.tools.project.find_systematic_genes`.
+    Typically this data excludes any genes having a systematic difference between the query and the atlas.
 
     **Returns**
 
@@ -256,13 +255,14 @@ def project_query_onto_atlas(
        relative to this projection and pick a second atlas anchor whose residuals are the most correlated to the query
        metacell's residuals. If ``reproducible``, a slower (still parallel) but reproducible algorithm will be used.
 
-    2. Consider as candidates only atlas metacells whose maximal gene fold factor compared to the anchor(s) is at most
-       ``max_consistency_fold_factor`` (default: {max_consistency_fold_factor}). Ignore the fold factors of genes whose
-       sum of UMIs in the anchor(s) and the candidate metacells is less than ``min_significant_gene_value`` (default:
-       {min_significant_gene_value}).
-
-    3. Select (for each anchor) the ``candidates_count`` (default: {candidates_count}) candidate metacells with the
+    2. Consider (for each anchor) the ``candidates_count`` (default: {candidates_count}) candidate metacells with the
        highest correlation with the query metacell.
+
+    2. Keep as candidates only atlas metacells whose maximal gene fold factor compared to the anchor(s) is at most
+       ``max_consistency_fold_factor`` (default: {max_consistency_fold_factor}). Keep at least
+       ``min_candidates_fraction`` (default: {min_candidates_fraction}) of the original candidates even if they are less
+       consistent. For this computation, Ignore the fold factors of genes whose sum of UMIs in the anchor(s) and the
+       candidate metacells is less than ``min_significant_gene_value`` (default: {min_significant_gene_value}).
 
     4. Compute the non-negative weights (with a sum of 1) of the selected candidates that give the best projection of
        the query metacells onto the atlas. Since the algorithm for computing these weights rarely produces an exact 0
@@ -282,6 +282,7 @@ def project_query_onto_atlas(
         min_significant_gene_value=min_significant_gene_value,
         max_consistency_fold_factor=max_consistency_fold_factor,
         candidates_count=candidates_count,
+        min_candidates_fraction=min_candidates_fraction,
         min_usage_weight=min_usage_weight,
         reproducible=reproducible,
         second_anchor_indices=second_anchor_indices,
@@ -321,12 +322,14 @@ def _project_query_atlas_data_arguments(
     min_significant_gene_value: float,
     max_consistency_fold_factor: float,
     candidates_count: int,
+    min_candidates_fraction: float,
     min_usage_weight: float,
     reproducible: bool,
     second_anchor_indices: Optional[List[int]],
 ) -> Dict[str, Any]:
     assert fold_normalization > 0
     assert candidates_count > 0
+    assert 0 <= min_candidates_fraction <= 1.0
     assert min_usage_weight >= 0
     assert max_consistency_fold_factor >= 0
     assert np.all(adata.var_names == qdata.var_names)
@@ -397,6 +400,7 @@ def _project_query_atlas_data_arguments(
         query_project_data=query_project_data,
         atlas_log_fractions=atlas_log_fractions,
         candidates_count=candidates_count,
+        min_candidates_fraction=min_candidates_fraction,
         min_significant_gene_value=min_significant_gene_value,
         min_usage_weight=min_usage_weight,
         max_consistency_fold_factor=max_consistency_fold_factor,
@@ -406,7 +410,7 @@ def _project_query_atlas_data_arguments(
 
 
 @ut.logged()
-def _project_single_metacell(  # pylint: disable=too-many-statements
+def _project_single_metacell(  # pylint: disable=too-many-statements,too-many-branches
     *,
     query_metacell_index: int,
     atlas_umis: ut.Matrix,
@@ -415,6 +419,7 @@ def _project_single_metacell(  # pylint: disable=too-many-statements
     query_project_data: ut.NumpyMatrix,
     atlas_log_fractions: ut.NumpyMatrix,
     candidates_count: int,
+    min_candidates_fraction: float,
     min_significant_gene_value: float,
     min_usage_weight: float,
     max_consistency_fold_factor: float,
@@ -431,50 +436,91 @@ def _project_single_metacell(  # pylint: disable=too-many-statements
     atlas_anchor_log_fractions = atlas_log_fractions[atlas_anchor_index, :]
     atlas_anchor_umis = ut.to_numpy_vector(atlas_umis[atlas_anchor_index, :])
 
-    atlas_candidate_indices_set = set([atlas_anchor_index])
+    atlas_candidates_consistency = [0.0]
+    atlas_candidates_indices = [atlas_anchor_index]
+
     position = 1
-    while len(atlas_candidate_indices_set) < candidates_count and position < len(query_metacell_atlas_order):
+    while len(atlas_candidates_indices) < candidates_count and position < len(query_metacell_atlas_order):
         atlas_metacell_index = query_metacell_atlas_order[position]
         position += 1
         atlas_metacell_log_fractions = atlas_log_fractions[atlas_metacell_index, :]
         atlas_metacell_consistency_fold_factors = np.abs(atlas_metacell_log_fractions - atlas_anchor_log_fractions)
         atlas_metacell_umis = ut.to_numpy_vector(atlas_umis[atlas_metacell_index, :])
         atlas_metacell_significant_genes_mask = atlas_metacell_umis + atlas_anchor_umis >= min_significant_gene_value
-        atlas_metacell_consistency = np.max(
-            atlas_metacell_consistency_fold_factors[atlas_metacell_significant_genes_mask]
-        )
-        if atlas_metacell_consistency <= max_consistency_fold_factor:
-            atlas_candidate_indices_set.add(atlas_metacell_index)
+        if np.any(atlas_metacell_significant_genes_mask):
+            atlas_metacell_consistency = np.max(
+                atlas_metacell_consistency_fold_factors[atlas_metacell_significant_genes_mask]
+            )
+            atlas_candidates_consistency.append(atlas_metacell_consistency)
+            atlas_candidates_indices.append(atlas_metacell_index)
 
-    if query_atlas_corr_residual is not None:
+    sorted_locations = list(np.argsort(np.array(atlas_candidates_consistency)))
+    min_candidates_count = candidates_count * min_candidates_fraction
+
+    while (
+        len(sorted_locations) > min_candidates_count
+        and atlas_candidates_consistency[sorted_locations[-1]] > max_consistency_fold_factor
+    ):
+        sorted_locations.pop()
+
+    atlas_candidate_indices_set = set([atlas_anchor_index])
+    for location in sorted_locations:
+        atlas_metacell_index = atlas_candidates_indices[location]
+        atlas_candidate_indices_set.add(atlas_metacell_index)
+
+    ut.log_calc("atlas_candidates", len(atlas_candidate_indices_set))
+
+    if query_atlas_corr_residual is None:
+        atlas_candidate_indices = np.array(sorted(atlas_candidate_indices_set))
+    else:
         query_metacell_atlas_residual_correlations = query_atlas_corr_residual[query_metacell_index, :]
         query_metacell_atlas_residual_order = np.argsort(-query_metacell_atlas_residual_correlations)
 
         atlas_secondary_anchor_index = query_metacell_atlas_residual_order[0]
         ut.log_calc("atlas_secondary_anchor_index", atlas_secondary_anchor_index)
+        atlas_secondary_anchor_log_fractions = atlas_log_fractions[atlas_anchor_index, :]
+        atlas_secondary_anchor_umis = ut.to_numpy_vector(atlas_umis[atlas_secondary_anchor_index, :])
 
-        atlas_secondary_candidate_indices_set = set([atlas_secondary_anchor_index])
+        atlas_secondary_candidates_consistency = [0.0]
+        atlas_secondary_candidates_indices = [atlas_secondary_anchor_index]
+
         position = 1
-        while len(atlas_secondary_candidate_indices_set) < candidates_count and position < len(
+        while len(atlas_secondary_candidates_indices) < candidates_count and position < len(
             query_metacell_atlas_residual_order
         ):
-            atlas_metacell_index = query_metacell_atlas_order[position]
+            atlas_metacell_index = query_metacell_atlas_residual_order[position]
             position += 1
             atlas_metacell_log_fractions = atlas_log_fractions[atlas_metacell_index, :]
-            atlas_metacell_consistency_fold_factors = np.abs(atlas_metacell_log_fractions - atlas_anchor_log_fractions)
+            atlas_metacell_consistency_fold_factors = np.abs(
+                atlas_metacell_log_fractions - atlas_secondary_anchor_log_fractions
+            )
             atlas_metacell_umis = ut.to_numpy_vector(atlas_umis[atlas_metacell_index, :])
             atlas_metacell_significant_genes_mask = (
-                atlas_metacell_umis + atlas_anchor_umis >= min_significant_gene_value
+                atlas_metacell_umis + atlas_secondary_anchor_umis >= min_significant_gene_value
             )
-            atlas_metacell_consistency = np.max(
-                atlas_metacell_consistency_fold_factors[atlas_metacell_significant_genes_mask]
-            )
-            if atlas_metacell_consistency <= max_consistency_fold_factor:
-                atlas_secondary_candidate_indices_set.add(atlas_metacell_index)
+            if np.any(atlas_metacell_significant_genes_mask):
+                atlas_metacell_consistency = np.max(
+                    atlas_metacell_consistency_fold_factors[atlas_metacell_significant_genes_mask]
+                )
+                atlas_secondary_candidates_consistency.append(atlas_metacell_consistency)
+                atlas_secondary_candidates_indices.append(atlas_metacell_index)
+
+        sorted_secondary_locations = list(np.argsort(np.array(atlas_secondary_candidates_consistency)))
+
+        while (
+            len(sorted_secondary_locations) > min_candidates_count
+            and atlas_secondary_candidates_consistency[sorted_secondary_locations[-1]] > max_consistency_fold_factor
+        ):
+            sorted_secondary_locations.pop()
+
+        atlas_secondary_candidate_indices_set = set([atlas_secondary_anchor_index])
+        for location in sorted_secondary_locations:
+            atlas_metacell_index = atlas_secondary_candidates_indices[location]
+            atlas_secondary_candidate_indices_set.add(atlas_metacell_index)
+
+        ut.log_calc("atlas_secondary_candidates", len(atlas_candidate_indices_set))
 
         atlas_candidate_indices = np.array(sorted(atlas_candidate_indices_set | atlas_secondary_candidate_indices_set))
-    else:
-        atlas_candidate_indices = np.array(sorted(atlas_candidate_indices_set))
 
     atlas_candidates_project_data = atlas_project_data[atlas_candidate_indices, :]
 
@@ -482,7 +528,7 @@ def _project_single_metacell(  # pylint: disable=too-many-statements
     assert represent_result is not None
     atlas_candidate_weights = represent_result[1]
     atlas_candidate_weights[atlas_candidate_weights < min_usage_weight] = 0
-    atlas_candidate_weights[atlas_candidate_weights < min_usage_weight] /= np.sum(atlas_candidate_weights)
+    atlas_candidate_weights[:] /= np.sum(atlas_candidate_weights)
 
     atlas_used_mask = atlas_candidate_weights > 0
 
@@ -499,89 +545,6 @@ def _project_single_metacell(  # pylint: disable=too-many-statements
     ut.log_return("atlas_used_weights", atlas_used_weights)
 
     return (atlas_used_indices, atlas_used_weights)
-
-
-@ut.logged()
-@ut.timed_call()
-@ut.expand_doc()
-def find_systematic_genes(
-    what: Union[str, ut.Matrix] = "__x__",
-    *,
-    adata: AnnData,
-    qdata: AnnData,
-    atlas_total_umis: Optional[ut.Vector] = None,
-    query_total_umis: Optional[ut.Vector] = None,
-    low_gene_quantile: float = pr.systematic_low_gene_quantile,
-    high_gene_quantile: float = pr.systematic_high_gene_quantile,
-    to_property_name: str = "systematic_gene",
-) -> None:
-    """
-    Find genes that
-
-    **Input**
-
-    Annotated query ``qdata`` and atlas ``adata``, where the observations are cells and the variables are genes, where
-    ``what`` is a per-variable-per-observation matrix or the name of a per-variable-per-observation annotation
-    containing such a matrix.
-
-    **Returns**
-
-    A matrix whose rows are query metacells and columns are atlas metacells, where each entry is the weight of the atlas
-    metacell in the projection of the query metacells. The sum of weights in each row (that is, for a single query
-    metacell) is 1. The weighted sum of the atlas metacells using these weights is the "projected" image of the query
-    metacell onto the atlas.
-
-    In addition, sets the following annotations in ``qdata``:
-
-    Variable (Gene) Annotations
-        ``systematic_gene`` (or ``to_property_name``)
-            A boolean mask indicating whether the gene is systematically higher or lower in the query compared to the
-            atlas.
-
-    **Computation Parameters**
-
-    1. Compute the fraction of each gene out of the total UMIs in both the atlas and the query. If ``atlas_total_umis``
-       and/or ``query_total_umis`` are given, use them as the basis instead of the sum of the UMIs.
-
-    2. Compute for each gene its ``low_gene_quantile`` (default: {low_gene_quantile}) fraction in the query, and its
-       ``high_gene_quantile`` (default: {high_gene_quantile}) fraction in the atlas.
-
-    3. Compute for each gene its standard deviation in the atlas.
-
-    4. Mark as systematic the genes for which the low quantile value in the query is at least the atlas high quantile
-       value.
-
-    5. Mark as systematic the genes for which the low quantile value in the atlas is at least the query high quantile
-       value.
-    """
-    assert 0 <= low_gene_quantile <= 1
-    assert 0 <= high_gene_quantile <= 1
-    assert np.all(adata.var_names == qdata.var_names)
-
-    if adata.n_obs == 1:
-        systematic = np.zeros(adata.n_vars, dtype="bool")
-    else:
-        query_umis = ut.get_vo_proper(qdata, what, layout="row_major")
-        atlas_umis = ut.get_vo_proper(adata, what, layout="row_major")
-
-        atlas_fractions = ut.to_numpy_matrix(ut.fraction_by(atlas_umis, by="row", sums=atlas_total_umis))
-        query_fractions = ut.to_numpy_matrix(ut.fraction_by(query_umis, by="row", sums=query_total_umis))
-
-        query_fractions = ut.to_layout(query_fractions, layout="column_major")
-        atlas_fractions = ut.to_layout(atlas_fractions, layout="column_major")
-
-        query_low_gene_values = ut.quantile_per(query_fractions, low_gene_quantile, per="column")
-        atlas_low_gene_values = ut.quantile_per(atlas_fractions, low_gene_quantile, per="column")
-
-        query_high_gene_values = ut.quantile_per(query_fractions, high_gene_quantile, per="column")
-        atlas_high_gene_values = ut.quantile_per(atlas_fractions, high_gene_quantile, per="column")
-
-        query_above_atlas = query_low_gene_values > atlas_high_gene_values
-        atlas_above_query = atlas_low_gene_values >= query_high_gene_values
-
-        systematic = query_above_atlas | atlas_above_query
-
-    ut.set_v_data(qdata, to_property_name, systematic)
 
 
 @ut.logged()
@@ -627,16 +590,16 @@ def project_atlas_to_query(
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def find_biased_genes(
+def find_misfit_genes(
     adata: AnnData,
     *,
     max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
-    min_metacells_fraction: float = pr.biased_min_metacells_fraction,
+    min_metacells_fraction: float = pr.misfit_min_metacells_fraction,
     abs_folds: bool = pr.project_abs_folds,
-    to_property_name: str = "biased_gene",
+    to_property_name: str = "misfit_gene",
 ) -> None:
     """
-    Find genes that have a strong bias in the query compared to the atlas.
+    Find genes with a very poor fit between the query and the atlas.
 
     **Input**
 
@@ -652,15 +615,15 @@ def find_biased_genes(
     Sets the following annotations in ``adata``:
 
     Variable (Gene) Annotations
-        ``biased_gene`` (or ``to_property_name``):
-            A boolean mask indicating whether the gene has a strong bias in the query compared to the atlas.
+        ``misfit_gene`` (or ``to_property_name``):
+            A boolean mask indicating whether the gene has a very poor fit between the query and the atlas.
 
     **Computation Parameters**
 
     1. Count for each such gene the number of query metacells for which the ``projected_fold`` is above
        ``max_projection_fold_factor``. If ``abs_folds`` (default: {abs_folds}), consider the absolute fold factor.
 
-    2. Mark the gene as biased if either count is at least a ``min_metacells_fraction`` (default:
+    2. Mark the gene as misfit if either count is at least a ``min_metacells_fraction`` (default:
        {min_metacells_fraction}) of the metacells.
     """
     assert max_projection_fold_factor >= 0

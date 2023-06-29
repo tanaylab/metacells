@@ -903,6 +903,10 @@ project_min_significant_gene_value: float = 40
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
 project_candidates_count: int = 50
 
+#: The minimal number of atlas candidates to use even if they fail the consistency check. See
+#: :py:func:`metacells.tools.project.project_query_onto_atlas`.
+project_min_candidates_fraction: float = 1.0 / 3.0
+
 #: The minimal weight of an atlas metacell used for the projection of a query metacell. See
 #: :py:func:`metacells.tools.project.project_query_onto_atlas`.
 project_min_usage_weight: float = 1e-5
@@ -971,23 +975,11 @@ ignore_query_insignificant_genes: bool = False
 #: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
 ignore_query_forbidden_genes: bool = False
 
-#: The quantile of the gene value to use for the query gene expressions when looking for systematic genes. See
-#: :py:func:`metacells.tools.project.find_systematic_genes`,
+#: The minimal fraction of metacells where a gene has a high projection fold factor to mark the gene as "misfit".
+#: See :py:func:`metacells.tools.project.find_misfit_genes`,
 #: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
 #: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
-systematic_low_gene_quantile: float = 0.05
-
-#: The quantile of the gene value to use for the atlas gene expressions when looking for systematic genes. See
-#: :py:func:`metacells.tools.project.find_systematic_genes`
-#: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
-#: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
-systematic_high_gene_quantile: float = 0.95
-
-#: The minimal fraction of metacells where a gene has a high projection fold factor to mark the gene as biased.
-#: See :py:func:`metacells.tools.project.find_biased_genes`,
-#: :py:func:`metacells.pipeline.projection.direct_projection_pipeline`
-#: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
-biased_min_metacells_fraction: float = 0.5
+misfit_min_metacells_fraction: float = 0.5
 
 #: The minimal fold between the maximal and minimal gene expression in metacells to be significant.
 #: See :py:func:`metacells.tools.high.find_significant_metacells_genes`.
@@ -1007,18 +999,17 @@ min_significant_metacells_gene_fraction: float = 1e-4
 #: and :py:func:`metacells.pipeline.projection.projection_pipeline`.
 project_renormalize_query: bool = False
 
-#: The minimal correlation between observed and projected genes for considering linear correction of the query gene
-#: value.
+#: Whether to compute linear corrections for genes between the query and the atlas.
 #: See :py:func:`metacells.pipeline.projection.projection_pipeline`.
+project_corrections: bool = False
+
+#: The minimal correlation between observed and projected genes for considering linear correction of the query gene
+#: value. See :py:func:`metacells.pipeline.projection.projection_pipeline`.
 project_min_corrected_gene_correlation: float = 0.8
 
 #: The minimal strength of the correction between the mean query and projected mean value (for correlated genes).
 #: See :py:func:`metacells.pipeline.projection.projection_pipeline`.
 project_min_corrected_gene_factor: float = 0.15
-
-#: The m aximal correlation between observed and projected genes for ignoring the gene as uncorrelated.
-#: See :py:func:`metacells.pipeline.projection.projection_pipeline`.
-project_max_uncorrelated_gene_correlation: float = 0.5
 
 #: The maximal number of deviant genes allowed for saying a query is similar to the projection in the atlas.
 #: See :py:func:`metacells.tools.quality.compute_similar_query_metacells`
@@ -1033,3 +1024,6 @@ renormalize_query_by_atlas: bool = True
 #: The quantile of each gene's normalized variance across the metacells to use for the overall gene's variability.
 #: See :py:func:`metacells.tools.quality.compute_type_gene_normalized_variance`.
 type_gene_normalized_variance_quantile: float = 0.95
+
+#: Minimal fraction of atlas essential genes which must be similar for a projection to be valid.
+project_min_similar_essential_genes_fraction: float = 0.75

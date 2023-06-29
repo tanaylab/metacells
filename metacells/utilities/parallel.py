@@ -51,6 +51,7 @@ using the ``psutil`` package.
 import ctypes
 import os
 import sys
+from math import ceil
 from multiprocessing import Value
 from multiprocessing import get_context
 from threading import current_thread
@@ -127,6 +128,8 @@ def set_processors_count(processors: int) -> None:
 
     threadpool_limits(limits=PROCESSORS_COUNT)
     xt.set_threads_count(PROCESSORS_COUNT)
+    os.environ["OMP_NUM_THREADS"] = str(PROCESSORS_COUNT)
+    os.environ["MKL_NUM_THREADS"] = str(PROCESSORS_COUNT)
 
 
 if "sphinx" not in sys.argv[0]:
@@ -200,6 +203,9 @@ def parallel_map(
     global MAP_INDEX
     MAP_INDEX += 1
 
+    os.environ["OMP_NUM_THREADS"] = str(ceil(PROCESSES_COUNT / invocations))
+    os.environ["MKL_NUM_THREADS"] = str(ceil(PROCESSES_COUNT / invocations))
+
     PARALLEL_FUNCTION = function
     IS_MAIN_PROCESS = None
     try:
@@ -216,6 +222,8 @@ def parallel_map(
     finally:
         IS_MAIN_PROCESS = True
         PARALLEL_FUNCTION = None
+        os.environ["OMP_NUM_THREADS"] = str(PROCESSES_COUNT)
+        os.environ["MKL_NUM_THREADS"] = str(PROCESSES_COUNT)
 
 
 def _invocation(index: int) -> Tuple[int, Any]:
@@ -241,6 +249,8 @@ def _invocation(index: int) -> Tuple[int, Any]:
         utl.logger().debug("PROCESSORS: %s", PROCESSORS_COUNT)
         threadpool_limits(limits=PROCESSORS_COUNT)
         xt.set_threads_count(PROCESSORS_COUNT)
+        os.environ["OMP_NUM_THREADS"] = str(PROCESSORS_COUNT)
+        os.environ["MKL_NUM_THREADS"] = str(PROCESSORS_COUNT)
 
     assert PARALLEL_FUNCTION is not None
     return index, PARALLEL_FUNCTION(index)
