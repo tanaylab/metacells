@@ -24,6 +24,7 @@ __all__ = [
 def find_named_genes(
     adata: AnnData,
     *,
+    col: Optional[str] = None,
     names: Optional[Collection[str]] = None,
     patterns: Optional[Collection[Union[str, Pattern]]] = None,
     to: Optional[str] = None,
@@ -35,6 +36,8 @@ def find_named_genes(
     This creates a mask of all the genes whose name appears in ``names`` or matches any of the
     ``patterns``. If ``invert`` (default: {invert}), invert the resulting mask.
 
+    If ``col`` is specified the mask will be based on a column in the ``adata.var`` DataFrame
+
     If ``to`` (default: {to}) is specified, this is stored as a per-variable (gene) annotation with
     that name, and returns ``None``. This is useful to fill gene masks such as ``excluded_genes``
     (genes which should be excluded from the rest of the processing) and ``forbidden_genes`` (genes
@@ -42,16 +45,21 @@ def find_named_genes(
 
     Otherwise, it returns it as a pandas series (indexed by the variable, that is gene, names).
     """
+    if col is None:
+        var_names_col = adata.var_names
+    else:
+        var_names_col = adata.var[col]
+
     if names is None:
         names_mask = np.zeros(adata.n_vars, dtype="bool")
     else:
         lower_names_set = {name.lower() for name in names}
-        names_mask = np.array([name.lower() in lower_names_set for name in adata.var_names])  #
+        names_mask = np.array([name.lower() in lower_names_set for name in var_names_col])
 
     if patterns is None:
         patterns_mask = np.zeros(adata.n_vars, dtype="bool")
     else:
-        patterns_mask = ut.patterns_matches(patterns, adata.var_names)
+        patterns_mask = ut.patterns_matches(patterns, var_names_col)
 
     genes_mask = names_mask | patterns_mask
 
