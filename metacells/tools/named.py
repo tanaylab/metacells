@@ -24,7 +24,7 @@ __all__ = [
 def find_named_genes(
     adata: AnnData,
     *,
-    name_property: optional[str] = None,
+    name_property: Optional[str] = None,
     names: Optional[Collection[str]] = None,
     patterns: Optional[Collection[Union[str, Pattern]]] = None,
     to: Optional[str] = None,

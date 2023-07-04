@@ -114,9 +114,10 @@ terminology for these lists:
     list.
 
 ``noisy_gene`` mask
-    Noisy genes are not only forbidden from being selected for computing cells similarity, but are also given more
-    freedom when computing deviant (outlier) cells. That is, we don't expect the expression level of such genes in the
-    cells in the same metacell to be as consistent as we do for regular (non-noisy) genes.
+    Noisy genes are given more freedom when computing deviant (outlier) cells. That is, we don't expect the expression
+    level of such genes in the cells in the same metacell to be as consistent as we do for regular (non-noisy) genes.
+    Note this isn't related to the question of whether the gene is lateral of not. That is, a gee maybe lateral, noisy,
+    both, or neither.
 
     The motivation is that some genes are inherently bursty and therefore cause many cells which are otherwise a good
     match for their metacell to be marked as deviant (outliers). An indication for this is by examining the
