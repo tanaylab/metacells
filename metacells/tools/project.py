@@ -34,6 +34,7 @@ def compute_projection_weights(
     from_atlas_layer: str = "corrected_fraction",
     from_query_layer: str = "corrected_fraction",
     to_query_layer: str = "projected_fraction",
+    log_data: bool = pr.project_log_data,
     fold_regularization: float = pr.project_fold_regularization,
     min_significant_gene_umis: float = pr.project_min_significant_gene_umis,
     max_consistency_fold_factor: float = pr.project_max_consistency_fold_factor,
@@ -97,10 +98,11 @@ def compute_projection_weights(
        candidate metacells is less than ``min_significant_gene_umis`` (default: {min_significant_gene_umis}).
 
     4. Compute the non-negative weights (with a sum of 1) of the selected candidates that give the best projection of
-       the query metacells onto the atlas. Since the algorithm for computing these weights rarely produces an exact 0
-       weight, reduce all weights less than the ``min_usage_weight`` (default: {min_usage_weight}) to zero. If
-       ``second_anchor_indices`` is not ``None``, it is set to the list of indices of the used atlas metacells
-       candidates correlated with the second anchor.
+       the query metacells onto the atlas. If ``log_data`` (default: {log_data}), try to fit the log (base 2) of the
+       fractions, otherwise, try to fit the fractions themselves. Since the algorithm for computing these weights rarely
+       produces an exact 0 weight, reduce all weights less than the ``min_usage_weight`` (default: {min_usage_weight})
+       to zero. If ``second_anchor_indices`` is not ``None``, it is set to the list of indices of the used atlas
+       metacells candidates correlated with the second anchor.
     """
     prepared_arguments = _project_query_atlas_data_arguments(
         adata=adata,
@@ -108,6 +110,7 @@ def compute_projection_weights(
         from_atlas_layer=from_atlas_layer,
         from_query_layer=from_query_layer,
         to_query_layer=to_query_layer,
+        log_data=log_data,
         fold_regularization=fold_regularization,
         min_significant_gene_umis=min_significant_gene_umis,
         max_consistency_fold_factor=max_consistency_fold_factor,
@@ -149,6 +152,8 @@ def compute_projected_fractions(
     qdata: AnnData,
     from_atlas_layer: str = "corrected_fraction",
     to_query_layer: str = "projected_fraction",
+    log_data: bool = pr.project_log_data,
+    fold_regularization: float = pr.project_fold_regularization,
     weights: ut.ProperMatrix,
 ) -> None:
     """
@@ -161,13 +166,31 @@ def compute_projected_fractions(
 
     **Returns**
 
-    Sets ``to_query_layer`` (default: {to_query_layer}) in the query containing the gene fractions of the projection
-    of the atlas fractions using the ``weights`` matrix.
+    Sets ``to_query_layer`` (default: {to_query_layer}) in the query containing the gene fractions of the projection of
+    the atlas fractions using the ``weights`` matrix.
+
+    .. note::
+
+        It is important to use the same ``log_data`` value as that given to ``compute_projection_weights`` to compute
+        the weights (default: {log_data}).
     """
+    assert fold_regularization > 0
+
     atlas_fractions = ut.get_vo_proper(adata, from_atlas_layer, layout="row_major")
-    projected_fractions = weights @ atlas_fractions  # type: ignore
+
+    if log_data:
+        atlas_log_fractions = ut.to_numpy_matrix(atlas_fractions, copy=True)
+        atlas_log_fractions += fold_regularization  # type: ignore
+        atlas_log_fractions = np.log2(atlas_log_fractions, out=atlas_log_fractions)  # type: ignore
+        projected_fractions = weights @ atlas_log_fractions  # type: ignore
+        projected_fractions = np.power(2.0, projected_fractions, out=projected_fractions)
+        projected_fractions -= fold_regularization
+
+    else:
+        projected_fractions = weights @ atlas_fractions  # type: ignore
+
     assert projected_fractions.shape == qdata.shape
-    projected_fractions = ut.fraction_by(projected_fractions, by="row")
+    projected_fractions = ut.fraction_by(projected_fractions, by="row").astype("float32")  # type: ignore
     ut.set_vo_data(qdata, to_query_layer, sp.csr_matrix(projected_fractions))
 
 
@@ -177,6 +200,7 @@ def _project_query_atlas_data_arguments(
     from_atlas_layer: str,
     from_query_layer: str,
     to_query_layer: str,
+    log_data: bool,
     fold_regularization: float,
     min_significant_gene_umis: float,
     max_consistency_fold_factor: float,
@@ -211,36 +235,46 @@ def _project_query_atlas_data_arguments(
         atlas_residual_fractions = atlas_fractions - ut.to_numpy_vector(query_residual_fractions)[np.newaxis, :]
         atlas_residual_fractions[atlas_residual_fractions < 0] = 0
 
-        atlas_residual_fractions += fold_regularization
-        query_residual_fractions += fold_regularization
+        if log_data:
+            atlas_residual_fractions += fold_regularization
+            query_residual_fractions += fold_regularization
 
-        atlas_project_residual_data = np.log2(atlas_residual_fractions)
-        query_project_residual_data = np.log2(query_residual_fractions)
+            atlas_residual_data = np.log2(atlas_residual_fractions, out=atlas_residual_fractions)
+            query_residual_data = np.log2(query_residual_fractions, out=query_residual_fractions)
+
+        else:
+            atlas_residual_data = atlas_residual_fractions
+            query_residual_data = query_residual_fractions
 
         query_atlas_corr_residual: Optional[ut.NumpyMatrix] = ut.cross_corrcoef_rows(
-            query_project_residual_data, atlas_project_residual_data, reproducible=reproducible
+            query_residual_data, atlas_residual_data, reproducible=reproducible
         )
 
     else:
         query_atlas_corr_residual = None
 
-    atlas_fractions += fold_regularization
-    query_fractions += fold_regularization
+    atlas_log_fractions = atlas_fractions + fold_regularization
+    atlas_log_fractions = np.log2(atlas_log_fractions, out=atlas_log_fractions)
 
-    atlas_log_fractions = np.log2(atlas_fractions)
-    query_log_fractions = np.log2(query_fractions)
+    query_log_fractions = query_fractions + fold_regularization
+    query_log_fractions = np.log2(query_log_fractions, out=query_log_fractions)
 
-    atlas_fractions -= fold_regularization
-    query_fractions -= fold_regularization
+    if log_data:
+        atlas_data = atlas_log_fractions
+        query_data = query_log_fractions
+
+    else:
+        atlas_data = atlas_fractions
+        query_data = query_fractions
 
     query_atlas_corr = ut.cross_corrcoef_rows(query_log_fractions, atlas_log_fractions, reproducible=reproducible)
 
     return {
         "atlas_umis": atlas_umis,
         "query_atlas_corr": query_atlas_corr,
-        "atlas_fractions": atlas_fractions,
+        "atlas_data": atlas_data,
         "atlas_log_fractions": atlas_log_fractions,
-        "query_log_fractions": query_log_fractions,
+        "query_data": query_data,
         "candidates_count": candidates_count,
         "min_candidates_fraction": min_candidates_fraction,
         "min_significant_gene_umis": min_significant_gene_umis,
@@ -257,9 +291,9 @@ def _project_single_metacell(  # pylint: disable=too-many-statements,too-many-br
     query_metacell_index: int,
     atlas_umis: ut.Matrix,
     query_atlas_corr: ut.NumpyMatrix,
-    atlas_fractions: ut.NumpyMatrix,  # pylint: disable=unused-argument
+    atlas_data: ut.NumpyMatrix,
     atlas_log_fractions: ut.NumpyMatrix,
-    query_log_fractions: ut.NumpyMatrix,
+    query_data: ut.NumpyMatrix,
     candidates_count: int,
     min_candidates_fraction: float,
     min_significant_gene_umis: float,
@@ -268,7 +302,7 @@ def _project_single_metacell(  # pylint: disable=too-many-statements,too-many-br
     second_anchor_indices: Optional[List[int]],
     query_atlas_corr_residual: Optional[ut.NumpyMatrix],
 ) -> Tuple[ut.NumpyVector, ut.NumpyVector]:
-    query_metacell_log_fractions = query_log_fractions[query_metacell_index, :]
+    query_metacell_data = query_data[query_metacell_index, :]
 
     query_metacell_atlas_correlations = query_atlas_corr[query_metacell_index, :]
     query_metacell_atlas_order = np.argsort(-query_metacell_atlas_correlations)
@@ -364,9 +398,8 @@ def _project_single_metacell(  # pylint: disable=too-many-statements,too-many-br
 
         atlas_candidate_indices = np.array(sorted(atlas_candidate_indices_set | atlas_secondary_candidate_indices_set))
 
-    atlas_candidates_log_fractions = atlas_log_fractions[atlas_candidate_indices, :]
-
-    represent_result = ut.represent(query_metacell_log_fractions, atlas_candidates_log_fractions)
+    atlas_candidates_data = atlas_data[atlas_candidate_indices, :]
+    represent_result = ut.represent(query_metacell_data, atlas_candidates_data)
     assert represent_result is not None
     atlas_candidate_weights = represent_result[1]
     atlas_candidate_weights[atlas_candidate_weights < min_usage_weight] = 0

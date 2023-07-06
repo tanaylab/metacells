@@ -21,7 +21,7 @@ __all__ = [
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def find_named_genes(
+def find_named_genes(  # pylint: disable=too-many-branches
     adata: AnnData,
     *,
     name_property: Optional[str] = None,
@@ -65,7 +65,7 @@ def find_named_genes(
         names_mask = np.zeros(adata.n_vars, dtype="bool")
     else:
         lower_names_set = {name.lower() for name in names}
-        names_mask = np.array([name.lower() in lower_names_set for name in var_names]) #
+        names_mask = np.array([name.lower() in lower_names_set for name in var_names])  #
 
     if patterns is None or len(patterns) == 0:
         patterns_mask = np.zeros(adata.n_vars, dtype="bool")

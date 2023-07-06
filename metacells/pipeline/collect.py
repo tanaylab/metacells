@@ -31,6 +31,7 @@ def collect_metacells(  # pylint: disable=too-many-statements
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
+    metacell_geo_mean: bool = pr.metacell_geo_mean,
     metacell_umis_regularization: float = pr.metacell_umis_regularization,
     zeros_cell_size_quantile: float = pr.zeros_cell_size_quantile,
     groups: Union[str, ut.Vector] = "metacell",
@@ -90,14 +91,19 @@ def collect_metacells(  # pylint: disable=too-many-statements
 
     For each metacell:
 
-    1. Compute the fraction of each gene out of each cell grouped into the metacell.
+    3. If ``metacell_geo_mean`` (default: {metacell_geo_mean}),
 
-    2. For each cell, add to the fractions the ``metacell_umis_regularization`` divided by the total UMIs of the cell.
+        A. Compute the fraction of each gene out of each cell grouped into the metacell.
 
-    3. For each gene, compute the weighted geomean of these fractions across all the cells, where the weight of each
-       cell is the log of its total number of UMIs.
+        B. For each cell, add to the fractions the ``metacell_umis_regularization`` divided by the total UMIs of the cell.
 
-    4. Subtract the geomean of the per-cell regularization so all-zero genes would have a zero fraction.
+        C. For each gene, compute the weighted geomean of these fractions across all the cells, where the weight of each
+           cell is the log of its total number of UMIs, and
+
+        D. Subtract the geomean of the per-cell regularization so all-zero genes would have a zero fraction.
+
+    4. Otherwise, for each metacell, sum the total UMIs of each gene across all cells, and divide it by the total UMIs of
+       all genes in all cells.
 
     5. Normalize the per-gene fractions so their sum would be 1.0 in the metacell.
 
@@ -165,37 +171,44 @@ def collect_metacells(  # pylint: disable=too-many-statements
 
             umis_per_gene_per_cell_of_metacell = ut.to_layout(umis_per_gene_per_cell_of_metacell, layout="column_major")
             umis_per_gene_of_metacell = ut.sum_per(umis_per_gene_per_cell_of_metacell, per="column").astype("float32")
-            fraction_per_gene_per_cell_of_metacell = ut.to_layout(
-                umis_per_gene_per_cell_of_metacell / ut.to_numpy_matrix(umis_per_cell_of_metacell[:, np.newaxis]),
-                layout="column_major",
-            )
+            assert np.sum(umis_per_gene_of_metacell) == total_umis_of_metacell
 
-            regularization_per_cell_of_metacell = metacell_umis_regularization / umis_per_cell_of_metacell
-            regularization_of_metacell = ss.mstats.gmean(regularization_per_cell_of_metacell)
+            if not metacell_geo_mean:
+                fraction_per_gene_of_metacell = umis_per_gene_of_metacell / total_umis_of_metacell
 
-            log_fraction_per_gene_per_cell_of_metacell = np.log2(
-                fraction_per_gene_per_cell_of_metacell + regularization_per_cell_of_metacell[:, np.newaxis]
-            )
-            weight_per_cell_of_metacell = np.log2(umis_per_cell_of_metacell)
-            weighted_log_fraction_per_gene_per_cell_of_metacell = ut.to_layout(
-                log_fraction_per_gene_per_cell_of_metacell * weight_per_cell_of_metacell[:, np.newaxis],
-                layout="column_major",
-            )
+            else:
+                fraction_per_gene_per_cell_of_metacell = ut.to_layout(
+                    umis_per_gene_per_cell_of_metacell / ut.to_numpy_matrix(umis_per_cell_of_metacell[:, np.newaxis]),
+                    layout="column_major",
+                )
 
-            total_weighted_log_fraction_per_gene_of_metacell = ut.sum_per(
-                weighted_log_fraction_per_gene_per_cell_of_metacell, per="column"
-            )
-            total_weight_of_metacell = np.sum(weight_per_cell_of_metacell)
+                regularization_per_cell_of_metacell = metacell_umis_regularization / umis_per_cell_of_metacell
+                regularization_of_metacell = ss.mstats.gmean(regularization_per_cell_of_metacell)
 
-            mean_log_fraction_per_gene_of_metacell = (
-                total_weighted_log_fraction_per_gene_of_metacell / total_weight_of_metacell
-            )
-            fraction_per_gene_of_metacell = 2**mean_log_fraction_per_gene_of_metacell
-            fraction_per_gene_of_metacell -= regularization_of_metacell
-            fraction_per_gene_of_metacell[umis_per_gene_of_metacell == 0] = 0
-            fraction_per_gene_of_metacell[fraction_per_gene_of_metacell < 0] = 0
-            assert np.min(fraction_per_gene_of_metacell) >= 0
-            fraction_per_gene_of_metacell /= np.sum(fraction_per_gene_of_metacell)
+                log_fraction_per_gene_per_cell_of_metacell = np.log2(
+                    fraction_per_gene_per_cell_of_metacell + regularization_per_cell_of_metacell[:, np.newaxis]
+                )
+                weight_per_cell_of_metacell = np.log2(umis_per_cell_of_metacell)
+                weighted_log_fraction_per_gene_per_cell_of_metacell = ut.to_layout(
+                    log_fraction_per_gene_per_cell_of_metacell * weight_per_cell_of_metacell[:, np.newaxis],
+                    layout="column_major",
+                )
+
+                total_weighted_log_fraction_per_gene_of_metacell = ut.sum_per(
+                    weighted_log_fraction_per_gene_per_cell_of_metacell, per="column"
+                )
+                total_weight_of_metacell = np.sum(weight_per_cell_of_metacell)
+
+                mean_log_fraction_per_gene_of_metacell = (
+                    total_weighted_log_fraction_per_gene_of_metacell / total_weight_of_metacell
+                )
+                fraction_per_gene_of_metacell = 2**mean_log_fraction_per_gene_of_metacell
+                fraction_per_gene_of_metacell -= regularization_of_metacell
+                fraction_per_gene_of_metacell[umis_per_gene_of_metacell == 0] = 0
+                fraction_per_gene_of_metacell[fraction_per_gene_of_metacell < 0] = 0
+                assert np.min(fraction_per_gene_of_metacell) >= 0
+                fraction_per_gene_of_metacell /= np.sum(fraction_per_gene_of_metacell)
+
             fraction_per_gene_of_metacell = fraction_per_gene_of_metacell.astype("float32")
             if _metacell_groups:
                 fraction_per_gene_of_metacell *= total_umis_of_metacell

@@ -126,7 +126,11 @@ target_metacells_in_pile: int = 100
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 target_metacell_size: float = 96
 
-#: The number of UMIs to use for regularization when computing metacell gene fractions.
+#: Whether to use geometrical mean to compute metacell gene fractions.
+#: See :py:func:`metacells.pipeline.collect.collect_metacells`.
+metacell_geo_mean: bool = True
+
+#: The number of UMIs to use for regularization when computing metacell gene fractions geometrical mean.
 #: See :py:func:`metacells.pipeline.collect.collect_metacells`.
 metacell_umis_regularization: float = 1 / 16.0
 
@@ -949,6 +953,10 @@ project_max_projection_noisy_fold_factor: float = significant_noisy_gene_fold_fa
 #: The maximal fold factor of genes between the atlas metacells used for the projection of a query metacell. See
 #: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_max_consistency_fold_factor: float = significant_gene_fold_factor - 1.0
+
+#: Whether to compute projectio the log (base 2) of the data. See
+#: :py:func:`metacells.tools.project.compute_projection_weights`.
+project_log_data: bool = True
 
 #: The regularization factor to use when computing log of fractions for finding the most similar group for outliers. See
 #: :py:func:`metacells.tools.quality.compute_outliers_matches`.
