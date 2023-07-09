@@ -79,7 +79,7 @@ def compute_knn_by_markers(
     1. If ``marker_gene_names`` and/or ``marker_gene_patterns`` were specified, use the matching genes.
        Otherwise, use the ``marker_gene`` mask.
 
-    2. If `ignore_lateral_genes` (default: {ignore_lateral_genes}), then remove any genes marked as lateral
+    2. If ``ignore_lateral_genes`` (default: {ignore_lateral_genes}), then remove any genes marked as lateral
        from the mask.
 
     3. If ``max_marker_genes`` (default: {max_marker_genes}) is not ``None``, then pick this number

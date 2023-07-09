@@ -180,9 +180,9 @@ def compute_projected_fractions(
 
     if log_data:
         atlas_log_fractions = ut.to_numpy_matrix(atlas_fractions, copy=True)
-        atlas_log_fractions += fold_regularization  # type: ignore
-        atlas_log_fractions = np.log2(atlas_log_fractions, out=atlas_log_fractions)  # type: ignore
-        projected_fractions = weights @ atlas_log_fractions  # type: ignore
+        atlas_log_fractions += fold_regularization
+        atlas_log_fractions = np.log2(atlas_log_fractions, out=atlas_log_fractions)
+        projected_fractions = weights @ atlas_log_fractions
         projected_fractions = np.power(2.0, projected_fractions, out=projected_fractions)
         projected_fractions -= fold_regularization
 

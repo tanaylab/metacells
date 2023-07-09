@@ -48,6 +48,10 @@ def projection_pipeline(
     project_min_candidates_fraction: float = pr.project_min_candidates_fraction,
     project_min_significant_gene_umis: int = pr.project_min_significant_gene_umis,
     project_min_usage_weight: float = pr.project_min_usage_weight,
+    project_filter_ranges: bool = True,  # TODOX
+    project_ignore_range_quantile: float = 0.02,  # TODOX
+    project_ignore_range_max_fold: float = 3,  # TODOX
+    project_ignore_range_min_overlap_fraction: float = 0.5,  # TODOX
     project_max_consistency_fold_factor: float = pr.project_max_consistency_fold_factor,
     project_max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
     project_max_projection_noisy_fold_factor: float = pr.project_max_projection_noisy_fold_factor,
@@ -332,6 +336,10 @@ def projection_pipeline(
         project_log_data=project_log_data,
         project_fold_regularization=project_fold_regularization,
         project_min_significant_gene_umis=project_min_significant_gene_umis,
+        project_filter_ranges=project_filter_ranges,
+        project_ignore_range_quantile=project_ignore_range_quantile,
+        project_ignore_range_max_fold=project_ignore_range_max_fold,
+        project_ignore_range_min_overlap_fraction=project_ignore_range_min_overlap_fraction,
         project_max_consistency_fold_factor=project_max_consistency_fold_factor,
         project_candidates_count=project_candidates_count,
         project_min_usage_weight=project_min_usage_weight,
@@ -690,6 +698,10 @@ def _compute_preliminary_projection(
     project_log_data: bool,
     project_fold_regularization: float,
     project_min_significant_gene_umis: float,
+    project_filter_ranges: bool,
+    project_ignore_range_quantile: float,
+    project_ignore_range_max_fold: float,
+    project_ignore_range_min_overlap_fraction: float,
     project_max_consistency_fold_factor: float,
     project_candidates_count: int,
     project_min_usage_weight: float,
@@ -702,7 +714,8 @@ def _compute_preliminary_projection(
     correction_factor_per_gene = np.full(common_qdata.n_vars, 1.0, dtype="float32")
 
     repeat = 0
-    while True:
+    is_done = False
+    while not is_done:
         repeat += 1
         ut.log_calc("preliminary repeat", repeat)
 
@@ -730,7 +743,7 @@ def _compute_preliminary_projection(
             reproducible=reproducible,
         )
 
-        if (
+        is_done = (
             repeat > 2
             or not project_corrections
             or not _correct_correlated_genes(
@@ -745,8 +758,19 @@ def _compute_preliminary_projection(
                 weights=weights,
                 reproducible=reproducible,
             )
-        ):
-            break
+        )
+
+        if project_filter_ranges:
+            _filter_range_genes(
+                common_qdata=common_qdata,
+                filter_by_overlap=is_done,
+                project_fold_regularization=project_fold_regularization,
+                project_ignore_range_quantile=project_ignore_range_quantile,
+                project_ignore_range_max_fold=project_ignore_range_max_fold,
+                project_ignore_range_min_overlap_fraction=project_ignore_range_min_overlap_fraction,
+                correction_factor_per_gene=correction_factor_per_gene,
+                preliminary_fitted_genes_mask=preliminary_fitted_genes_mask,
+            )
 
     if project_corrections:
         ut.set_v_data(common_qdata, "correction_factor", correction_factor_per_gene)
@@ -858,6 +882,117 @@ def _correct_correlated_genes(
     ut.set_vo_data(common_qdata, "corrected_fraction", sp.csr_matrix(corrected_fractions_per_gene_per_metacell))
 
     return True
+
+
+@ut.logged()
+@ut.timed_call()
+def _filter_range_genes(
+    *,
+    common_qdata: AnnData,
+    filter_by_overlap: bool,
+    project_fold_regularization: float,
+    project_ignore_range_quantile: float,
+    project_ignore_range_max_fold: float,
+    project_ignore_range_min_overlap_fraction: float,
+    correction_factor_per_gene: ut.NumpyVector,
+    preliminary_fitted_genes_mask: ut.NumpyVector,
+) -> None:
+    corrected_fractions_per_gene_per_metacell = ut.to_numpy_matrix(
+        ut.get_vo_proper(common_qdata, "corrected_fraction", layout="column_major")
+    )
+    projected_fractions_per_gene_per_metacell = ut.to_numpy_matrix(
+        ut.get_vo_proper(common_qdata, "projected_fraction", layout="column_major")
+    )
+
+    preliminary_fitted_genes_indices = np.where(preliminary_fitted_genes_mask)[0]
+    corrected_fractions_per_fitted_gene_per_metacell = corrected_fractions_per_gene_per_metacell[
+        :, preliminary_fitted_genes_indices
+    ]
+    projected_fractions_per_fitted_gene_per_metacell = projected_fractions_per_gene_per_metacell[
+        :, preliminary_fitted_genes_indices
+    ]
+
+    corrected_log_fractions_per_fitted_gene_per_metacell = (
+        corrected_fractions_per_fitted_gene_per_metacell + project_fold_regularization
+    )
+    projected_log_fractions_per_fitted_gene_per_metacell = (
+        projected_fractions_per_fitted_gene_per_metacell + project_fold_regularization
+    )
+
+    np.log2(
+        corrected_log_fractions_per_fitted_gene_per_metacell, out=corrected_log_fractions_per_fitted_gene_per_metacell
+    )
+    np.log2(
+        projected_log_fractions_per_fitted_gene_per_metacell, out=projected_log_fractions_per_fitted_gene_per_metacell
+    )
+
+    low_corrected_log_fractions_per_fitted_gene = ut.quantile_per(
+        corrected_log_fractions_per_fitted_gene_per_metacell, project_ignore_range_quantile, per="column"
+    )
+    low_projected_log_fractions_per_fitted_gene = ut.quantile_per(
+        projected_log_fractions_per_fitted_gene_per_metacell, project_ignore_range_quantile, per="column"
+    )
+
+    high_corrected_log_fractions_per_fitted_gene = ut.quantile_per(
+        corrected_log_fractions_per_fitted_gene_per_metacell, 1.0 - project_ignore_range_quantile, per="column"
+    )
+    high_projected_log_fractions_per_fitted_gene = ut.quantile_per(
+        projected_log_fractions_per_fitted_gene_per_metacell, 1.0 - project_ignore_range_quantile, per="column"
+    )
+
+    range_corrected_fold_per_fitted_gene = (
+        high_corrected_log_fractions_per_fitted_gene - low_corrected_log_fractions_per_fitted_gene
+    )
+    range_projected_fold_per_fitted_gene = (
+        high_projected_log_fractions_per_fitted_gene - low_projected_log_fractions_per_fitted_gene
+    )
+
+    range_diff_fold_per_fitted_gene = range_corrected_fold_per_fitted_gene - range_projected_fold_per_fitted_gene
+    np.abs(range_diff_fold_per_fitted_gene, out=range_diff_fold_per_fitted_gene)
+    ignore_fitted_genes_mask = range_diff_fold_per_fitted_gene > project_ignore_range_max_fold
+
+    if filter_by_overlap:
+        ut.log_calc("fold_ignore_fitted_genes_mask", ignore_fitted_genes_mask)
+        min_low_log_fractions_per_fitted_gene = np.minimum(
+            low_corrected_log_fractions_per_fitted_gene, low_projected_log_fractions_per_fitted_gene
+        )
+        max_low_log_fractions_per_fitted_gene = np.maximum(
+            low_corrected_log_fractions_per_fitted_gene, low_projected_log_fractions_per_fitted_gene
+        )
+        min_high_log_fractions_per_fitted_gene = np.minimum(
+            high_corrected_log_fractions_per_fitted_gene, high_projected_log_fractions_per_fitted_gene
+        )
+        max_high_log_fractions_per_fitted_gene = np.maximum(
+            high_corrected_log_fractions_per_fitted_gene, high_projected_log_fractions_per_fitted_gene
+        )
+        total_range_log_fractions_per_fitted_gene = (
+            max_high_log_fractions_per_fitted_gene - min_low_log_fractions_per_fitted_gene
+        )
+        shared_range_log_fractions_per_fitted_gene = (
+            min_high_log_fractions_per_fitted_gene - max_low_log_fractions_per_fitted_gene
+        )
+        overlap_per_fitted_gene = shared_range_log_fractions_per_fitted_gene / total_range_log_fractions_per_fitted_gene
+        overlap_ignore_fitted_genes_mask = overlap_per_fitted_gene < project_ignore_range_min_overlap_fraction
+        ut.log_calc("overlap_ignore_fitted_genes_mask", overlap_ignore_fitted_genes_mask)
+        ignore_fitted_genes_mask |= overlap_ignore_fitted_genes_mask
+
+    ut.log_calc("ignore_fitted_genes_mask", ignore_fitted_genes_mask)
+    if not np.any(ignore_fitted_genes_mask):
+        return
+
+    ignore_gene_indices = preliminary_fitted_genes_indices[ignore_fitted_genes_mask]
+    preliminary_fitted_genes_mask[ignore_gene_indices] = False
+    ut.log_calc("preliminary_fitted_genes_mask", preliminary_fitted_genes_mask)
+
+    correction_factor_per_gene[ignore_gene_indices] = 1.0
+    corrected_fractions_per_gene_per_metacell = ut.to_numpy_matrix(
+        ut.get_vo_proper(common_qdata, "corrected_fraction", layout="column_major")
+    )
+    corrected_fractions_per_gene_per_metacell[:, ignore_gene_indices] = 0.0
+    corrected_fractions_per_gene_per_metacell = ut.fraction_by(  # type: ignore
+        ut.to_layout(corrected_fractions_per_gene_per_metacell, layout="row_major"), by="row"
+    )
+    ut.set_vo_data(common_qdata, "corrected_fraction", sp.csr_matrix(corrected_fractions_per_gene_per_metacell))
 
 
 @ut.logged()
@@ -1604,9 +1739,9 @@ def outliers_projection_pipeline(
 
 def write_projection_weights(path: str, adata: AnnData, qdata: AnnData, weights: ut.CompressedMatrix) -> None:
     """
-    Write into the `path` the `weights` computed for the projection of the query `qdata` on the atlas `adata`.
+    Write into the ``path`` the ``weights`` computed for the projection of the query ``qdata`` on the atlas ``adata``.
 
-    Since the weights are (very) sparse, we just write them as a CSV file. This is also what `MCView` expect.
+    Since the weights are (very) sparse, we just write them as a CSV file. This is also what ``MCView`` expect.
     """
     with open(path, "w", encoding="utf8") as file:
         file.write("query,atlas,weight\n")
