@@ -920,6 +920,18 @@ quality_min_gene_total: int = 40
 #: :py:func:`metacells.pipeline.divide_and_conquer.guess_max_parallel_piles`.
 max_gbs: float = -0.1
 
+#: Whether the projection will ignore genes where the ranges of the corrected vs. the projected expression is too low.
+#: See :py:func:`metacells.pipeline.projection.projection_pipeline`.
+project_filter_ranges: bool = True
+
+#: The quantile to use (on both low and high ends) to compute the range of expression of a corrected of a projected
+#: gene. See :py:func:`metacells.pipeline.projection.projection_pipeline`.
+project_ignore_range_quantile: float = 0.02
+
+#: The minimal overlap (shared range divided by total range) for genes to keep projecting. See
+#: :py:func:`metacells.pipeline.projection.projection_pipeline`.
+project_ignore_range_min_overlap_fraction: float = 0.5
+
 #: The regularization factor to use when computing fold factors for projecting a query onto an atlas. See
 #: :py:func:`metacells.tools.project.compute_projection_weights`.
 project_fold_regularization: float = 1e-5

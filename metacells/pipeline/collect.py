@@ -95,15 +95,16 @@ def collect_metacells(  # pylint: disable=too-many-statements
 
         A. Compute the fraction of each gene out of each cell grouped into the metacell.
 
-        B. For each cell, add to the fractions the ``metacell_umis_regularization`` divided by the total UMIs of the cell.
+        B. For each cell, add to the fractions the ``metacell_umis_regularization`` divided by the total UMIs of the
+           cell.
 
         C. For each gene, compute the weighted geomean of these fractions across all the cells, where the weight of each
            cell is the log of its total number of UMIs, and
 
         D. Subtract the geomean of the per-cell regularization so all-zero genes would have a zero fraction.
 
-    4. Otherwise, for each metacell, sum the total UMIs of each gene across all cells, and divide it by the total UMIs of
-       all genes in all cells.
+    4. Otherwise, for each metacell, sum the total UMIs of each gene across all cells, and divide it by the total UMIs
+       of all genes in all cells.
 
     5. Normalize the per-gene fractions so their sum would be 1.0 in the metacell.
 

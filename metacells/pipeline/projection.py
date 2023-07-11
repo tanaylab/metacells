@@ -48,10 +48,9 @@ def projection_pipeline(
     project_min_candidates_fraction: float = pr.project_min_candidates_fraction,
     project_min_significant_gene_umis: int = pr.project_min_significant_gene_umis,
     project_min_usage_weight: float = pr.project_min_usage_weight,
-    project_filter_ranges: bool = True,  # TODOX
-    project_ignore_range_quantile: float = 0.02,  # TODOX
-    project_ignore_range_max_fold: float = 3,  # TODOX
-    project_ignore_range_min_overlap_fraction: float = 0.5,  # TODOX
+    project_filter_ranges: bool = pr.project_filter_ranges,
+    project_ignore_range_quantile: float = pr.project_ignore_range_quantile,
+    project_ignore_range_min_overlap_fraction: float = pr.project_ignore_range_min_overlap_fraction,
     project_max_consistency_fold_factor: float = pr.project_max_consistency_fold_factor,
     project_max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
     project_max_projection_noisy_fold_factor: float = pr.project_max_projection_noisy_fold_factor,
@@ -223,15 +222,23 @@ def projection_pipeline(
        {project_max_consistency_fold_factor}), ``project_candidates_count`` (default: {project_candidates_count}),
        ``project_min_usage_weight`` (default: {project_min_usage_weight}), and ``reproducible``.
 
-    3. If ``project_corrections``: Correlate the expression levels of each gene between the query and projection. If
-       this is at least ``project_min_corrected_gene_correlation`` (default: {project_min_corrected_gene_correlation}),
-       compute the ratio between the mean expression of the gene in the projection and the query. If this is at most
-       1/(1+``project_min_corrected_gene_factor``) or at least (1+``project_min_corrected_gene_factor``) (default:
-       {project_min_corrected_gene_factor}), then multiply the gene's value by this factor so its level would match the
-       atlas. As usual, ignore genes which do not have at least ``project_min_significant_gene_umis``. If any genes were
-       ignored or corrected, then repeat steps 1-4.
+    3. If ``project_corrections`` (default: {project_corrections}: Correlate the expression levels of each gene between
+       the query and projection. If this is at least ``project_min_corrected_gene_correlation`` (default:
+       {project_min_corrected_gene_correlation}), compute the ratio between the mean expression of the gene in the
+       projection and the query. If this is at most 1/(1+``project_min_corrected_gene_factor``) or at least
+       (1+``project_min_corrected_gene_factor``) (default: {project_min_corrected_gene_factor}), then multiply the
+       gene's value by this factor so its level would match the atlas. As usual, ignore genes which do not have at least
+       ``project_min_significant_gene_umis``. If any genes were corrected, then repeat steps 2-3 (but do these steps no
+       more than 3 times).
 
-    4. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` to assign a projected type to each of the
+    4. If ``project_filter_ranges`` (default: {project_filter_ranges}): Compute for each gene its expression range
+       (lowest and highest ``project_ignore_range_quantile`` (default: {project_ignore_range_quantile}) in both the
+       projected and the corrected values. Compute the overlap between these ranges (shared range divided by the total
+       range). If this is less than ``project_ignore_range_min_overlap_fraction`` (default:
+       {project_ignore_range_min_overlap_fraction}), then ignore the gene. If any genes were ignored, repeat steps 2-4
+       (but do this step no more than 3 times).
+
+    5. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` to assign a projected type to each of the
        query metacells based on the ``atlas_type_property_name`` (default: {atlas_type_property_name}).
 
     Then, for each type of query metacells:
@@ -241,22 +248,22 @@ def projection_pipeline(
     types of parallelism at once, which the code currently can't do without non-trivial coding (this would have been
     trivial in Julia...).
 
-    5. Further reduce the mask of type-specific fitted genes by ignoring any genes in ``ignored_gene_of_<type>``, if
+    6. Further reduce the mask of type-specific fitted genes by ignoring any genes in ``ignored_gene_of_<type>``, if
        this annotation exists in the query. Normalize the sum of the fitted gene fractions to 1 in each metacell.
 
-    6. Invoke :py:func:`metacells.tools.project.compute_projection_weights` to project each query metacell of the type
+    7. Invoke :py:func:`metacells.tools.project.compute_projection_weights` to project each query metacell of the type
        onto the atlas. Note that even though we only look at query metacells (tentatively) assigned the type, their
        projection on the atlas may use metacells of any type.
 
-    7. Invoke :py:func:`metacells.tools.quality.compute_projected_folds` to compute the significant fold factors
+    8. Invoke :py:func:`metacells.tools.quality.compute_projected_folds` to compute the significant fold factors
        between the query and its projection.
 
-    8. Identify type-specific misfit genes whose fold factor is above ``project_max_projection_fold_factor``. If
+    9. Identify type-specific misfit genes whose fold factor is above ``project_max_projection_fold_factor``. If
        ``consider_atlas_noisy_genes`` and/or ``consider_query_noisy_genes``, then any gene listed in either is allowed
        an additional ``project_max_projection_noisy_fold_factor``. If any gene has such a high fold factor in at least
-       ``misfit_min_metacells_fraction``, remove it from the fitted genes mask and repeat steps 5-8.
+       ``misfit_min_metacells_fraction``, remove it from the fitted genes mask and repeat steps 6-9.
 
-    9. Invoke :py:func:`metacells.tools.quality.compute_similar_query_metacells` to verify which query metacells
+    10. Invoke :py:func:`metacells.tools.quality.compute_similar_query_metacells` to verify which query metacells
         ended up being sufficiently similar to their projection, using ``project_max_consistency_fold_factor`` (default:
         {project_max_consistency_fold_factor}), ``project_max_projection_noisy_fold_factor`` (default:
         {project_max_projection_noisy_fold_factor}), ``project_max_misfit_genes`` (default: {project_max_misfit_genes}),
@@ -265,29 +272,29 @@ def projection_pipeline(
 
     And then:
 
-    10. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` to assign an updated projected type to each of
+    11. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` to assign an updated projected type to each of
         the query metacells based on the ``atlas_type_property_name`` (default: {atlas_type_property_name}). If this
-        changed the type assigned to any query metacell, repeat steps 5-10 (but do these steps no more than 3 times).
+        changed the type assigned to any query metacell, repeat steps 6-11 (but do this step no more than 3 times).
 
     For each query metacell that ended up being dissimilar, try to project them as a combination of two atlas regions:
 
-    11. Reduce the list of fitted genes for the metacell based on the ``ignored_gene_of_<type>`` for both the primary
+    12. Reduce the list of fitted genes for the metacell based on the ``ignored_gene_of_<type>`` for both the primary
         (initially from the above) query metacell type and the secondary query metacell type (initially empty).
         Normalize the sum of the gene fractions in the metacell to 1.
 
-    12. Invoke :py:func:`metacells.tools.project.compute_projection_weights` just for this metacell, allowing the
+    13. Invoke :py:func:`metacells.tools.project.compute_projection_weights` just for this metacell, allowing the
         projection to use a secondary location in the atlas based on the residuals of the atlas metacells relative to
         the primary query projection.
 
-    13. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` twice, once for the weights of the primary
+    14. Invoke :py:func:`metacells.tools.project.convey_atlas_to_query` twice, once for the weights of the primary
         location and once for the weights of the secondary location, to obtain a primary and secondary type for
-        the query metacell. If these have changed, repeat steps 12-14 (but do these steps no more than 3 times; note
+        the query metacell. If these have changed, repeat steps 13-14 (but do these steps no more than 3 times; note
         will will always do them twice as the 1st run will generate some non-empty secondary type).
 
-    14. Invoke :py:func:`metacells.tools.quality.compute_projected_folds` and
+    15. Invoke :py:func:`metacells.tools.quality.compute_projected_folds` and
         :py:func:`metacells.tools.quality.compute_similar_query_metacells` to update the projection and evaluation of
         the query metacell. If it is now similar, then use the results for the metacell; otherwise, keep the original
-        results as they were at the end of step 9.
+        results as they were at the end of step 10.
     """
     assert project_min_corrected_gene_factor >= 0
     use_essential_genes = project_min_essential_genes_fraction is not None and _has_any_essential_genes(adata)
@@ -338,7 +345,6 @@ def projection_pipeline(
         project_min_significant_gene_umis=project_min_significant_gene_umis,
         project_filter_ranges=project_filter_ranges,
         project_ignore_range_quantile=project_ignore_range_quantile,
-        project_ignore_range_max_fold=project_ignore_range_max_fold,
         project_ignore_range_min_overlap_fraction=project_ignore_range_min_overlap_fraction,
         project_max_consistency_fold_factor=project_max_consistency_fold_factor,
         project_candidates_count=project_candidates_count,
@@ -700,7 +706,6 @@ def _compute_preliminary_projection(
     project_min_significant_gene_umis: float,
     project_filter_ranges: bool,
     project_ignore_range_quantile: float,
-    project_ignore_range_max_fold: float,
     project_ignore_range_min_overlap_fraction: float,
     project_max_consistency_fold_factor: float,
     project_candidates_count: int,
@@ -714,10 +719,77 @@ def _compute_preliminary_projection(
     correction_factor_per_gene = np.full(common_qdata.n_vars, 1.0, dtype="float32")
 
     repeat = 0
-    is_done = False
-    while not is_done:
+    while True:
         repeat += 1
         ut.log_calc("preliminary repeat", repeat)
+
+        fitted_adata, weights = _compute_correction_factors(
+            common_adata=common_adata,
+            common_qdata=common_qdata,
+            correction_factor_per_gene=correction_factor_per_gene,
+            preliminary_fitted_genes_mask=preliminary_fitted_genes_mask,
+            project_log_data=project_log_data,
+            project_fold_regularization=project_fold_regularization,
+            project_min_significant_gene_umis=project_min_significant_gene_umis,
+            project_max_consistency_fold_factor=project_max_consistency_fold_factor,
+            project_candidates_count=project_candidates_count,
+            project_min_usage_weight=project_min_usage_weight,
+            project_corrections=project_corrections,
+            project_min_corrected_gene_correlation=project_min_corrected_gene_correlation,
+            project_min_corrected_gene_factor=project_min_corrected_gene_factor,
+            reproducible=reproducible,
+        )
+
+        if (
+            repeat > 2
+            or not project_filter_ranges
+            or not _filter_range_genes(
+                common_qdata=common_qdata,
+                project_fold_regularization=project_fold_regularization,
+                project_ignore_range_quantile=project_ignore_range_quantile,
+                project_ignore_range_min_overlap_fraction=project_ignore_range_min_overlap_fraction,
+                correction_factor_per_gene=correction_factor_per_gene,
+                preliminary_fitted_genes_mask=preliminary_fitted_genes_mask,
+            )
+        ):
+            ut.log_calc("preliminary last repeat", repeat)
+            break
+
+    if project_corrections:
+        ut.set_v_data(common_qdata, "correction_factor", correction_factor_per_gene)
+
+    tl.convey_atlas_to_query(
+        adata=fitted_adata,
+        qdata=common_qdata,
+        weights=weights,
+        property_name=atlas_type_property_name,
+        to_property_name="projected_type",
+    )
+
+
+@ut.logged()
+@ut.timed_call()
+def _compute_correction_factors(
+    *,
+    common_adata: AnnData,
+    common_qdata: AnnData,
+    correction_factor_per_gene: ut.NumpyVector,
+    preliminary_fitted_genes_mask: ut.NumpyVector,
+    project_log_data: bool,
+    project_fold_regularization: float,
+    project_min_significant_gene_umis: float,
+    project_max_consistency_fold_factor: float,
+    project_candidates_count: int,
+    project_min_usage_weight: float,
+    project_corrections: bool,
+    project_min_corrected_gene_correlation: float,
+    project_min_corrected_gene_factor: float,
+    reproducible: bool,
+) -> Tuple[AnnData, ut.ProperMatrix]:
+    repeat = 0
+    while True:
+        repeat += 1
+        ut.log_calc("corrections repeat", repeat)
 
         fitted_adata = ut.slice(common_adata, name=".fitted", vars=preliminary_fitted_genes_mask, top_level=False)
         _normalize_corrected_fractions(fitted_adata, "corrected_fraction")
@@ -743,71 +815,45 @@ def _compute_preliminary_projection(
             reproducible=reproducible,
         )
 
-        is_done = (
+        tl.compute_projected_fractions(
+            adata=common_adata,
+            qdata=common_qdata,
+            log_data=project_log_data,
+            fold_regularization=project_fold_regularization,
+            weights=weights,
+        )
+
+        if (
             repeat > 2
             or not project_corrections
             or not _correct_correlated_genes(
                 common_adata=common_adata,
                 common_qdata=common_qdata,
-                project_log_data=project_log_data,
-                project_fold_regularization=project_fold_regularization,
                 preliminary_fitted_genes_mask=preliminary_fitted_genes_mask,
                 project_min_corrected_gene_correlation=project_min_corrected_gene_correlation,
                 project_min_corrected_gene_factor=project_min_corrected_gene_factor,
                 correction_factor_per_gene=correction_factor_per_gene,
-                weights=weights,
                 reproducible=reproducible,
             )
-        )
-
-        if project_filter_ranges:
-            _filter_range_genes(
-                common_qdata=common_qdata,
-                filter_by_overlap=is_done,
-                project_fold_regularization=project_fold_regularization,
-                project_ignore_range_quantile=project_ignore_range_quantile,
-                project_ignore_range_max_fold=project_ignore_range_max_fold,
-                project_ignore_range_min_overlap_fraction=project_ignore_range_min_overlap_fraction,
-                correction_factor_per_gene=correction_factor_per_gene,
-                preliminary_fitted_genes_mask=preliminary_fitted_genes_mask,
-            )
-
-    if project_corrections:
-        ut.set_v_data(common_qdata, "correction_factor", correction_factor_per_gene)
-
-    tl.convey_atlas_to_query(
-        adata=fitted_adata,
-        qdata=common_qdata,
-        weights=weights,
-        property_name=atlas_type_property_name,
-        to_property_name="projected_type",
-    )
+        ):
+            ut.log_calc("corrections last repeat", repeat)
+            return fitted_adata, weights
 
 
 def _correct_correlated_genes(
     *,
     common_adata: AnnData,
     common_qdata: AnnData,
-    project_log_data: bool,
-    project_fold_regularization: float,
     preliminary_fitted_genes_mask: ut.NumpyVector,
     project_min_corrected_gene_correlation: float,
     project_min_corrected_gene_factor: float,
     correction_factor_per_gene: ut.NumpyVector,
-    weights: ut.ProperMatrix,
     reproducible: bool,
 ) -> bool:
     corrected_fractions_per_gene_per_metacell = ut.to_numpy_matrix(
         ut.get_vo_proper(common_qdata, "corrected_fraction", layout="column_major")
     )
 
-    tl.compute_projected_fractions(
-        adata=common_adata,
-        qdata=common_qdata,
-        log_data=project_log_data,
-        fold_regularization=project_fold_regularization,
-        weights=weights,
-    )
     projected_fractions_per_gene_per_metacell = ut.to_numpy_matrix(
         ut.get_vo_proper(common_qdata, "projected_fraction", layout="column_major")
     )
@@ -889,14 +935,12 @@ def _correct_correlated_genes(
 def _filter_range_genes(
     *,
     common_qdata: AnnData,
-    filter_by_overlap: bool,
     project_fold_regularization: float,
     project_ignore_range_quantile: float,
-    project_ignore_range_max_fold: float,
     project_ignore_range_min_overlap_fraction: float,
     correction_factor_per_gene: ut.NumpyVector,
     preliminary_fitted_genes_mask: ut.NumpyVector,
-) -> None:
+) -> bool:
     corrected_fractions_per_gene_per_metacell = ut.to_numpy_matrix(
         ut.get_vo_proper(common_qdata, "corrected_fraction", layout="column_major")
     )
@@ -940,45 +984,33 @@ def _filter_range_genes(
         projected_log_fractions_per_fitted_gene_per_metacell, 1.0 - project_ignore_range_quantile, per="column"
     )
 
-    range_corrected_fold_per_fitted_gene = (
-        high_corrected_log_fractions_per_fitted_gene - low_corrected_log_fractions_per_fitted_gene
+    min_low_log_fractions_per_fitted_gene = np.minimum(
+        low_corrected_log_fractions_per_fitted_gene, low_projected_log_fractions_per_fitted_gene
     )
-    range_projected_fold_per_fitted_gene = (
-        high_projected_log_fractions_per_fitted_gene - low_projected_log_fractions_per_fitted_gene
+    max_low_log_fractions_per_fitted_gene = np.maximum(
+        low_corrected_log_fractions_per_fitted_gene, low_projected_log_fractions_per_fitted_gene
+    )
+    min_high_log_fractions_per_fitted_gene = np.minimum(
+        high_corrected_log_fractions_per_fitted_gene, high_projected_log_fractions_per_fitted_gene
+    )
+    max_high_log_fractions_per_fitted_gene = np.maximum(
+        high_corrected_log_fractions_per_fitted_gene, high_projected_log_fractions_per_fitted_gene
     )
 
-    range_diff_fold_per_fitted_gene = range_corrected_fold_per_fitted_gene - range_projected_fold_per_fitted_gene
-    np.abs(range_diff_fold_per_fitted_gene, out=range_diff_fold_per_fitted_gene)
-    ignore_fitted_genes_mask = range_diff_fold_per_fitted_gene > project_ignore_range_max_fold
+    total_range_log_fractions_per_fitted_gene = (
+        max_high_log_fractions_per_fitted_gene - min_low_log_fractions_per_fitted_gene
+    )
+    shared_range_log_fractions_per_fitted_gene = (
+        min_high_log_fractions_per_fitted_gene - max_low_log_fractions_per_fitted_gene
+    )
 
-    if filter_by_overlap:
-        ut.log_calc("fold_ignore_fitted_genes_mask", ignore_fitted_genes_mask)
-        min_low_log_fractions_per_fitted_gene = np.minimum(
-            low_corrected_log_fractions_per_fitted_gene, low_projected_log_fractions_per_fitted_gene
-        )
-        max_low_log_fractions_per_fitted_gene = np.maximum(
-            low_corrected_log_fractions_per_fitted_gene, low_projected_log_fractions_per_fitted_gene
-        )
-        min_high_log_fractions_per_fitted_gene = np.minimum(
-            high_corrected_log_fractions_per_fitted_gene, high_projected_log_fractions_per_fitted_gene
-        )
-        max_high_log_fractions_per_fitted_gene = np.maximum(
-            high_corrected_log_fractions_per_fitted_gene, high_projected_log_fractions_per_fitted_gene
-        )
-        total_range_log_fractions_per_fitted_gene = (
-            max_high_log_fractions_per_fitted_gene - min_low_log_fractions_per_fitted_gene
-        )
-        shared_range_log_fractions_per_fitted_gene = (
-            min_high_log_fractions_per_fitted_gene - max_low_log_fractions_per_fitted_gene
-        )
-        overlap_per_fitted_gene = shared_range_log_fractions_per_fitted_gene / total_range_log_fractions_per_fitted_gene
-        overlap_ignore_fitted_genes_mask = overlap_per_fitted_gene < project_ignore_range_min_overlap_fraction
-        ut.log_calc("overlap_ignore_fitted_genes_mask", overlap_ignore_fitted_genes_mask)
-        ignore_fitted_genes_mask |= overlap_ignore_fitted_genes_mask
+    total_range_log_fractions_per_fitted_gene[total_range_log_fractions_per_fitted_gene == 0] = 1
+    overlap_per_fitted_gene = shared_range_log_fractions_per_fitted_gene / total_range_log_fractions_per_fitted_gene
 
+    ignore_fitted_genes_mask = overlap_per_fitted_gene < project_ignore_range_min_overlap_fraction
     ut.log_calc("ignore_fitted_genes_mask", ignore_fitted_genes_mask)
     if not np.any(ignore_fitted_genes_mask):
-        return
+        return False
 
     ignore_gene_indices = preliminary_fitted_genes_indices[ignore_fitted_genes_mask]
     preliminary_fitted_genes_mask[ignore_gene_indices] = False
@@ -993,6 +1025,14 @@ def _filter_range_genes(
         ut.to_layout(corrected_fractions_per_gene_per_metacell, layout="row_major"), by="row"
     )
     ut.set_vo_data(common_qdata, "corrected_fraction", sp.csr_matrix(corrected_fractions_per_gene_per_metacell))
+
+    projected_fractions_per_gene_per_metacell[:, ignore_gene_indices] = 0.0
+    projected_fractions_per_gene_per_metacell = ut.fraction_by(  # type: ignore
+        ut.to_layout(projected_fractions_per_gene_per_metacell, layout="row_major"), by="row"
+    )
+    ut.set_vo_data(common_qdata, "projected_fraction", sp.csr_matrix(projected_fractions_per_gene_per_metacell))
+
+    return True
 
 
 @ut.logged()
@@ -1111,6 +1151,7 @@ def _compute_per_type_projection(
             atlas_type_property_name=atlas_type_property_name,
             old_types_per_metacell=old_types_per_metacell,
         ):
+            ut.log_calc("types last repeat", repeat)
             break
 
     for type_name, fitted_genes_mask_of_type in fitted_genes_mask_per_type.items():
@@ -1242,6 +1283,7 @@ def _compute_single_type_projection(
             misfit_min_metacells_fraction=misfit_min_metacells_fraction,
             fitted_genes_mask_of_type=fitted_genes_mask_of_type,
         ):
+            ut.log_calc(f"{type_name} misfit last repeat", repeat)
             break
 
     tl.compute_similar_query_metacells(
@@ -1591,6 +1633,7 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
             new_primary_type = ut.get_o_numpy(dissimilar_qdata, "projected_type")[0]
 
         if repeat > 2 or (new_primary_type == primary_type and new_secondary_type == secondary_type):
+            ut.log_calc("residuals last repeat", repeat)
             break
 
         primary_type = new_primary_type
