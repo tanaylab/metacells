@@ -209,10 +209,11 @@ def compute_projected_folds(
 
 @ut.logged()
 @ut.timed_call()
-def compute_similar_query_metacells(
+def compute_similar_query_metacells(  # pylint: disable=too-many-statements
     qdata: AnnData,
     max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
     max_projection_noisy_fold_factor: float = pr.project_max_projection_noisy_fold_factor,
+    min_atlas_markers_fraction: float = pr.project_min_atlas_markers_fraction,
     max_misfit_genes: int = pr.project_max_misfit_genes,
     essential_genes_property: Union[None, str, Collection[str]] = None,
     min_essential_genes: Optional[int] = None,
@@ -257,7 +258,10 @@ def compute_similar_query_metacells(
        {max_misfit_genes}) genes whose projection fold is above ``max_projection_fold_factor``,
        or, for genes in ``projected_noisy_gene``, above an additional ``max_projection_noisy_fold_factor``.
 
-    3. If ``essential_genes_property`` and ``min_essential_genes`` are specified, the former should be the name(s) of
+    3. Mark as dissimilar any query metacells which did not fit at least ``min_atlas_markers_fraction`` of the
+       atlas marker genes.
+
+    4. If ``essential_genes_property`` and ``min_essential_genes`` are specified, the former should be the name(s) of
        boolean per-gene property/ies, and we will mark as dissimilar any query metacells which have at least this number
        of essential genes with a low projection fold factor.
     """
@@ -291,6 +295,17 @@ def compute_similar_query_metacells(
 
     similar_mask = misfit_per_metacell <= max_misfit_genes
     ut.log_calc("similar_mask", similar_mask)
+
+    if fitted_genes_mask is not None:
+        atlas_marker_genes_mask = ut.get_v_numpy(qdata, "atlas_marker_gene")
+        fitted_atlas_marker_genes_mask = atlas_marker_genes_mask & fitted_genes_mask
+        ut.log_calc("fitted_atlas_marker_genes_mask", fitted_atlas_marker_genes_mask)
+        atlas_marker_genes_count = max(np.sum(atlas_marker_genes_mask), 1)
+        fitted_atlas_marker_genes_fraction = np.sum(fitted_atlas_marker_genes_mask) / atlas_marker_genes_count
+        ut.log_calc("fitted_atlas_marker_genes_fraction", fitted_atlas_marker_genes_fraction)
+        if fitted_atlas_marker_genes_fraction < min_atlas_markers_fraction:
+            similar_mask[:] = False
+            ut.log_calc("similar_mask", similar_mask)
 
     if essential_genes_property is not None and min_essential_genes is not None:
         essential_genes_mask = np.zeros(qdata.n_vars, dtype="bool")

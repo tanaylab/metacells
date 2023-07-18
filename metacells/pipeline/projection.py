@@ -51,6 +51,7 @@ def projection_pipeline(
     project_filter_ranges: bool = pr.project_filter_ranges,
     project_ignore_range_quantile: float = pr.project_ignore_range_quantile,
     project_ignore_range_min_overlap_fraction: float = pr.project_ignore_range_min_overlap_fraction,
+    project_min_atlas_markers_fraction: float = pr.project_min_atlas_markers_fraction,
     project_max_consistency_fold_factor: float = pr.project_max_consistency_fold_factor,
     project_max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
     project_max_projection_noisy_fold_factor: float = pr.project_max_projection_noisy_fold_factor,
@@ -233,7 +234,7 @@ def projection_pipeline(
 
     4. If ``project_filter_ranges`` (default: {project_filter_ranges}): Compute for each gene its expression range
        (lowest and highest ``project_ignore_range_quantile`` (default: {project_ignore_range_quantile}) in both the
-       projected and the corrected values. Compute the overlap between these ranges (shared range divided by the total
+       projected and the corrected values. Compute the overlap between these ranges (shared range divided by the query
        range). If this is less than ``project_ignore_range_min_overlap_fraction`` (default:
        {project_ignore_range_min_overlap_fraction}), then ignore the gene. If any genes were ignored, repeat steps 2-4
        (but do this step no more than 3 times).
@@ -371,6 +372,7 @@ def projection_pipeline(
         project_max_projection_fold_factor=project_max_projection_fold_factor,
         project_max_projection_noisy_fold_factor=project_max_projection_noisy_fold_factor,
         project_max_misfit_genes=project_max_misfit_genes,
+        project_min_atlas_markers_fraction=project_min_atlas_markers_fraction,
         min_essential_genes_of_type=min_essential_genes_of_type,
         atlas_type_property_name=atlas_type_property_name,
         top_level_parallel=top_level_parallel,
@@ -392,6 +394,7 @@ def projection_pipeline(
         project_max_projection_fold_factor=project_max_projection_fold_factor,
         project_max_projection_noisy_fold_factor=project_max_projection_noisy_fold_factor,
         project_max_misfit_genes=project_max_misfit_genes,
+        project_min_atlas_markers_fraction=project_min_atlas_markers_fraction,
         min_essential_genes_of_type=min_essential_genes_of_type,
         atlas_type_property_name=atlas_type_property_name,
         top_level_parallel=top_level_parallel,
@@ -984,28 +987,22 @@ def _filter_range_genes(
         projected_log_fractions_per_fitted_gene_per_metacell, 1.0 - project_ignore_range_quantile, per="column"
     )
 
-    min_low_log_fractions_per_fitted_gene = np.minimum(
+    low_common_log_fractions_per_fitted_gene = np.maximum(
         low_corrected_log_fractions_per_fitted_gene, low_projected_log_fractions_per_fitted_gene
     )
-    max_low_log_fractions_per_fitted_gene = np.maximum(
-        low_corrected_log_fractions_per_fitted_gene, low_projected_log_fractions_per_fitted_gene
-    )
-    min_high_log_fractions_per_fitted_gene = np.minimum(
-        high_corrected_log_fractions_per_fitted_gene, high_projected_log_fractions_per_fitted_gene
-    )
-    max_high_log_fractions_per_fitted_gene = np.maximum(
+    high_common_log_fractions_per_fitted_gene = np.minimum(
         high_corrected_log_fractions_per_fitted_gene, high_projected_log_fractions_per_fitted_gene
     )
 
-    total_range_log_fractions_per_fitted_gene = (
-        max_high_log_fractions_per_fitted_gene - min_low_log_fractions_per_fitted_gene
+    corrected_range_log_fractions_per_fitted_gene = (
+        high_corrected_log_fractions_per_fitted_gene - low_corrected_log_fractions_per_fitted_gene
     )
-    shared_range_log_fractions_per_fitted_gene = (
-        min_high_log_fractions_per_fitted_gene - max_low_log_fractions_per_fitted_gene
+    common_range_log_fractions_per_fitted_gene = (
+        high_common_log_fractions_per_fitted_gene - low_common_log_fractions_per_fitted_gene
     )
 
-    total_range_log_fractions_per_fitted_gene[total_range_log_fractions_per_fitted_gene == 0] = 1
-    overlap_per_fitted_gene = shared_range_log_fractions_per_fitted_gene / total_range_log_fractions_per_fitted_gene
+    corrected_range_log_fractions_per_fitted_gene[corrected_range_log_fractions_per_fitted_gene == 0] = 1
+    overlap_per_fitted_gene = common_range_log_fractions_per_fitted_gene / corrected_range_log_fractions_per_fitted_gene
 
     ignore_fitted_genes_mask = overlap_per_fitted_gene < project_ignore_range_min_overlap_fraction
     ut.log_calc("ignore_fitted_genes_mask", ignore_fitted_genes_mask)
@@ -1053,6 +1050,7 @@ def _compute_per_type_projection(
     project_max_projection_fold_factor: float,
     project_max_projection_noisy_fold_factor: float,
     project_max_misfit_genes: int,
+    project_min_atlas_markers_fraction: float,
     min_essential_genes_of_type: Dict[Tuple[str, str], Optional[int]],
     atlas_type_property_name: str,
     top_level_parallel: bool,
@@ -1102,6 +1100,7 @@ def _compute_per_type_projection(
                 project_max_projection_fold_factor=project_max_projection_fold_factor,
                 project_max_projection_noisy_fold_factor=project_max_projection_noisy_fold_factor,
                 project_max_misfit_genes=project_max_misfit_genes,
+                project_min_atlas_markers_fraction=project_min_atlas_markers_fraction,
                 min_essential_genes_of_type=min_essential_genes_of_type,
                 top_level_parallel=top_level_parallel,
                 reproducible=reproducible,
@@ -1214,6 +1213,7 @@ def _compute_single_type_projection(
     project_max_projection_fold_factor: float,
     project_max_projection_noisy_fold_factor: float,
     project_max_misfit_genes: int,
+    project_min_atlas_markers_fraction: float,
     min_essential_genes_of_type: Dict[Tuple[str, str], Optional[int]],
     top_level_parallel: bool,
     reproducible: bool,
@@ -1291,6 +1291,7 @@ def _compute_single_type_projection(
         max_projection_fold_factor=project_max_projection_fold_factor,
         max_projection_noisy_fold_factor=project_max_projection_noisy_fold_factor,
         max_misfit_genes=project_max_misfit_genes,
+        min_atlas_markers_fraction=project_min_atlas_markers_fraction,
         essential_genes_property=f"essential_gene_of_{type_name}",
         min_essential_genes=min_essential_genes_of_type[(type_name, type_name)],
         fitted_genes_mask=fitted_genes_mask_of_type,
@@ -1439,6 +1440,7 @@ def _compute_dissimilar_residuals_projection(
     project_max_projection_fold_factor: float,
     project_max_projection_noisy_fold_factor: float,
     project_max_misfit_genes: int,
+    project_min_atlas_markers_fraction: float,
     min_essential_genes_of_type: Dict[Tuple[str, str], Optional[int]],
     atlas_type_property_name: str,
     top_level_parallel: bool,
@@ -1470,6 +1472,7 @@ def _compute_dissimilar_residuals_projection(
             project_max_projection_fold_factor=project_max_projection_fold_factor,
             project_max_projection_noisy_fold_factor=project_max_projection_noisy_fold_factor,
             project_max_misfit_genes=project_max_misfit_genes,
+            project_min_atlas_markers_fraction=project_min_atlas_markers_fraction,
             min_essential_genes_of_type=min_essential_genes_of_type,
             atlas_type_property_name=atlas_type_property_name,
             reproducible=reproducible,
@@ -1545,6 +1548,7 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
     project_max_projection_fold_factor: float,
     project_max_projection_noisy_fold_factor: float,
     project_max_misfit_genes: int,
+    project_min_atlas_markers_fraction: float,
     min_essential_genes_of_type: Dict[Tuple[str, str], Optional[int]],
     atlas_type_property_name: str,
     reproducible: bool,
@@ -1664,6 +1668,7 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
         max_misfit_genes=project_max_misfit_genes,
         essential_genes_property=essential_genes_properties,
         min_essential_genes=min_essential_genes,
+        min_atlas_markers_fraction=project_min_atlas_markers_fraction,
         fitted_genes_mask=fitted_genes_mask,
     )
 
