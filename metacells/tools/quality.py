@@ -290,6 +290,7 @@ def compute_similar_query_metacells(  # pylint: disable=too-many-statements
         misfit_per_fitted_gene_per_metacell = misfit_per_gene_per_metacell
     else:
         misfit_per_fitted_gene_per_metacell = misfit_per_gene_per_metacell[:, fitted_genes_mask]
+
     misfit_per_metacell = ut.sum_per(misfit_per_fitted_gene_per_metacell, per="row")
     ut.log_calc("misfit_per_metacell", misfit_per_metacell, formatter=ut.sizes_description)
 
