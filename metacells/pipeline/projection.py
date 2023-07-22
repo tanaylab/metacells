@@ -51,7 +51,7 @@ def projection_pipeline(
     project_filter_ranges: bool = pr.project_filter_ranges,
     project_ignore_range_quantile: float = pr.project_ignore_range_quantile,
     project_ignore_range_min_overlap_fraction: float = pr.project_ignore_range_min_overlap_fraction,
-    project_min_atlas_markers_fraction: float = pr.project_min_atlas_markers_fraction,
+    project_min_query_markers_fraction: float = pr.project_min_query_markers_fraction,
     project_max_consistency_fold_factor: float = pr.project_max_consistency_fold_factor,
     project_max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
     project_max_projection_noisy_fold_factor: float = pr.project_max_projection_noisy_fold_factor,
@@ -320,6 +320,10 @@ def projection_pipeline(
     common_adata = _initialize_common_adata(adata, what, atlas_common_gene_indices)
     common_qdata = _initialize_common_qdata(qdata, what, query_common_gene_indices)
 
+    query_marker_genes_mask = ut.get_v_numpy(common_qdata, "marker_gene")
+    min_fitted_query_marker_genes = np.sum(query_marker_genes_mask) * project_min_query_markers_fraction
+    ut.log_calc("min_fitted_query_marker_genes", min_fitted_query_marker_genes)
+
     min_essential_genes_of_type = _min_essential_genes_of_type(
         adata=adata,
         common_adata=common_adata,
@@ -372,7 +376,7 @@ def projection_pipeline(
         project_max_projection_fold_factor=project_max_projection_fold_factor,
         project_max_projection_noisy_fold_factor=project_max_projection_noisy_fold_factor,
         project_max_misfit_genes=project_max_misfit_genes,
-        project_min_atlas_markers_fraction=project_min_atlas_markers_fraction,
+        min_fitted_query_marker_genes=min_fitted_query_marker_genes,
         min_essential_genes_of_type=min_essential_genes_of_type,
         atlas_type_property_name=atlas_type_property_name,
         top_level_parallel=top_level_parallel,
@@ -393,7 +397,7 @@ def projection_pipeline(
         project_max_projection_fold_factor=project_max_projection_fold_factor,
         project_max_projection_noisy_fold_factor=project_max_projection_noisy_fold_factor,
         project_max_misfit_genes=project_max_misfit_genes,
-        project_min_atlas_markers_fraction=project_min_atlas_markers_fraction,
+        min_fitted_query_marker_genes=min_fitted_query_marker_genes,
         min_essential_genes_of_type=min_essential_genes_of_type,
         atlas_type_property_name=atlas_type_property_name,
         top_level_parallel=top_level_parallel,
@@ -1038,7 +1042,7 @@ def _compute_per_type_projection(
     project_max_projection_fold_factor: float,
     project_max_projection_noisy_fold_factor: float,
     project_max_misfit_genes: int,
-    project_min_atlas_markers_fraction: float,
+    min_fitted_query_marker_genes: float,
     min_essential_genes_of_type: Dict[Tuple[str, str], Optional[int]],
     atlas_type_property_name: str,
     top_level_parallel: bool,
@@ -1088,7 +1092,7 @@ def _compute_per_type_projection(
                 project_max_projection_fold_factor=project_max_projection_fold_factor,
                 project_max_projection_noisy_fold_factor=project_max_projection_noisy_fold_factor,
                 project_max_misfit_genes=project_max_misfit_genes,
-                project_min_atlas_markers_fraction=project_min_atlas_markers_fraction,
+                min_fitted_query_marker_genes=min_fitted_query_marker_genes,
                 min_essential_genes_of_type=min_essential_genes_of_type,
                 top_level_parallel=top_level_parallel,
                 reproducible=reproducible,
@@ -1201,7 +1205,7 @@ def _compute_single_type_projection(
     project_max_projection_fold_factor: float,
     project_max_projection_noisy_fold_factor: float,
     project_max_misfit_genes: int,
-    project_min_atlas_markers_fraction: float,
+    min_fitted_query_marker_genes: float,
     min_essential_genes_of_type: Dict[Tuple[str, str], Optional[int]],
     top_level_parallel: bool,
     reproducible: bool,
@@ -1277,7 +1281,7 @@ def _compute_single_type_projection(
         max_projection_fold_factor=project_max_projection_fold_factor,
         max_projection_noisy_fold_factor=project_max_projection_noisy_fold_factor,
         max_misfit_genes=project_max_misfit_genes,
-        min_atlas_markers_fraction=project_min_atlas_markers_fraction,
+        min_fitted_query_marker_genes=min_fitted_query_marker_genes,
         essential_genes_property=f"essential_gene_of_{type_name}",
         min_essential_genes=min_essential_genes_of_type[(type_name, type_name)],
         fitted_genes_mask=fitted_genes_mask_of_type,
@@ -1425,7 +1429,7 @@ def _compute_dissimilar_residuals_projection(
     project_max_projection_fold_factor: float,
     project_max_projection_noisy_fold_factor: float,
     project_max_misfit_genes: int,
-    project_min_atlas_markers_fraction: float,
+    min_fitted_query_marker_genes: float,
     min_essential_genes_of_type: Dict[Tuple[str, str], Optional[int]],
     atlas_type_property_name: str,
     top_level_parallel: bool,
@@ -1456,7 +1460,7 @@ def _compute_dissimilar_residuals_projection(
             project_max_projection_fold_factor=project_max_projection_fold_factor,
             project_max_projection_noisy_fold_factor=project_max_projection_noisy_fold_factor,
             project_max_misfit_genes=project_max_misfit_genes,
-            project_min_atlas_markers_fraction=project_min_atlas_markers_fraction,
+            min_fitted_query_marker_genes=min_fitted_query_marker_genes,
             min_essential_genes_of_type=min_essential_genes_of_type,
             atlas_type_property_name=atlas_type_property_name,
             reproducible=reproducible,
@@ -1531,7 +1535,7 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
     project_max_projection_fold_factor: float,
     project_max_projection_noisy_fold_factor: float,
     project_max_misfit_genes: int,
-    project_min_atlas_markers_fraction: float,
+    min_fitted_query_marker_genes: float,
     min_essential_genes_of_type: Dict[Tuple[str, str], Optional[int]],
     atlas_type_property_name: str,
     reproducible: bool,
@@ -1649,7 +1653,7 @@ def _compute_single_metacell_residuals(  # pylint: disable=too-many-statements
         max_misfit_genes=project_max_misfit_genes,
         essential_genes_property=essential_genes_properties,
         min_essential_genes=min_essential_genes,
-        min_atlas_markers_fraction=project_min_atlas_markers_fraction,
+        min_fitted_query_marker_genes=min_fitted_query_marker_genes,
         fitted_genes_mask=fitted_genes_mask,
     )
 

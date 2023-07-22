@@ -932,10 +932,9 @@ project_ignore_range_quantile: float = 0.02
 #: :py:func:`metacells.pipeline.projection.projection_pipeline`.
 project_ignore_range_min_overlap_fraction: float = 0.5
 
-#: The minimal fraction of the atlas marker genes that are fitted for a query metacell to be considered
-#: "similar" to the atlas. See
-#: :py:func:`metacells.pipeline.projection.projection_pipeline`.
-project_min_atlas_markers_fraction: float = 1 / 3
+#: The minimal fraction of the query marker genes that are fitted for a query metacell to be considered "similar" to the
+#: atlas. See :py:func:`metacells.pipeline.projection.projection_pipeline`.
+project_min_query_markers_fraction: float = 1 / 3
 
 #: The regularization factor to use when computing fold factors for projecting a query onto an atlas. See
 #: :py:func:`metacells.tools.project.compute_projection_weights`.
