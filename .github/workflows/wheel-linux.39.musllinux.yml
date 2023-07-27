@@ -1,4 +1,4 @@
-name: Wheel-MuslLinux_3.9
+name: Wheel-MuslLinux-3.9
 
 on: [workflow_dispatch]
 
