@@ -9,7 +9,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-20.04, macOS-11]
-        python-version: [37]
+        python-version: [310]
 
     steps:
       - name: Checkout repository and submodules
