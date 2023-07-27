@@ -9,7 +9,7 @@ jobs:
         platform:
           - [ubuntu-20.04, manylinux_x86_64]
           - [ubuntu-20.04, musllinux_x86_64]
-        python: [["cp311", "cp310", "cp39", "cp38", "cp37"]
+        python: ["cp311", "cp310", "cp39", "cp38", "cp37"]
 
     name: Build wheel for ${{ matrix.python }}-${{ matrix.platform[0] }}-${{ matrix.platform[1] }}
     runs-on: ${{ matrix.platform[0] }}
