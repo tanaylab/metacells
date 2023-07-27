@@ -153,6 +153,11 @@ def extract_selected_data(
         )
 
     if results is None:
-        raise ValueError("Empty selected data, giving up")
+        candidate_genes = (
+            ut.get_v_numpy(adata, "high_top3_gene")
+            & ut.get_v_numpy(adata, "high_total_gene")
+            & ut.get_v_numpy(adata, "high_relative_variance_gene")
+        )
+        raise ValueError(f"All candidate genes are lateral: {' '.join(sorted(adata.var_names[candidate_genes]))}")
 
     return results[0]
