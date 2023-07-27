@@ -1,5 +1,5 @@
-Metacells 0.9.0-dev.1 Documentation
-===================================
+Metacells 0.9.1
+===============
 
 .. toctree::
   :titlesonly:
@@ -7,14 +7,6 @@ Metacells 0.9.0-dev.1 Documentation
 
   README <readme>
   history
-
-Vignettes
-=========
-
-.. note::
-
-    The vigettes have been temporarily removed, to be replaced with a dedicated vignette and example scripts, in a
-    separate repository which will be linked to from here.
 
 API
 ===

@@ -1,4 +1,4 @@
-Metacells 0.9.0 - Single-cell RNA Sequencing Analysis
+Metacells 0.9.1 - Single-cell RNA Sequencing Analysis
 =====================================================
 
 .. image:: https://readthedocs.org/projects/metacells/badge/?version=latest
