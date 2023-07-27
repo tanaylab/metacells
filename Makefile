@@ -61,7 +61,7 @@ clean-docs:
 
 TODO = todo$()x
 
-pc: is_dev $(TODO) history format smells dist pytest docs staged tox  ## check everything before commit
+pc: $(TODO) history format smells dist pytest docs staged tox  ## check everything before commit
 
 ci: history format smells dist docs tox  ## check everything in a CI server
 
@@ -297,89 +297,6 @@ dist: .make.dist  ## builds the release distribution package
 
 upload: committed is_not_dev .make.dist  ## upload the release distribution package
 	twine upload dist/*
-
-current_version:  # report the current version number
-	@grep 'current_version =' setup.cfg
-
-start_patch: committed  ## start working on the next patch version
-	@if grep -q 'current_version.*dev' setup.cfg; \
-	then \
-	    read -p "Skip over releasing the current development version [n]? " answer; \
-	    case "$$answer" in \
-	        y|yes|Y|Yes|YES) bumpversion patch;; \
-	        *) false;; \
-	    esac; \
-	else bumpversion patch; \
-	fi
-	@grep 'current_version =' setup.cfg
-
-start_minor: committed  ## start working on the next minor version
-	@if grep -q 'current_version.*dev' setup.cfg; \
-	then \
-	    read -p "Skip over releasing the current development version [n]? " answer; \
-	    case "$$answer" in \
-	        y|yes|Y|Yes|YES) bumpversion minor;; \
-	        *) false ;; \
-	    esac; \
-	else bumpversion minor; \
-	fi
-	@grep 'current_version =' setup.cfg
-
-start_major: committed  ## start working on the next major version
-	@if grep -q 'current_version.*dev' setup.cfg; \
-	then \
-	    read -p "Skip over releasing the current development version [n]? " answer; \
-	    case "$$answer" in \
-	        y|yes|Y|Yes|YES) bumpversion major;; \
-	        *) false ;; \
-	    esac; \
-	else bumpversion major; \
-	fi
-	@grep 'current_version =' setup.cfg
-
-start_history: is_dev  ## append a history section for the development version
-	@version=`grep 'current_version =' setup.cfg | sed 's/.* //;s/.dev.*//;'`; \
-	if grep -q "^$$version (WIP)\$$" HISTORY.rst; \
-	then true; \
-	else \
-	    echo >> HISTORY.rst; \
-	    echo "$$version (WIP)" >> HISTORY.rst; \
-	    echo "$$version" | sed 's/./-/g' >> HISTORY.rst; \
-	    echo >> HISTORY.rst; \
-	    echo "* ..." >> HISTORY.rst; \
-	fi
-
-bump_dev: committed is_dev  ## bump the development version indicator
-	bumpversion dev
-	@grep 'current_version =' setup.cfg
-
-done_dev: committed done_history is_dev dist  ## remove the development version indicator
-	bumpversion rel
-	@grep 'current_version =' setup.cfg
-
-done_history:  ## check to-be-done version is described in HISTORY.rst
-	@version=`grep 'current_version =' setup.cfg | sed 's/.* //;s/.dev.*//;'`; \
-	if grep -q "^$$version\$$" HISTORY.rst; \
-	then true; \
-	else \
-	    echo "No finalized entry in HISTORY.rst (fix manually)."; \
-	    false; \
-	fi
-
-is_not_dev:
-	@if grep -q 'current_version.*dev' setup.cfg; \
-	then \
-	    echo "`grep 'current_version =' setup.cfg` is a development version."; \
-	    false; \
-	fi
-
-is_dev:
-	@if grep -q 'current_version.*dev' setup.cfg; \
-	then true; \
-	else \
-	    echo "`grep 'current_version =' setup.cfg` is not a development version."; \
-	    false; \
-	fi
 
 tags: $(PY_SOURCE_FILES)  ## generate a tags file for vi
 	ctags $(PY_SOURCE_FILES)

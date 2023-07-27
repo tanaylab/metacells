@@ -1,4 +1,4 @@
-name: Wheel
+name: Wheel-MacOS
 
 on: [workflow_dispatch]
 
@@ -7,15 +7,13 @@ jobs:
     strategy:
       matrix:
         platform:
-          - [ubuntu-20.04, manylinux_x86_64]
-          - [ubuntu-20.04, musllinux_x86_64]          
-          - [macos-10, macosx_x86_64]
-          - [macos-10, macosx_arm64]
+          - [macos-11, macosx_x86_64]
+          - [macos-11, macosx_arm64]
         python: ["cp310", "cp39", "cp38", "cp37"]
-        
+
     name: Build wheel for ${{ matrix.python }}-${{ matrix.platform[0] }}-${{ matrix.platform[1] }}
     runs-on: ${{ matrix.platform[0] }}
-    
+
     steps:
       - name: Checkout repository and submodules
         uses: actions/checkout@v2
