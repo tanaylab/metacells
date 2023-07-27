@@ -29,8 +29,8 @@ jobs:
         env:
           CIBW_PRERELEASE_PYTHONS: True
           CIBW_BUILD: ${{ matrix.python }}-${{ matrix.platform[1] }}
-          # CIBW_ARCHS_MACOS: "x86_64 arm64"
-          # CIBW_ARCHS_LINUX: "x86_64"
+          CIBW_ARCHS_MACOS: "x86_64 arm64"
+          CIBW_ARCHS_LINUX: "x86_64"
           CIBW_BUILD_VERBOSITY: 3
           CIBW_ENVIRONMENT: WHEEL=1
 
