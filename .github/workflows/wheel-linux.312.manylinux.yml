@@ -1,4 +1,4 @@
-name: Wheel-MacOS
+name: Wheel-ManyLinux-3.12
 
 on: [workflow_dispatch]
 
@@ -7,9 +7,8 @@ jobs:
     strategy:
       matrix:
         platform:
-          - [macos-11, macosx_x86_64]
-          - [macos-11, macosx_arm64]
-        python: ["cp310", "cp39", "cp38", "cp37"]
+          - [ubuntu-20.04, manylinux_x86_64]
+        python: ["cp312"]
 
     name: Build wheel for ${{ matrix.python }}-${{ matrix.platform[0] }}-${{ matrix.platform[1] }}
     runs-on: ${{ matrix.platform[0] }}
