@@ -7,7 +7,7 @@ jobs:
     strategy:
       matrix:
         buildplat:
-          - [ubuntu-20.04, manylinux_x86_64]
+          - [ubuntu-22.04, manylinux_x86_64]
           - [macos-10, macosx_x86_64]
           - [macos-10, macosx_arm64]
         python: ["cp311", "cp310", "cp39", "cp38", "cp37"]
