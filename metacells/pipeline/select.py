@@ -112,7 +112,8 @@ def extract_selected_data(  # pylint: disable=too-many-branches, too-many-statem
        {additional_gene_masks}).
 
     5. If we found less than ``min_genes`` genes (default: {min_genes}, and ``min_gene_relative_variance`` was
-       specified, try to achieve the required minimal number of genes by reducing the ``min_gene_relative_variance``.
+       specified, try to achieve the required minimal number of genes by reducing the ``min_gene_relative_variance``. In
+       extreme cases, give up on the relative variance requirement altogether.
 
     6. Invoke :py:func:`metacells.tools.filter.filter_data` to slice just the selected genes.
     """
@@ -172,9 +173,12 @@ def extract_selected_data(  # pylint: disable=too-many-branches, too-many-statem
     if results is None and min_gene_relative_variance is not None:
         valid_candidate_genes_mask = tl.combine_masks(adata, var_masks[:-1] + additional_gene_masks)
         assert valid_candidate_genes_mask is not None
-        if np.sum(valid_candidate_genes_mask.values) >= min_genes:
-            is_valid_set = False
 
+        is_valid_set = False
+        if np.sum(valid_candidate_genes_mask.values) <= min_genes:
+            var_masks.pop()
+
+        else:
             while True:
                 high_gene_relative_variance = min_gene_relative_variance
                 min_gene_relative_variance -= 1 / 8
@@ -202,19 +206,19 @@ def extract_selected_data(  # pylint: disable=too-many-branches, too-many-statem
                     high_gene_relative_variance = mid_gene_relative_variance
                     is_valid_set = False
 
-            if not is_valid_set:
-                ut.set_v_data(adata, "high_relative_variance_gene", valid_candidate_genes_mask.values)
+        if not is_valid_set:
+            ut.set_v_data(adata, "high_relative_variance_gene", valid_candidate_genes_mask.values)
 
-            results = tl.filter_data(
-                adata,
-                name=name,
-                top_level=top_level,
-                track_var="full_gene_index",
-                var_masks=var_masks + additional_gene_masks,
-                mask_var="selected_gene",
-            )
+        results = tl.filter_data(
+            adata,
+            name=name,
+            top_level=top_level,
+            track_var="full_gene_index",
+            var_masks=var_masks + additional_gene_masks,
+            mask_var="selected_gene",
+        )
 
     if results is None:
-        raise ValueError("Failed to select genes")
+        raise ValueError(f"Failed to select {min_genes} genes")
 
     return results[0]

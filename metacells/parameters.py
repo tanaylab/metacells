@@ -478,7 +478,7 @@ select_min_gene_top3: Optional[int] = 4
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-select_min_genes: int = 50
+select_min_genes: int = 100
 
 #: Whether to compute cell-cell similarity using the log (base 2) of the data. See
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
