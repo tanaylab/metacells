@@ -24,7 +24,6 @@ import metacells.tools as tl
 import metacells.utilities as ut
 
 from .collect import collect_metacells
-from .direct import FeatureCorrection
 from .direct import compute_direct_metacells
 
 __all__ = [
@@ -203,7 +202,7 @@ class DirectParameters:  # pylint: disable=too-many-instance-attributes
     select_min_gene_total: Optional[int]
     select_min_gene_top3: Optional[int]
     select_min_gene_relative_variance: Optional[float]
-    select_correction: Optional[FeatureCorrection]
+    select_min_genes: int
     cells_similarity_value_regularization: float
     cells_similarity_log_data: bool
     cells_similarity_method: str
@@ -388,7 +387,7 @@ def divide_and_conquer_pipeline(
     select_min_gene_total: Optional[int] = pr.select_min_gene_total,
     select_min_gene_top3: Optional[int] = pr.select_min_gene_top3,
     select_min_gene_relative_variance: Optional[float] = pr.select_min_gene_relative_variance,
-    select_correction: Optional[FeatureCorrection] = None,
+    select_min_genes: int = pr.select_min_genes,
     cells_similarity_value_regularization: float = pr.cells_similarity_value_regularization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_method: str = pr.cells_similarity_method,
@@ -537,7 +536,7 @@ def divide_and_conquer_pipeline(
             select_min_gene_total=select_min_gene_total,
             select_min_gene_top3=select_min_gene_top3,
             select_min_gene_relative_variance=select_min_gene_relative_variance,
-            select_correction=select_correction,
+            select_min_genes=select_min_genes,
             cells_similarity_value_regularization=cells_similarity_value_regularization,
             cells_similarity_log_data=cells_similarity_log_data,
             cells_similarity_method=cells_similarity_method,
@@ -681,7 +680,7 @@ def compute_divide_and_conquer_metacells(
     select_min_gene_total: Optional[int] = pr.select_min_gene_total,
     select_min_gene_top3: Optional[int] = pr.select_min_gene_top3,
     select_min_gene_relative_variance: Optional[float] = pr.select_min_gene_relative_variance,
-    select_correction: Optional[FeatureCorrection] = None,
+    select_min_genes: int = pr.select_min_genes,
     cells_similarity_value_regularization: float = pr.cells_similarity_value_regularization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_method: str = pr.cells_similarity_method,
@@ -838,7 +837,7 @@ def compute_divide_and_conquer_metacells(
             select_min_gene_total=select_min_gene_total,
             select_min_gene_top3=select_min_gene_top3,
             select_min_gene_relative_variance=select_min_gene_relative_variance,
-            select_correction=select_correction,
+            select_min_genes=select_min_genes,
             cells_similarity_value_regularization=cells_similarity_value_regularization,
             cells_similarity_log_data=cells_similarity_log_data,
             cells_similarity_method=cells_similarity_method,
@@ -1209,7 +1208,6 @@ def _compute_metacell_groups(
             direct_parameters=replace(
                 dac_parameters.direct_parameters,
                 target_metacell_size=dac_parameters.target_pile_size,
-                select_correction=None,
                 cell_sizes=metacell_sizes,
                 knn_k_size_factor=dac_parameters.piles_knn_k_size_factor,
                 candidates_min_split_size_factor=dac_parameters.piles_min_split_size_factor,

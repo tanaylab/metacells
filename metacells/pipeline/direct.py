@@ -3,7 +3,6 @@ Direct
 ------
 """
 
-from typing import Callable
 from typing import Optional
 from typing import Union
 
@@ -20,43 +19,6 @@ __all__ = [
     "compute_direct_metacells",
 ]
 
-try:
-    from mypy_extensions import NamedArg
-
-    #: A function to correct the extracted selected values before computing cell-cell similarity.
-    #:
-    #: This function takes the following named arguments:
-    #:
-    #: ``adata`` - The full annotated data of the cells.
-    #:
-    #: ``sdata`` - The selected genes annotated data of the cells (a slice of ``adata``). This has a
-    #: ``downsample_samples`` unstructured annotation with the target number of samples per cell.
-    #:
-    #: ``downsampled`` - A dense matrix of the downsampled UMIs of the selected genes of the cells (a copy of the
-    #: ``downsampled`` layer of ``sdata``).
-    #:
-    #: The function is free to modify ``downsampled`` as it sees fit to perform any type of correction (typically, some
-    #: form of batch correction). The data type of ``downsampled`` is ``float32`` so the corrected values need not be
-    #: integers (even though their initial values will be).
-    #:
-    #: Note that this is only invoked for metacells-of-cells by
-    #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline` or
-    #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`, and is not invoked for
-    #: computing groups of metacelles. Therefore the function can access any metadata of the original input.
-    #:
-    #: See :py:func:`compute_direct_metacells`.
-    FeatureCorrection = Callable[
-        [
-            NamedArg(AnnData, "adata"),  # noqa: F821
-            NamedArg(AnnData, "sdata"),  # noqa: F821
-            NamedArg(ut.NumpyMatrix, "downsampled"),  # noqa: F821
-        ],
-        None,
-    ]
-
-except ModuleNotFoundError:
-    FeatureCorrection = Callable  # type: ignore
-
 
 @ut.logged()
 @ut.timed_call()
@@ -71,7 +33,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
     select_min_gene_total: Optional[int] = pr.select_min_gene_total,
     select_min_gene_top3: Optional[int] = pr.select_min_gene_top3,
     select_min_gene_relative_variance: Optional[float] = pr.select_min_gene_relative_variance,
-    select_correction: Optional[FeatureCorrection] = None,
+    select_min_genes: int = pr.select_min_genes,
     cells_similarity_value_regularization: float = pr.cells_similarity_value_regularization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_method: str = pr.cells_similarity_method,
@@ -185,21 +147,19 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        ``select_min_gene_relative_variance`` (default: {select_min_gene_relative_variance}) and
        ``random_seed``.
 
-    2. Apply the ``select_correction`` function, if any, to modify the downsampled selects data.
-
-    3. Compute the fractions of each variable in each cell, and add the
+    2. Compute the fractions of each variable in each cell, and add the
        ``cells_similarity_value_regularization`` (default: {cells_similarity_value_regularization}) to
        it.
 
-    4. If ``cells_similarity_log_data`` (default: {cells_similarity_log_data}), invoke the
+    3. If ``cells_similarity_log_data`` (default: {cells_similarity_log_data}), invoke the
        :py:func:`metacells.utilities.computation.log_data` function to compute the log (base 2) of
        the data.
 
-    5. Invoke :py:func:`metacells.tools.similarity.compute_obs_obs_similarity` to compute the
+    4. Invoke :py:func:`metacells.tools.similarity.compute_obs_obs_similarity` to compute the
        similarity between each pair of cells, using the
        ``cells_similarity_method`` (default: {cells_similarity_method}).
 
-    6. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a K-Nearest-Neighbors graph,
+    5. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a K-Nearest-Neighbors graph,
        using the ``knn_balanced_ranks_factor`` (default: {knn_balanced_ranks_factor}), ``knn_incoming_degree_factor``
        (default: {knn_incoming_degree_factor}) and ``knn_outgoing_degree_factor`` (default:
        {knn_outgoing_degree_factor}). If ``knn_k`` (default: {knn_k}) is not specified, then it is chosen to be the
@@ -207,7 +167,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        metacell size, or the ``knn_k_size_quantile`` (default: {knn_k_size_quantile}) the number of cells required, or
        ``min_knn_k`` (default: {min_knn_k}), whichever is largest.
 
-    7. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
+    6. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
        the candidate metacells, using the
        ``min_seed_size_quantile`` (default: {min_seed_size_quantile}),
        ``max_seed_size_quantile`` (default: {max_seed_size_quantile}),
@@ -222,7 +182,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
        ``target_metacell_size`` (default: {target_metacell_size})
        using the effective cell sizes.
 
-    8. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
+    7. Unless ``must_complete_cover`` (default: {must_complete_cover}), invoke
        :py:func:`metacells.tools.deviants.find_deviant_cells` to remove deviants from the candidate
        metacells, using the
        ``deviants_policy`` (default: {deviants_policy}),
@@ -272,14 +232,12 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
             min_gene_relative_variance=select_min_gene_relative_variance,
             min_gene_total=select_min_gene_total,
             min_gene_top3=select_min_gene_top3,
+            min_genes=select_min_genes,
             random_seed=random_seed,
         )
 
         data = ut.get_vo_proper(sdata, "downsampled", layout="row_major")
         data = ut.to_numpy_matrix(data, copy=True)
-
-        if select_correction is not None:
-            select_correction(adata=adata, sdata=sdata, downsampled=data)
 
         if cells_similarity_value_regularization > 0:
             data += cells_similarity_value_regularization

@@ -5,8 +5,10 @@ Selection
 
 from typing import List
 from typing import Optional
+from typing import Tuple
 from typing import Union
 
+import numpy as np
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
@@ -24,7 +26,7 @@ __all__ = [
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
-def extract_selected_data(
+def extract_selected_data(  # pylint: disable=too-many-branches, too-many-statements
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",
     *,
@@ -32,7 +34,8 @@ def extract_selected_data(
     downsample_min_samples: float = pr.select_downsample_min_samples,
     downsample_min_cell_quantile: float = pr.select_downsample_min_cell_quantile,
     downsample_max_cell_quantile: float = pr.select_downsample_max_cell_quantile,
-    min_gene_relative_variance: Optional[float] = pr.select_min_gene_relative_variance,
+    min_gene_relative_variance: Optional[float],  # = pr.select_min_gene_relative_variance,
+    min_genes: int = pr.select_min_genes,
     min_gene_total: Optional[int] = pr.select_min_gene_total,
     min_gene_top3: Optional[int] = pr.select_min_gene_top3,
     additional_gene_masks: List[str] = ["&~lateral_gene"],
@@ -92,6 +95,8 @@ def extract_selected_data(
 
     **Computation Parameters**
 
+    0. If a ``select_gene`` mask exists, just use these genes and go directly to the last step 6.
+
     1. Invoke :py:func:`metacells.tools.downsample.downsample_cells` to downsample the cells to the same total number of
        UMIs, using the ``downsample_min_samples`` (default: {downsample_min_samples}), ``downsample_min_cell_quantile``
        (default: {downsample_min_cell_quantile}), ``downsample_max_cell_quantile`` (default:
@@ -103,9 +108,16 @@ def extract_selected_data(
     3. Invoke :py:func:`metacells.tools.high.find_high_relative_variance_genes` to select high-variance genes (based on
        the downsampled data), using ``min_gene_relative_variance``.
 
-    4. Invoke :py:func:`metacells.tools.filter.filter_data` to slice just the selected genes using the ``name``
-       (default: {name}) with following ``additional_gene_masks`` (default: {additional_gene_masks}).
+    4. Compute the set of genes that pass the above test, as well as match the ``additional_gene_masks`` (default:
+       {additional_gene_masks}).
+
+    5. If we found less than ``min_genes`` genes (default: {min_genes}, and ``min_gene_relative_variance`` was
+       specified, try to achieve the required minimal number of genes by reducing the ``min_gene_relative_variance``.
+
+    6. Invoke :py:func:`metacells.tools.filter.filter_data` to slice just the selected genes.
     """
+
+    assert min_genes > 0
 
     tl.downsample_cells(
         adata,
@@ -116,6 +128,7 @@ def extract_selected_data(
         random_seed=random_seed,
     )
 
+    results: Optional[Tuple[AnnData, ut.PandasSeries, ut.PandasSeries]] = None
     if ut.has_data(adata, "select_gene"):
         results = tl.filter_data(
             adata,
@@ -125,6 +138,7 @@ def extract_selected_data(
             var_masks=["&select_gene"],
             mask_var="selected_gene",
         )
+        assert results is not None
 
     else:
         var_masks = []
@@ -143,21 +157,64 @@ def extract_selected_data(
                 adata, "downsampled", min_gene_relative_variance=min_gene_relative_variance
             )
 
-        results = tl.filter_data(
-            adata,
-            name=name,
-            top_level=top_level,
-            track_var="full_gene_index",
-            var_masks=var_masks + additional_gene_masks,
-            mask_var="selected_gene",
-        )
+        candidate_genes_mask = tl.combine_masks(adata, var_masks + additional_gene_masks)
+        assert candidate_genes_mask is not None
+        if np.sum(candidate_genes_mask.values) >= min_genes:
+            results = tl.filter_data(
+                adata,
+                name=name,
+                top_level=top_level,
+                track_var="full_gene_index",
+                var_masks=var_masks + additional_gene_masks,
+                mask_var="selected_gene",
+            )
+
+    if results is None and min_gene_relative_variance is not None:
+        valid_candidate_genes_mask = tl.combine_masks(adata, var_masks[:-1] + additional_gene_masks)
+        assert valid_candidate_genes_mask is not None
+        if np.sum(valid_candidate_genes_mask.values) >= min_genes:
+            is_valid_set = False
+
+            while True:
+                high_gene_relative_variance = min_gene_relative_variance
+                min_gene_relative_variance -= 1 / 8
+                tl.find_high_relative_variance_genes(
+                    adata, "downsampled", min_gene_relative_variance=min_gene_relative_variance
+                )
+                valid_candidate_genes_mask = tl.combine_masks(adata, var_masks + additional_gene_masks)
+                assert valid_candidate_genes_mask is not None
+                if np.sum(valid_candidate_genes_mask.values) >= min_genes:
+                    is_valid_set = True
+                    break
+
+            for _ in range(4):
+                mid_gene_relative_variance = (high_gene_relative_variance + min_gene_relative_variance) / 2.0
+                tl.find_high_relative_variance_genes(
+                    adata, "downsampled", min_gene_relative_variance=mid_gene_relative_variance
+                )
+                mid_candidate_genes_mask = tl.combine_masks(adata, var_masks + additional_gene_masks)
+                assert mid_candidate_genes_mask is not None
+                if np.sum(mid_candidate_genes_mask.values) >= min_genes:
+                    min_gene_relative_variance = mid_gene_relative_variance
+                    valid_candidate_genes_mask = mid_candidate_genes_mask
+                    is_valid_set = True
+                else:
+                    high_gene_relative_variance = mid_gene_relative_variance
+                    is_valid_set = False
+
+            if not is_valid_set:
+                ut.set_v_data(adata, "high_relative_variance_gene", valid_candidate_genes_mask.values)
+
+            results = tl.filter_data(
+                adata,
+                name=name,
+                top_level=top_level,
+                track_var="full_gene_index",
+                var_masks=var_masks + additional_gene_masks,
+                mask_var="selected_gene",
+            )
 
     if results is None:
-        candidate_genes = (
-            ut.get_v_numpy(adata, "high_top3_gene")
-            & ut.get_v_numpy(adata, "high_total_gene")
-            & ut.get_v_numpy(adata, "high_relative_variance_gene")
-        )
-        raise ValueError(f"All candidate genes are lateral: {' '.join(sorted(adata.var_names[candidate_genes]))}")
+        raise ValueError("Failed to select genes")
 
     return results[0]

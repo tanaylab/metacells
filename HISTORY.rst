@@ -42,7 +42,7 @@ History
 * Restrict number of rare gene candidates.
 * Tighter control over metacells size and internal quality.
 * Improved divide-and-conquer strategy.
-* Base deviants (outliers) on gaps and median instead of mean
+* Base deviants (outliers) on gaps between cells.
 * Terminology changes (see the README for details).
 * Projection!
 
@@ -50,4 +50,5 @@ History
 -----
 
 * Fix build for python 3.11.
-* Improved error messages.
+* More robust gene selection.
+* More thorough binary wheels.

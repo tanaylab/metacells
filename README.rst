@@ -433,12 +433,12 @@ To see the native capabilities of your machine, you can ``grep flags /proc/cpuin
 long list of supported CPU features in an arbitrary order, which may include ``sse``, ``avx2``, ``avx512``, etc. You can
 therefore simply ``grep avx2 /proc/cpuinfo | head -1`` to test whether AVX2 is/not supported by your machine.
 
-You can avoid installing the pre-compiled wheel by running ``pip install metacells --install-option='--native'``. This
-will force ``pip`` to compile the C++ extensions locally on your machine, optimizing for its native capabilities,
-whatever these may be. This will take much longer but may give you faster results (note: the results will **not** be
-exactly the same as when running the precompiled wheel due to differences in floating-point rounding). Also, this
-requires you to have a C++ compiler which supports C++14 installed (either ``g++`` or ``clang``). Installing a C++
-compiler depends on your specific system (using ``conda`` may make this less painful).
+You can avoid installing the pre-compiled wheel by running ``pip install metacells --no-binary :all:``. This will force
+``pip`` to compile the C++ extensions locally on your machine, optimizing for its native capabilities, whatever these
+may be. This will take much longer but may give you *somewhat* faster results (note: the results will **not** be exactly
+the same as when running the precompiled wheel due to differences in floating-point rounding). Also, this requires you
+to have a C++ compiler which supports C++14 installed (either ``g++`` or ``clang``). Installing a C++ compiler depends
+on your specific system (using ``conda`` may make this less painful).
 
 Vignettes
 ---------
