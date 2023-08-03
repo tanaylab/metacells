@@ -261,7 +261,7 @@ do_complete_seeds(ArraySlice<int32_t> seed_of_nodes,
 }
 
 /// See the Python `metacell.tools.candidates._choose_seeds` function.
-void
+size_t
 choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
              const pybind11::array_t<int32_t>& outgoing_weights_indices_array,
              const pybind11::array_t<int32_t>& outgoing_weights_indptr_array,
@@ -364,9 +364,11 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
         }
     }
 
-    FastAssertCompare(seeds_count, ==, max_seeds_count);
+    FastAssertCompare(seeds_count, <=, max_seeds_count);
 
     do_complete_seeds(seed_of_nodes, seeds_count, outgoing_weights, incoming_weights, random);
+
+    return seeds_count;
 }
 
 void

@@ -160,7 +160,7 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
     ut.log_calc("initial_seeds_count", initial_seeds_count)
 
     community_of_nodes = np.full(size, -1, dtype="int32")
-    _choose_seeds(
+    initial_seeds_count = _choose_seeds(
         outgoing_edge_weights=outgoing_edge_weights,
         incoming_edge_weights=incoming_edge_weights,
         seed_of_cells=community_of_nodes,
@@ -238,7 +238,7 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
         )
 
         max_seeds_count = kept_communities_count + small_communities_count - 1
-        _choose_seeds(
+        seeds_count = _choose_seeds(
             outgoing_edge_weights=outgoing_edge_weights,
             incoming_edge_weights=incoming_edge_weights,
             seed_of_cells=community_of_nodes,
@@ -248,7 +248,7 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
             random_seed=random_seed,
         )
 
-        hot_communities = list(range(kept_communities_count, max_seeds_count))
+        hot_communities = list(range(kept_communities_count, seeds_count))
 
     assert np.all(community_of_nodes >= 0)
 
@@ -650,10 +650,10 @@ def _choose_seeds(
     min_seed_size_quantile: float,
     max_seed_size_quantile: float,
     random_seed: int,
-) -> None:
+) -> int:
     ut.log_calc("partial seeds", seed_of_cells, formatter=ut.groups_description)
 
-    xt.choose_seeds(
+    seeds_count = xt.choose_seeds(
         outgoing_edge_weights.data,
         outgoing_edge_weights.indices,
         outgoing_edge_weights.indptr,
@@ -667,8 +667,10 @@ def _choose_seeds(
         seed_of_cells,
     )
 
+    ut.log_calc("chosen seeds count", seeds_count)
     ut.log_calc("chosen seeds", seed_of_cells, formatter=ut.groups_description)
     assert np.min(seed_of_cells) == 0
+    return seeds_count
 
 
 @ut.logged()
