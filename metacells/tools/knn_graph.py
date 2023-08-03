@@ -84,7 +84,9 @@ def compute_obs_obs_knn_graph(
             is nodes that many other nodes prefer to connect with, end up connected to a limited
             number of such "spoke" nodes.
 
-    5. Normalize the outgoing edge weights by dividing them with the sum of their balanced ranks,
+    5. If there is any node which is left with an out degree of only 1, increase K by 10% and repeat steps 2-4.
+
+    6. Normalize the outgoing edge weights by dividing them with the sum of their balanced ranks,
        such that the sum of the outgoing edge weights for each node is 1. Note that there is always
        at least one outgoing edge for each node. This gives us the ``obs_outgoing_weights`` for our
        directed K-Nearest-Neighbors graph.
@@ -235,13 +237,28 @@ def _compute_elements_knn_graph(
 
     ut.log_calc("similarity", similarity)
 
-    outgoing_ranks = _rank_outgoing(similarity)
+    while True:
+        outgoing_ranks = _rank_outgoing(similarity)
 
-    balanced_ranks = _balance_ranks(outgoing_ranks, k, balanced_ranks_factor)
-    store_matrix(balanced_ranks, "balanced_ranks", True)
+        balanced_ranks = _balance_ranks(outgoing_ranks, k, balanced_ranks_factor)
+        store_matrix(balanced_ranks, "balanced_ranks", True)
 
-    pruned_ranks = _prune_ranks(balanced_ranks, k, incoming_degree_factor, outgoing_degree_factor)
-    store_matrix(pruned_ranks, "pruned_ranks", True)
+        pruned_ranks = _prune_ranks(balanced_ranks, k, incoming_degree_factor, outgoing_degree_factor)
+        store_matrix(pruned_ranks, "pruned_ranks", True)
+
+        incoming_ranks = ut.nnz_per(pruned_ranks, per="column")
+        min_incoming_degree = np.min(incoming_ranks)
+        ut.log_calc("min_incoming_degree", min_incoming_degree)
+
+        outgoing_ranks = ut.nnz_per(pruned_ranks, per="row")
+        min_outgoing_degree = np.min(outgoing_ranks)
+        ut.log_calc("min_outgoing_degree", min_outgoing_degree)
+
+        if min_outgoing_degree > 1:
+            break
+
+        k += max(1, int(k / 10))
+        ut.log_calc("k", k)
 
     outgoing_weights = _weigh_edges(pruned_ranks)
     store_matrix(outgoing_weights, "outgoing_weights", inplace)

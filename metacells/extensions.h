@@ -61,14 +61,14 @@ extern thread_local AtomicWriter writer;
             std::lock_guard<std::mutex> io_lock(io_mutex);                                                       \
             std::cerr << __FILE__ << ":" << __LINE__ << ": failed assert: " << #X << " -> " << (X) << " " << #OP \
                       << " " << (Y) << " <- " << #Y << "" << std::endl;                                          \
-            assert(false);                                                                                       \
+            std::exit(1);                                                                                        \
         } else
 #    define FastAssertCompareWhat(X, OP, Y, WHAT)                                                                  \
         if (!(double(X) OP double(Y))) {                                                                           \
             std::lock_guard<std::mutex> io_lock(io_mutex);                                                         \
             std::cerr << __FILE__ << ":" << __LINE__ << ": " << WHAT << ": failed assert: " << #X << " -> " << (X) \
                       << " " << #OP << " " << (Y) << " <- " << #Y << "" << std::endl;                              \
-            assert(false);                                                                                         \
+            std::exit(1);                                                                                          \
         } else
 #else
 #    define FastAssertCompare(...)
@@ -472,7 +472,7 @@ public:
                 return;
             }
         }
-        assert(false);
+        FastAssertCompare(false, ==, true);
     }
 
     ~TmpVectorSizeT() {
@@ -507,7 +507,7 @@ public:
                 return;
             }
         }
-        assert(false);
+        FastAssertCompare(false, ==, true);
     }
 
     ~TmpVectorFloat64() {

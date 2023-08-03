@@ -50,5 +50,5 @@ History
 -----
 
 * Fix build for python 3.11.
-* More robust gene selection.
+* More robust gene selection, KNN graph creation, and metacells partition.
 * More thorough binary wheels.

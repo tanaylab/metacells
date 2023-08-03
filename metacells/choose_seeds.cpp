@@ -84,7 +84,7 @@ remove_sorted(std::vector<T>& vector, T value) {
         vector.erase(position);
     } else {
         LOCATED_LOG(true) << " OOPS! removing nonexistent value" << std::endl;
-        assert(false);
+        std::exit(1);
     }
 }
 
@@ -166,12 +166,15 @@ connect_node(size_t node_index,
              ArraySlice<int32_t> seed_of_nodes,
              ConstCompressedMatrix<float32_t, int32_t, int32_t>& outgoing_weights,
              ConstCompressedMatrix<float32_t, int32_t, int32_t>& incoming_weights,
-             std::vector<float32_t>& seed_weights) {
+             std::vector<int32_t>& seed_sizes,
+             std::vector<float32_t>& seed_weights,
+             std::minstd_rand& random) {
     if (seed_of_nodes[node_index] >= 0) {
         return true;
     }
 
     std::fill(seed_weights.begin(), seed_weights.end(), 0.0);
+    float64_t total_weights = 0.0;
 
     auto incoming_node_indices = incoming_weights.get_band_indices(node_index);
     auto incoming_edge_weights = incoming_weights.get_band_data(node_index);
@@ -180,7 +183,9 @@ connect_node(size_t node_index,
         auto other_node_index = incoming_node_indices[position];
         auto other_node_seed = seed_of_nodes[other_node_index];
         if (other_node_seed >= 0) {
-            seed_weights[other_node_seed] += incoming_edge_weights[position];
+            const auto weight = incoming_edge_weights[position] / seed_sizes[other_node_seed];
+            seed_weights[other_node_seed] += weight;
+            total_weights += weight;
         }
     }
 
@@ -191,33 +196,53 @@ connect_node(size_t node_index,
         auto other_node_index = outgoing_node_indices[position];
         auto other_node_seed = seed_of_nodes[other_node_index];
         if (other_node_seed >= 0) {
-            seed_weights[other_node_seed] += outgoing_edge_weights[position];
+            const auto weight = outgoing_edge_weights[position] / seed_sizes[other_node_seed];
+            seed_weights[other_node_seed] += weight;
+            total_weights += weight;
         }
     }
 
-    auto max_seed_weight = std::max_element(seed_weights.begin(), seed_weights.end());
-    if (*max_seed_weight == 0.0) {
+    if (total_weights == 0.0) {
         return false;
     }
 
-    size_t max_seed_index = max_seed_weight - seed_weights.begin();
-    seed_of_nodes[node_index] = max_seed_index;
-    return true;
+    std::uniform_real_distribution<float64_t> uniform(0.0, total_weights);
+    auto weight = uniform(random);
+    FastAssertCompare(0, <=, weight);
+    FastAssertCompare(weight, <=, total_weights);
+    for (size_t seed_index = 0; seed_index < seed_weights.size(); ++seed_index) {
+        weight -= seed_weights[seed_index];
+        if (weight <= 0.0) {
+            seed_of_nodes[node_index] = seed_index;
+            seed_sizes[seed_index] += 1;
+            return true;
+        }
+    }
+    FastAssertCompare(false, ==, true);
 }
 
 static void
 do_complete_seeds(ArraySlice<int32_t> seed_of_nodes,
                   size_t seeds_count,
                   ConstCompressedMatrix<float32_t, int32_t, int32_t>& outgoing_weights,
-                  ConstCompressedMatrix<float32_t, int32_t, int32_t>& incoming_weights) {
+                  ConstCompressedMatrix<float32_t, int32_t, int32_t>& incoming_weights,
+                  std::minstd_rand& random) {
     size_t nodes_count = seed_of_nodes.size();
     std::vector<float32_t> seed_weights(seeds_count);
+    std::vector<int32_t> seed_sizes(seeds_count);
 
     std::vector<size_t> old_disconnected_nodes;
     std::vector<size_t> new_disconnected_nodes;
 
+    for (auto seed_index : seed_of_nodes) {
+        if (seed_index >= 0) {
+            seed_sizes[seed_index] += 1;
+        }
+    }
+
     for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
-        if (!connect_node(node_index, seed_of_nodes, outgoing_weights, incoming_weights, seed_weights)) {
+        if (!connect_node(
+                node_index, seed_of_nodes, outgoing_weights, incoming_weights, seed_sizes, seed_weights, random)) {
             new_disconnected_nodes.push_back(node_index);
         }
     }
@@ -226,7 +251,8 @@ do_complete_seeds(ArraySlice<int32_t> seed_of_nodes,
         std::swap(old_disconnected_nodes, new_disconnected_nodes);
         new_disconnected_nodes.clear();
         for (size_t node_index : old_disconnected_nodes) {
-            if (!connect_node(node_index, seed_of_nodes, outgoing_weights, incoming_weights, seed_weights)) {
+            if (!connect_node(
+                    node_index, seed_of_nodes, outgoing_weights, incoming_weights, seed_sizes, seed_weights, random)) {
                 new_disconnected_nodes.push_back(node_index);
             }
         }
@@ -272,108 +298,80 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
     FastAssertCompare(min_seed_size_quantile, <=, max_seed_size_quantile);
     FastAssertCompare(max_seed_size_quantile, <=, 1.0);
 
-    std::vector<std::vector<int32_t>> connected_nodes = collect_connected_nodes(incoming_weights, seed_of_nodes);
-
-    TmpVectorSizeT tmp_candidates_raii;
-    auto tmp_candidates = tmp_candidates_raii.vector(nodes_count);
-    tmp_candidates.clear();
-    for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
-        if (seed_of_nodes[node_index] < 0) {
-            tmp_candidates.push_back(node_index);
-        }
-    }
-
-    std::minstd_rand random(random_seed);
     size_t given_seeds_count = size_t(*std::max_element(seed_of_nodes.begin(), seed_of_nodes.end()) + 1);
     size_t seeds_count = given_seeds_count;
 
-    FastAssertCompare(tmp_candidates.size(), >=, max_seeds_count - given_seeds_count);
-    size_t mean_seed_size = size_t(ceil(tmp_candidates.size() / (max_seeds_count - given_seeds_count)));
-    FastAssertCompare(mean_seed_size, >=, 1);
+    std::minstd_rand random(random_seed);
 
-    while (seeds_count < max_seeds_count && keep_large_candidates(tmp_candidates, connected_nodes)) {
-        size_t seed_node_index =
-            choose_seed_node(tmp_candidates, connected_nodes, min_seed_size_quantile, max_seed_size_quantile, random);
+    if (given_seeds_count < max_seeds_count) {
+        std::vector<std::vector<int32_t>> connected_nodes = collect_connected_nodes(incoming_weights, seed_of_nodes);
 
-        store_seed_node(outgoing_weights,
-                        incoming_weights,
-                        seeds_count,
-                        seed_node_index,
-                        tmp_candidates,
-                        connected_nodes,
-                        seed_of_nodes,
-                        mean_seed_size);
-        ++seeds_count;
-    }
-
-    if (seeds_count < max_seeds_count) {
+        TmpVectorSizeT tmp_candidates_raii;
+        auto tmp_candidates = tmp_candidates_raii.vector(nodes_count);
         tmp_candidates.clear();
         for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
             if (seed_of_nodes[node_index] < 0) {
                 tmp_candidates.push_back(node_index);
             }
         }
-        std::sort(tmp_candidates.begin(),
-                  tmp_candidates.end(),
-                  [&](const size_t left_node_index, const size_t right_node_index) {
-                      const auto left_node_incoming = incoming_weights.get_band_indices(left_node_index);
-                      const auto right_node_incoming = incoming_weights.get_band_indices(right_node_index);
-                      const auto left_node_outgoing = outgoing_weights.get_band_indices(left_node_index);
-                      const auto right_node_outgoing = outgoing_weights.get_band_indices(right_node_index);
-                      return (left_node_incoming.size() + 1) * (left_node_outgoing.size() + 1)
-                             > (right_node_incoming.size() + 1) * (right_node_outgoing.size() + 1);
-                  });
 
-        while (tmp_candidates.size() > 0 && seeds_count < max_seeds_count) {
-            auto node_index = tmp_candidates.back();
-            tmp_candidates.pop_back();
-            seed_of_nodes[node_index] = int32_t(seeds_count);
+        FastAssertCompare(tmp_candidates.size(), >=, max_seeds_count - given_seeds_count);
+        size_t mean_seed_size = size_t(ceil(tmp_candidates.size() / (max_seeds_count - given_seeds_count)));
+        FastAssertCompare(mean_seed_size, >=, 1);
+
+        while (seeds_count < max_seeds_count && keep_large_candidates(tmp_candidates, connected_nodes)) {
+            size_t seed_node_index = choose_seed_node(tmp_candidates,
+                                                      connected_nodes,
+                                                      min_seed_size_quantile,
+                                                      max_seed_size_quantile,
+                                                      random);
+
+            store_seed_node(outgoing_weights,
+                            incoming_weights,
+                            seeds_count,
+                            seed_node_index,
+                            tmp_candidates,
+                            connected_nodes,
+                            seed_of_nodes,
+                            mean_seed_size);
             ++seeds_count;
+        }
+
+        if (seeds_count < max_seeds_count) {
+            tmp_candidates.clear();
+            for (size_t node_index = 0; node_index < nodes_count; ++node_index) {
+                if (seed_of_nodes[node_index] < 0) {
+                    tmp_candidates.push_back(node_index);
+                }
+            }
+            std::sort(tmp_candidates.begin(),
+                      tmp_candidates.end(),
+                      [&](const size_t left_node_index, const size_t right_node_index) {
+                          const auto left_node_incoming = incoming_weights.get_band_indices(left_node_index);
+                          const auto right_node_incoming = incoming_weights.get_band_indices(right_node_index);
+                          const auto left_node_outgoing = outgoing_weights.get_band_indices(left_node_index);
+                          const auto right_node_outgoing = outgoing_weights.get_band_indices(right_node_index);
+                          return (left_node_incoming.size() + 1) * (left_node_outgoing.size() + 1)
+                                 > (right_node_incoming.size() + 1) * (right_node_outgoing.size() + 1);
+                      });
+
+            while (tmp_candidates.size() > 0 && seeds_count < max_seeds_count) {
+                auto node_index = tmp_candidates.back();
+                tmp_candidates.pop_back();
+                seed_of_nodes[node_index] = int32_t(seeds_count);
+                ++seeds_count;
+            }
         }
     }
 
     FastAssertCompare(seeds_count, ==, max_seeds_count);
 
-    do_complete_seeds(seed_of_nodes, seeds_count, outgoing_weights, incoming_weights);
-}
-
-static void
-complete_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
-               const pybind11::array_t<int32_t>& outgoing_weights_indices_array,
-               const pybind11::array_t<int32_t>& outgoing_weights_indptr_array,
-               const pybind11::array_t<float32_t>& incoming_weights_data_array,
-               const pybind11::array_t<int32_t>& incoming_weights_indices_array,
-               const pybind11::array_t<int32_t>& incoming_weights_indptr_array,
-               size_t seeds_count,
-               pybind11::array_t<int32_t>& seed_of_nodes_array) {
-    WithoutGil without_gil{};
-    ArraySlice<int32_t> seed_of_nodes = ArraySlice<int32_t>(seed_of_nodes_array, "seed_of_nodes");
-    size_t nodes_count = seed_of_nodes.size();
-    FastAssertCompare(nodes_count, >, 0);
-
-    ConstCompressedMatrix<float32_t, int32_t, int32_t>
-        outgoing_weights(ConstArraySlice<float32_t>(outgoing_weights_data_array, "outgoing_weights_data"),
-                         ConstArraySlice<int32_t>(outgoing_weights_indices_array, "outgoing_weights_indices"),
-                         ConstArraySlice<int32_t>(outgoing_weights_indptr_array, "outgoing_weights_indptr"),
-                         int32_t(nodes_count),
-                         "outgoing_weights");
-    FastAssertCompare(outgoing_weights.bands_count(), ==, nodes_count);
-
-    ConstCompressedMatrix<float32_t, int32_t, int32_t>
-        incoming_weights(ConstArraySlice<float32_t>(incoming_weights_data_array, "incoming_weights_data"),
-                         ConstArraySlice<int32_t>(incoming_weights_indices_array, "incoming_weights_indices"),
-                         ConstArraySlice<int32_t>(incoming_weights_indptr_array, "incoming_weights_indptr"),
-                         int32_t(nodes_count),
-                         "incoming_weights");
-    FastAssertCompare(incoming_weights.bands_count(), ==, nodes_count);
-
-    do_complete_seeds(seed_of_nodes, seeds_count, outgoing_weights, incoming_weights);
+    do_complete_seeds(seed_of_nodes, seeds_count, outgoing_weights, incoming_weights, random);
 }
 
 void
 register_choose_seeds(pybind11::module& module) {
     module.def("choose_seeds", &metacells::choose_seeds, "Choose seed partitions for computing metacells.");
-    module.def("complete_seeds", &metacells::complete_seeds, "Complete seed partitions for computing metacells.");
 }
 
 }

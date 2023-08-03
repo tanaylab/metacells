@@ -170,12 +170,8 @@ def collect_metacells(  # pylint: disable=too-many-statements
             zeros_per_gene = ut.sum_per(zeros_per_gene_per_cell_of_metacell, per="column").astype("int32")
             ut.log_calc("zeros_per_gene", zeros_per_gene, formatter=ut.sizes_description)
 
-            umis_per_gene_per_cell_of_metacell = ut.to_layout(
-                umis_per_gene_per_cell_of_metacell, layout="column_major"
-            )
-            umis_per_gene_of_metacell = ut.sum_per(umis_per_gene_per_cell_of_metacell, per="column").astype(
-                "float32"
-            )
+            umis_per_gene_per_cell_of_metacell = ut.to_layout(umis_per_gene_per_cell_of_metacell, layout="column_major")
+            umis_per_gene_of_metacell = ut.sum_per(umis_per_gene_per_cell_of_metacell, per="column").astype("float32")
             assert np.sum(umis_per_gene_of_metacell) == total_umis_of_metacell
 
             if not metacell_geo_mean:
