@@ -151,7 +151,7 @@ def collect_metacells(  # pylint: disable=too-many-statements
             assert grouped_of_metacell > 0
 
             umis_per_cell_of_metacell = umis_per_cell[mask_per_cell]
-            total_umis_of_metacell = np.sum(umis_per_cell_of_metacell)
+            total_umis_of_metacell = np.sum(umis_per_cell_of_metacell.astype("int32"))
             ut.log_calc("total_umis_of_metacell", total_umis_of_metacell)
 
             umis_per_gene_per_cell_of_metacell = ut.to_numpy_matrix(umis_per_gene_per_cell[mask_per_cell, :])
@@ -172,7 +172,7 @@ def collect_metacells(  # pylint: disable=too-many-statements
 
             umis_per_gene_per_cell_of_metacell = ut.to_layout(umis_per_gene_per_cell_of_metacell, layout="column_major")
             umis_per_gene_of_metacell = ut.sum_per(umis_per_gene_per_cell_of_metacell, per="column").astype("float32")
-            assert np.sum(umis_per_gene_of_metacell) == total_umis_of_metacell
+            assert np.sum(umis_per_gene_of_metacell.astype("int32")) == total_umis_of_metacell
 
             if not metacell_geo_mean:
                 total_downsampled_umis_of_metacell = np.sum(
