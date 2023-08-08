@@ -1,3 +1,4 @@
+anndata
 cvxpy
 fastcluster
 importlib-metadata

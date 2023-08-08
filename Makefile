@@ -61,9 +61,9 @@ clean-docs:
 
 TODO = todo$()x
 
-pc: $(TODO) history format smells dist pytest docs staged tox  ## check everything before commit
+pc: $(TODO) ci staged  ## check everything before commit
 
-ci: history format smells dist docs tox  ## check everything in a CI server
+ci: history format smells dist pytest docs  ## check everything in a CI server
 
 history:  ## check to-be-done version is described in HISTORY.rst
 	@version=`grep 'current_version =' setup.cfg | sed 's/.* //;s/.dev.*//;'`; \

@@ -246,10 +246,6 @@ def _compute_elements_knn_graph(
         pruned_ranks = _prune_ranks(balanced_ranks, k, incoming_degree_factor, outgoing_degree_factor)
         store_matrix(pruned_ranks, "pruned_ranks", True)
 
-        incoming_ranks = ut.nnz_per(pruned_ranks, per="column")
-        min_incoming_degree = np.min(incoming_ranks)
-        ut.log_calc("min_incoming_degree", min_incoming_degree)
-
         outgoing_ranks = ut.nnz_per(pruned_ranks, per="row")
         min_outgoing_degree = np.min(outgoing_ranks)
         ut.log_calc("min_outgoing_degree", min_outgoing_degree)
