@@ -30,6 +30,7 @@ def compute_obs_obs_knn_graph(
     balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
+    min_outgoing_degree: int = pr.knn_min_outgoing_degree,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     """
@@ -84,7 +85,8 @@ def compute_obs_obs_knn_graph(
             is nodes that many other nodes prefer to connect with, end up connected to a limited
             number of such "spoke" nodes.
 
-    5. If there is any node which is left with an out degree of only 1, increase K by 10% and repeat steps 2-4.
+    5. If there is any node which is left with an out degree of less than ``min_outgoing_degree`` (default:
+       {min_outgoing_degree}), increase K by 10% and repeat steps 2-4.
 
     6. Normalize the outgoing edge weights by dividing them with the sum of their balanced ranks,
        such that the sum of the outgoing edge weights for each node is 1. Note that there is always
@@ -105,6 +107,7 @@ def compute_obs_obs_knn_graph(
         balanced_ranks_factor=balanced_ranks_factor,
         incoming_degree_factor=incoming_degree_factor,
         outgoing_degree_factor=outgoing_degree_factor,
+        min_outgoing_degree=min_outgoing_degree,
         inplace=inplace,
     )
 
@@ -120,6 +123,7 @@ def compute_var_var_knn_graph(
     balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
+    min_outgoing_degree: int = pr.knn_min_outgoing_degree,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     """
@@ -168,7 +172,10 @@ def compute_var_var_knn_graph(
             is nodes that many other nodes prefer to connect with, end up connected to a limited
             number of such "spoke" nodes.
 
-    5. Normalize the outgoing edge weights by dividing them with the sum of their balanced ranks,
+    5. If there is any node which is left with an out degree of less than ``min_outgoing_degree`` (default:
+       {min_outgoing_degree}), increase K by 10% and repeat steps 2-4.
+
+    6. Normalize the outgoing edge weights by dividing them with the sum of their balanced ranks,
        such that the sum of the outgoing edge weights for each node is 1. Note that there is always
        at least one outgoing edge for each node. This gives us the ``var_outgoing_weights`` for our
        directed K-Nearest-Neighbors graph.
@@ -187,6 +194,7 @@ def compute_var_var_knn_graph(
         balanced_ranks_factor=balanced_ranks_factor,
         incoming_degree_factor=incoming_degree_factor,
         outgoing_degree_factor=outgoing_degree_factor,
+        min_outgoing_degree=min_outgoing_degree,
         inplace=inplace,
     )
 
@@ -200,12 +208,14 @@ def _compute_elements_knn_graph(
     balanced_ranks_factor: float,
     incoming_degree_factor: float,
     outgoing_degree_factor: float,
+    min_outgoing_degree: int,
     inplace: bool = True,
 ) -> Optional[ut.PandasFrame]:
     assert elements in ("obs", "var")
     assert balanced_ranks_factor > 0.0
     assert incoming_degree_factor > 0.0
     assert outgoing_degree_factor > 0.0
+    assert min_outgoing_degree >= 1
 
     if elements == "obs":
         get_data = ut.get_oo_proper
@@ -247,10 +257,10 @@ def _compute_elements_knn_graph(
         store_matrix(pruned_ranks, "pruned_ranks", True)
 
         outgoing_ranks = ut.nnz_per(pruned_ranks, per="row")
-        min_outgoing_degree = np.min(outgoing_ranks)
-        ut.log_calc("min_outgoing_degree", min_outgoing_degree)
+        outgoing_degree = np.min(outgoing_ranks)
+        ut.log_calc("outgoing_degree", outgoing_degree)
 
-        if min_outgoing_degree > 1:
+        if outgoing_degree >= min_outgoing_degree:
             break
 
         k += max(1, int(k / 10))

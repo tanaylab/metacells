@@ -214,6 +214,7 @@ class DirectParameters:  # pylint: disable=too-many-instance-attributes
     knn_balanced_ranks_factor: float
     knn_incoming_degree_factor: float
     knn_outgoing_degree_factor: float
+    knn_min_outgoing_degree: int
     min_seed_size_quantile: float
     max_seed_size_quantile: float
     candidates_cooldown_pass: float
@@ -408,6 +409,7 @@ def divide_and_conquer_pipeline(
     knn_balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     knn_incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     knn_outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
+    knn_min_outgoing_degree: int = pr.knn_min_outgoing_degree,
     min_seed_size_quantile: float = pr.min_seed_size_quantile,
     max_seed_size_quantile: float = pr.max_seed_size_quantile,
     candidates_knn_k_size_factor: float = pr.candidates_knn_k_size_factor,
@@ -548,6 +550,7 @@ def divide_and_conquer_pipeline(
             knn_balanced_ranks_factor=knn_balanced_ranks_factor,
             knn_incoming_degree_factor=knn_incoming_degree_factor,
             knn_outgoing_degree_factor=knn_outgoing_degree_factor,
+            knn_min_outgoing_degree=knn_min_outgoing_degree,
             min_seed_size_quantile=min_seed_size_quantile,
             max_seed_size_quantile=max_seed_size_quantile,
             candidates_cooldown_pass=candidates_cooldown_pass,
@@ -701,6 +704,7 @@ def compute_divide_and_conquer_metacells(
     knn_balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     knn_incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     knn_outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
+    knn_min_outgoing_degree: int = pr.knn_min_outgoing_degree,
     min_seed_size_quantile: float = pr.min_seed_size_quantile,
     max_seed_size_quantile: float = pr.max_seed_size_quantile,
     candidates_cooldown_pass: float = pr.cooldown_pass,
@@ -849,6 +853,7 @@ def compute_divide_and_conquer_metacells(
             knn_balanced_ranks_factor=knn_balanced_ranks_factor,
             knn_incoming_degree_factor=knn_incoming_degree_factor,
             knn_outgoing_degree_factor=knn_outgoing_degree_factor,
+            knn_min_outgoing_degree=knn_min_outgoing_degree,
             min_seed_size_quantile=min_seed_size_quantile,
             max_seed_size_quantile=max_seed_size_quantile,
             candidates_cooldown_pass=candidates_cooldown_pass,

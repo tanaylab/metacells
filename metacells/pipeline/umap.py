@@ -48,6 +48,7 @@ def compute_knn_by_markers(
     balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
+    min_outgoing_degree: int = pr.markers_knn_min_outgoing_degree,
     reproducible: bool,
 ) -> ut.PandasFrame:
     """
@@ -100,8 +101,8 @@ def compute_knn_by_markers(
     7. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` using the distances,
        ``k`` (no default!), ``balanced_ranks_factor`` (default: {balanced_ranks_factor}),
        ``incoming_degree_factor`` (default: {incoming_degree_factor}), ``outgoing_degree_factor``
-       (default: {outgoing_degree_factor}) to compute a "skeleton" graph to overlay on top of the
-       UMAP graph.
+       (default: {outgoing_degree_factor}) and ``min_outgoing_degree`` (default: {min_outgoing_degree})
+       to compute a "skeleton" graph to overlay on top of the UMAP graph.
     """
     assert max_marker_genes is None or max_marker_genes > 0
     if marker_gene_names is None and marker_gene_patterns is None:
@@ -157,6 +158,7 @@ def compute_knn_by_markers(
         balanced_ranks_factor=balanced_ranks_factor,
         incoming_degree_factor=incoming_degree_factor,
         outgoing_degree_factor=outgoing_degree_factor,
+        min_outgoing_degree=min_outgoing_degree,
     )
 
     return similarities
@@ -182,6 +184,7 @@ def compute_umap_by_markers(
     balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
+    min_outgoing_degree: int = pr.markers_knn_min_outgoing_degree,
     umap_k: int = pr.umap_k,
     dimensions: int = 2,
     min_dist: float = pr.umap_min_dist,
@@ -221,9 +224,9 @@ def compute_umap_by_markers(
        (default: {similarity_log_data}), ``similarity_method`` (default: {similarity_method}), ``logistics_location``
        (default: {logistics_location}), ``logistics_slope`` (default: {logistics_slope}), ``skeleton_k`` (default:
        {skeleton_k}), ``balanced_ranks_factor`` (default: {balanced_ranks_factor}), ``incoming_degree_factor`` (default:
-       {incoming_degree_factor}) and ``outgoing_degree_factor`` (default: {outgoing_degree_factor}) to compute a
-       "skeleton" graph to overlay on top of the UMAP graph. Specify a non-zero ``random_seed`` to make this
-       reproducible.
+       {incoming_degree_factor}) and ``outgoing_degree_factor`` (default: {outgoing_degree_factor}) and ``min_outgoing_degree``
+       (default: {min_outgoing_degree}) to compute a "skeleton" graph to overlay on top of the UMAP graph. Specify a non-zero
+       ``random_seed`` to make this reproducible.
 
     2. Invoke :py:func:`metacells.tools.layout.umap_by_distances` using the distances, ``umap_k``
        (default: {umap_k}), ``min_dist`` (default: {min_dist}), ``spread`` (default: {spread}),
@@ -253,6 +256,7 @@ def compute_umap_by_markers(
         balanced_ranks_factor=balanced_ranks_factor,
         incoming_degree_factor=incoming_degree_factor,
         outgoing_degree_factor=outgoing_degree_factor,
+        min_outgoing_degree=min_outgoing_degree,
         reproducible=(random_seed != 0),
     )
 

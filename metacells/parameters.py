@@ -605,6 +605,22 @@ knn_incoming_degree_factor: float = 3.0
 #: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
 knn_outgoing_degree_factor: float = 1.0
 
+#: The minimal outgoing degree of nodes in the KNN graph. See
+#: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
+#: :py:func:`metacells.tools.knn_graph.compute_var_var_knn_graph`,
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
+#: :py:func:`metacells.pipeline.umap.compute_knn_by_markers`
+#: and
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
+knn_min_outgoing_degree: int = 2
+
+#: The minimal outgoing degree of nodes in the markers KNN graph. See
+#: :py:func:`metacells.pipeline.umap.compute_knn_by_markers` and
+#: :py:func:`metacells.pipeline.umap.compute_umap_by_markers`.
+markers_knn_min_outgoing_degree: int = 1
+
 #: The minimal quantile of a seed to be selected. See
 #: :py:func:`metacells.tools.candidates.choose_seeds`,
 #: :py:func:`metacells.tools.candidates.compute_candidate_metacells`,

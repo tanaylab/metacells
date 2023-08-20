@@ -46,6 +46,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
     knn_balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     knn_incoming_degree_factor: float = pr.knn_incoming_degree_factor,
     knn_outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
+    knn_min_outgoing_degree: int = pr.knn_min_outgoing_degree,
     min_seed_size_quantile: float = pr.min_seed_size_quantile,
     max_seed_size_quantile: float = pr.max_seed_size_quantile,
     candidates_cooldown_pass: float = pr.cooldown_pass,
@@ -161,11 +162,12 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
 
     5. Invoke :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph` to compute a K-Nearest-Neighbors graph,
        using the ``knn_balanced_ranks_factor`` (default: {knn_balanced_ranks_factor}), ``knn_incoming_degree_factor``
-       (default: {knn_incoming_degree_factor}) and ``knn_outgoing_degree_factor`` (default:
-       {knn_outgoing_degree_factor}). If ``knn_k`` (default: {knn_k}) is not specified, then it is chosen to be the
-       ``knn_k_size_factor`` (default: {knn_k_size_factor} times the median number of cells required to reach the target
-       metacell size, or the ``knn_k_size_quantile`` (default: {knn_k_size_quantile}) the number of cells required, or
-       ``min_knn_k`` (default: {min_knn_k}), whichever is largest.
+       (default: {knn_incoming_degree_factor}) ``knn_outgoing_degree_factor`` (default: {knn_outgoing_degree_factor})
+       and ``knn_min_outgoing_degree`` (default: {knn_min_outgoing_degree})(. If ``knn_k`` (default: {knn_k}) is not
+       specified, then it is chosen to be the ``knn_k_size_factor`` (default: {knn_k_size_factor} times the median
+       number of cells required to reach the target metacell size, or the ``knn_k_size_quantile`` (default:
+       {knn_k_size_quantile}) the number of cells required, or ``min_knn_k`` (default: {min_knn_k}), whichever is
+       largest.
 
     6. Invoke :py:func:`metacells.tools.candidates.compute_candidate_metacells` to compute
        the candidate metacells, using the
@@ -283,6 +285,7 @@ def compute_direct_metacells(  # pylint: disable=too-many-branches,too-many-stat
                 balanced_ranks_factor=knn_balanced_ranks_factor,
                 incoming_degree_factor=knn_incoming_degree_factor,
                 outgoing_degree_factor=knn_outgoing_degree_factor,
+                min_outgoing_degree=knn_min_outgoing_degree,
             )
 
             tl.compute_candidate_metacells(

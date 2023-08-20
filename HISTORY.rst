@@ -52,3 +52,9 @@ History
 * Fix build for python 3.11.
 * More robust gene selection, KNN graph creation, and metacells partition.
 * More thorough binary wheels.
+
+0.9.2
+-----
+
+* Fix numpy compatibility issue.
+* Fix K of UMAP skeleton KNN graph (broken in 0.9.1).
