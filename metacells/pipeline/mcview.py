@@ -109,7 +109,7 @@ def compute_for_mcview(
 
     ut.set_m_data(gdata, "mcview_format", "1.0")
 
-    metacell_of_cells = ut.get_o_numpy(adata, "metacell")
+    metacell_of_cells = ut.get_o_numpy(adata, group)
     ut.set_m_data(gdata, "outliers", np.sum(metacell_of_cells < 0))
 
     step_is_not_none = [
