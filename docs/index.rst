@@ -1,4 +1,4 @@
-Metacells 0.9.1
+Metacells 0.9.2
 ===============
 
 .. toctree::

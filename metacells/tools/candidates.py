@@ -386,7 +386,9 @@ def _cut_split_communities(  # pylint: disable=too-many-branches,too-many-statem
             )
             all_parts_exist = False
             while not all_parts_exist:
-                split_parts_assignment = np.random.randint(split_parts_count, size=len(community_indices))  # type: ignore
+                split_parts_assignment = np.random.randint(  # type: ignore
+                    split_parts_count, size=len(community_indices)
+                )
                 all_parts_exist = True
                 for split_index in range(split_parts_count):
                     if not np.any(split_parts_assignment == split_index):

@@ -1,4 +1,4 @@
-Metacells 0.9.1 - Single-cell RNA Sequencing Analysis
+Metacells 0.9.2 - Single-cell RNA Sequencing Analysis
 =====================================================
 
 .. image:: https://readthedocs.org/projects/metacells/badge/?version=latest
@@ -60,7 +60,8 @@ Terminology and Results Format
 **NOTE**: Version 0.9 **breaks compatibility** with version 0.8 when it comes to some APIs and the names and semantics
 of the result annotations. See below for the description of updated results (and how they differ from version 0.8). The
 new format is meant to improve the usability of the system in downstream analysis pipelines. For convenience we also
-list here the results of the new projection pipeline added in version 0.9.
+list here the results of the new projection pipeline added in version 0.9. Versions 0.9.1 and 0.9.2 contain some bug
+fixes - use the latest published version (right now, 0.9.2) for best results.
 
 If you have existing metacell data that was computed using version 0.8 (the current published version you will get
 from using ``pip install metacells``, you can use the provided
