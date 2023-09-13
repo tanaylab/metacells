@@ -1,5 +1,5 @@
-Metacells 0.9.3dev - Single-cell RNA Sequencing Analysis
-========================================================
+Metacells 0.9.3 - Single-cell RNA Sequencing Analysis
+=====================================================
 
 .. image:: https://readthedocs.org/projects/metacells/badge/?version=latest
     :target: https://metacells.readthedocs.io/en/latest/?badge=latest
