@@ -12,7 +12,6 @@ All the functions included here are exported under ``metacells.pl``.
 """
 
 from .collect import *
-from .consistency import *
 from .direct import *
 from .divide_and_conquer import *
 from .exclude import *

@@ -5,7 +5,6 @@ Defaults
 
 from math import sqrt
 from typing import Optional
-from typing import Union
 
 import metacells.utilities.typing as utt
 
@@ -29,6 +28,7 @@ significant_gene_similarity: float = 0.1
 
 #: The generic "significant" fold factor. See
 #: :py:const:`deviants_min_gene_fold_factor`
+#: :py:const:`rare_min_convincing_gene_fold_factor`,
 #: and
 #: :py:const:`dissolve_min_convincing_gene_fold_factor`.
 significant_gene_fold_factor: float = 3.0
@@ -36,6 +36,8 @@ significant_gene_fold_factor: float = 3.0
 #: The generic additional "significant" fold factor for noisy genes, in addition to
 #: :py:const:`significant_gene_fold_factor`. See
 #: :py:const:`deviants_min_gene_fold_factor`
+#: and
+#: :py:const:`rare_min_convincing_gene_fold_factor`,
 #: and
 #: :py:const:`dissolve_min_convincing_gene_fold_factor`.
 significant_noisy_gene_fold_factor: float = 2.0
@@ -110,7 +112,7 @@ min_target_pile_size: int = 8000
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-max_target_pile_size: int = 32000
+max_target_pile_size: int = 24000
 
 #: The target number of metacells computed in each pile. See
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
@@ -118,13 +120,19 @@ max_target_pile_size: int = 32000
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 target_metacells_in_pile: int = 100
 
-#: The generic target total metacell size (by default, in cells). See
-#: :py:const:`candidates_target_metacell_size`,
+#: The generic target total metacell size (in cells). See
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-target_metacell_size: float = 96
+target_metacell_size: int = 48
+
+#: The generic target total metacell total UMIs. See
+#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
+#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
+#: and
+#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
+target_metacell_umis: int = 160000
 
 #: Whether to use geometrical mean to compute metacell gene fractions.
 #: See :py:func:`metacells.pipeline.collect.collect_metacells`.
@@ -139,15 +147,13 @@ metacell_umis_regularization: float = 1 / 16.0
 #: :py:func:`metacells.pipeline.collect.collect_metacells`.
 zeros_cell_size_quantile: float = 0.1
 
-#: The genetic size of each cell for computing each metacell's size. See
-#: :py:const:`candidates_cell_sizes`,
-#: :py:const:`dissolve_cell_sizes`,
+#: The number of UMIs in each cell for computing each metacell's total UMIs. See
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`
 #: and
 #: :py:func:`metacells.pipeline.collect.collect_metacells`.
-cell_sizes: Optional[Union[str, utt.Vector]] = None
+cell_umis: Optional[utt.NumpyVector] = None
 
 #: The generic maximal group size factor, above which we should split it. See
 #: :py:const:`piles_min_split_size_factor`
@@ -163,19 +169,15 @@ min_robust_size_factor: float = 0.5
 
 #: The generic maximal group size factor, below which we should merge it. See
 #: :py:const:`piles_max_merge_size_factor`,
-#: :py:const:`candidates_max_merge_size_factor`,
-#: and
-#: :py:const:`dissolve_min_convincing_size_factor`.
-max_merge_size_factor: float = 0.25
+#: :py:const:`candidates_max_merge_size_factor`.
+max_merge_size_factor: float = 0.5
 
 #: The minimal number of cells in a metacell, below which we would merge it. See
 #: :py:const:`rare_min_cells_of_modules`,
-#: :py:func:`candidates_min_metacell_cells`,
-#: :py:func:`dissolve_min_metacell_cells`,
 #: :py:func:`metacells.tools.candidates.compute_candidate_metacells`
 #: and
 #: :py:func:`metacells.tools.dissolve.dissolve_metacells`.
-min_metacell_cells: int = 12
+min_metacell_size: int = 12
 
 #: The maximal strength of a min-cut of a metacell that will cause it to be split. See
 #: :py:func:`metacells.tools.candidates.compute_candidate_metacells`.
@@ -190,7 +192,7 @@ min_cut_seed_cells: int = 7
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-piles_min_split_size_factor: float = 1.25
+piles_min_split_size_factor: float = 1.5
 
 #: The minimal pile size factor, below which we should consider dissolving it. See
 #: :py:const:`min_robust_size_factor`,
@@ -202,7 +204,6 @@ piles_min_robust_size_factor: float = 0.3
 #: The maximal size factor of a pile, below which we should merge it. See
 #: :py:const:`min_robust_size_factor`,
 #: :py:const:`max_merge_size_factor`,
-#: :py:const:`dissolve_min_convincing_size_factor`,
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
@@ -357,15 +358,15 @@ rare_genes_cluster_method: str = "ward"
 rare_min_genes_of_modules: int = 4
 
 #: The minimal number of cells in a rare gene module. See
-#: :py:const:`min_metacell_cells`,
+#: :py:const:`min_metacell_size`,
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-rare_min_cells_of_modules: int = min_metacell_cells
+rare_min_cells_of_modules: int = min_metacell_size
 
 #: The maximal mean number of cells (as a fraction of the target metacell size) in a random pile for a rare gene module
 #: to be considered rare. See
-#: :py:const:`min_metacell_cells`,
+#: :py:const:`min_metacell_size`,
 #: :py:func:`metacells.tools.rare.find_rare_gene_modules`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
@@ -516,20 +517,6 @@ groups_similarity_log_data: bool = True
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 groups_similarity_method: str = similarity_method
 
-#: Whether to compute group self-similarity using the log (base 2) of the data. See
-#: :py:func:`metacells.pipeline.consistency.compute_groups_self_consistency`.
-self_similarity_log_data: bool = True
-
-#: The regularization factor to use after computing the fractions of the data for
-#: computing group self similarity. See
-#: :py:func:`metacells.pipeline.consistency.compute_groups_self_consistency`.
-self_similarity_value_regularization: float = 1e-5
-
-#: The method to use to compute group self-consistency. See
-#: :py:func:`metacells.tools.similarity.compute_obs_obs_similarity`,
-#: :py:func:`metacells.pipeline.consistency.compute_groups_self_consistency`.
-self_similarity_method: str = "logistics"
-
 #: The target K for building the K-Nearest-Neighbors graph. See
 #: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
 #: :py:func:`metacells.tools.knn_graph.compute_var_var_knn_graph`,
@@ -556,12 +543,12 @@ candidates_knn_k_size_factor: int = 2
 piles_knn_k_size_factor: int = 3
 
 #: The size of the default K for building the K-Nearest-Neighbors graph, based
-#: on the number of cells needed to reach the :py:const:`target_metacell_size` for a quantile of the cells. See
+#: on the number of cells needed to reach the :py:const:`target_metacell_umis` for a quantile of the cells. See
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`,
 #: and
 #: :py:func:`metacells.pipeline.direct.compute_direct_metacells`.
-knn_k_size_quantile: float = 0.1
+knn_k_umis_quantile: float = 0.1
 
 #: The minimal target K for building the K-Nearest-Neighbors graph. See
 #: :py:func:`metacells.tools.knn_graph.compute_obs_obs_knn_graph`,
@@ -661,24 +648,6 @@ cooldown_node: float = 0.25
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 cooldown_phase: float = 0.75
 
-#: The target total cluster size for clustering the nodes of the K-Nearest-Neighbors graph. See
-#: :py:const:`target_metacell_size`,
-#: :py:func:`metacells.tools.candidates.compute_candidate_metacells`,
-#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
-#: and
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-candidates_target_metacell_size: float = target_metacell_size
-
-#: The size of each node for clustering the nodes of the K-Nearest-Neighbors graph. See
-#: :py:const:`cell_sizes`
-#: :py:func:`metacells.tools.candidates.compute_candidate_metacells`,
-#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
-#: and
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-candidates_cell_sizes: Optional[Union[str, utt.Vector]] = cell_sizes
-
 #: The minimal size factor of clusters to split when clustering the nodes of the
 #: K-Nearest-Neighbors graph. See
 #: :py:const:`min_split_size_factor`,
@@ -698,12 +667,6 @@ candidates_min_split_size_factor: float = min_split_size_factor
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 candidates_max_merge_size_factor: float = max_merge_size_factor
-
-#: The minimal number of cells in a metacell, below which we would merge it. See
-#: :py:const:`min_metacell_cells`
-#: and
-#: :py:func:`metacells.tools.candidates.compute_candidate_metacells`.
-candidates_min_metacell_cells: int = min_metacell_cells
 
 #: The policy to use for deciding which cell is "deviant". See
 #: :py:func:`metacells.tools.deviants.find_deviant_cells`,
@@ -794,15 +757,6 @@ deviants_max_gene_fraction: float = 0.03
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 deviants_max_cell_fraction: Optional[float] = 0.25
 
-#: The size of each cell for for dissolving too-small metacells. See
-#: :py:const:`cell_sizes`,
-#: :py:func:`metacells.tools.dissolve.dissolve_metacells`,
-#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
-#: and
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-dissolve_cell_sizes: Optional[Union[str, utt.Vector]] = cell_sizes
-
 #: The minimal size factor for a metacell to be considered "robust". See
 #: :py:const:`min_robust_size_factor`
 #: :py:func:`metacells.tools.dissolve.dissolve_metacells`,
@@ -811,12 +765,6 @@ dissolve_cell_sizes: Optional[Union[str, utt.Vector]] = cell_sizes
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 dissolve_min_robust_size_factor: float = min_robust_size_factor
-
-#: The minimal number of cells in a metacell, below which we would dissolve it. See
-#: :py:const:`min_metacell_cells`
-#: and
-#: :py:func:`metacells.tools.dissolve.dissolve_metacells`.
-dissolve_min_metacell_cells: int = min_metacell_cells
 
 #: The minimal size factor for a metacell to be considered "robust" when grouping rare gene module
 #: cells. See
@@ -829,16 +777,7 @@ dissolve_min_metacell_cells: int = min_metacell_cells
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
 rare_dissolve_min_robust_size_factor: float = max_merge_size_factor
 
-#: The minimal size factor for a metacell to be kept if it is "convincing". See
-#: :py:const:`max_merge_size_factor`
-#: :py:func:`metacells.tools.dissolve.dissolve_metacells`,
-#: :py:func:`metacells.pipeline.direct.compute_direct_metacells`,
-#: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
-#: and
-#: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-dissolve_min_convincing_size_factor: Optional[float] = 0.125
-
-#: The minimal size factor for a metacell to be kept if it is "convincing" when grouping rare gene
+#: The minimal fold factor of a gene in a rare metacell to make it "convincing". See
 #: module cells. See
 #: :py:const:`max_merge_size_factor`
 #: :py:func:`metacells.tools.dissolve.dissolve_metacells`,
@@ -846,7 +785,7 @@ dissolve_min_convincing_size_factor: Optional[float] = 0.125
 #: :py:func:`metacells.pipeline.divide_and_conquer.compute_divide_and_conquer_metacells`
 #: and
 #: :py:func:`metacells.pipeline.divide_and_conquer.divide_and_conquer_pipeline`.
-rare_dissolve_min_convincing_size_factor: Optional[float] = None
+rare_min_convincing_gene_fold_factor: Optional[float] = None
 
 #: The minimal fold factor of a gene in a metacell to make it "convincing". See
 #: :py:const:`significant_gene_fold_factor`,

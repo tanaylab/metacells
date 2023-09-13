@@ -58,3 +58,9 @@ History
 
 * Fix numpy compatibility issue.
 * Fix K of UMAP skeleton KNN graph (broken in 0.9.1).
+
+0.9.3
+-----
+
+* Allow specifying both target UMIs and target size (in cells) for the metacells, and adaptively try to
+  satisfy both. This should produce better-sized metacells "out of the box" compared to 0.9.[0-2].

@@ -12,8 +12,6 @@ from math import ceil
 from typing import Dict
 from typing import List
 from typing import Optional
-from typing import Tuple
-from typing import Union
 
 import numpy as np
 import psutil  # type: ignore
@@ -74,8 +72,9 @@ def guess_max_parallel_piles(
     what: str = "__x__",
     *,
     max_gbs: float = pr.max_gbs,
-    cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
-    target_metacell_size: float = pr.target_metacell_size,
+    target_metacell_umis: int = pr.target_metacell_umis,
+    cell_umis: Optional[ut.NumpyVector] = pr.cell_umis,
+    target_metacell_size: int = pr.target_metacell_size,
     min_target_pile_size: int = pr.min_target_pile_size,
     max_target_pile_size: int = pr.max_target_pile_size,
     target_metacells_in_pile: int = pr.target_metacells_in_pile,
@@ -105,14 +104,21 @@ def guess_max_parallel_piles(
     **Computation Parameters**
 
     1. Figure out the target pile size by invoking
-       :py:func:`metacells.pipeline.divide_and_conquer.compute_target_pile_size` using the
-       ``cell_sizes`` (default: {cell_sizes}), ``target_metacell_size`` (default: {target_metacell_size}),
-       ``min_target_pile_size`` (default: {min_target_pile_size}), ``max_target_pile_size`` (default:
-       {max_target_pile_size}) and ``target_metacells_in_pile`` (default: {target_metacells_in_pile}).
+       :py:func:`metacells.pipeline.divide_and_conquer.compute_target_pile_size` using the ``target_metacell_umis``
+       (default: {target_metacell_umis}), ``cell_umis`` (default: {cell_umis}), ``target_metacell_size`` (default:
+       {target_metacell_size}), ``min_target_pile_size`` (default: {min_target_pile_size}), ``max_target_pile_size``
+       (default: {max_target_pile_size}) and ``target_metacells_in_pile`` (default: {target_metacells_in_pile}).
+
+    2. Use ``psutil.virtual_memory`` to query the amount of memory in the system, and apply ``max_gbs`` (default:
+       {max_gbs}) off the top (e.g., ``-0.1`` means reduce it by 10%).
+
+    3. Guesstimate the number of piles that, if computed in parallel, will consume this amount of memory.
     """
     target_pile_size = compute_target_pile_size(
         cells,
-        cell_sizes=cell_sizes,
+        what,
+        target_metacell_umis=target_metacell_umis,
+        cell_umis=cell_umis,
         target_metacell_size=target_metacell_size,
         min_target_pile_size=min_target_pile_size,
         max_target_pile_size=max_target_pile_size,
@@ -134,9 +140,11 @@ def guess_max_parallel_piles(
 @ut.expand_doc()
 def compute_target_pile_size(
     adata: AnnData,
+    what: str = "__x__",
     *,
-    cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
-    target_metacell_size: float = pr.target_metacell_size,
+    cell_umis: Optional[ut.NumpyVector] = pr.cell_umis,
+    target_metacell_size: int = pr.target_metacell_size,
+    target_metacell_umis: int = pr.target_metacell_umis,
     min_target_pile_size: int = pr.min_target_pile_size,
     max_target_pile_size: int = pr.max_target_pile_size,
     target_metacells_in_pile: int = pr.target_metacells_in_pile,
@@ -146,14 +154,8 @@ def compute_target_pile_size(
 
     Larger piles are slower to process (O(N^2)) than smaller piles, but (up to a point) they allow the algorithm to
     produce better results. The ideal pile size is just big enough to allow for a sufficient number of metacells to be
-    created.
-
-    For normal 10X data with a mean (clean genes, clean cells) UMIs count of ~1600 UMIs, and aiming at 100 metacells per
-    pile with a mean of 160K UMIs in each metacell, this works out to a target pile size of 10K cells. By default we
-    make the minimal pile size to be slightly lower at 8000. If the cells are more sparse (e.g., ~800 UMIs) then the
-    pile size will increase to ~20K cells which will slow down the algorithm but will improve quality. By default we
-    will not allow the pile size to go above 32K as the computation cost starts to be excessive and it isn't clear that
-    one can meaningfully evaluate quality for cells with such low number of UMIs.
+    created; specifically, we'd like the number of metacells in each pile to be roughly the same as the number of cells
+    in a metacell, which is natural for the divide and conquer algorithm.
 
     Note that the target pile size is just a target. It is directly used in the 1st phase of the divide-and-conquer
     algorithm, but the pile sizes of the 2nd phase are determined by clustering metacells together which inevitably
@@ -161,29 +163,36 @@ def compute_target_pile_size(
 
     **Computation Parameters**
 
-    0. If no ``cell_sizes`` are specified, return the minimal target pile size.
+    0. If ``cell_umis`` is not specified, use the sum of the ``what`` data for each cell.
 
-    1. Pick an ideal pile size such that on average, each pile will give rise to ``target_metacells_in_pile`` (default:
-       {target_metacells_in_pile}) such that the size of each one is ``target_metacell_size`` (default:
-       {target_metacell_size}) using the specified ``cell_sizes`` (by default, the sum of the data).
+    1. The natural pile size is the product of the ``target_metacell_size`` (default: {target_metacell_size}) and
+       the ``target_metacells_in_pile`` (default: {target_metacells_in_pile}).
 
-    2. Clamp this value to be no lower than ``min_target_pile_size`` (default: {min_target_pile_size}) and no higher
+    2. Also consider the mean number of cells needed to reach the ``target_metacell_umis`` (default:
+       {target_metacell_umis}); this times the ``target_metacells_in_pile`` gives us another pile size, and if this one
+       is larger than what we computed in the previous step, we use it instead.
+
+    3. Clamp this value to be no lower than ``min_target_pile_size`` (default: {min_target_pile_size}) and no higher
        than ``max_target_pile_size`` (default: {max_target_pile_size}). That is, if you set both to the same value, this
        will force the target pile size value.
     """
     assert 0 < min_target_pile_size <= max_target_pile_size
 
-    if cell_sizes is None or min_target_pile_size == max_target_pile_size:
-        ut.log_return("target_pile_size", min_target_pile_size)
-        return min_target_pile_size
+    pile_size_by_cells = target_metacell_size * target_metacells_in_pile
+    ut.log_calc("pile_size_by_cells", pile_size_by_cells)
 
-    cell_sizes = ut.get_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
-    mean_cell_size = np.mean(cell_sizes)
-    ut.log_calc("mean_cell_size", mean_cell_size)
-    mean_cells_per_metacell = target_metacell_size / mean_cell_size
-    ut.log_calc("mean_cells_per_metacell", mean_cells_per_metacell)
-    target_pile_size = round(mean_cells_per_metacell * target_metacells_in_pile)
-    ut.log_calc("raw target_pile_size", target_pile_size)
+    if cell_umis is None:
+        cell_umis = ut.get_o_numpy(adata, what, sum=True, formatter=ut.sizes_description).astype("float32")
+    else:
+        assert cell_umis.dtype == "float32"
+    assert isinstance(cell_umis, ut.NumpyVector)
+    mean_cell_umis = np.mean(cell_umis)
+    ut.log_calc("mean_cell_umis", mean_cell_umis)
+    mean_metacell_size = target_metacell_umis / mean_cell_umis
+    pile_size_by_umis = int(round(mean_metacell_size * target_metacells_in_pile))
+    ut.log_calc("pile_size_by_umis", pile_size_by_umis)
+
+    target_pile_size = max(pile_size_by_cells, pile_size_by_umis)
     target_pile_size = max(target_pile_size, min_target_pile_size)
     target_pile_size = min(target_pile_size, max_target_pile_size)
     ut.log_return("target_pile_size", target_pile_size)
@@ -206,10 +215,12 @@ class DirectParameters:  # pylint: disable=too-many-instance-attributes
     cells_similarity_value_regularization: float
     cells_similarity_log_data: bool
     cells_similarity_method: str
-    target_metacell_size: float
-    cell_sizes: ut.NumpyVector
+    target_metacell_umis: int
+    cell_umis: ut.NumpyVector
+    target_metacell_size: int
+    min_metacell_size: int
     knn_k: Optional[int]
-    knn_k_size_quantile: float
+    knn_k_umis_quantile: float
     min_knn_k: Optional[int]
     knn_balanced_ranks_factor: float
     knn_incoming_degree_factor: float
@@ -223,7 +234,6 @@ class DirectParameters:  # pylint: disable=too-many-instance-attributes
     knn_k_size_factor: float
     candidates_min_split_size_factor: float
     candidates_max_merge_size_factor: float
-    candidates_min_metacell_cells: Optional[int]
     candidates_max_split_min_cut_strength: Optional[float]
     candidates_min_cut_seed_cells: Optional[int]
     must_complete_cover: bool
@@ -236,9 +246,7 @@ class DirectParameters:  # pylint: disable=too-many-instance-attributes
     deviants_max_gap_cells_count: int
     deviants_max_gap_cells_fraction: float
     dissolve_min_robust_size_factor: Optional[float]
-    dissolve_min_convincing_size_factor: Optional[float]
     dissolve_min_convincing_gene_fold_factor: float
-    dissolve_min_metacell_cells: int
     random_seed: int
 
 
@@ -323,41 +331,6 @@ class SubsetResults:
         ut.set_v_data(adata, "selected_gene", selected_genes_mask | self.selected_mask)
 
 
-def compute_derived_parameters(
-    *,
-    adata: AnnData,
-    cell_sizes: Optional[Union[str, ut.Vector]],
-    min_target_pile_size: int,
-    max_target_pile_size: int,
-    target_metacells_in_pile: int,
-    target_metacell_size: float,
-) -> Tuple[ut.NumpyVector, int]:
-    """
-    Compute the value of parameters derived from the low-level ones given to the exposed API.
-    """
-    assert (
-        target_metacell_size < 1000 or cell_sizes is not None
-    ), f"target_metacell_size: {target_metacell_size} seems to be in UMIs, should be in cells"
-    if cell_sizes is None:
-        explicit_cell_sizes = np.full(adata.n_obs, 1, dtype="float32")
-    elif isinstance(cell_sizes, str):
-        explicit_cell_sizes = ut.get_o_numpy(adata, cell_sizes)
-    else:
-        explicit_cell_sizes = ut.to_numpy_vector(cell_sizes)
-    ut.log_calc("cell_sizes", explicit_cell_sizes)
-
-    target_pile_size = compute_target_pile_size(
-        adata,
-        cell_sizes=explicit_cell_sizes,
-        target_metacell_size=target_metacell_size,
-        min_target_pile_size=min_target_pile_size,
-        max_target_pile_size=max_target_pile_size,
-        target_metacells_in_pile=target_metacells_in_pile,
-    )
-
-    return explicit_cell_sizes, target_pile_size
-
-
 @ut.logged()
 @ut.timed_call()
 @ut.expand_doc()
@@ -379,7 +352,6 @@ def divide_and_conquer_pipeline(
     rare_max_cells_factor_of_random_pile: float = pr.rare_max_cells_factor_of_random_pile,
     rare_deviants_max_cell_fraction: Optional[float] = pr.rare_deviants_max_cell_fraction,
     rare_dissolve_min_robust_size_factor: Optional[float] = pr.rare_dissolve_min_robust_size_factor,
-    rare_dissolve_min_convincing_size_factor: Optional[float] = pr.rare_dissolve_min_convincing_size_factor,
     rare_dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
     quick_and_dirty: bool = pr.quick_and_dirty,
     select_downsample_min_samples: int = pr.select_downsample_min_samples,
@@ -394,17 +366,19 @@ def divide_and_conquer_pipeline(
     cells_similarity_method: str = pr.cells_similarity_method,
     groups_similarity_log_data: bool = pr.groups_similarity_log_data,
     groups_similarity_method: str = pr.groups_similarity_method,
+    target_metacell_umis: int = pr.target_metacell_umis,
+    cell_umis: Optional[ut.NumpyVector] = pr.cell_umis,
+    target_metacell_size: int = pr.target_metacell_size,
+    min_metacell_size: int = pr.min_metacell_size,
+    target_metacells_in_pile: int = pr.target_metacells_in_pile,
     min_target_pile_size: int = pr.min_target_pile_size,
     max_target_pile_size: int = pr.max_target_pile_size,
-    target_metacells_in_pile: int = pr.target_metacells_in_pile,
-    cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     piles_knn_k_size_factor: float = pr.piles_knn_k_size_factor,
     piles_min_split_size_factor: float = pr.piles_min_split_size_factor,
     piles_min_robust_size_factor: float = pr.piles_min_robust_size_factor,
     piles_max_merge_size_factor: float = pr.piles_max_merge_size_factor,
-    target_metacell_size: float = pr.target_metacell_size,
     knn_k: Optional[int] = pr.knn_k,
-    knn_k_size_quantile: float = pr.knn_k_size_quantile,
+    knn_k_umis_quantile: float = pr.knn_k_umis_quantile,
     min_knn_k: Optional[int] = pr.min_knn_k,
     knn_balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     knn_incoming_degree_factor: float = pr.knn_incoming_degree_factor,
@@ -418,7 +392,6 @@ def divide_and_conquer_pipeline(
     candidates_cooldown_phase: float = pr.cooldown_phase,
     candidates_min_split_size_factor: float = pr.candidates_min_split_size_factor,
     candidates_max_merge_size_factor: float = pr.candidates_max_merge_size_factor,
-    candidates_min_metacell_cells: Optional[int] = pr.candidates_min_metacell_cells,
     candidates_max_split_min_cut_strength: Optional[float] = pr.max_split_min_cut_strength,
     candidates_min_cut_seed_cells: int = pr.min_cut_seed_cells,
     must_complete_cover: bool = False,
@@ -431,9 +404,7 @@ def divide_and_conquer_pipeline(
     deviants_max_gap_cells_count: int = pr.deviants_max_gap_cells_count,
     deviants_max_gap_cells_fraction: float = pr.deviants_max_gap_cells_fraction,
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
-    dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
-    dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
     random_seed: int,
 ) -> None:
     """
@@ -480,12 +451,15 @@ def divide_and_conquer_pipeline(
 
     **Computation Parameters**
 
-    0. Invoke :py:func:`metacells.pipeline.divide_and_conquer.compute_target_pile_size` using ``target_metacell_size``
-       (default: {target_metacell_size}), ``min_target_pile_size`` (default: {min_target_pile_size}),
-       ``max_target_pile_size`` (default: {max_target_pile_size}) and ``target_metacells_in_pile`` (default:
-       {target_metacells_in_pile}).
+    0. If ``cell_umis`` is not specified, use the sum of the ``what`` data for each cell.
 
-    1. Invoke :py:func:`metacells.tools.rare.find_rare_gene_modules` to isolate cells expressing
+    1. Invoke :py:func:`metacells.pipeline.divide_and_conquer.compute_target_pile_size` using
+       ``target_metacell_umis`` (default: {target_metacell_umis}), ``cell_umis`` (default: {cell_umis}),
+       ``target_metacell_size`` (default: {target_metacell_size}), ``min_target_pile_size`` (default:
+       {min_target_pile_size}), ``max_target_pile_size`` (default: {max_target_pile_size}) and
+       ``target_metacells_in_pile`` (default: {target_metacells_in_pile}).
+
+    2. Invoke :py:func:`metacells.tools.rare.find_rare_gene_modules` to isolate cells expressing
        rare gene modules, using the
        ``rare_max_genes`` (default: {rare_max_genes}),
        ``rare_max_gene_cell_fraction`` (default: {rare_max_gene_cell_fraction}),
@@ -502,21 +476,29 @@ def divide_and_conquer_pipeline(
        ``rare_min_cell_module_total`` (default: {rare_min_cell_module_total}). Use a non-zero
        ``random_seed`` to make this reproducible.
 
-    2. For each detected rare gene module, collect all cells that express the module, and apply
+    3. For each detected rare gene module, collect all cells that express the module, and apply
        :py:func:`metacells.pipeline.direct.compute_direct_metacells` to them.
 
-    3. Collect all the outliers from the above together with the rest of the cells (which express no rare gene module)
+    4. Collect all the outliers from the above together with the rest of the cells (which express no rare gene module)
        and apply the :py:func:`compute_divide_and_conquer_metacells` to the combined result. The annotations for
        rare-but-outlier cells (e.g. ``cell_directs``) will not reflect the work done when computing the rare gene module
        metacells which they were rejected from.
     """
-    explicit_cell_sizes, target_pile_size = compute_derived_parameters(
-        adata=adata,
-        cell_sizes=cell_sizes,
+    if cell_umis is None:
+        cell_umis = ut.get_o_numpy(adata, what, sum=True, formatter=ut.sizes_description).astype("float32")
+    else:
+        assert cell_umis.dtype == "float32"
+    assert isinstance(cell_umis, ut.NumpyVector)
+
+    target_pile_size = compute_target_pile_size(
+        adata,
+        what,
+        target_metacell_umis=target_metacell_umis,
+        cell_umis=cell_umis,
+        target_metacell_size=target_metacell_size,
+        target_metacells_in_pile=target_metacells_in_pile,
         min_target_pile_size=min_target_pile_size,
         max_target_pile_size=max_target_pile_size,
-        target_metacells_in_pile=target_metacells_in_pile,
-        target_metacell_size=target_metacell_size,
     )
 
     dac_parameters = DacParameters(
@@ -542,10 +524,12 @@ def divide_and_conquer_pipeline(
             cells_similarity_value_regularization=cells_similarity_value_regularization,
             cells_similarity_log_data=cells_similarity_log_data,
             cells_similarity_method=cells_similarity_method,
+            target_metacell_umis=target_metacell_umis,
+            cell_umis=cell_umis,
             target_metacell_size=target_metacell_size,
-            cell_sizes=explicit_cell_sizes,
+            min_metacell_size=min_metacell_size,
             knn_k=knn_k,
-            knn_k_size_quantile=knn_k_size_quantile,
+            knn_k_umis_quantile=knn_k_umis_quantile,
             min_knn_k=min_knn_k,
             knn_balanced_ranks_factor=knn_balanced_ranks_factor,
             knn_incoming_degree_factor=knn_incoming_degree_factor,
@@ -559,7 +543,6 @@ def divide_and_conquer_pipeline(
             knn_k_size_factor=candidates_knn_k_size_factor,
             candidates_min_split_size_factor=candidates_min_split_size_factor,
             candidates_max_merge_size_factor=candidates_max_merge_size_factor,
-            candidates_min_metacell_cells=candidates_min_metacell_cells,
             candidates_max_split_min_cut_strength=candidates_max_split_min_cut_strength,
             candidates_min_cut_seed_cells=candidates_min_cut_seed_cells,
             must_complete_cover=must_complete_cover,
@@ -572,9 +555,7 @@ def divide_and_conquer_pipeline(
             deviants_max_gap_cells_count=deviants_max_gap_cells_count,
             deviants_max_gap_cells_fraction=deviants_max_gap_cells_fraction,
             dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
-            dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
             dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
-            dissolve_min_metacell_cells=dissolve_min_metacell_cells,
             random_seed=random_seed,
         ),
     )
@@ -603,10 +584,10 @@ def divide_and_conquer_pipeline(
             min_genes_of_modules=rare_min_genes_of_modules,
             min_cells_of_modules=rare_min_cells_of_modules,
             target_metacell_size=target_metacell_size,
+            target_pile_size=target_pile_size,
             min_module_correlation=rare_min_module_correlation,
             min_related_gene_fold_factor=rare_min_related_gene_fold_factor,
             max_related_gene_increase_factor=rare_max_related_gene_increase_factor,
-            target_pile_size=target_pile_size,
             max_cells_factor_of_random_pile=rare_max_cells_factor_of_random_pile,
             min_cell_module_total=rare_min_cell_module_total,
             reproducible=(random_seed != 0),
@@ -638,7 +619,6 @@ def divide_and_conquer_pipeline(
                         dac_parameters.direct_parameters,
                         deviants_max_cell_fraction=rare_deviants_max_cell_fraction,
                         dissolve_min_robust_size_factor=rare_dissolve_min_robust_size_factor,
-                        dissolve_min_convincing_size_factor=rare_dissolve_min_convincing_size_factor,
                         dissolve_min_convincing_gene_fold_factor=rare_dissolve_min_convincing_gene_fold_factor,
                         must_complete_cover=False,
                     ),
@@ -689,17 +669,19 @@ def compute_divide_and_conquer_metacells(
     cells_similarity_method: str = pr.cells_similarity_method,
     groups_similarity_log_data: bool = pr.groups_similarity_log_data,
     groups_similarity_method: str = pr.groups_similarity_method,
+    target_metacell_umis: int = pr.target_metacell_umis,
+    cell_umis: Optional[ut.NumpyVector] = pr.cell_umis,
+    target_metacell_size: int = pr.target_metacell_size,
+    min_metacell_size: int = pr.min_metacell_size,
     min_target_pile_size: int = pr.min_target_pile_size,
     max_target_pile_size: int = pr.max_target_pile_size,
     target_metacells_in_pile: int = pr.target_metacells_in_pile,
-    cell_sizes: Optional[Union[str, ut.Vector]] = pr.cell_sizes,
     piles_knn_k_size_factor: float = pr.piles_knn_k_size_factor,
     piles_min_split_size_factor: float = pr.piles_min_split_size_factor,
     piles_min_robust_size_factor: float = pr.piles_min_robust_size_factor,
     piles_max_merge_size_factor: float = pr.piles_max_merge_size_factor,
-    target_metacell_size: float = pr.target_metacell_size,
     knn_k: Optional[int] = pr.knn_k,
-    knn_k_size_quantile: float = pr.knn_k_size_quantile,
+    knn_k_umis_quantile: float = pr.knn_k_umis_quantile,
     min_knn_k: Optional[int] = pr.min_knn_k,
     knn_balanced_ranks_factor: float = pr.knn_balanced_ranks_factor,
     knn_incoming_degree_factor: float = pr.knn_incoming_degree_factor,
@@ -713,7 +695,6 @@ def compute_divide_and_conquer_metacells(
     candidates_knn_k_size_factor: float = pr.candidates_knn_k_size_factor,
     candidates_min_split_size_factor: float = pr.candidates_min_split_size_factor,
     candidates_max_merge_size_factor: float = pr.candidates_max_merge_size_factor,
-    candidates_min_metacell_cells: Optional[int] = pr.candidates_min_metacell_cells,
     candidates_max_split_min_cut_strength: Optional[float] = pr.max_split_min_cut_strength,
     candidates_min_cut_seed_cells: int = pr.min_cut_seed_cells,
     must_complete_cover: bool = False,
@@ -726,9 +707,7 @@ def compute_divide_and_conquer_metacells(
     deviants_max_gap_cells_count: int = pr.deviants_max_gap_cells_count,
     deviants_max_gap_cells_fraction: float = pr.deviants_max_gap_cells_fraction,
     dissolve_min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
-    dissolve_min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
     dissolve_min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
-    dissolve_min_metacell_cells: int = pr.dissolve_min_metacell_cells,
     random_seed: int,
     _fdata: Optional[AnnData] = None,
     _counts: Optional[Dict[str, int]] = None,
@@ -770,10 +749,12 @@ def compute_divide_and_conquer_metacells(
 
     **Computation Parameters**
 
-    1. Invoke :py:func:`metacells.pipeline.divide_and_conquer.compute_target_pile_size` using ``target_metacell_size``
-       (default: {target_metacell_size}), ``min_target_pile_size`` (default: {min_target_pile_size}),
-       ``max_target_pile_size`` (default: {max_target_pile_size}) and ``target_metacells_in_pile`` (default:
-       {target_metacells_in_pile}).
+    0. If ``cell_umis`` is not specified, use the sum of the ``what`` data for each cell.
+
+    1. Invoke :py:func:`metacells.pipeline.divide_and_conquer.compute_target_pile_size` using ``target_metacell_umis``
+       (default: {target_metacell_umis}), ``cell_umis`` (default: {cell_umis}), ``target_metacell_size`` (default:
+       {target_metacell_size}), ``min_target_pile_size`` (default: {min_target_pile_size}), ``max_target_pile_size``
+       (default: {max_target_pile_size}) and ``target_metacells_in_pile`` (default: {target_metacells_in_pile}).
 
     2. If the data is smaller than the target_pile_size times the ``piles_min_split_size_factor`` (default:
        {piles_min_split_size_factor}), then just invoke :py:func:`metacells.pipeline.direct.compute_direct_metacells`
@@ -813,13 +794,20 @@ def compute_divide_and_conquer_metacells(
         piles, by invoking :py:func:`metacells.pipeline.direct.compute_direct_metacells`, possibly in parallel. Stop
         here and accept all outliers as final outliers (that is, there are no level 2 metacells).
     """
-    explicit_cell_sizes, target_pile_size = compute_derived_parameters(
+    if cell_umis is None:
+        cell_umis = ut.get_o_numpy(adata, what, sum=True, formatter=ut.sizes_description).astype("float32")
+    else:
+        assert cell_umis.dtype == "float32"
+    assert isinstance(cell_umis, ut.NumpyVector)
+
+    target_pile_size = compute_target_pile_size(
         adata=adata,
-        cell_sizes=cell_sizes,
+        target_metacell_umis=target_metacell_umis,
+        cell_umis=cell_umis,
+        target_metacell_size=target_metacell_size,
         min_target_pile_size=min_target_pile_size,
         max_target_pile_size=max_target_pile_size,
         target_metacells_in_pile=target_metacells_in_pile,
-        target_metacell_size=target_metacell_size,
     )
 
     dac_parameters = DacParameters(
@@ -845,10 +833,12 @@ def compute_divide_and_conquer_metacells(
             cells_similarity_value_regularization=cells_similarity_value_regularization,
             cells_similarity_log_data=cells_similarity_log_data,
             cells_similarity_method=cells_similarity_method,
+            target_metacell_umis=target_metacell_umis,
+            cell_umis=cell_umis,
             target_metacell_size=target_metacell_size,
-            cell_sizes=explicit_cell_sizes,
+            min_metacell_size=min_metacell_size,
             knn_k=knn_k,
-            knn_k_size_quantile=knn_k_size_quantile,
+            knn_k_umis_quantile=knn_k_umis_quantile,
             min_knn_k=min_knn_k,
             knn_balanced_ranks_factor=knn_balanced_ranks_factor,
             knn_incoming_degree_factor=knn_incoming_degree_factor,
@@ -862,7 +852,6 @@ def compute_divide_and_conquer_metacells(
             knn_k_size_factor=candidates_knn_k_size_factor,
             candidates_min_split_size_factor=candidates_min_split_size_factor,
             candidates_max_merge_size_factor=candidates_max_merge_size_factor,
-            candidates_min_metacell_cells=candidates_min_metacell_cells,
             candidates_max_split_min_cut_strength=candidates_max_split_min_cut_strength,
             candidates_min_cut_seed_cells=candidates_min_cut_seed_cells,
             must_complete_cover=must_complete_cover,
@@ -875,9 +864,7 @@ def compute_divide_and_conquer_metacells(
             deviants_max_gap_cells_count=deviants_max_gap_cells_count,
             deviants_max_gap_cells_fraction=deviants_max_gap_cells_fraction,
             dissolve_min_robust_size_factor=dissolve_min_robust_size_factor,
-            dissolve_min_convincing_size_factor=dissolve_min_convincing_size_factor,
             dissolve_min_convincing_gene_fold_factor=dissolve_min_convincing_gene_fold_factor,
-            dissolve_min_metacell_cells=dissolve_min_metacell_cells,
             random_seed=random_seed,
         ),
     )
@@ -1197,11 +1184,13 @@ def _compute_metacell_groups(
         )
 
     with ut.progress_bar_slice(groups_time):
-        metacell_sizes = ut.get_o_numpy(mdata, "grouped")
+        metacell_sizes = ut.get_o_numpy(mdata, "grouped").astype("float32")
         target_pile_size = compute_target_pile_size(
             mdata,
-            cell_sizes=metacell_sizes,
-            target_metacell_size=dac_parameters.target_pile_size,
+            what,
+            target_metacell_umis=dac_parameters.target_pile_size,
+            cell_umis=metacell_sizes,
+            target_metacell_size=dac_parameters.target_metacells_in_pile,
             min_target_pile_size=dac_parameters.min_target_pile_size,
             max_target_pile_size=dac_parameters.max_target_pile_size,
             target_metacells_in_pile=dac_parameters.target_metacells_in_pile,
@@ -1212,12 +1201,12 @@ def _compute_metacell_groups(
             target_pile_size=target_pile_size,
             direct_parameters=replace(
                 dac_parameters.direct_parameters,
-                target_metacell_size=dac_parameters.target_pile_size,
-                cell_sizes=metacell_sizes,
+                target_metacell_umis=dac_parameters.target_pile_size,
+                cell_umis=metacell_sizes,
+                target_metacell_size=dac_parameters.target_metacells_in_pile,
                 knn_k_size_factor=dac_parameters.piles_knn_k_size_factor,
                 candidates_min_split_size_factor=dac_parameters.piles_min_split_size_factor,
                 candidates_max_merge_size_factor=dac_parameters.piles_max_merge_size_factor,
-                candidates_min_metacell_cells=None,
                 cells_similarity_log_data=dac_parameters.groups_similarity_log_data,
                 cells_similarity_method=dac_parameters.groups_similarity_method,
                 dissolve_min_robust_size_factor=dac_parameters.piles_min_robust_size_factor,
@@ -1283,7 +1272,7 @@ def _compute_metacells_of_piles(
             track_obs="__full_cell_index__",
         )
         parameters = direct_parameters.__dict__.copy()
-        parameters["cell_sizes"] = direct_parameters.cell_sizes[pile_cells_mask]
+        parameters["cell_umis"] = direct_parameters.cell_umis[pile_cells_mask]
         if piles_count > 1:
             parameters["must_complete_cover"] = False
         with ut.timed_step(".direct"):

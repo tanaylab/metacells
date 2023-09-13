@@ -3,6 +3,7 @@ Dissolve
 --------
 """
 
+from math import floor
 from typing import Optional
 from typing import Union
 
@@ -26,12 +27,12 @@ def dissolve_metacells(
     *,
     candidates: Union[str, ut.Vector] = "candidate",
     deviants: ut.Vector,
-    target_metacell_size: float = pr.target_metacell_size,
-    cell_sizes: Optional[Union[str, ut.Vector]] = pr.dissolve_cell_sizes,
-    min_metacell_cells: int = pr.dissolve_min_metacell_cells,
-    min_robust_size_factor: Optional[float] = pr.dissolve_min_robust_size_factor,
-    min_convincing_size_factor: Optional[float] = pr.dissolve_min_convincing_size_factor,
-    min_convincing_gene_fold_factor: float = pr.dissolve_min_convincing_gene_fold_factor,
+    target_metacell_size: int = pr.target_metacell_size,
+    min_metacell_size: int = pr.min_metacell_size,
+    target_metacell_umis: int = pr.target_metacell_umis,
+    cell_umis: Optional[ut.NumpyVector] = pr.cell_umis,
+    min_robust_size_factor: float = pr.dissolve_min_robust_size_factor,
+    min_convincing_gene_fold_factor: Optional[float] = pr.dissolve_min_convincing_gene_fold_factor,
 ) -> None:
     """
     Dissolve too-small metacells based on ``what`` (default: {what}) data.
@@ -57,28 +58,26 @@ def dissolve_metacells(
 
     **Computation Parameters**
 
+    0. If ``cell_umis`` is not specified, use the sum of the ``what`` data for each cell.
+
     1. Mark all ``deviants`` cells "outliers". This can be the name of a per-observation (cell) annotation, or an
        explicit boolean mask of cells, or a or ``None`` if there are no deviant cells to mark.
 
-    2. Any metacell which has less cells than the ``min_metacell_cells`` is dissolved.
+    2. Any metacell which has less cells than the ``min_metacell_size`` is dissolved into outlier cells.
 
-    3. We are trying to create metacells of size ``target_metacell_size``. Compute the sizes of the
-       resulting metacells by summing the ``cell_sizes`` (default: {cell_sizes}). If it is ``None``,
-       each has a size of one. These parameters are typically identical to these passed to
-       :py:func:`metacells.tools.candidates.compute_candidate_metacells`.
+    3. If ``min_convincing_gene_fold_factor`` is not ``None``, preserve everything else. Otherwise:
 
-    4. If ``min_robust_size_factor`` (default: {min_robust_size_factor}) is specified, then any
-       metacell whose total size is at least ``target_metacell_size * min_robust_size_factor`` is
-       preserved.
+    4. We are trying to create metacells of size ``target_metacell_size`` cells and ``target_metacell_umis`` UMIs each.
+       Compute the UMIs of the metacells by summing the ``cell_umis``.
 
-    5. If ``min_convincing_size_factor`` (default: {min_convincing_size_factor}) is specified, then any remaining
-       metacells whose size is at least ``target_metacell_size * min_convincing_size_factor`` are preserved, given they
-       contain at least one gene whose fold factor (log2((actual + 1) / (expected + 1))) is at least
-       ``min_convincing_gene_fold_factor`` (default: {min_convincing_gene_fold_factor}). Consider the absolute fold
-       factors. That is, we only preserve these smaller metacells if there is at least one gene whose expression is
-       significantly different from the mean of the population.
+    5. Using ``min_robust_size_factor`` (default: {min_robust_size_factor}), any
+       metacell whose total size is at least ``target_metacell_size * min_robust_size_factor``
+       or whose total UMIs are at least ``target_metacell_umis * min_robust_size_factor`` is preserved.
 
-    6 . Any remaining metacell is dissolved into "outlier" cells.
+    6. Using ``min_convincing_gene_fold_factor``, preserve any remaining metacells which have at least one gene whose
+       fold factor (log2((actual + 1) / (expected_by_overall_population + 1))) is at least this high.
+
+    6. Dissolve the remaining metacells into outlier cells.
     """
     dissolved_of_cells = np.zeros(adata.n_obs, dtype="bool")
 
@@ -89,9 +88,11 @@ def dissolve_metacells(
     if deviant_of_cells is not None:
         deviant_of_cells = deviant_of_cells > 0
 
-    if cell_sizes is not None:
-        cell_sizes = ut.get_o_numpy(adata, cell_sizes, formatter=ut.sizes_description)
-        ut.log_calc("cell_sizes", cell_sizes, formatter=ut.sizes_description)
+    if cell_umis is None:
+        cell_umis = ut.get_o_numpy(adata, what, sum=True, formatter=ut.sizes_description).astype("float32")
+    else:
+        assert cell_umis.dtype == "float32"
+    assert isinstance(cell_umis, ut.NumpyVector)
 
     if deviant_of_cells is not None:
         candidate_of_cells[deviant_of_cells > 0] = -1
@@ -101,17 +102,10 @@ def dissolve_metacells(
     data = ut.get_vo_proper(adata, what, layout="column_major")
     fraction_of_genes = ut.fraction_per(data, per="column")
 
-    if min_robust_size_factor is None:
-        min_robust_size = None
-    else:
-        min_robust_size = target_metacell_size * min_robust_size_factor
+    min_robust_size = int(floor(target_metacell_size * min_robust_size_factor))
+    min_robust_umis = int(floor(target_metacell_umis * min_robust_size_factor))
     ut.log_calc("min_robust_size", min_robust_size)
-
-    if min_convincing_size_factor is None:
-        min_convincing_size = None
-    else:
-        min_convincing_size = target_metacell_size * min_convincing_size_factor
-    ut.log_calc("min_convincing_size", min_convincing_size)
+    ut.log_calc("min_robust_umis", min_robust_umis)
 
     did_dissolve = False
     for candidate_index in range(candidates_count):
@@ -119,11 +113,11 @@ def dissolve_metacells(
         if not _keep_candidate(
             candidate_index,
             data=data,
-            cell_sizes=cell_sizes,
+            cell_umis=cell_umis,
             fraction_of_genes=fraction_of_genes,
-            min_metacell_cells=min_metacell_cells,
+            min_metacell_size=min_metacell_size,
             min_robust_size=min_robust_size,
-            min_convincing_size=min_convincing_size,
+            min_robust_umis=min_robust_umis,
             min_convincing_gene_fold_factor=min_convincing_gene_fold_factor,
             candidates_count=candidates_count,
             candidate_cell_indices=candidate_cell_indices,
@@ -141,66 +135,63 @@ def dissolve_metacells(
     ut.set_o_data(adata, "metacell", metacell_of_cells, formatter=ut.groups_description)
 
 
-def _keep_candidate(  # pylint: disable=too-many-branches
+def _keep_candidate(
     candidate_index: int,
     *,
     data: ut.ProperMatrix,
-    cell_sizes: Optional[ut.NumpyVector],
+    cell_umis: ut.NumpyVector,
     fraction_of_genes: ut.NumpyVector,
-    min_metacell_cells: int,
-    min_robust_size: Optional[float],
-    min_convincing_size: Optional[float],
-    min_convincing_gene_fold_factor: float,
+    min_metacell_size: int,
+    min_robust_size: int,
+    min_robust_umis: int,
+    min_convincing_gene_fold_factor: Optional[float],
     candidates_count: int,
     candidate_cell_indices: ut.NumpyVector,
 ) -> bool:
+    metacell_size = candidate_cell_indices.size
+    metacell_umis = np.sum(cell_umis[candidate_cell_indices])
+
+    if metacell_size < min_metacell_size:
+        if ut.logging_calc():
+            ut.log_calc(
+                f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
+                f"size: {metacell_size} "
+                f"umis: {metacell_umis:g} "
+                f"has: less than minimal size"
+            )
+        return False
+
+    if metacell_size >= min_robust_size:
+        if ut.logging_calc():
+            ut.log_calc(
+                f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
+                f"size: {metacell_size} "
+                f"umis: {metacell_umis:g} "
+                f"has: robust size"
+            )
+        return True
+
+    if metacell_umis >= min_robust_umis:
+        if ut.logging_calc():
+            ut.log_calc(
+                f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
+                f"size: {metacell_size} "
+                f"umis: {metacell_umis:g} "
+                f"has: robust umis"
+            )
+        return True
+
+    if min_convincing_gene_fold_factor is None:
+        if ut.logging_calc():
+            ut.log_calc(
+                f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
+                f"size: {metacell_size} "
+                f"umis: {metacell_umis:g} "
+                f"has: minimal size"
+            )
+        return True
+
     genes_count = data.shape[1]
-
-    if cell_sizes is None:
-        candidate_total_size = candidate_cell_indices.size
-    else:
-        candidate_total_size = np.sum(cell_sizes[candidate_cell_indices])
-
-    if candidate_cell_indices.size < min_metacell_cells:
-        if ut.logging_calc():
-            ut.log_calc(
-                f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
-                f"cells: {candidate_cell_indices.size} "
-                f"size: {candidate_total_size:g} "
-                f"is: little"
-            )
-        return False
-
-    if min_robust_size is not None and candidate_total_size >= min_robust_size:
-        if ut.logging_calc():
-            ut.log_calc(
-                f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
-                f"cells: {candidate_cell_indices.size} "
-                f"size: {candidate_total_size:g} "
-                f"is: robust"
-            )
-        return True
-
-    if min_convincing_size is None:
-        if ut.logging_calc():
-            ut.log_calc(
-                f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
-                f"cells: {candidate_cell_indices.size} "
-                f"size: {candidate_total_size:g} "
-                f"is: accepted"
-            )
-        return True
-
-    if candidate_total_size < min_convincing_size:
-        if ut.logging_calc():
-            ut.log_calc(
-                f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
-                f"cells: {candidate_cell_indices.size} "
-                f"size: {candidate_total_size:g} "
-                f"is: unconvincing"
-            )
-        return False
-
     candidate_data = data[candidate_cell_indices, :]
     candidate_data_of_genes = ut.to_numpy_vector(candidate_data.sum(axis=0))
     assert candidate_data_of_genes.size == genes_count
@@ -217,16 +208,16 @@ def _keep_candidate(  # pylint: disable=too-many-branches
         if keep_candidate:
             ut.log_calc(
                 f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
-                f"cells: {candidate_cell_indices.size} "
-                f"size: {candidate_total_size:g} "
-                f"is: convincing"
+                f"size: {metacell_size} "
+                f"umis: {metacell_umis:g} "
+                f"has: convincing genes"
             )
         else:
             ut.log_calc(
                 f'- candidate: {ut.progress_description(candidates_count, candidate_index, "candidate")} '
-                f"cells: {candidate_cell_indices.size} "
-                f"size: {candidate_total_size:g} "
-                f"is: not convincing"
+                f"size: {metacell_size} "
+                f"umis: {metacell_umis:g} "
+                f"has: no convincing genes"
             )
 
     return keep_candidate

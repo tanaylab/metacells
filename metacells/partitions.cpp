@@ -244,10 +244,13 @@ struct OptimizePartitions {
     ConstCompressedMatrix<float32_t, int32_t, int32_t> outgoing_weights;
     ConstCompressedMatrix<float32_t, int32_t, int32_t> incoming_weights;
     const size_t nodes_count;
+    ConstArraySlice<float32_t> mass_of_nodes;
     float64_t low_mass;
     float64_t target_mass;
     float64_t high_mass;
-    ConstArraySlice<float32_t> mass_of_nodes;
+    float64_t low_size;
+    float64_t target_size;
+    float64_t high_size;
     ArraySlice<int32_t> partition_of_nodes;
     ArraySlice<int8_t> hot_partitions_mask;
     std::vector<float64_t> temperature_of_nodes;
@@ -264,10 +267,13 @@ struct OptimizePartitions {
                        const pybind11::array_t<float32_t>& incoming_weights_array,
                        const pybind11::array_t<int32_t>& incoming_indices_array,
                        const pybind11::array_t<int32_t>& incoming_indptr_array,
+                       const pybind11::array_t<float32_t>& mass_of_nodes_array,
                        const float64_t low_mass,
                        const float64_t target_mass,
                        const float64_t high_mass,
-                       const pybind11::array_t<float32_t>& mass_of_nodes_array,
+                       const float64_t low_size,
+                       const float64_t target_size,
+                       const float64_t high_size,
                        pybind11::array_t<int32_t>& partition_of_nodes_array,
                        pybind11::array_t<int8_t>& hot_partitions_mask_array)
       : outgoing_weights(ConstCompressedMatrix<float32_t, int32_t, int32_t>(
@@ -283,10 +289,13 @@ struct OptimizePartitions {
             int32_t(incoming_indptr_array.size() - 1),
             "incoming_weights"))
       , nodes_count(outgoing_weights.bands_count())
+      , mass_of_nodes(mass_of_nodes_array, "mass_of_nodes")
       , low_mass(low_mass)
       , target_mass(target_mass)
       , high_mass(high_mass)
-      , mass_of_nodes(mass_of_nodes_array, "mass_of_nodes")
+      , low_size(low_size)
+      , target_size(target_size)
+      , high_size(high_size)
       , partition_of_nodes(partition_of_nodes_array, "partition_of_nodes")
       , hot_partitions_mask(hot_partitions_mask_array, "hot_partitions_mask")
       , temperature_of_nodes(nodes_count, 1.0)
@@ -305,6 +314,9 @@ struct OptimizePartitions {
         FastAssertCompare(0.0, <, low_mass);
         FastAssertCompare(low_mass, <, target_mass);
         FastAssertCompare(target_mass, <, high_mass);
+        FastAssertCompare(0.0, <, low_size);
+        FastAssertCompare(low_size, <, target_size);
+        FastAssertCompare(target_size, <, high_size);
     }
 
     float64_t score(bool with_orphans = true) const {
@@ -813,13 +825,15 @@ struct OptimizePartitions {
         const float64_t old_mass = mass_of_partitions[current_partition_index];
         // const bool current_too_large = old_mass > high_mass * (1.0 + cold_temperature);
         const float64_t old_mass_factor = mass_factor(old_mass, low_mass, target_mass, high_mass);
+        const float64_t old_size_factor = mass_factor(old_size, low_size, target_size, high_size);
         const float64_t old_score = score_of_partitions[current_partition_index];
         float64_t old_adjusted_score = old_score - old_size * log2(float64_t(old_size));
-        old_adjusted_score += old_size * old_mass_factor;
+        old_adjusted_score += old_size * std::min(old_mass_factor, old_size_factor);
 
         LOCATED_LOG(false)                                              //
             << " current_partition_index: " << current_partition_index  //
             << " old_size: " << old_size                                //
+            << " old_size_factor: " << old_size_factor                  //
             << " old_mass: " << old_mass                                //
             << " old_mass_factor: " << old_mass_factor                  //
             << " old_score: " << old_score                              //
@@ -831,14 +845,16 @@ struct OptimizePartitions {
         const float64_t new_mass = old_mass - node_mass;
         // const bool current_too_small = new_mass < low_mass * (1.0 - cold_temperature);
         const float64_t new_mass_factor = mass_factor(new_mass, low_mass, target_mass, high_mass);
+        const float64_t new_size_factor = mass_factor(new_size, low_size, target_size, high_size);
         const float64_t new_score = old_score + current_cold_diff;
 
         float64_t new_adjusted_score = new_score - new_size * log2(float64_t(new_size));
-        new_adjusted_score += new_size * new_mass_factor;
+        new_adjusted_score += new_size * std::min(new_mass_factor, new_size_factor);
 
         LOCATED_LOG(false)                                              //
             << " current_partition_index: " << current_partition_index  //
             << " new_size: " << new_size                                //
+            << " new_size_factor: " << new_size_factor                  //
             << " new_mass: " << new_mass                                //
             << " new_mass_factor: " << new_mass_factor                  //
             << " new_score: " << new_score                              //
@@ -874,13 +890,15 @@ struct OptimizePartitions {
             const float64_t old_mass = mass_of_partitions[partition_index];
             // const bool other_too_small = old_mass < low_mass * (1.0 - cold_temperature);
             const float64_t old_mass_factor = mass_factor(old_mass, low_mass, target_mass, high_mass);
+            const float64_t old_size_factor = mass_factor(old_size, low_size, target_size, high_size);
             const float64_t old_score = score_of_partitions[partition_index];
             float64_t old_adjusted_score = old_score - old_size * log2(float64_t(old_size));
-            old_adjusted_score += old_size * old_mass_factor;
+            old_adjusted_score += old_size * std::min(old_mass_factor, old_size_factor);
             LOCATED_LOG(false)                                    //
                 << " partition_index: " << partition_index        //
                 << " old_size: " << old_size                      //
                 << " old_mass: " << old_mass                      //
+                << " old_size_factor: " << old_size_factor        //
                 << " old_score: " << old_score                    //
                 << " old_mass_factor: " << old_mass_factor        //
                 << " old_adjusted_score: " << old_adjusted_score  //
@@ -891,16 +909,18 @@ struct OptimizePartitions {
             const float64_t new_mass = old_mass + node_mass;
             // const bool other_too_large = new_mass > high_mass * (1.0 + cold_temperature);
             const float64_t new_mass_factor = mass_factor(new_mass, low_mass, target_mass, high_mass);
+            const float64_t new_size_factor = mass_factor(new_size, low_size, target_size, high_size);
             const float64_t new_score = old_score + cold_diff;
             float64_t new_adjusted_score = new_score - new_size * log2(float64_t(new_size));
-            new_adjusted_score += new_size * new_mass_factor;
+            new_adjusted_score += new_size * std::min(new_mass_factor, new_size_factor);
 
             LOCATED_LOG(false)                              //
                 << " partition_index: " << partition_index  //
                 << " new_size: " << new_size                //
+                << " new_size_factor: " << new_size_factor  //
                 << " new_mass: "
                 << new_mass  //
-                // << " too_large: " << other_too_large              //
+                // << " too_large: " << other_too_large           //
                 << " new_score: " << new_score                    //
                 << " new_mass_factor: " << new_mass_factor        //
                 << " new_adjusted_score: " << new_adjusted_score  //
@@ -1219,15 +1239,18 @@ optimize_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                     const pybind11::array_t<int32_t>& incoming_indices_array,
                     const pybind11::array_t<int32_t>& incoming_indptr_array,
                     const unsigned int random_seed,
-                    float64_t low_mass,
-                    float64_t target_mass,
-                    float64_t high_mass,
                     const pybind11::array_t<float32_t>& mass_of_nodes_array,
-                    float64_t cooldown_pass,
-                    float64_t cooldown_node,
+                    const float64_t low_mass,
+                    const float64_t target_mass,
+                    const float64_t high_mass,
+                    const float64_t low_size,
+                    const float64_t target_size,
+                    const float64_t high_size,
+                    const float64_t cooldown_pass,
+                    const float64_t cooldown_node,
                     pybind11::array_t<int32_t>& partition_of_nodes_array,
                     pybind11::array_t<int8_t>& hot_partitions_mask_array,
-                    float64_t cold_temperature) {
+                    const float64_t cold_temperature) {
     WithoutGil without_gil{};
     OptimizePartitions optimizer(outgoing_weights_array,
                                  outgoing_indices_array,
@@ -1235,10 +1258,13 @@ optimize_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                                  incoming_weights_array,
                                  incoming_indices_array,
                                  incoming_indptr_array,
+                                 mass_of_nodes_array,
                                  low_mass,
                                  target_mass,
                                  high_mass,
-                                 mass_of_nodes_array,
+                                 low_size,
+                                 target_size,
+                                 high_size,
                                  partition_of_nodes_array,
                                  hot_partitions_mask_array);
 
@@ -1251,10 +1277,13 @@ optimize_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                                     incoming_weights_array,
                                     incoming_indices_array,
                                     incoming_indptr_array,
+                                    mass_of_nodes_array,
                                     low_mass,
                                     target_mass,
                                     high_mass,
-                                    mass_of_nodes_array,
+                                    low_size,
+                                    target_size,
+                                    high_size,
                                     partition_of_nodes_array,
                                     hot_partitions_mask_array);
         LOCATED_LOG(false) << " COMPARE" << std::endl;
@@ -1279,10 +1308,13 @@ score_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                  const pybind11::array_t<float32_t>& incoming_weights_array,
                  const pybind11::array_t<int32_t>& incoming_indices_array,
                  const pybind11::array_t<int32_t>& incoming_indptr_array,
+                 const pybind11::array_t<float32_t>& mass_of_nodes_array,
                  const float64_t low_mass,
                  const float64_t target_mass,
                  const float64_t high_mass,
-                 const pybind11::array_t<float32_t>& mass_of_nodes_array,
+                 const float64_t low_size,
+                 const float64_t target_size,
+                 const float64_t high_size,
                  pybind11::array_t<int32_t>& partition_of_nodes_array,
                  pybind11::array_t<int8_t>& hot_partitions_mask_array,
                  bool with_orphans) {
@@ -1293,10 +1325,13 @@ score_partitions(const pybind11::array_t<float32_t>& outgoing_weights_array,
                                  incoming_weights_array,
                                  incoming_indices_array,
                                  incoming_indptr_array,
+                                 mass_of_nodes_array,
                                  low_mass,
                                  target_mass,
                                  high_mass,
-                                 mass_of_nodes_array,
+                                 low_size,
+                                 target_size,
+                                 high_size,
                                  partition_of_nodes_array,
                                  hot_partitions_mask_array);
     return optimizer.score(with_orphans);
