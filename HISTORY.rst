@@ -64,3 +64,8 @@ History
 
 * Allow specifying both target UMIs and target size (in cells) for the metacells, and adaptively try to
   satisfy both. This should produce better-sized metacells "out of the box" compared to 0.9.[0-2].
+
+0.9.4
+-----
+
+* Fix mior bug in regularization of metacell fractions.

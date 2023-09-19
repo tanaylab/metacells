@@ -189,6 +189,7 @@ def collect_metacells(  # pylint: disable=too-many-statements
                 fraction_per_gene_of_metacell = (
                     downsampled_umis_per_gene_of_metacell / total_downsampled_umis_of_metacell
                 )
+                assert fraction_per_gene_of_metacell.shape == (adata.n_vars,)
 
             else:
                 fraction_per_gene_per_cell_of_metacell = ut.to_layout(
@@ -197,26 +198,23 @@ def collect_metacells(  # pylint: disable=too-many-statements
                 )
 
                 regularization_per_cell_of_metacell = metacell_umis_regularization / umis_per_cell_of_metacell
-                regularization_of_metacell = ss.mstats.gmean(regularization_per_cell_of_metacell)
+                weight_per_cell_of_metacell = np.log2(umis_per_cell_of_metacell)
 
-                log_fraction_per_gene_per_cell_of_metacell = np.log2(
+                fraction_per_gene_per_cell_of_metacell = (
                     fraction_per_gene_per_cell_of_metacell + regularization_per_cell_of_metacell[:, np.newaxis]
                 )
-                weight_per_cell_of_metacell = np.log2(umis_per_cell_of_metacell)
-                weighted_log_fraction_per_gene_per_cell_of_metacell = ut.to_layout(
-                    log_fraction_per_gene_per_cell_of_metacell * weight_per_cell_of_metacell[:, np.newaxis],
-                    layout="column_major",
-                )
 
-                total_weighted_log_fraction_per_gene_of_metacell = ut.sum_per(
-                    weighted_log_fraction_per_gene_per_cell_of_metacell, per="column"
+                regularization_of_metacell = ss.mstats.gmean(
+                    regularization_per_cell_of_metacell,
+                    weights=weight_per_cell_of_metacell,
                 )
-                total_weight_of_metacell = np.sum(weight_per_cell_of_metacell)
+                fraction_per_gene_of_metacell = ss.mstats.gmean(
+                    fraction_per_gene_per_cell_of_metacell.transpose(),
+                    axis=1,
+                    weights=weight_per_cell_of_metacell,
+                )
+                assert fraction_per_gene_of_metacell.shape == (adata.n_vars,)
 
-                mean_log_fraction_per_gene_of_metacell = (
-                    total_weighted_log_fraction_per_gene_of_metacell / total_weight_of_metacell
-                )
-                fraction_per_gene_of_metacell = 2**mean_log_fraction_per_gene_of_metacell
                 fraction_per_gene_of_metacell -= regularization_of_metacell
                 fraction_per_gene_of_metacell[umis_per_gene_of_metacell == 0] = 0
                 fraction_per_gene_of_metacell[fraction_per_gene_of_metacell < 0] = 0
