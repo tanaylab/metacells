@@ -68,4 +68,5 @@ History
 0.9.4
 -----
 
-* Fix mior bug in regularization of metacell fractions.
+* Fix minor bug in regularization of metacell fractions.
+* Fix issue with canonical sparse matrices after downsampling (probably due to scipy.sparse updates?)

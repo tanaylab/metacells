@@ -895,6 +895,12 @@ def _downsample_compressed_matrix(
     if eliminate_zeros:
         utt.eliminate_zeros(output)
 
+        if matrix.has_sorted_indices:
+            utt.sort_indices(output)
+
+        if matrix.has_canonical_format:
+            utt.sum_duplicates(output)
+
     return output
 
 
