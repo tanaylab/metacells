@@ -72,9 +72,8 @@ from typing import Optional
 from typing import Tuple
 from typing import Union
 
-import anndata as ad  # type: ignore
 import numpy as np
-from anndata import AnnData
+from anndata import AnnData  # type: ignore
 
 import metacells.utilities.computation as utc
 import metacells.utilities.logging as utl
@@ -935,9 +934,10 @@ def _get_shaped_data(
 
 
 def _fix_data(data: Any) -> Any:
-    if isinstance(data, ad._core.sparse_dataset.SparseDataset):  # pylint: disable=protected-access
-        return data.value
-    return data
+    try:
+        return data.to_memory()
+    except Exception:  # pylint: disable=broad-exception-caught
+        return data
 
 
 def _annotation_per(adata: AnnData, per: str) -> Annotations:  # pylint: disable=too-many-return-statements

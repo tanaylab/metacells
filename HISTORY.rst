@@ -70,3 +70,4 @@ History
 
 * Fix minor bug in regularization of metacell fractions.
 * Fix issue with canonical sparse matrices after downsampling (probably due to scipy.sparse updates?)
+* Fix using deprecated AnnData APIs.
