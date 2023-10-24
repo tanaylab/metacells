@@ -85,7 +85,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'Metacells'
-copyright = "2020,2021,2022 Weizmann Institute of Science"
+copyright = "2020-2023 Weizmann Institute of Science"
 author = "Oren Ben-Kiki"
 
 # The version info for the project you're documenting, acts as replacement
@@ -93,7 +93,7 @@ author = "Oren Ben-Kiki"
 # the built documents.
 #
 # The short X.Y version.
-version = "0.9.4dev"
+version = "0.9.4"
 # The full version, including alpha/beta/rc tags.
 release = version
 

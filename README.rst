@@ -1,14 +1,14 @@
-Metacells 0.9.4dev - Single-cell RNA Sequencing Analysis
-========================================================
+Metacells 0.9.4 - Single-cell RNA Sequencing Analysis
+=====================================================
 
 .. image:: https://readthedocs.org/projects/metacells/badge/?version=latest
     :target: https://metacells.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
 
 The metacells package implements the improved metacell algorithm [1]_ for single-cell RNA sequencing (scRNA-seq) data
-analysis within the `scipy <https://www.scipy.org/>`_ framework. The original metacell algorithm [2]_ was implemented in
-R. The python package contains various algorithmic improvements and is scalable for larger data sets (millions of
-cells).
+analysis within the `scipy <https://www.scipy.org/>`_ framework, and projection algorithm based on it [2]_. The original
+metacell algorithm [3]_ was implemented in R. The python package contains various algorithmic improvements and is
+scalable for larger data sets (millions of cells).
 
 Metacell Analysis
 -----------------
@@ -61,9 +61,10 @@ Terminology and Results Format
 of the result annotations. See below for the description of updated results (and how they differ from version 0.8). The
 new format is meant to improve the usability of the system in downstream analysis pipelines. For convenience we also
 list here the results of the new projection pipeline added in version 0.9.*. Versions 0.9.1 and 0.9.2 contain some bug
-fixes. The latest version published 0.9.3 allows specifying target UMIs for the metacells, in addition to the target
-size in cells, and adaptively tries to satisfy both. This should produce better-sized metacells "out of the box"
-compared to the 0.9.[0-2] versions.
+fixes. Version 0.9.3 allows specifying target UMIs for the metacells, in addition to the target size in cells, and
+adaptively tries to satisfy both. This should produce better-sized metacells "out of the box" compared to the 0.9.[0-2]
+versions. The latest published version, 0.9.4, contains minor bug fixes and updates for newer versions of dependency
+packages.
 
 If you have existing metacell data that was computed using version 0.8 (the current published version you will get
 from using ``pip install metacells``, you can use the provided
@@ -456,7 +457,10 @@ Please cite the references appropriately in case they are used:
 .. [1] Ben-Kiki, O., Bercovich, A., Lifshitz, A. et al. Metacell-2: a divide-and-conquer metacell algorithm for scalable
    scRNA-seq analysis. Genome Biol 23, 100 (2022). https://doi.org/10.1186/s13059-022-02667-1
 
-.. [2] Baran, Y., Bercovich, A., Sebe-Pedros, A. et al. MetaCell: analysis of single-cell RNA-seq data using K-nn graph
+.. [2] Ben-Kiki, O., Bercovich, A., Lifshitz, A. et al. MCProj: metacell projection for interpretable and quantitative
+   use of transcriptional atlases. Genome Biol 24, 220 (2023). https://doi.org/10.1186/s13059-023-03069-7
+
+.. [3] Baran, Y., Bercovich, A., Sebe-Pedros, A. et al. MetaCell: analysis of single-cell RNA-seq data using K-nn graph
    partitions. Genome Biol 20, 206 (2019). `10.1186/s13059-019-1812-2 <https://doi.org/10.1186/s13059-019-1812-2>`_
 
 License (MIT)
