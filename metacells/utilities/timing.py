@@ -282,7 +282,7 @@ if COLLECT_TIMING:
 
 
 @contextmanager
-def timed_step(name: str) -> Iterator[None]:  # pylint: disable=too-many-branches
+def timed_step(name: str) -> Iterator[None]:
     """
     Collect timing information for a computation step.
 

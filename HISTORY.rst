@@ -71,3 +71,8 @@ History
 * Fix minor bug in regularization of metacell fractions.
 * Fix issue with canonical sparse matrices after downsampling (probably due to scipy.sparse updates?)
 * Fix using deprecated AnnData APIs.
+
+0.10.0
+------
+
+* Add "focus" pipeline to improve metacells by focusing on specific gene modules.

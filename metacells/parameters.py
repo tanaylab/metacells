@@ -1012,3 +1012,16 @@ type_gene_normalized_variance_quantile: float = 0.95
 #: See :py:func:`metacells.tools.quality.compute_similar_query_metacells`
 # and :py:func:`metacells.pipeline.projection.projection_pipeline`.
 project_min_essential_genes_fraction: float = 0.75
+
+#: Maximal p-score of correlation between a gene and the (punctuated) gene module for the gene to be preserved in the
+#: gene module.
+#: See :py:func:`metacells.pipeline.select.extract_selected_data`,
+#: :py:func:`metacells.tools.find_deviant_cells`,
+#: and :py:func:`metacells.pipeline.compute_direct_metacells`.
+max_gene_module_gene_p_score: float = 0.05
+
+#: Minimal fraction of genes preserved in a gene module for it to be a candidate feature.
+#: See :py:func:`metacells.pipeline.select.extract_selected_data`,
+#: :py:func:`metacells.tools.find_deviant_cells`,
+#: and :py:func:`metacells.pipeline.compute_direct_metacells`.
+min_gene_module_genes_fraction: float = 0.5

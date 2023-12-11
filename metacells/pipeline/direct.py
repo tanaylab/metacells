@@ -3,6 +3,8 @@ Direct
 ------
 """
 
+from typing import Dict
+from typing import List
 from typing import Optional
 from typing import Union
 
@@ -34,6 +36,9 @@ def compute_direct_metacells(
     select_min_gene_top3: Optional[int] = pr.select_min_gene_top3,
     select_min_gene_relative_variance: Optional[float] = pr.select_min_gene_relative_variance,
     select_min_genes: int = pr.select_min_genes,
+    gene_modules: Optional[Dict[str, List[str]]] = None,
+    max_gene_module_gene_p_score: float = pr.max_gene_module_gene_p_score,
+    min_gene_module_genes_fraction: float = pr.min_gene_module_genes_fraction,
     cells_similarity_value_regularization: float = pr.cells_similarity_value_regularization,
     cells_similarity_log_data: bool = pr.cells_similarity_log_data,
     cells_similarity_method: str = pr.cells_similarity_method,
@@ -236,6 +241,9 @@ def compute_direct_metacells(
             min_gene_total=select_min_gene_total,
             min_gene_top3=select_min_gene_top3,
             min_genes=select_min_genes,
+            gene_modules=gene_modules,
+            max_gene_module_gene_p_score=max_gene_module_gene_p_score,
+            min_gene_module_genes_fraction=min_gene_module_genes_fraction,
             random_seed=random_seed,
         )
 
@@ -323,6 +331,7 @@ def compute_direct_metacells(
             max_cell_fraction=deviants_max_cell_fraction,
             max_gap_cells_count=deviants_max_gap_cells_count,
             max_gap_cells_fraction=deviants_max_gap_cells_fraction,
+            gene_modules=gene_modules,
         )
 
         tl.dissolve_metacells(

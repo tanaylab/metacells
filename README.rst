@@ -1,5 +1,5 @@
-Metacells 0.9.4 - Single-cell RNA Sequencing Analysis
-=====================================================
+Metacells 0.10.0-dev - Single-cell RNA Sequencing Analysis
+==========================================================
 
 .. image:: https://readthedocs.org/projects/metacells/badge/?version=latest
     :target: https://metacells.readthedocs.io/en/latest/?badge=latest
@@ -60,11 +60,7 @@ Terminology and Results Format
 **NOTE**: Version 0.9 **breaks compatibility** with version 0.8 when it comes to some APIs and the names and semantics
 of the result annotations. See below for the description of updated results (and how they differ from version 0.8). The
 new format is meant to improve the usability of the system in downstream analysis pipelines. For convenience we also
-list here the results of the new projection pipeline added in version 0.9.*. Versions 0.9.1 and 0.9.2 contain some bug
-fixes. Version 0.9.3 allows specifying target UMIs for the metacells, in addition to the target size in cells, and
-adaptively tries to satisfy both. This should produce better-sized metacells "out of the box" compared to the 0.9.[0-2]
-versions. The latest published version, 0.9.4, contains minor bug fixes and updates for newer versions of dependency
-packages.
+list here the results of the new projection pipeline added in version 0.9.*.
 
 If you have existing metacell data that was computed using version 0.8 (the current published version you will get
 from using ``pip install metacells``, you can use the provided
@@ -73,9 +69,13 @@ script to migrate your data to the format described below, while preserving any 
 created for your data (e.g. metacells type annotations). The script will not modify your existing data files, so you can
 examine the results and tweak them if necessary.
 
-In the upcoming version 0.10 we will migrate from using ``AnnData`` to using ``daf`` to represent the data (``h5ad``
-files will still be supported, either directly through an adapter or via a conversion process). This will again
-unavoidingly break API compatibility, but will provide many advantages over the restricted ``AnnData`` APIs.
+Version 0.10 contains an additional (optional) post-processing pipeline for "focusing" the metacells, given gene modules
+of interest. This requires additional new inputs, which are not used by 0.9.*. Otherwise, 0.10.* behaves similarly to
+0.9.* so there's no need to recompute or migrate your data.
+
+In an upcoming version we will migrate from using ``AnnData`` to using ``daf`` to represent the data (``h5ad`` files
+will still be supported, either directly through an adapter or via a conversion process). This will again unavoidingly
+break API compatibility, but will provide many advantages over the restricted ``AnnData`` APIs.
 
 We apologize for the inconvenience.
 

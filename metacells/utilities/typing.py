@@ -402,7 +402,7 @@ def maybe_sparse_matrix(shaped: Any) -> Optional[SparseMatrix]:
         This will succeed for a :py:const:`CompressedMatrix` which is a sub-type of a
         :py:const:`SparseMatrix`.
     """
-    if isinstance(shaped, sp.base.spmatrix):
+    if isinstance(shaped, sp.spmatrix):
         return shaped
     return None
 

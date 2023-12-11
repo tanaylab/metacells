@@ -207,7 +207,7 @@ blackify:  ## reformat with black
 
 clang-reformat: $(H_SOURCE_FILES) $(CPP_SOURCE_FILES)
 	@echo "clang-format -i"
-	@clang-format -i $(H_SOURCE_FILES) $(CPP_SOURCE_FILES)
+	# TODOY @clang-format -i $(H_SOURCE_FILES) $(CPP_SOURCE_FILES)
 
 smells: mypy pylint  ## check for code smells
 
@@ -226,7 +226,7 @@ mypy: .make.mypy  ## check code with mypy
 pytest: .make.pytest  ## run tests on the active Python with pytest
 
 .make.pytest: .make.build
-	pytest -s --cov=$(NAME) --cov-report=html --cov-report=term --no-cov-on-fail tests
+	`which pytest` -s --cov=$(NAME) --cov-report=html --cov-report=term --no-cov-on-fail tests
 	touch $@
 
 tox: .make.tox  ## run tests on a clean Python version with tox
