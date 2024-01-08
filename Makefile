@@ -207,7 +207,7 @@ blackify:  ## reformat with black
 
 clang-reformat: $(H_SOURCE_FILES) $(CPP_SOURCE_FILES)
 	@echo "clang-format -i"
-	# TODOY @clang-format -i $(H_SOURCE_FILES) $(CPP_SOURCE_FILES)
+	@clang-format -i $(H_SOURCE_FILES) $(CPP_SOURCE_FILES)
 
 smells: mypy pylint  ## check for code smells
 

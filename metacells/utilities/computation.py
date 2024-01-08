@@ -2349,18 +2349,21 @@ def represent(
     variables = cvxpy.Variable(rows_count, nonneg=True)
     constraints = [cvxpy.sum(variables) == 1]
     objective = cvxpy.norm(goal - variables @ basis, 2)
-
     problem = cvxpy.Problem(cvxpy.Minimize(objective), constraints)
-    try:
-        result = problem.solve(solver="SCS")
-    except cvxpy.error.SolverError:
-        try:
-            result = problem.solve(solver="ECOS")
-        except cvxpy.error.SolverError:
-            result = problem.solve(solver="QSQP")
 
-    if result is None:
+    for solver in ("SCS", "ECOS", "QSQP"):
+        result = None
+        try:
+            result = problem.solve(solver=solver)
+        except cvxpy.error.SolverError:
+            pass
+
+        if result is not None and variables.value is not None and variables.value.ndim == 1:
+            break
+
+    if result is None or variables.value is None or variables.value.ndim != 1:
         return None
+
     return (float(result), utt.to_numpy_vector(variables.value))
 
 

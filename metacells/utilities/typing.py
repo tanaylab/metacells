@@ -184,7 +184,7 @@ class SparseMatrix(ShapedProtocol, Protocol):
     """
     A ``mypy`` type for sparse 2-dimensional data.
 
-    Should have been ``SparseMatrix = sp.base.spmatrix``.
+    Should have been ``SparseMatrix = sp.spmatrix``.
     """
 
     shape: Tuple[int, int]
@@ -465,7 +465,7 @@ def mustbe_sparse_matrix(shaped: Any) -> SparseMatrix:
         This will succeed for a :py:const:`CompressedMatrix` which is a sub-type of a
         :py:const:`SparseMatrix`.
     """
-    assert isinstance(shaped, sp.base.spmatrix)
+    assert isinstance(shaped, sp.spmatrix)
     return shaped
 
 
