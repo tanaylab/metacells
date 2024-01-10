@@ -257,6 +257,9 @@ def _gaps_deviant_cells(  # pylint: disable=too-many-statements
     cells_count = adata.n_obs
     genes_count = adata.n_vars
 
+    if cells_count <= max_gap_cells_count:
+        return np.zeros(cells_count, dtype="bool")
+
     min_gap_per_gene = np.full(genes_count, min_gene_fold_factor, dtype="float32")
     if ut.has_data(adata, "noisy_gene"):
         noisy_genes_mask = ut.get_v_numpy(adata, "noisy_gene")
