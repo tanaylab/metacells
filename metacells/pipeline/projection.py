@@ -144,6 +144,11 @@ def projection_pipeline(
             In general we expect high correlation (more than 0.9 in most metacells) since we restricted the
             ``fitted_gene`` mask only to genes we projected well.
 
+        ``projected_correlation`` per gene
+            For every gene (not only fitted genes), the correlation between the ``corrected_fraction`` and
+            ``projected_fraction`` across all the query metacells. In general we expect high correlation for fitted
+            genes and low correlation for the rest.
+
         ``similar`` mask per query metacell
             A conservative determination of whether the query metacell is "similar" to its projection on the atlas. This
             is based on whether the number of ``misfit_gene`` for the query metacell is low enough (by default, up to 3
@@ -418,6 +423,7 @@ def projection_pipeline(
         project_corrections=project_corrections,
         type_names=type_names,
         use_essential_genes=use_essential_genes,
+        reproducible=reproducible,
     )
 
     ut.set_m_data(qdata, "projection_algorithm", f"metacells.{__version__}")
@@ -649,6 +655,7 @@ def _common_data_to_full(
     project_corrections: bool,
     use_essential_genes: bool,
     type_names: List[str],
+    reproducible: bool,
 ) -> None:
     if use_essential_genes:
         primary_type_per_metacell = ut.get_o_numpy(common_qdata, "projected_type")
@@ -688,9 +695,19 @@ def _common_data_to_full(
         )
         ut.set_vo_data(qdata, property_name, sp.csr_matrix(data_per_gene_per_metacell))
 
+    corrected_fractions = ut.to_numpy_matrix(
+        ut.get_vo_proper(common_qdata, "corrected_fraction", layout="column_major").transpose()
+    )
+    projected_fractions = ut.to_numpy_matrix(
+        ut.get_vo_proper(common_qdata, "projected_fraction", layout="column_major").transpose()
+    )
+    correlation_per_gene = ut.pairs_corrcoef_rows(corrected_fractions, projected_fractions, reproducible=reproducible)
+    ut.set_v_data(common_qdata, "projected_correlation", correlation_per_gene)
+
     property_names = [f"fitted_gene_of_{type_name}" for type_name in type_names]
     if project_corrections:
         property_names.append("correction_factor")
+    property_names.append("projected_correlation")
 
     for property_name in property_names:
         data_per_common_gene = ut.get_v_numpy(common_qdata, property_name)

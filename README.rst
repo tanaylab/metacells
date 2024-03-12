@@ -392,6 +392,11 @@ significant amount of quality control one needs to apply before accepting these 
     In general we expect high correlation (more than 0.9 in most metacells) since we restricted the ``fitted`` genes
     mask only to genes we projected well.
 
+``projected_correlation`` per gene
+    For every gene (not only fitted genes), the correlation between the ``corrected_fraction`` and
+    ``projected_fraction`` across all the query metacells. In general we expect high correlation for fitted genes and
+    low correlation for the rest.
+
 ``projected_fold`` per gene per query metacell
     The fold factor between the ``corrected_fraction`` and the ``projected_fraction`` (0 for non-``atlas_gene``). If
     the absolute value of this is high (3 for 8x ratio) then the gene was not projected well for this metacell. This
