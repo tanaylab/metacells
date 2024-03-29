@@ -16,6 +16,7 @@ if "sphinx" not in sys.argv[0]:
 
 # pylint: disable=wrong-import-position
 
+from . import julia as jl
 from . import pipeline as pl
 from . import tools as tl
 from . import utilities as ut

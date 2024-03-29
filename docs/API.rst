@@ -10,3 +10,4 @@ API
   parameters
   utilities
   scripts
+  julia

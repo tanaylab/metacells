@@ -1,0 +1,11 @@
+{
+    "julia": "1.10",
+    "packages": {
+        "Metacells": {
+            "uuid": "2c3fbd22-7937-42a8-a46e-a575a65e83f1",
+            "_path": "/Users/obk/projects/Metacells.jl",
+            "url": "https://github.com/tanaylab/Metacells.jl",
+            "version": "0.1.0"
+        }
+    }
+}

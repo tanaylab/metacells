@@ -176,7 +176,7 @@ black: .make.black  ## check format with black
 flake8: .make.flake8  ## check format with flake8
 
 .make.flake8: $(PY_SOURCE_FILES)
-	flake8 --max-line-length $(MAX_LINE_LENGTH) --ignore E203,E704,F401,F403,W503 $(NAME) tests bin
+	flake8 --max-line-length $(MAX_LINE_LENGTH) --ignore E203,E704,F401,F403,E501,W503 $(NAME) tests bin
 	touch $@
 
 clang-format: .make.clang-format  ## check format with clang-format
