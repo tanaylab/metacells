@@ -400,7 +400,7 @@ significant amount of quality control one needs to apply before accepting these 
 ``projected_fold`` per gene per query metacell
     The fold factor between the ``corrected_fraction`` and the ``projected_fraction`` (0 for non-``atlas_gene``). If
     the absolute value of this is high (3 for 8x ratio) then the gene was not projected well for this metacell. This
-    will be 0 for non-``atlas_gene``.
+    will be 0 for non-``atlas_gene``, or if the total number of UMIs is too low.
 
     It is expected this would have low values for most ``fitted`` genes and high values for the rest of the
     ``atlas_gene``, but specific values will vary from one query metacell to another. This allows the analyst to make
