@@ -39,7 +39,7 @@ from warnings import warn
 import cvxpy
 import igraph as ig  # type: ignore
 import numpy as np
-import pandas as pd  # type: ignore
+import pandas as pd
 import scipy.sparse as sp  # type: ignore
 import scipy.stats as ss  # type: ignore
 
@@ -139,18 +139,15 @@ def allow_inefficient_layout(allow: bool) -> bool:
 
 
 @overload
-def to_layout(matrix: utt.CompressedMatrix, layout: str, *, symmetric: bool = False) -> utt.CompressedMatrix:
-    ...
+def to_layout(matrix: utt.CompressedMatrix, layout: str, *, symmetric: bool = False) -> utt.CompressedMatrix: ...
 
 
 @overload
-def to_layout(matrix: utt.NumpyMatrix, layout: str, *, symmetric: bool = False) -> utt.NumpyMatrix:
-    ...
+def to_layout(matrix: utt.NumpyMatrix, layout: str, *, symmetric: bool = False) -> utt.NumpyMatrix: ...
 
 
 @overload
-def to_layout(matrix: utt.ImproperMatrix, layout: str, *, symmetric: bool = False) -> utt.ProperMatrix:
-    ...
+def to_layout(matrix: utt.ImproperMatrix, layout: str, *, symmetric: bool = False) -> utt.ProperMatrix: ...
 
 
 @utm.timed_call()
@@ -1889,7 +1886,7 @@ def sliding_window_function(
     rolling_windows = extended_series.rolling(window_size)  # type: ignore
 
     compute = ROLLING_FUNCTIONS[function]
-    computed = compute(rolling_windows).values
+    computed = compute(rolling_windows).values  # type: ignore
     reordered = computed[window_size - 1 :]
     assert reordered.size == dense.size
 

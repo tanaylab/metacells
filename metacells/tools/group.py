@@ -11,6 +11,7 @@ from typing import Optional
 from typing import Union
 
 import numpy as np
+import pandas as pd
 from anndata import AnnData  # type: ignore
 
 import metacells.utilities as ut
@@ -119,7 +120,7 @@ def group_obs_annotation(
     min_value_fraction: float = 0.5,
     conflict: Optional[Any] = None,
     inplace: bool = True,
-) -> Optional[ut.PandasSeries]:
+) -> Optional[pd.Series]:
     """
     Transfer per-observation data from the per-observation (cell) ``adata`` to the
     per-group-of-observations (metacells) ``gdata``.

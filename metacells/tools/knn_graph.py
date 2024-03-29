@@ -7,6 +7,7 @@ from typing import Optional
 from typing import Union
 
 import numpy as np
+import pandas as pd
 import scipy.sparse as sp  # type: ignore
 from anndata import AnnData  # type: ignore
 
@@ -32,7 +33,7 @@ def compute_obs_obs_knn_graph(
     outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
     min_outgoing_degree: int = pr.knn_min_outgoing_degree,
     inplace: bool = True,
-) -> Optional[ut.PandasFrame]:
+) -> Optional[pd.DataFrame]:
     """
     Compute a directed  K-Nearest-Neighbors graph based on ``what`` (default: what) similarity data
     for each pair of observations (cells).
@@ -125,7 +126,7 @@ def compute_var_var_knn_graph(
     outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
     min_outgoing_degree: int = pr.knn_min_outgoing_degree,
     inplace: bool = True,
-) -> Optional[ut.PandasFrame]:
+) -> Optional[pd.DataFrame]:
     """
     Compute a directed  K-Nearest-Neighbors graph based on ``what`` (default: what) similarity data
     for each pair of variables (genes).
@@ -210,7 +211,7 @@ def _compute_elements_knn_graph(
     outgoing_degree_factor: float,
     min_outgoing_degree: int,
     inplace: bool = True,
-) -> Optional[ut.PandasFrame]:
+) -> Optional[pd.DataFrame]:
     assert elements in ("obs", "var")
     assert balanced_ranks_factor > 0.0
     assert incoming_degree_factor > 0.0

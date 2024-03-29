@@ -574,13 +574,15 @@ def _min_essential_genes_of_type(
                 missing_essential_genes_names = sorted(
                     set(atlas_essential_genes_names) - set(common_essential_genes_names)
                 )
+                common_essential_genes_names_string = ", ".join(common_essential_genes_names)
+                missing_essential_genes_names_string = ", ".join(missing_essential_genes_names)
                 ut.logger().warning(  # pylint: disable=logging-fstring-interpolation
                     f"the {common_essential_genes_count} "
-                    f"common essential gene(s) {', '.join(common_essential_genes_names)} "
+                    f"common essential gene(s) {common_essential_genes_names_string} "
                     f"for the type {type_name} "
                     f"are not enough for the required {min_essential_genes_count}; "
                     "reducing the minimal requirement "
-                    f" (the non-common essential gene(s) are: {', '.join(missing_essential_genes_names)})"
+                    f" (the non-common essential gene(s) are: {missing_essential_genes_names_string})"
                 )
                 min_essential_genes_count = common_essential_genes_count
 
@@ -1130,9 +1132,9 @@ def _compute_per_type_projection(
             fitted_genes_mask_per_type[query_type_names[type_index]][:] = False
             fitted_genes_mask_per_type[query_type_names[type_index]][fitted_genes_indices_of_type] = True
             similar_per_metacell[query_metacell_indices_of_type] = similar_per_metacell_of_type
-            projected_correlation_per_metacell[
-                query_metacell_indices_of_type
-            ] = projected_correlation_per_metacell_of_type
+            projected_correlation_per_metacell[query_metacell_indices_of_type] = (
+                projected_correlation_per_metacell_of_type
+            )
             misfit_per_gene_per_metacell[query_metacell_indices_of_type, :] = ut.to_numpy_matrix(
                 misfit_per_gene_per_metacell_of_type
             )

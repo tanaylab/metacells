@@ -28,7 +28,7 @@ endef
 export PRINT_HELP_PYSCRIPT
 
 help:
-	@python -c "$$PRINT_HELP_PYSCRIPT" < $(MAKEFILE_LIST)
+	@python3 -c "$$PRINT_HELP_PYSCRIPT" < $(MAKEFILE_LIST)
 
 clean: clean-make clean-build clean-pyc clean-test clean-docs  ## remove all build, test, coverage and Python artifacts
 
@@ -176,7 +176,7 @@ black: .make.black  ## check format with black
 flake8: .make.flake8  ## check format with flake8
 
 .make.flake8: $(PY_SOURCE_FILES)
-	flake8 --max-line-length $(MAX_LINE_LENGTH) --ignore E203,F401,F403,W503 $(NAME) tests bin
+	flake8 --max-line-length $(MAX_LINE_LENGTH) --ignore E203,E704,F401,F403,W503 $(NAME) tests bin
 	touch $@
 
 clang-format: .make.clang-format  ## check format with clang-format
@@ -249,8 +249,8 @@ RST_GENERATED_FILES = docs/timing_script.rst
 build: .make.build  ## build the C++ extensions
 
 .make.build: $(PY_SOURCE_FILES) $(H_SOURCE_FILES) $(CPP_SOURCE_FILES)
-	python setup.py build_ext --inplace
-	python setup.py build
+	python3 setup.py build_ext --inplace
+	python3 setup.py build
 	touch $@
 
 docs/timing_script.rst: \
@@ -260,16 +260,16 @@ docs/timing_script.rst: \
     docs/timing_script.part.4 \
     metacells/scripts/timing.py
 	( cat docs/timing_script.part.1 \
-	; python metacells/scripts/timing.py --help 2>&1 \
+	; python3 metacells/scripts/timing.py --help 2>&1 \
 	| sed 's/timing.py/metacells_timing.py/;s/^\(.\)/    \1/;s/`/``/g' \
 	; cat docs/timing_script.part.2 \
-	; python metacells/scripts/timing.py combine --help 2>&1 \
+	; python3 metacells/scripts/timing.py combine --help 2>&1 \
 	| sed 's/timing.py/metacells_timing.py/;s/^\(.\)/    \1/;s/`/``/g' \
 	; cat docs/timing_script.part.3 \
-	; python metacells/scripts/timing.py sum --help 2>&1 \
+	; python3 metacells/scripts/timing.py sum --help 2>&1 \
 	| sed 's/timing.py/metacells_timing.py/;s/^\(.\)/    \1/;s/`/``/g' \
 	; cat docs/timing_script.part.4 \
-	; python metacells/scripts/timing.py flame --help 2>&1 \
+	; python3 metacells/scripts/timing.py flame --help 2>&1 \
 	| sed 's/timing.py/metacells_timing.py/;s/^\(.\)/    \1/;s/`/``/g' \
 	; cat docs/timing_script.part.5 \
 	) > $@
@@ -285,13 +285,13 @@ committed:  staged ## check everything is committed in git
 	fi
 
 install: committed clean  ## install the package into the active Python
-	python setup.py install
+	python3 setup.py install
 
 dist: .make.dist  ## builds the release distribution package
 
 .make.dist: staged $(ALL_SOURCE_FILES)
 	rm -fr dist/
-	python setup.py sdist
+	python3 setup.py sdist
 	twine check dist/*
 	touch $@
 
@@ -304,12 +304,12 @@ tags: $(PY_SOURCE_FILES)  ## generate a tags file for vi
 flame: flame.html  ## generate a flame graph from a timing.csv file
 
 flame.html: timing.csv
-	python metacells/scripts/timing.py combine timing.csv \
-	| python metacells/scripts/timing.py flame -s \
+	python3 metacells/scripts/timing.py combine timing.csv \
+	| python3 metacells/scripts/timing.py flame -s \
 	| flameview.py --sizename 'Total Elapsed Time' --sortby size \
 	> flame.html
 
 sum:  ## summerize a timing.csv file
-	python metacells/scripts/timing.py combine timing.csv \
-	| python metacells/scripts/timing.py sum \
+	python3 metacells/scripts/timing.py combine timing.csv \
+	| python3 metacells/scripts/timing.py sum \
 	| column -t -s,

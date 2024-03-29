@@ -121,7 +121,7 @@ def exclude_genes(
             adata, names=excluded_gene_names, patterns=excluded_gene_patterns, to=None
         )
         assert named_genes_series is not None
-        named_genes_mask = named_genes_series.values
+        named_genes_mask = named_genes_series.values  # type: ignore
 
     excluded_genes_mask: Optional[ut.NumpyVector] = None
     if bursty_lonely_genes_mask is not None:

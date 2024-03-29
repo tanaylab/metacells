@@ -1354,9 +1354,9 @@ def _divide_and_conquer_times(
                 prefix=prefix + ".final",
                 piles_count=piles_count,
                 metacells_level=metacells_level,
-                max_metacells_level=1000
-                if dac_parameters.direct_parameters.must_complete_cover
-                else metacells_level + 1,
+                max_metacells_level=(
+                    1000 if dac_parameters.direct_parameters.must_complete_cover else metacells_level + 1
+                ),
                 dac_parameters=dac_parameters,
             )
         ]

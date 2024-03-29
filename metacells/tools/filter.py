@@ -2,11 +2,13 @@
 Filter
 ------
 """
+
 from typing import List
 from typing import Optional
 from typing import Tuple
 
 import numpy as np
+import pandas as pd
 from anndata import AnnData  # type: ignore
 
 import metacells.utilities as ut
@@ -32,7 +34,7 @@ def filter_data(  # pylint: disable=dangerous-default-value
     track_var: Optional[str] = None,
     name: Optional[str] = None,
     top_level: bool = True,
-) -> Optional[Tuple[AnnData, ut.PandasSeries, ut.PandasSeries]]:
+) -> Optional[Tuple[AnnData, pd.Series, pd.Series]]:
     """
     Filter (slice) the data based on previously-computed masks.
 

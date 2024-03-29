@@ -64,11 +64,11 @@ algorithm's nested sub-steps.
 
 from typing import Any
 from typing import Callable
-from typing import Collection
 from typing import Dict
 from typing import List
 from typing import MutableMapping
 from typing import Optional
+from typing import Sequence
 from typing import Tuple
 from typing import Union
 
@@ -116,7 +116,7 @@ __all__ = [
 ]
 
 
-Annotations = Union[MutableMapping[Any, Any], utt.PandasFrame]
+Annotations = Union[MutableMapping[Any, Any], utt.pd.DataFrame]
 
 
 @utm.timed_call()
@@ -396,7 +396,7 @@ def get_o_series(
     *,
     sum: bool = False,  # pylint: disable=redefined-builtin
     formatter: Optional[Callable[[Any], Any]] = None,
-) -> utt.PandasSeries:
+) -> utt.pd.Series:
     """
     Get per-observation (cell) data in ``adata`` by its ``name`` as a pandas series.
 
@@ -489,7 +489,7 @@ def get_v_series(
     *,
     sum: bool = False,  # pylint: disable=redefined-builtin
     formatter: Optional[Callable[[Any], Any]] = None,
-) -> utt.PandasSeries:
+) -> utt.pd.Series:
     """
     Get per-variable (gene) data in ``adata`` by its ``name`` as a pandas series.
 
@@ -564,7 +564,7 @@ def get_oo_frame(
     *,
     layout: Optional[str] = None,
     formatter: Optional[Callable[[Any], Any]] = None,
-) -> utt.PandasFrame:
+) -> utt.pd.DataFrame:
     """
     Get per-observation-per-observation (per-cell-per-cell) data as a pandas data frame.
 
@@ -619,7 +619,7 @@ def get_vv_frame(
     *,
     layout: Optional[str] = None,
     formatter: Optional[Callable[[Any], Any]] = None,
-) -> utt.PandasFrame:
+) -> utt.pd.DataFrame:
     """
     Get per-variable-per-variable (per-gene-per-gene) data as a pandas data frame.
 
@@ -672,10 +672,10 @@ def get_oa_frame(
     adata: AnnData,
     name: Union[str, utt.Matrix],
     *,
-    columns: Optional[Collection],
+    columns: Optional[Sequence],
     layout: Optional[str] = None,
     formatter: Optional[Callable[[Any], Any]] = None,
-) -> utt.PandasFrame:
+) -> utt.pd.DataFrame:
     """
     Get per-observation-per-any (per-cell-per-any) data as a pandas data frame.
 
@@ -697,7 +697,7 @@ def get_oa_frame(
     data = _get_oa_data(adata, name, layout=layout, formatter=formatter)
     frame = utt.maybe_pandas_frame(data)
     if frame is None:
-        frame = utt.to_pandas_frame(utt.to_numpy_matrix(data), index=adata.obs_names, columns=columns)
+        frame = utt.to_pandas_frame(utt.to_numpy_matrix(data), index=adata.obs_names, columns=columns)  # type: ignore
     return frame
 
 
@@ -731,10 +731,10 @@ def get_va_frame(
     adata: AnnData,
     name: Union[str, utt.Matrix],
     *,
-    columns: Optional[Collection],
+    columns: Optional[Sequence],
     layout: Optional[str] = None,
     formatter: Optional[Callable[[Any], Any]] = None,
-) -> utt.PandasFrame:
+) -> utt.pd.DataFrame:
     """
     Get per-variable-per-any (per-cell-per-any) data as a pandas data frame.
 
@@ -756,7 +756,7 @@ def get_va_frame(
     data = _get_va_data(adata, name, layout=layout, formatter=formatter)
     frame = utt.maybe_pandas_frame(data)
     if frame is None:
-        frame = utt.to_pandas_frame(utt.to_numpy_matrix(data), index=adata.var_names, columns=columns)
+        frame = utt.to_pandas_frame(utt.to_numpy_matrix(data), index=adata.var_names, columns=columns)  # type: ignore
     return frame
 
 
@@ -795,7 +795,7 @@ def get_vo_frame(
     *,
     layout: Optional[str] = None,
     formatter: Optional[Callable[[Any], Any]] = None,
-) -> utt.PandasFrame:
+) -> utt.pd.DataFrame:
     """
     Get per-variable-per-observation (per-gene-per-cell) data as a pandas data frame.
 

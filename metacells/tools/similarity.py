@@ -7,6 +7,7 @@ from typing import Optional
 from typing import Union
 
 import numpy as np
+import pandas as pd
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
@@ -32,7 +33,7 @@ def compute_obs_obs_similarity(
     bottom: Optional[int] = None,
     inplace: bool = True,
     reproducible: bool,
-) -> Optional[ut.PandasFrame]:
+) -> Optional[pd.DataFrame]:
     """
     Compute a measure of the similarity between the observations (cells) of ``what`` (default: {what}).
 
@@ -110,7 +111,7 @@ def compute_var_var_similarity(
     bottom: Optional[int] = None,
     inplace: bool = True,
     reproducible: bool,
-) -> Optional[ut.PandasFrame]:
+) -> Optional[pd.DataFrame]:
     """
     Compute a measure of the similarity between the variables (genes) of ``what`` (default: {what}).
 
@@ -187,7 +188,7 @@ def _compute_elements_similarity(  # pylint: disable=too-many-branches
     top: Optional[int],
     bottom: Optional[int],
     inplace: bool,
-) -> Optional[ut.PandasFrame]:
+) -> Optional[pd.DataFrame]:
     assert elements in ("obs", "var")
 
     assert method in (

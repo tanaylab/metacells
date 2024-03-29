@@ -7,6 +7,7 @@ from typing import Optional
 from typing import Union
 
 import numpy as np
+import pandas as pd
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
@@ -38,7 +39,7 @@ def find_bursty_lonely_genes(  # pylint: disable=too-many-statements
     max_gene_similarity: float = pr.bursty_lonely_max_gene_similarity,
     inplace: bool = True,
     random_seed: int,
-) -> Optional[ut.PandasSeries]:
+) -> Optional[pd.Series]:
     """
     Detect "bursty lonely" genes based on ``what`` (default: {what}) data.
 

@@ -73,7 +73,7 @@ from typing import TypeVar
 from typing import Union
 
 import numpy as np
-import pandas as pd  # type: ignore
+import pandas as pd
 from anndata import AnnData  # type: ignore
 
 import metacells.utilities.documentation as utd
@@ -513,7 +513,9 @@ def _format_value(  # pylint: disable=too-many-return-statements,too-many-branch
         values = list(value.values())
         if len(values) > 20 or (len(values) > 0 and hasattr(values[0], "__len__") and not isinstance(values[0], str)):
             keys = list(value.keys())
-            return f"dict {_format_value(keys, 'keys')} => {_format_value(values, 'values')}"
+            keys_string = _format_value(keys, "keys")
+            values_string = _format_value(values, "values")
+            return f"dict {keys_string} => {values_string}"
         return str(value) + checksum
 
     return f"{value.__class__.__module__}.{value.__class__.__qualname__}#{id(value)}"

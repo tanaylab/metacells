@@ -241,7 +241,8 @@ def _flame_main(input_path: Optional[str], output_path: Optional[str], focus: st
             "Invocations: %s<br/>"
             % (datum["elapsed"], datum["cpu"], 100 * datum["cpu"] / datum["elapsed"], datum["invocations"])
         )
-        output_file.write(f"{name.replace('.', ';')} {datum[focus]} #{html}\n")
+        name = name.replace(".", ";")
+        output_file.write(f"{name} {datum[focus]} #{html}\n")
 
 
 def _collect_data_by_name(input_path: Optional[str], split: bool) -> Dict[str, List[float]]:

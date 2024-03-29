@@ -34,14 +34,14 @@ To put some order in this chaos, the following concepts are used:
   any 2d data, and :py:const:`Vector` is any 1d data.
 
 * For 2D data, we allow multiple data types that we can't directly operate on:
-  most :py:class:`SparseMatrix` layouts, :py:class:`PandasFrame` and ``np.matrix`` have
+  most :py:class:`SparseMatrix` layouts, ``pandas.Series`` and ``np.matrix`` have
   strange quirks when it comes to directly operating on them and should be avoided, while CSR and
   CSC :py:class:`CompressedMatrix` sparse matrices and properly-laid-out 2D numpy arrays
   :py:const:`NumpyMatrix` are in general well-behaved. We therefore introduce the concept of
   :py:const:`ProperMatrix` vs. :py:const:`ImproperMatrix` types, and provide functions that
   manipulate whether the "proper" data is in row-major or column-major order.
 
-* For 1D data, we just distinguish between :py:class:`PandasSeries` and 1D numpy
+* For 1D data, we just distinguish between ``pandas.Series`` and 1D numpy
   :py:const:`NumpyVector` arrays, as these are the only types we allow. In theory we could have also
   allowed for sparse vectors but mercifully these are very uncommon so we can just ignore them.
 
@@ -52,19 +52,17 @@ same ``numpy.ndaarray`` type. Perhaps in the future numpy would allow for using 
 useful type annotations. Or this could all be ported to Julia and avoid this whole mess.
 """
 
-from abc import abstractmethod
 from contextlib import contextmanager
 from typing import Any
-from typing import Collection
 from typing import Iterator
 from typing import Optional
-from typing import Sized
+from typing import Sequence
 from typing import Tuple
 from typing import TypeVar
 from typing import Union
 
 import numpy as np
-import pandas as pd  # type: ignore
+import pandas as pd
 import scipy.sparse as sp  # type: ignore
 
 import metacells.utilities.documentation as utd
@@ -91,11 +89,9 @@ __all__ = [
     "CompressedMatrix",
     "ImproperMatrix",
     "SparseMatrix",
-    "PandasFrame",
     "Vector",
     "NumpyVector",
     "ImproperVector",
-    "PandasSeries",
     "is_1d",
     "is_2d",
     "maybe_numpy_vector",
@@ -167,14 +163,11 @@ class ShapedProtocol(Protocol):
     ndim: int
     shape: Union[Tuple[int, int], Tuple[int]]
 
-    def __getitem__(self, key: Any) -> Any:
-        ...
+    def __getitem__(self, key: Any) -> Any: ...
 
-    def __setitem__(self, key: Any, value: Any) -> Any:
-        ...
+    def __setitem__(self, key: Any, value: Any) -> Any: ...
 
-    def transpose(self: S) -> S:
-        ...
+    def transpose(self: S) -> S: ...
 
 
 SP = TypeVar("SP", bound="SparseMatrix")
@@ -190,59 +183,41 @@ class SparseMatrix(ShapedProtocol, Protocol):
     shape: Tuple[int, int]
     nnz: int
 
-    def getformat(self) -> str:
-        ...
+    def getformat(self) -> str: ...
 
-    def toarray(self, order: Optional[str] = None) -> NumpyMatrix:
-        ...
+    def toarray(self, order: Optional[str] = None) -> NumpyMatrix: ...
 
-    def multiply(self: SP, other: ShapedProtocol) -> SP:
-        ...
+    def multiply(self: SP, other: ShapedProtocol) -> SP: ...
 
-    def getcol(self: SP, index: int) -> SP:
-        ...
+    def getcol(self: SP, index: int) -> SP: ...
 
-    def getrow(self: SP, index: int) -> SP:
-        ...
+    def getrow(self: SP, index: int) -> SP: ...
 
-    def sum(self, *, axis: int) -> NumpyVector:
-        ...
+    def sum(self, *, axis: int) -> NumpyVector: ...
 
-    def max(self, *, axis: int) -> NumpyVector:
-        ...
+    def max(self, *, axis: int) -> NumpyVector: ...
 
-    def nanmax(self, *, axis: int) -> NumpyVector:
-        ...
+    def nanmax(self, *, axis: int) -> NumpyVector: ...
 
-    def min(self, *, axis: int) -> NumpyVector:
-        ...
+    def min(self, *, axis: int) -> NumpyVector: ...
 
-    def nanmin(self, *, axis: int) -> NumpyVector:
-        ...
+    def nanmin(self, *, axis: int) -> NumpyVector: ...
 
-    def getnnz(self, *, axis: int) -> NumpyVector:
-        ...
+    def getnnz(self, *, axis: int) -> NumpyVector: ...
 
-    def argmax(self, *, axis: int) -> NumpyVector:
-        ...
+    def argmax(self, *, axis: int) -> NumpyVector: ...
 
-    def maximum(self: SP, other: SP) -> SP:
-        ...
+    def maximum(self: SP, other: SP) -> SP: ...
 
-    def tocsr(self) -> "CompressedMatrix":
-        ...
+    def tocsr(self) -> "CompressedMatrix": ...
 
-    def tocsc(self) -> "CompressedMatrix":
-        ...
+    def tocsc(self) -> "CompressedMatrix": ...
 
-    def nonzero(self) -> Tuple[np.ndarray, np.ndarray]:
-        ...
+    def nonzero(self) -> Tuple[np.ndarray, np.ndarray]: ...
 
-    def mean(self: SP, *, axis: int) -> "np.ndarray":
-        ...
+    def mean(self: SP, *, axis: int) -> "np.ndarray": ...
 
-    def copy(self: SP) -> SP:
-        ...
+    def copy(self: SP) -> SP: ...
 
 
 class CompressedMatrix(SparseMatrix, Protocol):
@@ -258,58 +233,11 @@ class CompressedMatrix(SparseMatrix, Protocol):
     has_sorted_indices: bool
     has_canonical_format: bool
 
-    def sum_duplicates(self) -> None:
-        ...
+    def sum_duplicates(self) -> None: ...
 
-    def eliminate_zeros(self) -> None:
-        ...
+    def eliminate_zeros(self) -> None: ...
 
-    def sort_indices(self) -> None:
-        ...
-
-
-class PandasIndex(ShapedProtocol, Collection, Sized, Protocol):
-    """
-    A ``mypy`` type for a pandas index.
-    """
-
-    values: NumpyVector
-
-
-class PandasFrame(ShapedProtocol, Protocol):
-    """
-    A ``mypy`` type for pandas 2-dimensional data.
-
-    Should have been ``PandasFrame = pd.DataFrame``.
-    """
-
-    shape: Tuple[int, int]
-    values: NumpyMatrix
-    index: PandasIndex
-    columns: PandasIndex
-
-    def __delitem__(self, key: Any) -> None:
-        ...
-
-    def __constraints__(self, key: Any) -> bool:
-        ...
-
-
-class PandasSeries(ShapedProtocol, Sized, Protocol):
-    """
-    A ``mypy`` type for pandas 1-dimensional data.
-
-    Should have been ``PandasSeries = pd.Series``.
-    """
-
-    size: int
-    shape: Tuple[int]
-    values: NumpyVector
-    index: PandasIndex
-
-    @abstractmethod
-    def sort_values(self, inplace: bool, ascending: bool) -> None:
-        ...
+    def sort_indices(self) -> None: ...
 
 
 # pylint: enable=missing-function-docstring
@@ -327,13 +255,13 @@ ProperMatrix = Union[NumpyMatrix, CompressedMatrix]
 #: A ``mypy`` type for "improper" 2-dimensional data.
 #:
 #: "Improper" data contains or can be converted to "proper" data.
-ImproperMatrix = Union[PandasFrame, SparseMatrix]
+ImproperMatrix = Union[pd.DataFrame, SparseMatrix]
 
 #: A ``mypy`` type for any 2-dimensional data.
 Matrix = Union[ProperMatrix, ImproperMatrix]
 
 #: An "improper" 1-dimensional data.
-ImproperVector = Union[Collection[int], Collection[float], PandasSeries]
+ImproperVector = Union[Sequence[int], Sequence[float], pd.Series]
 
 #: A ``mypy`` type for any 1-dimensional data.
 #:
@@ -352,7 +280,7 @@ ImproperShaped = Union[ImproperMatrix, ImproperVector]
 Shaped = Union[ProperShaped, ImproperShaped]
 
 #: Pandas data in various types.
-PandasShaped = Union[PandasFrame, PandasSeries]
+PandasShaped = Union[pd.DataFrame, pd.Series]
 
 
 def is_1d(shaped: Shaped) -> bool:
@@ -416,21 +344,21 @@ def maybe_compressed_matrix(shaped: Any) -> Optional[CompressedMatrix]:
     return None
 
 
-def maybe_pandas_series(shaped: Any) -> Optional[PandasSeries]:
+def maybe_pandas_series(shaped: Any) -> Optional[pd.Series]:
     """
-    Return ``shaped`` as a :py:const:`PandasSeries`, if it is one.
+    Return ``shaped`` as a ``pandas.Series`` if it is one.
     """
     if isinstance(shaped, pd.Series):
-        return shaped
+        return shaped  # type: ignore
     return None
 
 
-def maybe_pandas_frame(shaped: Any) -> Optional[PandasFrame]:
+def maybe_pandas_frame(shaped: Any) -> Optional[pd.DataFrame]:
     """
-    Return ``shaped`` s a :py:const:`PandasFrame`, if it is one.
+    Return ``shaped`` s a ``pandas.DataFrame`` if it is one.
     """
     if isinstance(shaped, pd.DataFrame):
-        return shaped
+        return shaped  # type: ignore
     return None
 
 
@@ -477,20 +405,20 @@ def mustbe_compressed_matrix(shaped: Any) -> CompressedMatrix:
     return shaped
 
 
-def mustbe_pandas_series(shaped: Any) -> PandasSeries:
+def mustbe_pandas_series(shaped: Any) -> pd.Series:
     """
-    Return ``shaped`` as a :py:const:`PandasSeries`, asserting it must be one.
+    Return ``shaped`` as a ``pandas.Series`` asserting it must be one.
     """
     assert isinstance(shaped, pd.Series)
-    return shaped
+    return shaped  # type: ignore
 
 
-def mustbe_pandas_frame(shaped: Any) -> PandasFrame:
+def mustbe_pandas_frame(shaped: Any) -> pd.DataFrame:
     """
-    Return ``shaped`` as a :py:const:`PandasFrame`, asserting it must be one.
+    Return ``shaped`` as a ``pandas.DataFrame`` asserting it must be one.
     """
     assert isinstance(shaped, pd.DataFrame)
-    return shaped
+    return shaped  # type: ignore
 
 
 @utd.expand_doc()
@@ -580,30 +508,30 @@ def to_pandas_series(
     vector: Optional[Vector] = None,
     *,
     index: Optional[Vector] = None,
-) -> PandasSeries:
+) -> pd.Series:
     """
     Construct a pandas series from any :py:const:`Vector`.
     """
     if vector is None:
-        return pd.Series(index=index)
+        return pd.Series(index=index)  # type: ignore
 
-    return pd.Series(to_numpy_vector(vector), index=index)
+    return pd.Series(to_numpy_vector(vector), index=index)  # type: ignore
 
 
 def to_pandas_frame(
     matrix: Optional[Matrix] = None, *, index: Optional[Vector] = None, columns: Optional[Vector] = None
-) -> PandasFrame:
+) -> pd.DataFrame:
     """
     Construct a pandas frame from any :py:const:`Matrix`.
     """
     if matrix is None:
-        return pd.DataFrame(index=index, columns=columns)
+        return pd.DataFrame(index=index, columns=columns)  # type: ignore
 
     sparse = maybe_sparse_matrix(matrix)
     if sparse is not None:
-        return pd.DataFrame.sparse.from_spmatrix(sparse, index=index, columns=columns)
+        return pd.DataFrame.sparse.from_spmatrix(sparse, index=index, columns=columns)  # type: ignore
 
-    return pd.DataFrame(to_numpy_matrix(matrix, only_extract=True), index=index, columns=columns)
+    return pd.DataFrame(to_numpy_matrix(matrix, only_extract=True), index=index, columns=columns)  # type: ignore
 
 
 def frozen(shaped: Union[ProperShaped, PandasShaped]) -> bool:
@@ -618,7 +546,7 @@ def frozen(shaped: Union[ProperShaped, PandasShaped]) -> bool:
         return not compressed.data.flags.writeable
 
     if isinstance(shaped, (pd.DataFrame, pd.Series, pd.core.indexes.base.Index)):
-        shaped = shaped.values
+        shaped = shaped.values  # type: ignore
 
     if isinstance(shaped, pd.core.arrays.categorical.Categorical):
         shaped = shaped.codes
@@ -641,7 +569,7 @@ def freeze(shaped: Union[ProperShaped, PandasShaped]) -> None:
         return
 
     if isinstance(shaped, (pd.DataFrame, pd.Series, pd.core.indexes.base.Index)):
-        shaped = shaped.values
+        shaped = shaped.values  # type: ignore
 
     if isinstance(shaped, pd.core.arrays.categorical.Categorical):
         shaped = shaped.codes
@@ -665,7 +593,7 @@ def unfreeze(shaped: Union[ProperShaped, PandasShaped]) -> None:
         return
 
     if isinstance(shaped, (pd.DataFrame, pd.Series, pd.core.indexes.base.Index)):
-        shaped = shaped.values
+        shaped = shaped.values  # type: ignore
 
     if isinstance(shaped, pd.core.arrays.categorical.Categorical):
         shaped = shaped.codes
@@ -758,12 +686,12 @@ def to_numpy_vector(
 
     elif is_1d(shaped):
         if isinstance(shaped, (pd.DataFrame, pd.Series, pd.core.indexes.base.Index)):
-            shaped = shaped.values
+            shaped = shaped.values  # type: ignore
 
         if isinstance(shaped, pd.core.arrays.categorical.Categorical):
             shaped = np.array(shaped)
 
-        dense = shaped
+        dense = shaped  # type: ignore
 
     else:
         assert is_2d(shaped)
@@ -827,7 +755,7 @@ def shaped_dtype(shaped: Shaped) -> str:
 
     series = maybe_pandas_series(shaped)
     if series is not None:
-        shaped = series.values
+        shaped = series.values  # type: ignore
 
     if isinstance(shaped, pd.core.arrays.categorical.Categorical):
         shaped = np.array(shaped)
@@ -866,7 +794,7 @@ def is_contiguous(vector: Vector) -> bool:
     This is only ``True`` for a dense vector.
     """
     if isinstance(vector, (pd.DataFrame, pd.Series, pd.core.indexes.base.Index)):
-        vector = vector.values
+        vector = vector.values  # type: ignore
 
     if isinstance(vector, pd.core.arrays.categorical.Categorical):
         vector = np.array(vector)
@@ -1023,4 +951,4 @@ def shaped_checksum(shaped: Shaped) -> float:
         values = to_numpy_vector(shaped)
     else:
         values = to_numpy_matrix(shaped).ravel()  # type: ignore
-    return np.nansum(values.astype("float64") * (1 + np.arange(len(values))))
+    return np.nansum(values.astype("float64") * (1 + np.arange(len(values))))  # type: ignore

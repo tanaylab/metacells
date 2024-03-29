@@ -7,6 +7,7 @@ from typing import Optional
 from typing import Union
 
 import numpy as np
+import pandas as pd
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
@@ -31,7 +32,7 @@ def find_high_total_genes(
     *,
     min_gene_total: int,
     inplace: bool = True,
-) -> Optional[ut.PandasSeries]:
+) -> Optional[pd.Series]:
     """
     Find genes which have high total number of ``what`` (default: {what}) data.
 
@@ -85,7 +86,7 @@ def find_high_topN_genes(  # pylint: disable=invalid-name
     topN: int,
     min_gene_topN: int,
     inplace: bool = True,
-) -> Optional[ut.PandasSeries]:
+) -> Optional[pd.Series]:
     """
     Find genes which have high total top-Nth value of ``what`` (default: {what}) data.
 
@@ -139,7 +140,7 @@ def find_high_fraction_genes(
     *,
     min_gene_fraction: float = pr.significant_gene_fraction,
     inplace: bool = True,
-) -> Optional[ut.PandasSeries]:
+) -> Optional[pd.Series]:
     """
     Find genes which have high fraction of the total ``what`` (default: {what}) data of the cells.
 
@@ -192,7 +193,7 @@ def find_high_normalized_variance_genes(
     *,
     min_gene_normalized_variance: float = pr.significant_gene_normalized_variance,
     inplace: bool = True,
-) -> Optional[ut.PandasSeries]:
+) -> Optional[pd.Series]:
     """
     Find genes which have high normalized variance of ``what`` (default: {what}) data.
 
@@ -249,7 +250,7 @@ def find_high_relative_variance_genes(
     min_gene_relative_variance: float = pr.significant_gene_relative_variance,
     window_size: int = pr.relative_variance_window_size,
     inplace: bool = True,
-) -> Optional[ut.PandasSeries]:
+) -> Optional[pd.Series]:
     """
     Find genes which have high relative variance of ``what`` (default: {what}) data.
 
@@ -310,7 +311,7 @@ def find_metacells_marker_genes(
     regularization: float = pr.metacells_gene_range_regularization,
     min_max_gene_fraction: float = pr.min_marker_max_metacells_gene_fraction,
     inplace: bool = True,
-) -> Optional[ut.PandasSeries]:
+) -> Optional[pd.Series]:
     """
     Find "marker" genes which have a significant signal in metacells data. This computation is too unreliable to be
     used on cells.

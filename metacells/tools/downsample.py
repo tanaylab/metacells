@@ -8,6 +8,7 @@ from typing import Tuple
 from typing import Union
 
 import numpy as np
+import pandas as pd
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
@@ -30,7 +31,7 @@ def downsample_cells(
     downsample_max_cell_quantile: float = pr.downsample_max_cell_quantile,
     inplace: bool = True,
     random_seed: int,
-) -> Optional[Tuple[int, ut.PandasFrame]]:
+) -> Optional[Tuple[int, pd.DataFrame]]:
     """
     Downsample the values of ``what`` (default: {what}) data.
 

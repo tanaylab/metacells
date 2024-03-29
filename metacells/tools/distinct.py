@@ -9,6 +9,7 @@ from typing import Tuple
 from typing import Union
 
 import numpy as np
+import pandas as pd
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
@@ -33,7 +34,7 @@ def compute_distinct_folds(
     *,
     normalization: float = 0,
     inplace: bool = True,
-) -> Optional[ut.PandasFrame]:
+) -> Optional[pd.DataFrame]:
     """
     Compute for each observation (cell) and each variable (gene) how much is the ``what`` (default:
     {what}) value different from the overall population.
@@ -106,7 +107,7 @@ def find_distinct_genes(
     *,
     distinct_genes_count: int = pr.distinct_genes_count,
     inplace: bool = True,
-) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame]]:
+) -> Optional[Tuple[pd.DataFrame, pd.DataFrame]]:
     """
     Find for each observation (cell) the genes in which its ``what`` (default: {what}) value is most
     distinct from the general population. This is typically applied to the metacells data rather
@@ -168,7 +169,7 @@ def compute_subset_distinct_genes(
     scale: Optional[Union[bool, str, ut.NumpyVector]],
     subset: Union[str, ut.NumpyVector],
     normalization: float,
-) -> Optional[Tuple[ut.PandasSeries, ut.PandasSeries]]:
+) -> Optional[Tuple[pd.Series, pd.Series]]:
     """
     Given a subset of the observations (cells), compute for each gene how distinct its ``what``
     (default: {what}) value is in the subset compared to the overall population.

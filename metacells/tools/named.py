@@ -9,6 +9,7 @@ from typing import Optional
 from typing import Union
 
 import numpy as np
+import pandas as pd
 from anndata import AnnData  # type: ignore
 
 import metacells.utilities as ut
@@ -30,7 +31,7 @@ def find_named_genes(  # pylint: disable=too-many-branches
     to: Optional[str] = None,
     invert: bool = False,
     op: str = "set",
-) -> Optional[ut.PandasSeries]:
+) -> Optional[pd.Series]:
     """
     Find genes by their (case-insensitive) name.
 

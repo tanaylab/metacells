@@ -13,6 +13,7 @@ from typing import Tuple
 from typing import Union
 
 import numpy as np
+import pandas as pd
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
@@ -53,7 +54,7 @@ def compute_candidate_metacells(  # pylint: disable=too-many-statements
     must_complete_cover: bool = False,
     random_seed: int,
     inplace: bool = True,
-) -> Optional[ut.PandasSeries]:
+) -> Optional[pd.Series]:
     """
     Assign observations (cells) to (raw, candidate) metacells based on ``what`` data. (a weighted
     directed graph).
@@ -473,9 +474,9 @@ def _cut_split_communities(  # pylint: disable=too-many-branches,too-many-statem
                     community_of_nodes[split_part_indices[np.random.randint(len(split_part_indices))]] = community_index
                 else:
                     hot_communities.append(next_new_community_index)
-                    community_of_nodes[
-                        split_part_indices[np.random.randint(len(split_part_indices))]
-                    ] = next_new_community_index
+                    community_of_nodes[split_part_indices[np.random.randint(len(split_part_indices))]] = (
+                        next_new_community_index
+                    )
                     next_new_community_index += 1
                     split_communities_count += 1
             continue

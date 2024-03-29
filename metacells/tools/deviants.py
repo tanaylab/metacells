@@ -691,8 +691,7 @@ def _filter_cells(
 
         ut.log_calc("quantile_cells_fold_rank", quantile_cells_fold_rank)
 
-        if quantile_cells_fold_rank < threshold_cells_fold_rank:
-            threshold_cells_fold_rank = quantile_cells_fold_rank
+        threshold_cells_fold_rank = min(threshold_cells_fold_rank, quantile_cells_fold_rank)
 
     threshold_cells_fold_rank = max(threshold_cells_fold_rank, 2)
 

@@ -10,6 +10,7 @@ from typing import Tuple
 from typing import Union
 
 import numpy as np
+import pandas as pd
 import scipy.cluster.hierarchy as sch  # type: ignore
 import scipy.spatial.distance as scd  # type: ignore
 from anndata import AnnData  # type: ignore
@@ -47,7 +48,7 @@ def find_rare_gene_modules(
     min_cell_module_total: int = pr.rare_min_cell_module_total,
     inplace: bool = True,
     reproducible: bool,
-) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame]]:
+) -> Optional[Tuple[pd.DataFrame, pd.DataFrame]]:
     """
     Detect rare genes modules based on ``what`` (default: {what}) data.
 
@@ -627,7 +628,7 @@ def _results(
     rare_module_of_cells: ut.NumpyVector,
     list_of_rare_gene_indices_of_modules: List[List[int]],
     inplace: bool,
-) -> Optional[Tuple[ut.PandasFrame, ut.PandasFrame]]:
+) -> Optional[Tuple[pd.DataFrame, pd.DataFrame]]:
     assert np.max(rare_module_of_cells) == len(list_of_rare_gene_indices_of_modules) - 1
 
     if not inplace:

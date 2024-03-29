@@ -718,10 +718,10 @@ def _compute_metacell_genes_normalized_variances(
 ) -> None:
     metacell_cells_mask = metacell_per_cell == metacell_index
     metacell_umis = cells_umis[metacell_cells_mask, :]
-    total_umis = ut.sum_per(metacell_umis, per="row")
+    total_umis = ut.sum_per(metacell_umis, per="row")  # type: ignore
     median_total_umis = np.median(total_umis)
     ut.log_calc("median_total_umis", median_total_umis)
-    metacell_fractions = ut.fraction_by(metacell_umis, by="row")
+    metacell_fractions = ut.fraction_by(metacell_umis, by="row")  # type: ignore
     metacell_fractions = ut.to_layout(metacell_fractions, layout="column_major")
     metacell_fractions *= median_total_umis
     genes_normalized_variance = ut.normalized_variance_per(metacell_fractions, per="column")

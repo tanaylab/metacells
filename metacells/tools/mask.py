@@ -6,6 +6,7 @@ Mask
 from typing import Collection
 from typing import Optional
 
+import pandas as pd
 from anndata import AnnData  # type: ignore
 
 import metacells.utilities as ut
@@ -24,7 +25,7 @@ def combine_masks(  # pylint: disable=too-many-branches,too-many-statements
     *,
     invert: bool = False,
     to: Optional[str] = None,
-) -> Optional[ut.PandasSeries]:
+) -> Optional[pd.Series]:
     """
     Combine different pre-computed masks into a final overall mask.
 

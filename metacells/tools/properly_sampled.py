@@ -7,6 +7,7 @@ from typing import Optional
 from typing import Union
 
 import numpy as np
+import pandas as pd
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
@@ -45,7 +46,7 @@ def find_properly_sampled_cells(
     max_cell_total: Optional[int],
     max_excluded_genes_fraction: Optional[float],
     inplace: bool = True,
-) -> Optional[ut.PandasSeries]:
+) -> Optional[pd.Series]:
     """
     Detect cells with a "proper" amount of ``what`` (default: {what}) data.
 
@@ -114,7 +115,7 @@ def find_properly_sampled_genes(
     *,
     min_gene_total: int = pr.properly_sampled_min_gene_total,
     inplace: bool = True,
-) -> Optional[ut.PandasSeries]:
+) -> Optional[pd.Series]:
     """
     Detect genes with a "proper" amount of ``what`` (default: {what}) data.
 

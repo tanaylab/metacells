@@ -9,7 +9,7 @@ from typing import Union
 
 import fastcluster as fc  # type: ignore
 import numpy as np
-import pandas as pd  # type: ignore
+import pandas as pd
 import scipy.sparse as sp  # type: ignore
 import scipy.spatial.distance as scd  # type: ignore
 from anndata import AnnData  # type: ignore
@@ -155,7 +155,9 @@ def relate_to_lateral_genes(  # pylint: disable=too-many-statements
     for cluster_index, gene_indices in enumerate(clusters):
         cluster_of_genes[sdata.var_names[gene_indices]] = cluster_index
 
-    ut.set_v_data(adata, "lateral_genes_module", cluster_of_genes, formatter=ut.groups_description)
+    ut.set_v_data(
+        adata, "lateral_genes_module", cluster_of_genes.values, formatter=ut.groups_description  # type: ignore
+    )
 
     related_gene_indices = np.where(related_genes_mask)[0]
     data = similarity.flatten(order="C")

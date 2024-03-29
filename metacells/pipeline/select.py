@@ -9,6 +9,7 @@ from typing import Tuple
 from typing import Union
 
 import numpy as np
+import pandas as pd
 from anndata import AnnData  # type: ignore
 
 import metacells.parameters as pr
@@ -129,7 +130,7 @@ def extract_selected_data(  # pylint: disable=too-many-branches, too-many-statem
         random_seed=random_seed,
     )
 
-    results: Optional[Tuple[AnnData, ut.PandasSeries, ut.PandasSeries]] = None
+    results: Optional[Tuple[AnnData, pd.Series, pd.Series]] = None
     if ut.has_data(adata, "select_gene"):
         results = tl.filter_data(
             adata,
@@ -160,7 +161,7 @@ def extract_selected_data(  # pylint: disable=too-many-branches, too-many-statem
 
         candidate_genes_mask = tl.combine_masks(adata, var_masks + additional_gene_masks)
         assert candidate_genes_mask is not None
-        if np.sum(candidate_genes_mask.values) >= min_genes:
+        if np.sum(candidate_genes_mask.values) >= min_genes:  # type: ignore
             results = tl.filter_data(
                 adata,
                 name=name,
@@ -175,7 +176,7 @@ def extract_selected_data(  # pylint: disable=too-many-branches, too-many-statem
         assert valid_candidate_genes_mask is not None
 
         is_valid_set = False
-        if np.sum(valid_candidate_genes_mask.values) <= min_genes:
+        if np.sum(valid_candidate_genes_mask.values) <= min_genes:  # type: ignore
             var_masks.pop()
 
         else:
@@ -187,7 +188,7 @@ def extract_selected_data(  # pylint: disable=too-many-branches, too-many-statem
                 )
                 valid_candidate_genes_mask = tl.combine_masks(adata, var_masks + additional_gene_masks)
                 assert valid_candidate_genes_mask is not None
-                if np.sum(valid_candidate_genes_mask.values) >= min_genes:
+                if np.sum(valid_candidate_genes_mask.values) >= min_genes:  # type: ignore
                     is_valid_set = True
                     break
 
@@ -198,7 +199,7 @@ def extract_selected_data(  # pylint: disable=too-many-branches, too-many-statem
                 )
                 mid_candidate_genes_mask = tl.combine_masks(adata, var_masks + additional_gene_masks)
                 assert mid_candidate_genes_mask is not None
-                if np.sum(mid_candidate_genes_mask.values) >= min_genes:
+                if np.sum(mid_candidate_genes_mask.values) >= min_genes:  # type: ignore
                     min_gene_relative_variance = mid_gene_relative_variance
                     valid_candidate_genes_mask = mid_candidate_genes_mask
                     is_valid_set = True
@@ -207,7 +208,7 @@ def extract_selected_data(  # pylint: disable=too-many-branches, too-many-statem
                     is_valid_set = False
 
         if not is_valid_set:
-            ut.set_v_data(adata, "high_relative_variance_gene", valid_candidate_genes_mask.values)
+            ut.set_v_data(adata, "high_relative_variance_gene", valid_candidate_genes_mask.values)  # type: ignore
 
         results = tl.filter_data(
             adata,

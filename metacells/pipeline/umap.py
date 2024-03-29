@@ -15,6 +15,7 @@ from typing import Union
 
 import igraph as ig  # type: ignore
 import numpy as np
+import pandas as pd
 from anndata import AnnData  # type: ignore
 from scipy import sparse  # type: ignore
 
@@ -50,7 +51,7 @@ def compute_knn_by_markers(
     outgoing_degree_factor: float = pr.knn_outgoing_degree_factor,
     min_outgoing_degree: int = pr.markers_knn_min_outgoing_degree,
     reproducible: bool,
-) -> ut.PandasFrame:
+) -> pd.DataFrame:
     """
     Compute KNN graph between metacells based on marker genes.
 

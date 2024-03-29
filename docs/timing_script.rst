@@ -12,7 +12,7 @@ Usage
 
     Process a timing.csv file
 
-    optional arguments:
+    options:
       -h, --help  show this help message and exit
 
     commands:
@@ -40,7 +40,7 @@ Combine Command
     positional arguments:
       FILE                  The path to the timing CSV file.
 
-    optional arguments:
+    options:
       -h, --help            show this help message and exit
       -o OUTPUT, --output OUTPUT
                             The optional path to write the output to (otherwise,
@@ -64,7 +64,7 @@ Flame Command
       FILE                  The optional path to the timing CSV file (otherwise,
                             reads from the standard input).
 
-    optional arguments:
+    options:
       -h, --help            show this help message and exit
       -o OUTPUT, --output OUTPUT
                             The optional path to write the output to (otherwise,
@@ -86,7 +86,7 @@ Sum Command
       FILE                  The optional path to the timing CSV file (otherwise,
                             reads from the standard input).
 
-    optional arguments:
+    options:
       -h, --help            show this help message and exit
       -f {elapsed,cpu,invocations}, --focus {elapsed,cpu,invocations}
                             Which field to focus the flamegraph on.
