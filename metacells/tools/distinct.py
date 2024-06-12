@@ -144,7 +144,7 @@ def find_distinct_genes(
 
     fold_in_cells = ut.mustbe_numpy_matrix(ut.get_vo_proper(adata, what, layout="row_major"))
     extension_name = f"top_distinct_{fold_in_cells.dtype}_t"
-    extension = getattr(xt, extension_name)
+    extension = getattr(xt, extension_name)  # pylint: disable=possibly-used-before-assignment
     extension(distinct_gene_indices, distinct_gene_folds, fold_in_cells)
 
     if inplace:

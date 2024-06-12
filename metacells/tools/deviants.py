@@ -183,7 +183,7 @@ def find_deviant_cells(  # pylint: disable=too-many-statements,too-many-branches
                 compressed.indices.dtype,
                 compressed.indptr.dtype,
             )
-            extension = getattr(xt, extension_name)
+            extension = getattr(xt, extension_name)  # pylint: disable=possibly-used-before-assignment
 
             with ut.timed_step("extensions.fold_factor_compressed"):
                 extension(
