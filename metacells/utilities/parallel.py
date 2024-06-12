@@ -53,6 +53,7 @@ import ctypes
 import os
 import sys
 from math import ceil
+from multiprocessing import Lock
 from multiprocessing import Value
 from multiprocessing import get_context
 from threading import current_thread
@@ -104,6 +105,9 @@ def is_main_process() -> bool:
     return bool(IS_MAIN_PROCESS)
 
 
+LOCK = Lock()
+
+
 def set_processors_count(processors: int) -> None:
     """
     Set the (maximal) number of processors to use in parallel.
@@ -127,8 +131,10 @@ def set_processors_count(processors: int) -> None:
     global PROCESSORS_COUNT
     PROCESSORS_COUNT = processors
 
-    threadpool_limits(limits=PROCESSORS_COUNT)
-    xt.set_threads_count(PROCESSORS_COUNT)
+    with LOCK:
+        threadpool_limits(limits=PROCESSORS_COUNT)
+
+    xt.set_threads_count(PROCESSORS_COUNT)  # pylint: disable=possibly-used-before-assignment
     os.environ["OMP_NUM_THREADS"] = str(PROCESSORS_COUNT)
     os.environ["MKL_NUM_THREADS"] = str(PROCESSORS_COUNT)
 
@@ -252,7 +258,10 @@ def _invocation(index: int) -> Tuple[int, Any]:
 
         assert PROCESSORS_COUNT > 0
         utl.logger().debug("PROCESSORS: %s", PROCESSORS_COUNT)
-        threadpool_limits(limits=PROCESSORS_COUNT)
+
+        with LOCK:
+            threadpool_limits(limits=PROCESSORS_COUNT)
+
         xt.set_threads_count(PROCESSORS_COUNT)
         os.environ["OMP_NUM_THREADS"] = str(PROCESSORS_COUNT)
         os.environ["MKL_NUM_THREADS"] = str(PROCESSORS_COUNT)

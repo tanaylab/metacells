@@ -280,7 +280,7 @@ def _relayout_compressed(compressed: utt.CompressedMatrix) -> utt.CompressedMatr
             compressed.indices.dtype,
             compressed.indptr.dtype,
         )
-        extension = getattr(xt, extension_name)
+        extension = getattr(xt, extension_name)  # pylint: disable=possibly-used-before-assignment
 
         assert matrix_bands_count == compressed.indptr.size - 1
 

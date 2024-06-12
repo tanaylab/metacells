@@ -729,7 +729,7 @@ def _choose_seeds(
 ) -> int:
     ut.log_calc("partial seeds", seed_of_cells, formatter=ut.groups_description)
 
-    seeds_count = xt.choose_seeds(
+    seeds_count = xt.choose_seeds(  # pylint: disable=possibly-used-before-assignment
         outgoing_edge_weights.data,
         outgoing_edge_weights.indices,
         outgoing_edge_weights.indptr,

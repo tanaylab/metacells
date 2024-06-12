@@ -644,7 +644,7 @@ def _results(
         ut.set_v_data(adata, "rare_gene", rare_gene_mask)
         ut.set_v_data(adata, "rare_gene_module", rare_gene_modules, formatter=ut.groups_description)
     else:
-        var_metrics["rare_gene"] = rare_gene_mask
+        var_metrics["rare_gene"] = rare_gene_mask  # pylint: disable=possibly-used-before-assignment
         ut.log_return("rare_gene", rare_gene_mask)
         var_metrics["rare_gene_module"] = rare_gene_modules
         ut.log_return("rare_gene_module", rare_gene_modules, formatter=ut.groups_description)
