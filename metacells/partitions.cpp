@@ -277,11 +277,11 @@ struct OptimizePartitions {
                        pybind11::array_t<int32_t>& partition_of_nodes_array,
                        pybind11::array_t<int8_t>& hot_partitions_mask_array)
       : outgoing_weights(ConstCompressedMatrix<float32_t, int32_t, int32_t>(
-            ConstArraySlice<float32_t>(outgoing_weights_array, "outgoing_weights_array"),
-            ConstArraySlice<int32_t>(outgoing_indices_array, "outgoing_indices_array"),
-            ConstArraySlice<int32_t>(outgoing_indptr_array, "outgoing_indptr_array"),
-            int32_t(outgoing_indptr_array.size() - 1),
-            "outgoing_weights"))
+          ConstArraySlice<float32_t>(outgoing_weights_array, "outgoing_weights_array"),
+          ConstArraySlice<int32_t>(outgoing_indices_array, "outgoing_indices_array"),
+          ConstArraySlice<int32_t>(outgoing_indptr_array, "outgoing_indptr_array"),
+          int32_t(outgoing_indptr_array.size() - 1),
+          "outgoing_weights"))
       , incoming_weights(ConstCompressedMatrix<float32_t, int32_t, int32_t>(
             ConstArraySlice<float32_t>(incoming_weights_array, "incoming_weights_array"),
             ConstArraySlice<int32_t>(incoming_indices_array, "incoming_indices_array"),
