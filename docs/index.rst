@@ -1,5 +1,5 @@
-Metacells 0.9.5-dev
-===================
+Metacells 0.9.5
+===============
 
 .. toctree::
   :titlesonly:

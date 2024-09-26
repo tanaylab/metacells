@@ -77,3 +77,4 @@ History
 
 * Improve recovery from unstable convex solvers.
 * Fix an edge case in computing deviant cells using the gaps policy.
+* Turns out the ``threadpoolctl`` is not thread-safe (the irony!), causing deadlocks. Work around this.

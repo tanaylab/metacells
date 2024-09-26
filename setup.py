@@ -106,5 +106,5 @@ setup(
     tests_require=test_requirements,
     extras_require={"dev": dev_requirements},
     url="https://github.com/tanaylab/metacells.git",
-    version="0.9.5-dev",
+    version="0.9.5",
 )

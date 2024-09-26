@@ -6,7 +6,7 @@ import sys
 
 __author__ = "Oren Ben-Kiki"
 __email__ = "oren@ben-kiki.org"
-__version__ = "0.9.5-dev"
+__version__ = "0.9.5"
 
 if "sphinx" not in sys.argv[0]:
     from .should_check_avx2 import SHOULD_CHECK_AVX2
