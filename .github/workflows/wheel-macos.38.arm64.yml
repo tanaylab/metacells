@@ -7,7 +7,7 @@ jobs:
     strategy:
       matrix:
         platform:
-          - [macos-11, macosx_arm64]
+          - [macos-12, macosx_arm64]
         python: ["cp38"]
 
     name: Build wheel for ${{ matrix.python }}-${{ matrix.platform[0] }}-${{ matrix.platform[1] }}
