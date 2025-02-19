@@ -5,7 +5,9 @@ Mask
 
 from typing import Collection
 from typing import Optional
+from typing import Union
 
+import numpy as np
 import pandas as pd
 from anndata import AnnData  # type: ignore
 
@@ -13,6 +15,7 @@ import metacells.utilities as ut
 
 __all__ = [
     "combine_masks",
+    "sum_mask_genes",
 ]
 
 
@@ -129,3 +132,42 @@ def combine_masks(  # pylint: disable=too-many-branches,too-many-statements
         ut.set_v_data(adata, to, result_mask)
 
     return None
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def sum_mask_genes(
+    adata: AnnData,
+    what: Union[str, ut.Matrix] = "__x__",
+    *,
+    mask_property: str,
+    to: Optional[str] = None,
+) -> Optional[pd.Series]:
+    """
+    Sum the total value (typically UMIs) of all the variables (typically genes) listed in some ``mask_property`` in each
+    of the observations (typically cells).
+
+    This is used to count things like the total UMIs of mitochondrial genes or ribosomal genes when choosing cells to
+    exclude from the analyzed data.
+
+    The ``mask_property`` name should be of a per-variable (gene) Boolean annotation.
+
+    If ``to`` is specified, this is stored as a per-observation (cell) annotation with that name, and returns ``None``.
+    Otherwise, it returns it as a pandas series (indexed by the observation names, typically cell barcodes).
+    """
+    mask = ut.get_v_numpy(adata, mask_property)
+    assert mask.dtype == "bool"
+
+    values = ut.get_vo_proper(adata, what, layout="row_major")
+
+    sums = np.zeros(adata.n_obs, dtype=values.dtype)  # type: ignore
+    for var_index in np.where(mask)[0]:
+        sums += values[var_index, :]
+
+    if to is not None:
+        ut.set_v_data(adata, to, sums)
+        return None
+
+    ut.log_return("sums", sums)
+    return ut.to_pandas_series(sums, index=adata.obs_names)

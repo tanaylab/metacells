@@ -117,7 +117,7 @@ def find_bursty_lonely_genes(  # pylint: disable=too-many-statements
         sdata, name="high_total", top_level=False, track_var=track_var, var_masks=["&high_total_gene"]
     )
     track_var = None
-    assert results is not None
+    assert results is not None, "the data has no genes with high expression?!?!"
     ht_data = results[0]
 
     bursty_lonely_genes_mask = np.full(adata.n_vars, False)
