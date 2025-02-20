@@ -7,7 +7,6 @@ from typing import Collection
 from typing import Optional
 from typing import Union
 
-import numpy as np
 import pandas as pd
 from anndata import AnnData  # type: ignore
 
@@ -159,14 +158,12 @@ def sum_mask_genes(
     mask = ut.get_v_numpy(adata, mask_property)
     assert mask.dtype == "bool"
 
-    values = ut.get_vo_proper(adata, what, layout="row_major")
-
-    sums = np.zeros(adata.n_obs, dtype=values.dtype)  # type: ignore
-    for var_index in np.where(mask)[0]:
-        sums += values[var_index, :]
+    values = ut.get_vo_proper(adata, what)
+    masked_values = values[:, mask]
+    sums = ut.sum_per(masked_values, per="row")
 
     if to is not None:
-        ut.set_v_data(adata, to, sums)
+        ut.set_o_data(adata, to, sums)
         return None
 
     ut.log_return("sums", sums)

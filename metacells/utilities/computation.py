@@ -1063,11 +1063,15 @@ def mean_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     Compute the mean value ``per`` (``row`` or ``column``) of some ``matrix``.
 
     If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
-    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
-    ``column``, and the matrix must be in the appropriate layout (``row_major`` operating on rows,
-    ``column_major`` for operating on columns).
+    efficient direction is used based on the matrix layout.
+
+    .. note::
+
+        This is one of the select ``_per`` functions that was re-implemented here to work (efficiently!) for all
+        combinations of ``per`` and matrix layout; ``numpy`` in its infinite wisdom uses a very inefficient
+        implementation when the operation direction does not match the matrix layout.
     """
-    per = _ensure_per_for("mean", matrix, per)
+    per = _ensure_per(matrix, per)
     axis = 1 - utt.PER_OF_AXIS.index(per)
     return sum_per(matrix, per=per) / matrix.shape[axis]
 
@@ -1116,19 +1120,35 @@ def max_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     Compute the maximal value ``per`` (``row`` or ``column``) of some ``matrix``.
 
     If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
-    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
-    ``column``, and the matrix must be in the appropriate layout (``row_major`` operating on rows,
-    ``column_major`` for operating on columns).
+    efficient direction is used based on the matrix layout.
+
+    .. note::
+
+        This is one of the select ``_per`` functions that was re-implemented here to work (efficiently!) for all
+        combinations of ``per`` and matrix layout; ``numpy`` in its infinite wisdom uses a very inefficient
+        implementation when the operation direction does not match the matrix layout.
     """
-    per = _ensure_per_for("max", matrix, per)
+    per = _ensure_per(matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
     sparse = utt.maybe_sparse_matrix(matrix)
     if sparse is not None:
-        return _reduce_matrix("max", sparse, per, lambda sparse: sparse.max(axis=1 - axis))
+        return _reduce_matrix(
+            "max",
+            sparse,
+            per,
+            lambda sparse: sparse.max(axis=1 - axis),
+            lambda result, data: np.maximum.reduce([result, data], out=result),
+        )
 
     dense = utt.to_numpy_matrix(matrix, only_extract=True)
-    return _reduce_matrix("max", dense, per, lambda dense: np.max(dense, axis=1 - axis))
+    return _reduce_matrix(
+        "max",
+        dense,
+        per,
+        lambda dense: np.max(dense, axis=1 - axis),
+        lambda result, data: np.maximum.reduce([result, data], out=result),
+    )
 
 
 @utm.timed_call()
@@ -1156,19 +1176,35 @@ def min_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
     Compute the minimal value ``per`` (``row`` or ``column``) of some ``matrix``.
 
     If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
-    efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
-    ``column``, and the matrix must be in the appropriate layout (``row_major`` operating on rows,
-    ``column_major`` for operating on columns).
+    efficient direction is used based on the matrix layout.
+
+    .. note::
+
+        This is one of the select ``_per`` functions that was re-implemented here to work (efficiently!) for all
+        combinations of ``per`` and matrix layout; ``numpy`` in its infinite wisdom uses a very inefficient
+        implementation when the operation direction does not match the matrix layout.
     """
-    per = _ensure_per_for("nanmax", matrix, per)
+    per = _ensure_per(matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
     sparse = utt.maybe_sparse_matrix(matrix)
     if sparse is not None:
-        return _reduce_matrix("min", sparse, per, lambda sparse: sparse.min(axis=1 - axis))
+        return _reduce_matrix(
+            "min",
+            sparse,
+            per,
+            lambda sparse: sparse.min(axis=1 - axis),
+            lambda result, data: np.minimum.reduce([result, data], out=result),
+        )
 
     dense = utt.to_numpy_matrix(matrix, only_extract=True)
-    return _reduce_matrix("min", dense, per, lambda dense: np.min(dense, axis=1 - axis))
+    return _reduce_matrix(
+        "min",
+        dense,
+        per,
+        lambda dense: np.min(dense, axis=1 - axis),
+        lambda result, data: np.minimum.reduce([result, data], out=result),
+    )
 
 
 @utm.timed_call()
@@ -1227,18 +1263,35 @@ def sum_per(matrix: utt.Matrix, *, per: Optional[str]) -> utt.NumpyVector:
 
     If ``per`` is ``None``, the matrix must be square and is assumed to be symmetric, so the most
     efficient direction is used based on the matrix layout. Otherwise it must be one of ``row`` or
-    ``column``, and the matrix must be in the appropriate layout (``row_major`` operating on rows,
-    ``column_major`` for operating on columns).
+    ``column``.
+
+    .. note::
+
+        This is one of the select ``_per`` functions that was re-implemented here to work (efficiently!) for all
+        combinations of ``per`` and matrix layout; ``numpy`` in its infinite wisdom uses a very inefficient
+        implementation when the operation direction does not match the matrix layout.
     """
-    per = _ensure_per_for("sum", matrix, per)
+    per = _ensure_per(matrix, per)
     axis = utt.PER_OF_AXIS.index(per)
 
     sparse = utt.maybe_sparse_matrix(matrix)
     if sparse is not None:
-        return _reduce_matrix("sum", sparse, per, lambda sparse: sparse.sum(axis=1 - axis))
+        return _reduce_matrix(
+            "sum",
+            sparse,
+            per,
+            lambda sparse: sparse.sum(axis=1 - axis),
+            lambda result, data: np.add(result, data, out=result),
+        )
 
     dense = utt.to_numpy_matrix(matrix, only_extract=True)
-    return _reduce_matrix("sum", dense, per, lambda dense: utt.mustbe_numpy_vector(np.sum(dense, axis=1 - axis)))
+    return _reduce_matrix(
+        "sum",
+        dense,
+        per,
+        lambda dense: utt.mustbe_numpy_vector(np.sum(dense, axis=1 - axis)),
+        lambda result, data: np.add(result, data, out=result),
+    )
 
 
 @utm.timed_call()
@@ -1706,39 +1759,83 @@ def rank_matrix_by_layout(matrix: utt.NumpyMatrix, ascending: bool) -> Any:
 M = TypeVar("M", bound=utt.Matrix)
 
 
-def _reduce_matrix(
+def _reduce_matrix(  # pylint: disable=too-many-statements,too-many-branches
     _name: str,
     matrix: M,
     per: str,
     reducer: Callable[[M], utt.NumpyVector],
+    merger: Optional[Callable[[utt.NumpyVector, utt.NumpyVector], Any]] = None,
 ) -> utt.NumpyVector:
     assert matrix.ndim == 2
     axis = utt.PER_OF_AXIS.index(per)
-    results_count = matrix.shape[1 - axis]
+    results_size = matrix.shape[axis]
+    steps_count = matrix.shape[1 - axis]
 
     _, dense, compressed = utt.to_proper_matrices(matrix, default_layout=utt.LAYOUT_OF_AXIS[axis])
 
-    elements_count: float
+    effective_steps_count: float
     if dense is not None:
-        elements_count = dense.shape[axis]
+        effective_steps_count = dense.shape[1 - axis]
         axis_flag = (dense.flags.c_contiguous, dense.flags.f_contiguous)[axis]
         if axis_flag:
             timed_step = ".dense-efficient"
+            to_reduce = True
         else:
             timed_step = ".dense-inefficient"
+            to_reduce = False
+            assert merger is not None
 
     else:
         assert compressed is not None
-        elements_count = compressed.nnz / results_count
+        effective_steps_count = compressed.nnz / results_size
         axis_format = ("csr", "csc")[axis]
         if compressed.getformat() == axis_format:
             timed_step = ".compressed-efficient"
+            to_reduce = True
         else:
             timed_step = ".compressed-inefficient"
+            to_reduce = False
+            assert merger is not None
 
     with utm.timed_step(timed_step):
-        utm.timed_parameters(results=results_count, elements=elements_count)
-        return utt.to_numpy_vector(reducer(matrix))
+        if to_reduce:
+            utm.timed_parameters(results=results_size, steps=steps_count, effective_steps=effective_steps_count)
+            return utt.to_numpy_vector(reducer(matrix))
+
+        assert merger is not None
+        result = None
+        if axis == 0:
+            assert utt.is_layout(matrix, "column_major")
+
+            for column_index in range(steps_count):
+                data = matrix[:, column_index]
+                if not isinstance(data, np.ndarray):
+                    if data.nnz == 0:
+                        continue
+                    data = utt.to_numpy_vector(data)
+
+                if result is None:
+                    result = np.copy(data)
+                else:
+                    merger(result, data)
+
+        elif per == "column":
+            assert utt.is_layout(matrix, "row_major")
+
+            for row_index in range(steps_count):
+                data = matrix[row_index, :]
+                if not isinstance(data, np.ndarray):
+                    if data.nnz == 0:
+                        continue
+                    data = utt.to_numpy_vector(data)
+
+                if result is None:
+                    result = np.copy(data)
+                else:
+                    merger(result, data)
+
+        assert result is not None
+        return utt.to_numpy_vector(result)
 
 
 @utm.timed_call()

@@ -489,12 +489,18 @@ def _test_per(rows_matrix: ut.Matrix) -> None:
     assert np.allclose(ut.nnz_per(columns_matrix, per="column"), np.array([1, 2, 2]))
 
     assert np.allclose(ut.sum_per(rows_matrix, per="row"), np.array([3, 12]))
+    assert np.allclose(ut.sum_per(columns_matrix, per="row"), np.array([3, 12]))
+    assert np.allclose(ut.sum_per(rows_matrix, per="column"), np.array([3, 5, 7]))
     assert np.allclose(ut.sum_per(columns_matrix, per="column"), np.array([3, 5, 7]))
 
     assert np.allclose(ut.max_per(rows_matrix, per="row"), np.array([2, 5]))
+    assert np.allclose(ut.max_per(columns_matrix, per="row"), np.array([2, 5]))
+    assert np.allclose(ut.max_per(rows_matrix, per="column"), np.array([3, 4, 5]))
     assert np.allclose(ut.max_per(columns_matrix, per="column"), np.array([3, 4, 5]))
 
     assert np.allclose(ut.min_per(rows_matrix, per="row"), np.array([0, 3]))
+    assert np.allclose(ut.min_per(columns_matrix, per="row"), np.array([0, 3]))
+    assert np.allclose(ut.min_per(rows_matrix, per="column"), np.array([0, 1, 2]))
     assert np.allclose(ut.min_per(columns_matrix, per="column"), np.array([0, 1, 2]))
 
     assert np.allclose(ut.sum_squared_per(rows_matrix, per="row"), np.array([5, 50]))

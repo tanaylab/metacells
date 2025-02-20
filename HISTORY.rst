@@ -78,3 +78,10 @@ History
 * Improve recovery from unstable convex solvers.
 * Fix an edge case in computing deviant cells using the gaps policy.
 * Turns out the ``threadpoolctl`` is not thread-safe (the irony!), causing deadlocks. Work around this.
+
+0.9.6
+-----
+
+* Select few computations now work (efficiently!) for both matrix layouts (``sum_per``, ``min_per``, ``max_per``,
+  ``mean_per``).
+* Added ``sum_mask_genes`` to support new recommended procedure for cleaning up the data.
