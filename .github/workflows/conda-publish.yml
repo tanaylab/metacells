@@ -19,10 +19,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-14, macos-13]
         python: ["3.10", "3.11", "3.12"]
-        numpy: ["1.26", "2.0", "2.1"]
-        exclude:
-          - python: "3.10"
-            numpy: "2.1"
+        numpy: ["2.0", "2.1"]
     steps:
       - uses: actions/checkout@v4
 
