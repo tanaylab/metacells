@@ -5,7 +5,7 @@ Metacells 0.9.5 - Single-cell RNA Sequencing Analysis
     :target: https://pypi.org/project/metacells/
     :alt: PyPI
 
-.. image:: https://img.shields.io/conda/vn/aviezerl/metacells.svg
+.. image:: https://img.shields.io/conda/vn/aviezerl/metacells.svg?label=conda
     :target: https://anaconda.org/aviezerl/metacells
     :alt: Conda
 
