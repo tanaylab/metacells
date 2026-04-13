@@ -434,10 +434,12 @@ significant amount of quality control one needs to apply before accepting these 
 Installation
 ------------
 
-In short: ``pip install metacells``. Note that ``metacells`` requires many "heavy" dependencies, most notably ``numpy``,
-``pandas``, ``scipy``, ``scanpy``, which ``pip`` should automatically install for you. If you are running inside a
-``conda`` environment, you might prefer to use it to first install these dependencies, instead of having ``pip`` install
-them from ``PyPI``.
+In short: ``pip install metacells``, or using conda::
+
+    conda install -c aviezerl metacells
+
+Note that ``metacells`` requires many "heavy" dependencies, most notably ``numpy``,
+``pandas``, ``scipy``, ``scanpy``, which should be automatically installed for you.
 
 Note that ``metacells`` only runs natively on Linux and MacOS. To run it on a Windows computer, you must activate
 `Windows Subsystem for Linux <https://docs.microsoft.com/en-us/windows/wsl>`_ and install ``metacells`` within it.
