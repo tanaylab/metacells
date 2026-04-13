@@ -1,9 +1,21 @@
 Metacells 0.9.5 - Single-cell RNA Sequencing Analysis
 =====================================================
 
+.. image:: https://img.shields.io/pypi/v/metacells.svg
+    :target: https://pypi.org/project/metacells/
+    :alt: PyPI
+
+.. image:: https://img.shields.io/conda/vn/aviezerl/metacells.svg
+    :target: https://anaconda.org/aviezerl/metacells
+    :alt: Conda
+
 .. image:: https://readthedocs.org/projects/metacells/badge/?version=latest
     :target: https://metacells.readthedocs.io/en/latest/?badge=latest
     :alt: Documentation Status
+
+.. image:: https://img.shields.io/pypi/l/metacells.svg
+    :target: https://github.com/tanaylab/metacells/blob/master/LICENSE.rst
+    :alt: License
 
 The metacells package implements the improved metacell algorithm [1]_ for single-cell RNA sequencing (scRNA-seq) data
 analysis within the `scipy <https://www.scipy.org/>`_ framework, and projection algorithm based on it [2]_. The original
