@@ -1,0 +1,64 @@
+{% set name = "metacells" %}
+{% set version = environ.get("PACKAGE_VERSION", "0.9.5") %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  url: https://pypi.io/packages/source/{{ name[0] }}/{{ name }}/{{ name }}-{{ version }}.tar.gz
+  sha256: SET_ON_RELEASE
+
+build:
+  number: 0
+  skip: true  # [win]
+  script_env:
+    - WHEEL
+
+requirements:
+  build:
+    - {{ compiler("cxx") }}
+    - sysroot_linux-64 2.17  # [linux64]
+  host:
+    - python
+    - pip
+    - setuptools >=45
+    - wheel
+    - numpy
+  run:
+    - python
+    - {{ pin_compatible("numpy") }}
+    - anndata
+    - cvxpy
+    - fastcluster
+    - importlib-metadata
+    - pandas
+    - psutil
+    - python-igraph
+    - pyyaml
+    - scanpy
+    - scipy
+    - threadpoolctl
+    - umap-learn
+
+test:
+  imports:
+    - metacells
+    - metacells.extensions
+
+about:
+  home: https://github.com/tanaylab/metacells
+  license: MIT
+  license_family: MIT
+  license_file: LICENSE.rst
+  summary: Single-cell RNA Sequencing Analysis
+  description: |
+    Metacells is a Python package for analyzing single-cell RNA sequencing
+    data by computing metacells - groups of cells that are similar enough
+    to be analyzed as a unit.
+  dev_url: https://github.com/tanaylab/metacells
+  doc_url: https://tanaylab.github.io/metacells/
+
+extra:
+  recipe-maintainers:
+    - aviezerl

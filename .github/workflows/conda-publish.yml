@@ -1,0 +1,126 @@
+name: Build and publish conda packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Package version (without v prefix)"
+        required: true
+
+jobs:
+  build_conda:
+    name: conda (${{ matrix.os }}, py${{ matrix.python }}, np${{ matrix.numpy }})
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash -el {0}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-14, macos-13]
+        python: ["3.10", "3.11", "3.12"]
+        numpy: ["1.26", "2.0", "2.1"]
+        exclude:
+          - python: "3.10"
+            numpy: "2.1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: conda-incubator/setup-miniconda@v3
+        with:
+          miniforge-version: latest
+          channels: conda-forge
+          channel-priority: strict
+          python-version: ${{ matrix.python }}
+          activate-environment: build
+
+      - name: Install conda-build and anaconda-client
+        run: |
+          conda install -y conda-build anaconda-client
+
+      - name: Extract version
+        id: version
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Package version: $VERSION"
+
+      - name: Download sdist from PyPI and patch meta.yaml
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          SDIST_URL="https://pypi.io/packages/source/m/metacells/metacells-${PACKAGE_VERSION}.tar.gz"
+          echo "Downloading sdist from: $SDIST_URL"
+
+          # Retry up to 5 times with increasing delays
+          for i in 1 2 3 4 5; do
+            if curl -sSLf -o metacells-sdist.tar.gz "$SDIST_URL"; then
+              echo "Downloaded successfully on attempt $i"
+              break
+            fi
+            if [ $i -eq 5 ]; then
+              echo "ERROR: Failed to download sdist after 5 attempts"
+              exit 1
+            fi
+            echo "Attempt $i failed, retrying in $((i * 30))s..."
+            sleep $((i * 30))
+          done
+
+          # sha256sum on Linux, shasum on macOS
+          if command -v sha256sum &>/dev/null; then
+            SHA256=$(sha256sum metacells-sdist.tar.gz | awk '{print $1}')
+          else
+            SHA256=$(shasum -a 256 metacells-sdist.tar.gz | awk '{print $1}')
+          fi
+          echo "SHA256: $SHA256"
+
+          # sed -i syntax differs between GNU (Linux) and BSD (macOS)
+          if [[ "$RUNNER_OS" == "Linux" ]]; then
+            sed -i "s/SET_ON_RELEASE/${SHA256}/" conda-recipe/meta.yaml
+          else
+            sed -i '' "s/SET_ON_RELEASE/${SHA256}/" conda-recipe/meta.yaml
+          fi
+
+          echo "Patched meta.yaml:"
+          cat conda-recipe/meta.yaml
+
+      - name: Build conda package
+        env:
+          PACKAGE_VERSION: ${{ steps.version.outputs.version }}
+          WHEEL: "1"
+        run: |
+          conda build conda-recipe/ \
+            --python ${{ matrix.python }} \
+            --numpy ${{ matrix.numpy }} \
+            --no-anaconda-upload \
+            --output-folder conda-output/
+
+      - name: Upload to anaconda.org
+        env:
+          ANACONDA_TOKEN: ${{ secrets.ANACONDA_TOKEN }}
+        run: |
+          # Find all built packages (.tar.bz2 and .conda formats)
+          shopt -s nullglob
+          PACKAGES=( conda-output/**/*.tar.bz2 conda-output/**/*.conda )
+
+          if [ ${#PACKAGES[@]} -eq 0 ]; then
+            echo "ERROR: No conda packages found in conda-output/"
+            find conda-output/ -type f
+            exit 1
+          fi
+
+          echo "Uploading ${#PACKAGES[@]} package(s):"
+          printf '  %s\n' "${PACKAGES[@]}"
+
+          anaconda -t "$ANACONDA_TOKEN" upload \
+            --user aviezerl \
+            --label main \
+            --force \
+            "${PACKAGES[@]}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: conda-pkg-${{ matrix.os }}-py${{ matrix.python }}-np${{ matrix.numpy }}
+          path: |
+            conda-output/**/*.tar.bz2
+            conda-output/**/*.conda
