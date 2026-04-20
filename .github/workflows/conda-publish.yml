@@ -87,6 +87,7 @@ jobs:
           WHEEL: "1"
         run: |
           conda build conda-recipe/ \
+            -c conda-forge --override-channels \
             --python ${{ matrix.python }} \
             --numpy ${{ matrix.numpy }} \
             --no-anaconda-upload \
