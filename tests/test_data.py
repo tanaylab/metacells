@@ -67,7 +67,7 @@ def test_direct_pipeline() -> None:
         mc.ut.log_calc("path", path)
         pdata = adata[range(6000), :].copy()
 
-        mc.pl.exclude_genes(pdata, random_seed=123456, **expected.get("exclude_genes", {}))
+        mc.pl.exclude_genes(pdata, random_seed=123456, excluded_gene_masks=[], **expected.get("exclude_genes", {}))
         mc.pl.exclude_cells(pdata, **expected.get("exclude_cells", {}))
         cdata = mc.pl.extract_clean_data(pdata)
         assert cdata is not None

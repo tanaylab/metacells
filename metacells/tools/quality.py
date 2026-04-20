@@ -209,7 +209,7 @@ def compute_projected_folds(
 
 @ut.logged()
 @ut.timed_call()
-def compute_similar_query_metacells(  # pylint: disable=too-many-statements
+def compute_similar_query_metacells(  # pylint: disable=too-many-statements,disable=too-many-positional-arguments
     qdata: AnnData,
     max_projection_fold_factor: float = pr.project_max_projection_fold_factor,
     max_projection_noisy_fold_factor: float = pr.project_max_projection_noisy_fold_factor,

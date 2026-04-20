@@ -321,7 +321,7 @@ def _seeds_count_for(
     return seeds_count
 
 
-def _reduce_communities(
+def _reduce_communities(  # pylint: disable=too-many-positional-arguments
     outgoing_edge_weights: ut.CompressedMatrix,
     incoming_edge_weights: ut.CompressedMatrix,
     community_of_nodes: ut.NumpyVector,
@@ -530,7 +530,7 @@ def _cut_split_communities(  # pylint: disable=too-many-branches,too-many-statem
     return (split_communities_count, cut_communities_count, hot_communities)
 
 
-def _min_cut_community(
+def _min_cut_community(  # pylint: disable=too-many-positional-arguments
     outgoing_edge_weights: ut.CompressedMatrix,
     community_of_nodes: ut.NumpyVector,
     cut_community_index: int,

@@ -683,7 +683,7 @@ def log_get(
     return _log_value(name, value, "get", is_top_level, CALC, formatter)
 
 
-def _log_value(
+def _log_value(  # pylint: disable=too-many-positional-arguments
     name: str,
     value: Any,
     kind: str,

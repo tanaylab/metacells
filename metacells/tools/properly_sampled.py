@@ -3,6 +3,7 @@ Properly Sampled
 ----------------
 """
 
+from logging import warning
 from typing import Optional
 from typing import Union
 
@@ -44,7 +45,7 @@ def find_properly_sampled_cells(
     *,
     min_cell_total: Optional[int],
     max_cell_total: Optional[int],
-    max_excluded_genes_fraction: Optional[float],
+    max_excluded_genes_fraction: Optional[float] = None,
     inplace: bool = True,
 ) -> Optional[pd.Series]:
     """
@@ -80,6 +81,7 @@ def find_properly_sampled_cells(
 
     3. If ``max_excluded_genes_fraction`` (no default) is not ``None``, then exclude all cells whose sum of the excluded
        data (as defined by the ``excluded_gene`` mask) divided by the total data is more than the specified threshold.
+       **Note:** This is deprecated. See the updated vignette.
     """
     total_umis_per_cell = ut.get_o_numpy(adata, what, sum=True)
 
@@ -92,6 +94,7 @@ def find_properly_sampled_cells(
         cells_mask = cells_mask & (total_umis_per_cell <= max_cell_total)
 
     if max_excluded_genes_fraction is not None:
+        warning("Using max_excluded_genes_fraction is deprecated; see the updated vignette.")
         if not ut.has_data(adata, "excluded_umis"):
             compute_excluded_gene_umis(adata, what)
         excluded_umis_per_cell = ut.get_o_numpy(adata, "excluded_umis")

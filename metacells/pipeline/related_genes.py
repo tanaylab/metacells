@@ -20,6 +20,7 @@ import metacells.utilities as ut
 
 __all__ = [
     "relate_to_lateral_genes",
+    "relate_to_ribosomal_genes",
 ]
 
 
@@ -93,10 +94,10 @@ def relate_to_lateral_genes(  # pylint: disable=too-many-statements
         sdata = ut.copy_adata(adata, top_level=False)
 
     umis_per_cell_per_gene = ut.get_vo_proper(sdata, what)
-    fraction_per_gene_per_cell = ut.fraction_by(umis_per_cell_per_gene, by="row")
-    fraction_per_gene_per_cell = ut.to_layout(fraction_per_gene_per_cell, layout="column_major")
+    fraction_per_cell_per_gene = ut.fraction_by(umis_per_cell_per_gene, by="row")
+    fraction_per_cell_per_gene = ut.to_layout(fraction_per_cell_per_gene, layout="column_major")
 
-    mean_fraction_per_gene = ut.mean_per(fraction_per_gene_per_cell, per="column")
+    mean_fraction_per_gene = ut.mean_per(fraction_per_cell_per_gene, per="column")
     candidate_genes_mask = mean_fraction_per_gene >= min_mean_gene_fraction
     ut.log_calc("candidate_genes_mask", candidate_genes_mask)
 
@@ -112,11 +113,11 @@ def relate_to_lateral_genes(  # pylint: disable=too-many-statements
         if not np.any(candidate_genes_mask):
             break
 
-        fraction_per_candidate_gene_per_cell = ut.to_numpy_matrix(fraction_per_gene_per_cell[:, candidate_genes_mask])
-        fraction_per_additional_gene_per_cell = ut.to_numpy_matrix(fraction_per_gene_per_cell[:, additional_genes_mask])
+        fraction_per_cell_per_candidate_gene = ut.to_numpy_matrix(fraction_per_cell_per_gene[:, candidate_genes_mask])
+        fraction_per_cell_per_additional_gene = ut.to_numpy_matrix(fraction_per_cell_per_gene[:, additional_genes_mask])
 
-        fraction_per_cell_per_candidate_gene = np.transpose(fraction_per_candidate_gene_per_cell)
-        fraction_per_cell_per_additional_gene = np.transpose(fraction_per_additional_gene_per_cell)
+        fraction_per_cell_per_candidate_gene = np.transpose(fraction_per_cell_per_candidate_gene)
+        fraction_per_cell_per_additional_gene = np.transpose(fraction_per_cell_per_additional_gene)
 
         fraction_per_cell_per_candidate_gene = ut.to_layout(fraction_per_cell_per_candidate_gene, layout="row_major")
         fraction_per_cell_per_additional_gene = ut.to_layout(fraction_per_cell_per_additional_gene, layout="row_major")
@@ -135,7 +136,7 @@ def relate_to_lateral_genes(  # pylint: disable=too-many-statements
 
     name = (ut.get_name(sdata) or "cells") + ".related"
     var_names = sdata.var_names[related_genes_mask]
-    sdata = AnnData(fraction_per_gene_per_cell[:, related_genes_mask])
+    sdata = AnnData(fraction_per_cell_per_gene[:, related_genes_mask])
     sdata.var_names = var_names
     ut.set_name(sdata, name)
 
@@ -214,3 +215,76 @@ def _linkage_to_clusters(
         del entries_of_cluster[right_index]
 
     return list(entries_of_cluster.values())
+
+
+@ut.logged()
+@ut.timed_call()
+@ut.expand_doc()
+def relate_to_ribosomal_genes(
+    adata: AnnData,
+    what: Union[str, ut.Matrix] = "__x__",
+    *,
+    max_sampled_cells: int = pr.related_max_sampled_cells,
+    min_mean_gene_fraction: float = pr.related_min_mean_gene_fraction * 100,
+    random_seed: int = 0,
+) -> None:
+    """
+    Detect coarse correlations between genes and ribosomal genes based on ``what`` (default: {what}) data.
+
+    This is a quick-and-dirty way to look for genes highly correlated with ribosomal genes.
+
+    **Input**
+
+    Annotated ``adata``, where the observations are cells and the variables are genes, where ``what`` is a
+    per-variable-per-observation matrix or the name of a per-variable-per-observation annotation containing such a
+    matrix. The data should contain a ``lateral_gene`` mask containing some known-to-be lateral genes.
+
+    **Returns**
+
+    Variable-pair (Gene) Annotations
+        ``ribosomal_genes_similarity``
+            The similarity between each genes related to ribosomal genes.
+
+    **Computation Parameters**
+
+    1. If we have more than ``max_sampled_cells`` (default: {max_sampled_cells}), pick this number
+       of random cells from the data using the ``random_seed``.
+
+    2. Look up all the genes listed in the ``ribosomal`` genes mask, and compute their total fraction in each of the
+       sampled cells.
+
+    3. Pick as candidates any of the other genes whose mean fraction in the population is at least the (very low)
+       ``min_mean_gene_fraction`` (default: {min_mean_gene_fraction}). This is set to be reasonably high, as the goal
+       is to search for genes for exclusion, which may impact the denominator.
+
+    4. Compute the correlation between the candidate genes and the total ribosomal fraction (all other genes are
+       assigned a correlation of 0).
+    """
+    ribosomal_genes_mask = ut.get_v_numpy(adata, "ribosomal_gene")
+
+    if max_sampled_cells < adata.n_obs:
+        np.random.seed(random_seed)
+        cell_indices = np.random.choice(np.arange(adata.n_obs), size=max_sampled_cells, replace=False)
+        sdata = ut.slice(adata, obs=cell_indices, name=".sampled", top_level=False)
+    else:
+        sdata = ut.copy_adata(adata, top_level=False)
+
+    umis_per_cell_per_gene = ut.get_vo_proper(sdata, what)
+    fraction_per_cell_per_gene = ut.fraction_by(umis_per_cell_per_gene, by="row")
+    fraction_per_cell_per_gene = ut.to_layout(fraction_per_cell_per_gene, layout="column_major")
+    fraction_of_ribosomal_per_cell = ut.sum_per(fraction_per_cell_per_gene[:, ribosomal_genes_mask], per="row")
+
+    mean_fraction_per_gene = ut.mean_per(fraction_per_cell_per_gene, per="column")
+    candidate_genes_mask = mean_fraction_per_gene >= min_mean_gene_fraction
+    candidate_genes_mask[ribosomal_genes_mask] = False
+    ut.log_calc("candidate_genes_mask", candidate_genes_mask)
+
+    ribosomal_genes_similarity = np.zeros(sdata.n_vars, dtype="float32")
+
+    for gene_index in range(sdata.n_vars):
+        if candidate_genes_mask[gene_index]:
+            ribosomal_genes_similarity[gene_index] = np.corrcoef(
+                fraction_per_cell_per_gene[:, gene_index], fraction_of_ribosomal_per_cell
+            )[0, 1]
+
+    ut.set_v_data(adata, "ribosomal_genes_similarity", ribosomal_genes_similarity)

@@ -361,7 +361,7 @@ def test_bin_pack() -> None:
         elements_of_bin = np.where(bin_of_elements == bin_index)[0]
         size_of_bin = np.sum(size_of_elements[elements_of_bin])
         assert size_of_bin <= 106
-        size_of_bins.append(size_of_bin)
+        size_of_bins.append(int(size_of_bin))
         elements_of_bins.append(list(elements_of_bin))
 
     assert size_of_bins == [98, 98, 98, 76]
@@ -378,7 +378,7 @@ def test_bin_fill() -> None:
         elements_of_bin = np.where(bin_of_elements == bin_index)[0]
         size_of_bin = np.sum(size_of_elements[elements_of_bin])
         assert size_of_bin >= 106
-        size_of_bins.append(size_of_bin)
+        size_of_bins.append(int(size_of_bin))
         elements_of_bins.append(list(elements_of_bin))
 
     assert size_of_bins == [131, 123, 116]

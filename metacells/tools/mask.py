@@ -135,7 +135,6 @@ def combine_masks(  # pylint: disable=too-many-branches,too-many-statements
 
 @ut.logged()
 @ut.timed_call()
-@ut.expand_doc()
 def sum_mask_genes(
     adata: AnnData,
     what: Union[str, ut.Matrix] = "__x__",

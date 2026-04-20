@@ -767,10 +767,12 @@ def downsample_matrix(
     A non-zero ``random_seed`` will make the operation replicable.
     """
     assert per in ("row", "column")
+    axis = utt.PER_OF_AXIS.index(per)
+    results_count = matrix.shape[axis]
     if isinstance(samples, (int, float)):
-        samples = np.full(matrix.shape[0], samples, dtype="int32")
+        samples = np.full(results_count, samples, dtype="int32")
     else:
-        assert len(samples) == matrix.shape[0]
+        assert len(samples) == results_count
         samples = utt.to_numpy_vector(samples).astype("int32")
 
     _, dense, compressed = utt.to_proper_matrices(matrix)
@@ -825,13 +827,12 @@ def _downsample_dense_matrix(
     assert elements_count == matrix.shape[1]
 
     if results_count == 1:
-        input_array = utt.to_numpy_vector(matrix)
-        output_array = utt.to_numpy_vector(output)
-        extension_name = f"downsample_array_{input_array.dtype}_t_{output_array.dtype}_t"
-        extension = getattr(xt, extension_name)
-        with utm.timed_step("extensions.downsample_array"):
-            utm.timed_parameters(elements=input_array.size, samples=np.mean(samples))
-            extension(input_array, output_array, samples, random_seed)
+        downsample_vector(
+            matrix[0, :],
+            int(samples[0]),
+            output=output[0, :],
+            random_seed=random_seed,
+        )
     else:
         extension_name = f"downsample_dense_{matrix.dtype}_t_{output.dtype}_t"
         extension = getattr(xt, extension_name)
@@ -842,11 +843,12 @@ def _downsample_dense_matrix(
     if per == "column":
         output = np.transpose(output)
 
-    assert output.shape == matrix.shape
+    expected_shape = (elements_count, results_count) if per == "column" else (results_count, elements_count)
+    assert output.shape == expected_shape
     return output
 
 
-def _downsample_compressed_matrix(
+def _downsample_compressed_matrix(  # pylint: disable=too-many-positional-arguments
     matrix: utt.CompressedMatrix,
     per: str,
     samples: utt.NumpyVector,
@@ -876,18 +878,26 @@ def _downsample_compressed_matrix(
         output.has_sorted_indices = matrix.has_sorted_indices
         output.has_canonical_format = matrix.has_canonical_format
 
-    extension_name = "downsample_compressed_%s_t_%s_t_%s_t" % (  # pylint: disable=consider-using-f-string
-        matrix.data.dtype,
-        matrix.indptr.dtype,
-        output.data.dtype,
-    )
-    extension = getattr(xt, extension_name)
-
     assert results_count == matrix.indptr.size - 1
 
-    with utm.timed_step("extensions.downsample_sparse_matrix"):
-        utm.timed_parameters(results=results_count, elements=elements_count, samples=np.mean(samples))
-        extension(matrix.data, matrix.indptr, output.data, samples, random_seed)
+    if results_count == 1:
+        # A 1-row CSR (or 1-col CSC) stores the whole row in .data; implicit zeros stay zero.
+        downsample_vector(
+            matrix.data,
+            int(samples[0]),
+            output=output.data,
+            random_seed=random_seed,
+        )
+    else:
+        extension_name = "downsample_compressed_%s_t_%s_t_%s_t" % (  # pylint: disable=consider-using-f-string
+            matrix.data.dtype,
+            matrix.indptr.dtype,
+            output.data.dtype,
+        )
+        extension = getattr(xt, extension_name)
+        with utm.timed_step("extensions.downsample_sparse_matrix"):
+            utm.timed_parameters(results=results_count, elements=elements_count, samples=np.mean(samples))
+            extension(matrix.data, matrix.indptr, output.data, samples, random_seed)
 
     if eliminate_zeros:
         utt.eliminate_zeros(output)
@@ -1540,8 +1550,8 @@ def fraction_by(matrix: utt.Matrix, *, sums: Optional[utt.Vector] = None, by: st
         sums = utt.to_numpy_vector(sums)
 
     zeros_mask = sums == 0
-    scale = np.reciprocal(sums, where=~zeros_mask)
-    scale[zeros_mask] = 0
+    scale = np.zeros_like(sums, dtype=np.float64)
+    np.reciprocal(sums, where=~zeros_mask, out=scale)
     return scale_by(proper, scale, by=by)
 
 
@@ -1613,8 +1623,8 @@ def normalized_variance_per(matrix: utt.Matrix, *, per: Optional[str], zero_valu
     variance_per_element = variance_per(matrix, per=per)
     mean_per_element = mean_per(matrix, per=per)
     zeros_mask = mean_per_element == 0
-    result = np.reciprocal(mean_per_element, where=~zeros_mask)
-    result[zeros_mask] = 0
+    result = np.zeros_like(mean_per_element, dtype=np.float64)
+    np.reciprocal(mean_per_element, where=~zeros_mask, out=result)
     result *= variance_per_element
     result[zeros_mask] = zero_value
     return result

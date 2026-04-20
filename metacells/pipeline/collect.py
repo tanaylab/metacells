@@ -73,6 +73,30 @@ def collect_metacells(  # pylint: disable=too-many-statements
         ``total_umis``
             The total of all the UMIs of all the genes of all the cells grouped into the metacell.
 
+        ``total_excluded_umis``
+            The total of all the UMIs of all the exluded genes of all the cells grouped into the metacell.
+            Is computed if there is ``total_excluded_umis`` per cell in the input.
+
+        ``total_full_umis``
+            The total of all the UMIs of all the genes (including excluded genes) of all the cells grouped into the
+            metacell. Is computed if there is ``total_full_umis`` per cell in the input.
+
+        ``total_mitochondrial_umis``
+            The total of all the mitochondrial (excluded!) UMIs of all the genes of all the cells grouped into the
+            metacell. Is computed if there is ``total_mitochondrial_umis`` per cell in the input.
+
+        ``mitochondrial_umis_fraction``
+            The fraction of the mitochondrial UMIs out of the total (included) UMIs.
+            Is computed if there is ``total_mitochondrial_umis`` per cell in the input.
+
+        ``total_ribosomal_umis``
+            The total of all the ribosomal (excluded!) UMIs of all the genes of all the cells grouped into the metacell.
+            Is computed if there is ``total_ribosomal_umis`` per cell in the input.
+
+        ``ribosomal_umis_fraction``
+            The fraction of the ribosomal UMIs out of the total (included) UMIs.
+            Is computed if there is ``total_ribosomal_umis`` per cell in the input.
+
     Observations-Variables (Metacell-Gene) Annotations
         ``total_umis``
             The total of all the UMIs of each genes in all the cells grouped into the metacell.
@@ -284,23 +308,74 @@ def collect_metacells(  # pylint: disable=too-many-statements
         value_per_gene = ut.get_v_numpy(adata, annotation_name)
         ut.set_v_data(mdata, annotation_name, value_per_gene)
 
-    if isinstance(groups, str) and ut.has_data(adata, "metacells_level"):
-        tl.convey_obs_to_group(adata=adata, gdata=mdata, group=groups, property_name="metacell_level")
-    if isinstance(groups, str) and ut.has_data(adata, "rare_cell"):
-        tl.convey_obs_to_group(
-            adata=adata,
-            gdata=mdata,
-            group=groups,
-            property_name="cells_rare_gene_module",
-            to_property_name="metacells_rare_gene_module",
-        )
-        tl.convey_obs_to_group(
-            adata=adata,
-            gdata=mdata,
-            group=groups,
-            property_name="rare_cell",
-            to_property_name="rare_metacell",
-        )
+    if isinstance(groups, str):
+        if ut.has_data(adata, "metacells_level"):
+            tl.convey_obs_to_group(adata=adata, gdata=mdata, group=groups, property_name="metacell_level")
+
+        if ut.has_data(adata, "rare_cell"):
+            tl.convey_obs_to_group(
+                adata=adata,
+                gdata=mdata,
+                group=groups,
+                property_name="cells_rare_gene_module",
+                to_property_name="metacells_rare_gene_module",
+            )
+            tl.convey_obs_to_group(
+                adata=adata,
+                gdata=mdata,
+                group=groups,
+                property_name="rare_cell",
+                to_property_name="rare_metacell",
+            )
+            tl.convey_obs_to_group(
+                adata=adata,
+                gdata=mdata,
+                group=groups,
+                property_name="rare_cell",
+                to_property_name="rare_metacell",
+            )
+
+        if ut.has_data(adata, "total_excluded_umis"):
+            tl.convey_obs_to_group(
+                adata=adata,
+                gdata=mdata,
+                group=groups,
+                property_name="total_excluded_umis",
+                method=sum,
+            )
+
+        if ut.has_data(adata, "total_full_umis"):
+            tl.convey_obs_to_group(
+                adata=adata,
+                gdata=mdata,
+                group=groups,
+                property_name="total_full_umis",
+                method=sum,
+            )
+
+        if ut.has_data(adata, "total_mitochnodrial_umis"):
+            tl.convey_obs_to_group(
+                adata=adata,
+                gdata=mdata,
+                group=groups,
+                property_name="total_mitochnodrial_umis",
+                method=sum,
+            )
+            total_mitochnodrial_umis_per_metacell = ut.get_o_numpy(mdata, "total_mitochnodrial_umis")
+            mitochondrial_fraction = total_mitochnodrial_umis_per_metacell / total_umis_per_metacell
+            ut.set_o_data(mdata, "mitochondrial_umis_fraction", mitochondrial_fraction)
+
+        if ut.has_data(adata, "total_ribosomal_umis"):
+            tl.convey_obs_to_group(
+                adata=adata,
+                gdata=mdata,
+                group=groups,
+                property_name="total_ribosomal_umis",
+                method=sum,
+            )
+            total_ribosomal_umis_per_metacell = ut.get_o_numpy(mdata, "total_ribosomal_umis")
+            ribosomal_fraction = total_ribosomal_umis_per_metacell / total_umis_per_metacell
+            ut.set_o_data(mdata, "ribosomal_umis_fraction", ribosomal_fraction)
 
     ut.set_m_data(mdata, "outliers", outliers_count)
     ut.set_m_data(mdata, "metacells_algorithm", f"metacells.{__version__}")

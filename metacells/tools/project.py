@@ -194,7 +194,7 @@ def compute_projected_fractions(
     ut.set_vo_data(qdata, to_query_layer, sp.csr_matrix(projected_fractions))
 
 
-def _project_query_atlas_data_arguments(
+def _project_query_atlas_data_arguments(  # pylint: disable=too-many-positional-arguments
     adata: AnnData,
     qdata: AnnData,
     from_atlas_layer: str,

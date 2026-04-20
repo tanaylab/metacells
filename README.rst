@@ -199,6 +199,28 @@ metadata, and also:
     factors (log base 2 of the ratio) and related comparisons automatically ignore cases when this sum is below some
     threshold (40) by considering the effective fold factor to be 0 (that is, "no difference").
 
+``total_mitochondrial_umis`` per cell, and per metacell
+    The total mitochondrial UMIs of the meta/cell, which are excluded from the analysis.
+
+``total_ribosomal_umis`` per cell, and per metacell
+    The total ribosomal UMIs of the meta/cell, which are excluded from the analysis.
+
+``mitochondrial_umis_fraction`` per metacells
+    The fraction of the ``total_mitochondrial_umis`` out of the ``total_umis``. That is, by how much we would have
+    increased ``total_umis`` if we included the mitochondrial genes.
+
+``ribosomal_umis_fraction``
+    The fraction of the ``total_ribosomal`` out of the ``total_umis``. That is, by how much we would have increased
+    ``total_umis`` if we included the ribosomal_umis_fraction genes.
+
+``total_excluded_umis`` per cell, and per metacell
+    The total UMIs of the genes that were excluded from the meta/cell for any reason. Not very useful, but is included
+    for completeness.
+
+``total_full_umis`` per cell, and per metacell
+    The total UMIs of the meta/cell including the excluded genes (that is, ``total_umis + total_excluded_umis``). Not
+    very useful, but is included for completeness.
+
 ``metacells_level`` per cell or metacell
     This is 0 for rare gene module metacells, 1 for metacells computed from the main piles in the 2nd divide-and-conquer
     phase and 2 for metacells computed for their outliers.

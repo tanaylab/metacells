@@ -1503,7 +1503,7 @@ def _compute_dissimilar_residuals_projection(
         ut.get_vo_proper(common_qdata, "projected_fold"), copy=True
     )
 
-    def _collect_metacell_residuals(
+    def _collect_metacell_residuals(  # pylint: disable=too-many-positional-arguments
         dissimilar_metacell_index: int,
         primary_type: str,
         secondary_type: str,

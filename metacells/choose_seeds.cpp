@@ -279,19 +279,19 @@ choose_seeds(const pybind11::array_t<float32_t>& outgoing_weights_data_array,
     FastAssertCompare(nodes_count, >, 0);
 
     ConstCompressedMatrix<float32_t, int32_t, int32_t>
-        outgoing_weights(ConstArraySlice<float32_t>(outgoing_weights_data_array, "outgoing_weights_data"),
-                         ConstArraySlice<int32_t>(outgoing_weights_indices_array, "outgoing_weights_indices"),
-                         ConstArraySlice<int32_t>(outgoing_weights_indptr_array, "outgoing_weights_indptr"),
-                         int32_t(nodes_count),
-                         "outgoing_weights");
+    outgoing_weights(ConstArraySlice<float32_t>(outgoing_weights_data_array, "outgoing_weights_data"),
+                     ConstArraySlice<int32_t>(outgoing_weights_indices_array, "outgoing_weights_indices"),
+                     ConstArraySlice<int32_t>(outgoing_weights_indptr_array, "outgoing_weights_indptr"),
+                     int32_t(nodes_count),
+                     "outgoing_weights");
     FastAssertCompare(outgoing_weights.bands_count(), ==, nodes_count);
 
     ConstCompressedMatrix<float32_t, int32_t, int32_t>
-        incoming_weights(ConstArraySlice<float32_t>(incoming_weights_data_array, "incoming_weights_data"),
-                         ConstArraySlice<int32_t>(incoming_weights_indices_array, "incoming_weights_indices"),
-                         ConstArraySlice<int32_t>(incoming_weights_indptr_array, "incoming_weights_indptr"),
-                         int32_t(nodes_count),
-                         "incoming_weights");
+    incoming_weights(ConstArraySlice<float32_t>(incoming_weights_data_array, "incoming_weights_data"),
+                     ConstArraySlice<int32_t>(incoming_weights_indices_array, "incoming_weights_indices"),
+                     ConstArraySlice<int32_t>(incoming_weights_indptr_array, "incoming_weights_indptr"),
+                     int32_t(nodes_count),
+                     "incoming_weights");
     FastAssertCompare(incoming_weights.bands_count(), ==, nodes_count);
 
     FastAssertCompare(0, <=, min_seed_size_quantile);
