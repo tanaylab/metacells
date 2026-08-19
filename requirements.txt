@@ -3,7 +3,7 @@ cvxpy
 fastcluster
 importlib-metadata
 numpy<2
-pandas
+pandas<3
 psutil
 python-igraph
 pyyaml
