@@ -10,3 +10,14 @@ numpy:
 pin_run_as_build:
   numpy:
     max_pin: x.x
+
+# Pin the compiler instead of taking whatever conda-forge ships newest. An
+# unpinned {{ compiler(...) }} on a current runner resolves to gcc 16, which
+# stamps `libgcc >=16` / `libstdcxx >=16` onto the package and makes it
+# uninstallable in any environment holding an older libgcc - which is most
+# established ones. 14 keeps the floor low while matching what the rest of the
+# lab packages are pinned to; verified by building this package with it.
+c_compiler_version:
+  - 14  # [linux]
+cxx_compiler_version:
+  - 14  # [linux]
