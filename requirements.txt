@@ -2,7 +2,7 @@ anndata
 cvxpy
 fastcluster
 importlib-metadata
-numpy<2
+numpy<3
 pandas<3
 psutil
 python-igraph

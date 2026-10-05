@@ -85,3 +85,4 @@ History
 * Select few computations now work (efficiently!) for both matrix layouts (``sum_per``, ``min_per``, ``max_per``,
   ``mean_per``).
 * Added ``sum_mask_genes`` to support new recommended procedure for cleaning up the data.
+* Allow ``numpy`` 2.
